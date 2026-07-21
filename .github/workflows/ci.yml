@@ -44,3 +44,16 @@ jobs:
           name: conduit-build-log
           path: /tmp/conduit-build.log
           if-no-files-found: ignore
+      - name: Package macOS app
+        if: success()
+        shell: bash
+        run: |
+          codesign --force --deep --sign - dist/Conduit.app
+          ditto -c -k --sequesterRsrc --keepParent dist/Conduit.app dist/Conduit-macOS-arm64.zip
+      - name: Upload macOS app
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-macos-arm64
+          path: dist/Conduit-macOS-arm64.zip
+          if-no-files-found: error
