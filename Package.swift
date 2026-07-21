@@ -25,7 +25,7 @@ let package = Package(
                 "ConduitCore",
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ],
-            resources: [.process("Resources")]
+            exclude: ["Resources/Info.plist"]
         ),
         .testTarget(
             name: "ConduitCoreTests",
