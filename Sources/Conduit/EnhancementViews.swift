@@ -1,0 +1,207 @@
+#if os(macOS)
+import AppKit
+import AVFoundation
+import ConduitCore
+import Foundation
+import Speech
+import SwiftUI
+
+struct DiagnosticsView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("Conduit Doctor", systemImage: "stethoscope")
+                    .font(.title2.bold())
+                Spacer()
+                Button("Refresh") { Task { await model.refreshHealth() } }
+            }
+            .padding()
+            Divider()
+            List(model.healthResults) { result in
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: result.state.systemImage)
+                        .foregroundStyle(result.state.color)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(result.name).font(.headline)
+                        Text(result.detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                }
+                .padding(.vertical, 3)
+            }
+        }
+        .frame(width: 640, height: 480)
+        .task { await model.refreshHealth() }
+    }
+}
+
+struct ResourcePanelView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("Resource Deck", systemImage: "gauge.with.dots.needle.67percent")
+                    .font(.title2.bold())
+                Spacer()
+                Button("Activity Monitor") {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app"))
+                }
+                Button("Refresh") { Task { await model.refreshResources() } }
+            }
+            .padding()
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    GroupBox("Memory") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ProgressView(value: model.resourceSnapshot.usedMemoryGB, total: max(model.resourceSnapshot.totalMemoryGB, 1))
+                            Text(String(format: "%.1f GB used of %.1f GB", model.resourceSnapshot.usedMemoryGB, model.resourceSnapshot.totalMemoryGB))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    GroupBox("Loaded Ollama models") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if model.resourceSnapshot.ollamaModels.isEmpty {
+                                Text("No loaded models detected.").foregroundStyle(.secondary)
+                            } else {
+                                ForEach(model.resourceSnapshot.ollamaModels, id: \.self) { Text($0).font(.system(.body, design: .monospaced)) }
+                                Button("Unload all detected models") { Task { await model.unloadOllamaModels() } }
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    GroupBox("Largest processes") {
+                        VStack(spacing: 6) {
+                            ForEach(model.resourceSnapshot.topProcesses) { process in
+                                HStack {
+                                    Text(process.command).lineLimit(1)
+                                    Spacer()
+                                    Text(String(format: "%.0f MB", process.residentMegabytes)).foregroundStyle(.secondary)
+                                }
+                                .font(.caption)
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+        }
+        .frame(width: 680, height: 560)
+        .task { await model.refreshResources() }
+    }
+}
+
+struct ContextBundleView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HSplitView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Context sources").font(.headline).padding()
+                Divider()
+                List(model.contextCandidates) { document in
+                    Toggle(isOn: Binding(
+                        get: { model.selectedContextIDs.contains(document.id) },
+                        set: { selected in model.setContextDocument(document, selected: selected) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(document.label)
+                            Text(document.trustLabel).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(minWidth: 260)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Label("Bundle Preview", systemImage: "doc.on.doc")
+                        .font(.headline)
+                    Spacer()
+                    Text("Context, not verification").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding()
+                Divider()
+                ScrollView {
+                    Text(model.contextPreview.isEmpty ? "Select context sources." : model.contextPreview)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                Divider()
+                HStack {
+                    Spacer()
+                    Button("Attach Bundle") { model.attachContextBundle() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.contextPreview.isEmpty)
+                }
+                .padding()
+            }
+            .frame(minWidth: 460)
+        }
+        .frame(width: 860, height: 600)
+    }
+}
+
+struct PixelAgentStrip: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.7)) { timeline in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(model.sessionsForSelectedProject) { runtime in
+                        let state = runtime.controller.visualState(at: timeline.date)
+                        HStack(spacing: 7) {
+                            PixelOperator(state: state)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(runtime.descriptor.agent.name).font(.caption.bold())
+                                Text(state.label).font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.07))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            }
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
+private struct PixelOperator: View {
+    let state: TerminalVisualState
+
+    var body: some View {
+        Canvas { context, size in
+            let unit = min(size.width / 8, size.height / 8)
+            func rect(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: Color) {
+                context.fill(Path(CGRect(x: CGFloat(x) * unit, y: CGFloat(y) * unit, width: CGFloat(w) * unit, height: CGFloat(h) * unit)), with: .color(color))
+            }
+            rect(3, 0, 1, 1, state.indicatorColor)
+            rect(3, 1, 1, 1, .secondary)
+            rect(1, 2, 6, 4, .secondary.opacity(0.85))
+            rect(2, 3, 4, 2, Color(nsColor: .windowBackgroundColor))
+            rect(2, 3, 1, 1, state.indicatorColor)
+            rect(5, 3, 1, 1, state.indicatorColor)
+            rect(0, 4, 1, 2, .secondary)
+            rect(7, 4, 1, 2, .secondary)
+            rect(2, 6, 1, 2, .secondary)
+            rect(5, 6, 1, 2, .secondary)
+        }
+        .frame(width: 26, height: 26)
+        .accessibilityLabel("\(state.label) agent")
+    }
+}
+#endif

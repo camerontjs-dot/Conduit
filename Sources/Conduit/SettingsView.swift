@@ -16,9 +16,8 @@ struct SettingsView: View {
                     Button("Choose…", action: model.chooseMainframeRoot)
                 }
                 Toggle("Show project context by default", isOn: $model.settings.showContextByDefault)
-                Toggle("Restore session definitions on launch", isOn: $model.settings.restoreSessions)
-                    .disabled(true)
-                    .help("Reserved for the next persistence pass; terminal processes are never silently resurrected.")
+                Toggle("Use durable tmux sessions when available", isOn: $model.settings.restoreSessions)
+                    .help("When enabled, closing a Conduit tab detaches the tmux session instead of ending the underlying work.")
             }
 
             Section("Agent CLIs") {
@@ -43,6 +42,17 @@ struct SettingsView: View {
                 Button("Add Agent") {
                     model.settings.agents.append(AgentProfile(name: "Agent", command: ""))
                 }
+            }
+
+            Section("Utilities") {
+                HStack {
+                    Button("Run Conduit Doctor") { model.showDiagnostics = true }
+                    Button("Open Resource Deck") { model.showResources = true }
+                    Spacer()
+                }
+                Text("Conduit records process facts and Git state, but does not treat terminal prose as completion evidence.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             HStack {

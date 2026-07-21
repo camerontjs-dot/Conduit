@@ -31,6 +31,15 @@ struct RootView: View {
         } message: {
             Text(model.errorMessage ?? "Unknown error")
         }
+        .sheet(isPresented: $model.showDiagnostics) {
+            DiagnosticsView().environmentObject(model)
+        }
+        .sheet(isPresented: $model.showResources) {
+            ResourcePanelView().environmentObject(model)
+        }
+        .sheet(isPresented: $model.showContextBundle) {
+            ContextBundleView().environmentObject(model)
+        }
         .onChange(of: model.speech.isRecording) { recording in
             if !recording { model.absorbSpeechTranscript() }
         }
@@ -53,6 +62,12 @@ struct RootView: View {
                     Label("Choose Root", systemImage: "folder")
                 }
                 Spacer()
+                Button {
+                    model.showDiagnostics = true
+                } label: {
+                    Image(systemName: "stethoscope")
+                }
+                .help("Conduit Doctor")
                 Button(action: model.refreshProjects) {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -65,8 +80,7 @@ struct RootView: View {
 
     private var onboarding: some View {
         VStack(spacing: 18) {
-            Image(systemName: "terminal.fill")
-                .font(.system(size: 54))
+            PixelOnboardingMark()
             Text("Connect Conduit to MainFrame")
                 .font(.largeTitle.bold())
             Text("Choose the folder containing 00_inbox, 10_knowledge, 20_live, and 30_projects. Conduit keeps your files as the source of truth.")
@@ -83,7 +97,13 @@ struct RootView: View {
         VStack(spacing: 0) {
             WorkspaceHeader(project: project)
             Divider()
+            WorkSessionBar(project: project)
+            Divider()
             SessionBar()
+            if !model.sessionsForSelectedProject.isEmpty {
+                Divider()
+                PixelAgentStrip()
+            }
             Divider()
             HSplitView {
                 terminalArea
@@ -180,6 +200,29 @@ private struct EmptyStateView: View {
                 .frame(maxWidth: 420)
         }
         .padding(32)
+    }
+}
+
+private struct PixelOnboardingMark: View {
+    var body: some View {
+        Canvas { context, size in
+            let unit = min(size.width / 12, size.height / 12)
+            func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: Color) {
+                context.fill(Path(CGRect(x: CGFloat(x) * unit, y: CGFloat(y) * unit, width: CGFloat(w) * unit, height: CGFloat(h) * unit)), with: .color(color))
+            }
+            fill(5, 0, 2, 2, .accentColor)
+            fill(5, 2, 2, 1, .secondary)
+            fill(2, 3, 8, 6, .secondary.opacity(0.85))
+            fill(3, 4, 6, 4, Color(nsColor: .windowBackgroundColor))
+            fill(4, 5, 1, 1, .accentColor)
+            fill(7, 5, 1, 1, .accentColor)
+            fill(0, 5, 2, 3, .secondary)
+            fill(10, 5, 2, 3, .secondary)
+            fill(3, 9, 2, 3, .secondary)
+            fill(7, 9, 2, 3, .secondary)
+        }
+        .frame(width: 88, height: 88)
+        .accessibilityLabel("Conduit pixel operator")
     }
 }
 #endif

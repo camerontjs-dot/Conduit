@@ -7,31 +7,118 @@ import Speech
 import SwiftTerm
 import SwiftUI
 
+final class ActivityTerminalView: LocalProcessTerminalView {
+    var onOutput: (() -> Void)?
+
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        onOutput?()
+        super.dataReceived(slice: slice)
+    }
+}
+
 @MainActor
 final class TerminalSessionController: NSObject, ObservableObject, LocalProcessTerminalViewDelegate {
     let descriptor: SessionDescriptor
-    let terminalView: LocalProcessTerminalView
+    let terminalView: ActivityTerminalView
     @Published private(set) var isRunning = false
     @Published private(set) var exitCode: Int32?
     @Published private(set) var terminalTitle: String
+    @Published private(set) var lastOutputAt: Date?
+    @Published private(set) var isDetached = false
+    @Published private(set) var usesTmux = false
+    private let useDetachedSessions: Bool
     private var hasStarted = false
 
-    init(descriptor: SessionDescriptor) {
+    init(descriptor: SessionDescriptor, useDetachedSessions: Bool) {
         self.descriptor = descriptor
+        self.useDetachedSessions = useDetachedSessions
         self.terminalTitle = descriptor.title
-        self.terminalView = LocalProcessTerminalView(frame: .zero)
+        self.terminalView = ActivityTerminalView(frame: .zero)
         super.init()
         terminalView.processDelegate = self
+        terminalView.onOutput = { [weak self] in
+            Task { @MainActor in self?.lastOutputAt = Date() }
+        }
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         terminalView.nativeForegroundColor = NSColor.textColor
         terminalView.nativeBackgroundColor = NSColor.windowBackgroundColor
+    }
+
+    var backendLabel: String {
+        usesTmux ? "tmux" : "PTY"
     }
 
     func startIfNeeded() {
         guard !hasStarted else { return }
         hasStarted = true
         isRunning = true
+        isDetached = false
+        exitCode = nil
 
+        if useDetachedSessions, ShellProbe.resolve("tmux") != nil {
+            usesTmux = true
+            startTmuxSession()
+        } else {
+            usesTmux = false
+            startDirectSession()
+        }
+    }
+
+    func send(_ text: String) {
+        startIfNeeded()
+        let bytes = Array(text.utf8)
+        terminalView.process.send(data: bytes[...])
+    }
+
+    func interrupt() {
+        send("\u{3}")
+    }
+
+    func closeSession() {
+        guard hasStarted else { return }
+        if usesTmux && isRunning {
+            let detach = Array("\u{2}d".utf8)
+            terminalView.process.send(data: detach[...])
+            isDetached = true
+            isRunning = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.terminalView.terminate()
+            }
+        } else {
+            terminate()
+        }
+    }
+
+    func terminate() {
+        guard hasStarted else { return }
+        terminalView.terminate()
+        isRunning = false
+    }
+
+    func visualState(at date: Date) -> TerminalVisualState {
+        if isDetached { return .detached }
+        if let exitCode, exitCode != 0 { return .failed }
+        if !isRunning { return .exited }
+        if let lastOutputAt, date.timeIntervalSince(lastOutputAt) < 1.8 { return .working }
+        return .running
+    }
+
+    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        terminalTitle = title.isEmpty ? descriptor.title : title
+    }
+
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+
+    func processTerminated(source: TerminalView, exitCode: Int32?) {
+        if !isDetached {
+            isRunning = false
+            self.exitCode = exitCode
+        }
+    }
+
+    private func startDirectSession() {
         let agent = descriptor.agent
         if agent.kind == .shell && agent.command.hasPrefix("/") {
             terminalView.startProcess(
@@ -49,33 +136,43 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         }
     }
 
-    func send(_ text: String) {
-        startIfNeeded()
-        let bytes = Array(text.utf8)
-        terminalView.process.send(data: bytes[...])
+    private func startTmuxSession() {
+        let name = Self.tmuxSessionName(for: descriptor)
+        let command = ([descriptor.agent.command] + descriptor.agent.arguments)
+            .map(Self.shellQuote)
+            .joined(separator: " ")
+        let script = """
+        if tmux has-session -t \(Self.shellQuote(name)) 2>/dev/null; then
+          exec tmux attach-session -t \(Self.shellQuote(name))
+        else
+          exec tmux new-session -s \(Self.shellQuote(name)) -c \(Self.shellQuote(descriptor.projectPath.path)) \(Self.shellQuote("exec \(command)"))
+        fi
+        """
+        terminalView.startProcess(
+            executable: "/bin/zsh",
+            args: ["-l", "-c", script],
+            currentDirectory: descriptor.projectPath.path
+        )
+        terminalTitle = "\(descriptor.title) · durable"
     }
 
-    func interrupt() {
-        send("\u{3}")
+    private static func tmuxSessionName(for descriptor: SessionDescriptor) -> String {
+        let raw = "\(descriptor.projectPath.standardizedFileURL.path)|\(descriptor.agent.name)"
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in raw.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        let project = safeName(descriptor.projectPath.lastPathComponent)
+        let agent = safeName(descriptor.agent.name)
+        return String("conduit-\(project)-\(agent)-\(String(hash, radix: 16).suffix(8))".prefix(70))
     }
 
-    func terminate() {
-        guard hasStarted else { return }
-        terminalView.terminate()
-        isRunning = false
-    }
-
-    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-        terminalTitle = title.isEmpty ? descriptor.title : title
-    }
-
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-
-    func processTerminated(source: TerminalView, exitCode: Int32?) {
-        isRunning = false
-        self.exitCode = exitCode
+    private static func safeName(_ value: String) -> String {
+        let transformed = value.lowercased().map { character -> Character in
+            character.isLetter || character.isNumber ? character : "-"
+        }
+        return String(transformed).split(separator: "-").filter { !$0.isEmpty }.joined(separator: "-")
     }
 
     private static func shellQuote(_ value: String) -> String {

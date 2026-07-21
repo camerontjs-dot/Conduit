@@ -8,7 +8,7 @@ struct WorkspaceHeader: View {
     let project: MainframeProject
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(project.metadata.title).font(.headline)
                 Text(project.path.path)
@@ -20,8 +20,31 @@ struct WorkspaceHeader: View {
             ForEach(model.enabledAgents) { agent in
                 Button(agent.name) { model.launch(agent: agent) }
                     .buttonStyle(.bordered)
-                    .help("Launch \(agent.name) in \(project.metadata.title)")
+                    .help("Launch or reconnect to \(agent.name) in \(project.metadata.title)")
             }
+            Menu {
+                Button("Move clipboard selection to composer", action: model.copyClipboardSelectionToComposer)
+                Divider()
+                ForEach(model.enabledAgents) { agent in
+                    Button("Send to \(agent.name)") { model.forwardClipboardSelection(to: agent) }
+                }
+            } label: {
+                Image(systemName: "arrowshape.turn.up.right")
+            }
+            .menuStyle(.borderlessButton)
+            .help("Forward copied terminal output")
+            Button(action: model.prepareContextBundle) {
+                Image(systemName: "doc.on.doc")
+            }
+            .help("Build a labeled context bundle")
+            Button { model.showResources = true } label: {
+                Image(systemName: "gauge.with.dots.needle.67percent")
+            }
+            .help("Resource deck")
+            Button { model.showDiagnostics = true } label: {
+                Image(systemName: "stethoscope")
+            }
+            .help("Conduit Doctor")
             Button {
                 model.showContext.toggle()
             } label: {
@@ -34,6 +57,43 @@ struct WorkspaceHeader: View {
     }
 }
 
+struct WorkSessionBar: View {
+    @EnvironmentObject private var model: AppModel
+    let project: MainframeProject
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let session = model.activeWorkSession, session.project.id == project.id {
+                Circle().fill(.green).frame(width: 7, height: 7)
+                Text("Work session")
+                    .font(.caption.bold())
+                TextField("Objective", text: $model.workSessionObjective)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 220)
+                TextField("Receipt note (optional)", text: $model.workSessionNotes)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 180)
+                Text(session.startedAt, style: .timer)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button("Close & Receipt", action: model.closeWorkSession)
+                    .buttonStyle(.bordered)
+                    .help("Write an append-only receipt under 20_live/conduit/sessions")
+            } else {
+                Image(systemName: "record.circle")
+                    .foregroundStyle(.secondary)
+                Text("Launch an agent to begin an evidence-aware work session.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.secondary.opacity(0.04))
+    }
+}
+
 struct SessionBar: View {
     @EnvironmentObject private var model: AppModel
 
@@ -41,25 +101,8 @@ struct SessionBar: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(model.sessionsForSelectedProject) { runtime in
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(runtime.controller.isRunning ? .green : .secondary)
-                            .frame(width: 7, height: 7)
-                        Button(runtime.controller.terminalTitle) {
-                            model.activeSessionID = runtime.id
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            model.closeSession(runtime)
-                        } label: {
-                            Image(systemName: "xmark").font(.caption2)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(runtime.id == model.activeSessionID ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
-                    .clipShape(Capsule())
+                    SessionPill(runtime: runtime)
+                        .environmentObject(model)
                 }
                 Button {
                     model.launchDefaultShell()
@@ -72,6 +115,55 @@ struct SessionBar: View {
             .padding(.vertical, 7)
         }
         .background(.bar)
+    }
+}
+
+private struct SessionPill: View {
+    @EnvironmentObject private var model: AppModel
+    let runtime: TerminalRuntime
+    @ObservedObject private var controller: TerminalSessionController
+
+    init(runtime: TerminalRuntime) {
+        self.runtime = runtime
+        self._controller = ObservedObject(wrappedValue: runtime.controller)
+    }
+
+    var body: some View {
+        let state = controller.visualState(at: Date())
+        HStack(spacing: 6) {
+            Circle()
+                .fill(state.indicatorColor)
+                .frame(width: 7, height: 7)
+            Button(controller.terminalTitle) {
+                model.activeSessionID = runtime.id
+            }
+            .buttonStyle(.plain)
+            Text(controller.backendLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                model.closeSession(runtime)
+            } label: {
+                Image(systemName: controller.usesTmux ? "rectangle.portrait.and.arrow.right" : "xmark")
+                    .font(.caption2)
+            }
+            .buttonStyle(.plain)
+            .help(controller.usesTmux ? "Detach session" : "Close session")
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(runtime.id == model.activeSessionID ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
+        .clipShape(Capsule())
+        .contextMenu {
+            Button("Move clipboard selection to composer", action: model.copyClipboardSelectionToComposer)
+            Menu("Send clipboard selection to") {
+                ForEach(model.enabledAgents) { agent in
+                    Button(agent.name) { model.forwardClipboardSelection(to: agent) }
+                }
+            }
+            Divider()
+            Button(controller.usesTmux ? "Detach" : "Close") { model.closeSession(runtime) }
+        }
     }
 }
 
@@ -97,6 +189,9 @@ struct ContextPanel: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    Text("Context shown here is for navigation and inspection, not verification.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     if let goal = project.metadata.goal {
                         contextSection("Goal", goal)
                     }

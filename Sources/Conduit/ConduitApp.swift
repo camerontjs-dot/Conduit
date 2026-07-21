@@ -9,7 +9,7 @@ struct ConduitApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .frame(minWidth: 980, minHeight: 680)
+                .frame(minWidth: 1080, minHeight: 720)
                 .task { await model.bootstrap() }
         }
         .commands {
@@ -19,6 +19,15 @@ struct ConduitApp: App {
                 Button("Capture to 00_inbox") { model.captureComposerToInbox() }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                 Divider()
+                Button("Build Context Bundle") { model.prepareContextBundle() }
+                    .keyboardShortcut("b", modifiers: [.command, .shift])
+                Button("Conduit Doctor") { model.showDiagnostics = true }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                Button("Resource Deck") { model.showResources = true }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
+                Divider()
+                Button("Close Work Session & Write Receipt") { model.closeWorkSession() }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
                 Button("Toggle Context") { model.showContext.toggle() }
                     .keyboardShortcut("\\", modifiers: [.command])
                 Button("Refresh MainFrame") { model.refreshProjects() }
@@ -29,7 +38,7 @@ struct ConduitApp: App {
         Settings {
             SettingsView()
                 .environmentObject(model)
-                .frame(width: 620, height: 460)
+                .frame(width: 680, height: 520)
         }
     }
 }

@@ -2,36 +2,61 @@
 
 Conduit is a native macOS work surface for operating **MainFrame** through the CLI agents already installed on your computer.
 
-It is deliberately not an orchestration platform. Version 0.1 focuses on the daily loop:
+It is deliberately a personal daily driver before it becomes an orchestration platform. The current app gives MainFrame a focused desktop face without replacing its file tree, its evidence rules, or the native agent CLIs underneath it.
+
+## Daily loop
 
 1. Choose a MainFrame root.
 2. Select the root workspace or a project discovered under `30_projects/`.
-3. Launch Claude, Codex, Gemini, OpenCode, or a normal shell in a real pseudo-terminal.
+3. Launch or reconnect to Claude, Codex, Gemini, OpenCode, or a normal shell in a real pseudo-terminal.
 4. Compose multiline prompts, dictate them, paste screenshots, capture a screen region, or attach files and folders.
-5. Inspect the project README beside the terminal.
-6. Capture unfinished thoughts directly into `00_inbox/` without silently overwriting history.
+5. Build a labeled context bundle from project coordination files.
+6. Forward selected terminal output to another agent with an explicit verification boundary.
+7. Close the work session and write an append-only receipt under `20_live/conduit/sessions/`.
 
 ## Current features
+
+### Agent workspace
 
 - MainFrame root autodetection plus folder picker
 - Lifecycle-aware project discovery from `30_projects/*/README.md`
 - Real PTY terminals powered by SwiftTerm
 - Configurable CLI agent profiles
 - Multiple project-scoped terminal tabs
-- Rich multiline composer with `⌘↩` send
+- Optional durable tmux sessions with deterministic project-and-agent names
+- Reconnection to an existing tmux session by launching the same agent again
+- Compact pixel operator strip driven only by observed process state
+
+### Rich input
+
+- Multiline composer with `⌘↩` send
 - macOS speech-to-text with editable transcription
 - Clipboard image paste and native region screenshot capture
 - Drag-and-drop and file/folder attachments
+- Copied terminal selection forwarding between agents
+- Automatic warning that forwarded terminal prose is unverified
+
+### MainFrame continuity
+
 - Project goal, next action, state, and README context panel
+- Previewable context bundles with per-file trust labels
 - Provenance-bearing `00_inbox` capture
+- Evidence-aware work-session receipts containing objective, observed exit codes, detached state, Git branch/status, and operator notes
+- Collision-safe append-only writes
+
+### Local operations
+
+- Conduit Doctor for CLI paths, versions, MainFrame structure, tmux, microphone, and speech permissions
+- Resource Deck for memory use, largest processes, loaded Ollama models, and one-click Ollama unloading
 - Native settings stored in `~/.conduit/config.json`
 
 ## Requirements
 
 - macOS 13 or newer
-- Xcode 15 or newer
+- Xcode 15 or newer for source builds
 - Your preferred agent CLIs installed and authenticated separately
-- A local MainFrame tree containing at least `00_inbox/` and `30_projects/`
+- A local MainFrame tree containing `00_inbox/`, `20_live/`, and `30_projects/`
+- `tmux` is optional but recommended for durable sessions, for example `brew install tmux`
 
 ## Build and run
 
@@ -55,13 +80,15 @@ Conduit follows the public MainFrame contract rather than any private project in
 
 - The file tree remains the source of truth.
 - `00_inbox` is fast, temporary capture.
+- `20_live` contains volatile operational state and Conduit session receipts.
 - `30_projects` contains outcome-oriented workspaces.
 - Project README frontmatter supplies `title`, `project_state`, `goal`, and `next_action`.
-- Captures append new files and preserve provenance.
+- Captures and receipts append new files and preserve provenance.
 - Retrieved or displayed context is context for inspection, not verification.
+- Terminal output is never promoted into completion evidence merely because an agent said it was done.
 
-See [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
+See [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) and [`docs/DAILY_DRIVER_PASS.md`](docs/DAILY_DRIVER_PASS.md).
 
 ## Status
 
-This repository contains the complete 0.1 application source and tests. The macOS CI workflow is the authoritative compile check because the app depends on AppKit, Speech, AVFoundation, and SwiftTerm's macOS PTY view.
+The repository contains the complete application source, core tests, macOS CI, and a packaged Apple-silicon application artifact on successful pull-request runs. Hardware permissions, installed CLIs, and private MainFrame paths still require a local smoke test.
