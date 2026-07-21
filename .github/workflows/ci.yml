@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+      - name: Selftest
+        run: swift run conduit-selftest
+      - name: Test
+        id: test
+        shell: bash
+        run: |
+          set +e
+          swift test > /tmp/conduit-swift-test.log 2>&1
+          status=$?
+          tail -n 180 /tmp/conduit-swift-test.log
+          exit $status
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-swift-test-log
+          path: /tmp/conduit-swift-test.log
+          if-no-files-found: warn
+      - name: Build release app
+        id: build
+        shell: bash
+        run: |
+          set +e
+          ./scripts/build-app.sh > /tmp/conduit-build.log 2>&1
+          status=$?
+          tail -n 180 /tmp/conduit-build.log
+          exit $status
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-build-log
+          path: /tmp/conduit-build.log
+          if-no-files-found: ignore
+      - name: Package macOS app
+        if: success()
+        shell: bash
+        run: |
+          codesign --force --deep --sign - dist/Conduit.app
+          ditto -c -k --sequesterRsrc --keepParent dist/Conduit.app dist/Conduit-macOS-arm64.zip
+      - name: Upload macOS app
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-macos-arm64
+          path: dist/Conduit-macOS-arm64.zip
+          if-no-files-found: error
