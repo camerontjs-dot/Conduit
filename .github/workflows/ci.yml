@@ -13,6 +13,18 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
       - name: Test
-        run: swift test
+        shell: bash
+        run: |
+          set +e
+          swift test > /tmp/conduit-swift-test.log 2>&1
+          status=$?
+          tail -n 180 /tmp/conduit-swift-test.log
+          exit $status
       - name: Build release app
-        run: ./scripts/build-app.sh
+        shell: bash
+        run: |
+          set +e
+          ./scripts/build-app.sh > /tmp/conduit-build.log 2>&1
+          status=$?
+          tail -n 180 /tmp/conduit-build.log
+          exit $status
