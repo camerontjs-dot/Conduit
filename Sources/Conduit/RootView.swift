@@ -16,10 +16,10 @@ struct RootView: View {
             } else if let project = model.selectedProject {
                 workspace(project)
             } else {
-                ContentUnavailableView(
-                    "No MainFrame projects found",
+                EmptyStateView(
+                    title: "No MainFrame projects found",
                     systemImage: "folder.badge.questionmark",
-                    description: Text("Choose another MainFrame root or create a project under 30_projects.")
+                    description: "Choose another MainFrame root or create a project under 30_projects."
                 )
             }
         }
@@ -125,10 +125,10 @@ struct RootView: View {
         ZStack {
             Color(nsColor: .windowBackgroundColor)
             if model.sessionsForSelectedProject.isEmpty {
-                ContentUnavailableView(
-                    "No terminal session",
+                EmptyStateView(
+                    title: "No terminal session",
                     systemImage: "terminal",
-                    description: Text("Launch an agent or open a shell from the toolbar.")
+                    description: "Launch an agent or open a shell from the toolbar."
                 )
             }
             ForEach(model.sessionsForSelectedProject) { runtime in
@@ -159,6 +159,27 @@ private struct ProjectRow: View {
             }
         }
         .padding(.vertical, 3)
+    }
+}
+
+private struct EmptyStateView: View {
+    let title: String
+    let systemImage: String
+    let description: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 42))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.title2.bold())
+            Text(description)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 420)
+        }
+        .padding(32)
     }
 }
 #endif
