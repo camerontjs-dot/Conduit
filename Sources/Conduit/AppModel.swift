@@ -140,7 +140,7 @@ final class AppModel: ObservableObject {
 
     func addAttachments(_ urls: [URL]) {
         let existing = Set(attachments.map(\.url))
-        attachments.append(contentsOf: urls.filter { !existing.contains($0) }.map(Attachment.init(url:)))
+        attachments.append(contentsOf: urls.filter { !existing.contains($0) }.map { Attachment(url: $0) })
     }
 
     func removeAttachment(_ attachment: Attachment) {
@@ -221,11 +221,12 @@ final class AppModel: ObservableObject {
 
 @MainActor
 final class TerminalRuntime: ObservableObject, Identifiable {
+    nonisolated let id: UUID
     let descriptor: SessionDescriptor
     let controller: TerminalSessionController
-    var id: UUID { descriptor.id }
 
     init(descriptor: SessionDescriptor) {
+        self.id = descriptor.id
         self.descriptor = descriptor
         self.controller = TerminalSessionController(descriptor: descriptor)
     }

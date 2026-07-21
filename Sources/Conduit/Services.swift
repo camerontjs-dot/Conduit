@@ -1,8 +1,11 @@
 #if os(macOS)
 import AppKit
+import AVFoundation
 import ConduitCore
 import Foundation
+import Speech
 import SwiftTerm
+import SwiftUI
 
 @MainActor
 final class TerminalSessionController: NSObject, ObservableObject, LocalProcessTerminalViewDelegate {
@@ -80,6 +83,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     }
 }
 
+@MainActor
 struct TerminalHostView: NSViewRepresentable {
     let controller: TerminalSessionController
 
