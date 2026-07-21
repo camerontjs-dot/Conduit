@@ -13,6 +13,7 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
       - name: Test
+        id: test
         shell: bash
         run: |
           set +e
@@ -20,7 +21,15 @@ jobs:
           status=$?
           tail -n 180 /tmp/conduit-swift-test.log
           exit $status
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-swift-test-log
+          path: /tmp/conduit-swift-test.log
+          if-no-files-found: warn
       - name: Build release app
+        id: build
         shell: bash
         run: |
           set +e
@@ -28,3 +37,10 @@ jobs:
           status=$?
           tail -n 180 /tmp/conduit-build.log
           exit $status
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-build-log
+          path: /tmp/conduit-build.log
+          if-no-files-found: ignore
