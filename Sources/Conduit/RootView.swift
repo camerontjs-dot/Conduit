@@ -96,6 +96,7 @@ struct RootView: View {
                 Button(action: model.chooseMainframeRoot) {
                     Label("Choose Root", systemImage: "folder")
                 }
+                .accessibilityLabel("Choose MainFrame Root")
                 Spacer()
                 Button {
                     model.showDiagnostics = true
@@ -134,6 +135,7 @@ struct RootView: View {
                 .frame(maxWidth: 560)
             Button("Choose MainFrame Root", action: model.chooseMainframeRoot)
                 .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Choose MainFrame Root")
             if let status = model.statusMessage {
                 Text(status)
                     .font(.caption)
@@ -163,6 +165,7 @@ struct RootView: View {
             }
             Button("Choose MainFrame Root", action: model.chooseMainframeRoot)
                 .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Choose MainFrame Root")
             if let status = model.statusMessage {
                 Text(status)
                     .font(.caption)

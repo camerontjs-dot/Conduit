@@ -299,6 +299,22 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func leaveActiveSession() {
+        guard let activeSession else {
+            statusMessage = "No active terminal session to leave."
+            return
+        }
+        closeSession(activeSession)
+    }
+
+    func endActiveSession() {
+        guard let activeSession else {
+            statusMessage = "No active terminal session to end."
+            return
+        }
+        endSession(activeSession)
+    }
+
     /// Kill the process / tmux session and drop the tab. Next launch of that
     /// agent on this project starts fresh (no reconnect to a stuck shell).
     func endSession(_ runtime: TerminalRuntime) {

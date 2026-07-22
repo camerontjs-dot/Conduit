@@ -274,7 +274,9 @@ public enum MainframeScannerError: LocalizedError {
     }
 }
 
-public struct MainframeScanner: Sendable {
+/// FileManager's filesystem APIs are thread-safe; Swift's Foundation overlay
+/// does not yet declare the reference type Sendable on this deployment range.
+public struct MainframeScanner: @unchecked Sendable {
     private let fileManager: FileManager
 
     public init(fileManager: FileManager = .default) {
@@ -379,13 +381,13 @@ public enum InboxWriterError: LocalizedError {
     }
 }
 
-public struct InboxWriter: Sendable {
+public struct InboxWriter: @unchecked Sendable {
     private let fileManager: FileManager
     private let now: @Sendable () -> Date
 
     public init(
         fileManager: FileManager = .default,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.fileManager = fileManager
         self.now = now

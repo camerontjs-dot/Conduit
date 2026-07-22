@@ -25,7 +25,9 @@ public struct ContextBundle: Hashable, Sendable {
     }
 }
 
-public struct ContextBundleBuilder: Sendable {
+/// FileManager's filesystem APIs are thread-safe; Swift's Foundation overlay
+/// does not yet declare the reference type Sendable on this deployment range.
+public struct ContextBundleBuilder: @unchecked Sendable {
     private let fileManager: FileManager
 
     public init(fileManager: FileManager = .default) {
@@ -138,7 +140,7 @@ public enum WorkSessionReceiptError: LocalizedError {
     }
 }
 
-public struct WorkSessionReceiptWriter: Sendable {
+public struct WorkSessionReceiptWriter: @unchecked Sendable {
     private let fileManager: FileManager
 
     public init(fileManager: FileManager = .default) {

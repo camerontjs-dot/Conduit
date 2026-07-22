@@ -22,6 +22,18 @@ struct ConduitApp: App {
             CommandMenu("Conduit") {
                 Button("New Shell") { model.launchDefaultShell() }
                     .keyboardShortcut("t", modifiers: [.command])
+                Menu("Launch or Reconnect Agent") {
+                    ForEach(model.enabledAgents.filter { $0.kind != .shell }) { agent in
+                        Button(agent.name) { model.launch(agent: agent) }
+                    }
+                }
+                Button(model.activeSession?.controller.usesTmux == true ? "Detach Active Session" : "Close Active Session") {
+                    model.leaveActiveSession()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(model.activeSession == nil)
+                Button("End Active Session") { model.endActiveSession() }
+                    .disabled(model.activeSession == nil)
                 Button("Capture to 00_inbox") { model.captureComposerToInbox() }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                 Divider()

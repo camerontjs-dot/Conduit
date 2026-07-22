@@ -37,6 +37,7 @@ struct SettingsView: View {
                             Image(systemName: "trash")
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove \(agent.name) profile")
                     }
                 }
                 Button("Add Agent") {

@@ -213,15 +213,24 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
     // MARK: - LocalProcessTerminalViewDelegate
 
-    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    nonisolated func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-        terminalTitle = title.isEmpty ? descriptor.title : title
+    nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.terminalTitle = title.isEmpty ? self.descriptor.title : title
+        }
     }
 
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
-    func processTerminated(source: TerminalView, exitCode: Int32?) {
+    nonisolated func processTerminated(source: TerminalView, exitCode: Int32?) {
+        Task { @MainActor [weak self] in
+            self?.handleProcessTermination(exitCode: exitCode)
+        }
+    }
+
+    private func handleProcessTermination(exitCode: Int32?) {
         // Already resolved (e.g. our own detach set .detached) — ignore.
         guard !lifecycle.isTerminal else { return }
 
