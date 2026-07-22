@@ -53,12 +53,13 @@ Conduit must:
 
 ```text
 SwiftUI application shell
-├── MainFrame navigator
+├── searchable, lifecycle-grouped MainFrame navigator
 ├── project context panel
 ├── rich composer
 ├── attachment and speech services
 └── terminal workspaces
     ├── TerminalSessionController (lifecycle, readiness-gated delivery)
+    ├── compact observed-state agent identity
     └── SwiftTerm LocalProcessTerminalView
         └── local PTY  ── or ──  tmux attach-session
             └── zsh / Claude / Codex / other CLI
@@ -67,11 +68,13 @@ App services (macOS-only)
 ├── SubprocessRunner (argv-direct, timeout, SIGPIPE-safe)
 ├── EnvironmentResolver (login PATH, resolve never spawns)
 ├── TmuxDriver (new-session -d / detach-client / paste-buffer / has-session)
-└── BlockingWork (GCD offload)
+├── security-scoped MainFrame folder access with timeout recovery
+└── BlockingWork (GCD offload with bounded startup scan)
 
 ConduitCore (AppKit-free, tested)
 ├── frontmatter parser
 ├── MainFrame scanner
+├── project navigation and exact agent-sprite mapping
 ├── prompt assembler + PromptEncoder (paste bytes)
 ├── inbox writer
 ├── SessionLifecycle + naming + quoting + exit-status decode
@@ -168,6 +171,10 @@ The foundation's terminal layer, rebuilt for correctness (see ADRs D-015…D-019
 - event-sourced work sessions with crash recovery
 - subprocess layer that cannot deadlock, hang the main actor, or crash on SIGPIPE
 - single-window scene; on-device speech enforced
+- responsive 1080×720 daily workspace with adaptive context presentation
+- security-scoped MainFrame access recovery and complete local app signing
+- compact Codex and Claude sprites in session controls, with a generic fallback
+  for every unmatched profile
 
 ### Phase 2: Session continuity — **partial**
 

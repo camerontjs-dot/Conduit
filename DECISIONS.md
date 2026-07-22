@@ -152,7 +152,8 @@ MainFrame-only coordination decisions live outside this tree.
 
 ## D-014: Pixel operator strip is decorative telemetry
 
-**Status:** Accepted (daily-driver pass 0.2)  
+**Status:** Superseded by D-021
+
 **Context:** A small status affordance helps scanning many sessions without implying a control-room truth model.
 
 **Decision:** Drive a compact pixel operator strip only from observable runtime state (working, ready, detached, exited, failed). It is not the source of truth for task or agent success.
@@ -213,6 +214,69 @@ MainFrame-only coordination decisions live outside this tree.
 **Decision:** `swift run conduit-selftest` runs a deterministic assertion suite over `ConduitCore` (encoder bytes, lifecycle transitions, event-log roundtrips and recovery, receipt rendering and collision safety, scanner/inbox/bundle behavior) with no test-framework dependency. CI keeps the full XCTest suite.
 
 **Consequences:** Any machine that can build the app can verify the core. The selftest and XCTest suites must be kept in step when core behavior changes.
+
+---
+
+## D-020: Stored paths are not macOS folder permission
+
+**Status:** Accepted (finish pass 0.4)
+
+**Context:** A saved MainFrame URL can remain syntactically valid after a local
+rebuild while macOS has revoked that binary's access to the Desktop folder. A
+blocking `open` call then waits in the kernel and leaves project discovery
+stuck.
+
+**Decision:** Capture a security-scoped bookmark through `NSOpenPanel`, renew it
+at startup, and keep filesystem scanning off the main actor behind a bounded
+wait. If access cannot be renewed or the read does not return, keep the window
+responsive and present an explicit Choose Root recovery action. Sign and verify
+the complete local `.app` bundle so its Info.plist and resources share the
+intended bundle identity.
+
+**Rejected alternatives:** A raw stored path is not permission. A shell helper
+would transfer trust to another process and hide the real access boundary.
+Scanning synchronously before the first window would reproduce the freeze.
+
+**Evidence:** A sampled installed build was blocked in `open` while reading the
+saved root README. The recovery build accepted the same folder through the
+system picker, saved the bookmark, loaded 32 project folders, and restored them
+after relaunch.
+
+**Consequences:** A development build may ask for one renewed folder selection
+after its code identity changes. The installed app fails visibly instead of
+silently hanging. The app remains unsandboxed under D-008.
+
+---
+
+## D-021: Agent sprites are compact identity, not progress evidence
+
+**Status:** Accepted (finish pass 0.4)
+
+**Context:** Generic status ornament duplicated session information and did not
+help distinguish terminal identities. Existing MainFrame character art could
+make the work surface more personable, but external tracker wiring or a
+decorative completion pose would overstate what Conduit observes.
+
+**Decision:** Copy the six Codex and Claude poses into Conduit's own resource
+bundle with source notes and SHA-256 hashes. Resolve only exact known names or
+executables. Every unmatched profile gets an in-code generic character with an
+accessibility hint. Map poses only from terminal lifecycle facts: starting,
+recent output, running quiet, detached, exited, and failed.
+
+**Rejected alternatives:** Runtime reads from the workstation create an
+undeclared product dependency. Fuzzy name matching can impersonate a known
+identity. A large separate sprite strip takes terminal space while repeating
+the session bar. Tracker state would introduce a second control plane.
+
+**Evidence:** Core tests cover exact and fallback mapping. The packaged resource
+manifest verifies all twelve copied PNGs, and the app bundle is checked after
+resource installation. Live visual evidence remains part of the local macOS
+smoke gate.
+
+**Consequences:** Sprites stay inside compact session controls and are hidden as
+redundant VoiceOver elements. Their textual state remains the accessible source
+of meaning. Public redistribution of the copied art is not asserted by this
+decision; the bundled provenance note records that boundary.
 
 ---
 

@@ -18,15 +18,21 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 
 ### Agent workspace
 
-- MainFrame root autodetection plus folder picker
-- Lifecycle-aware project discovery from `30_projects/*/README.md`
+- MainFrame root autodetection plus a security-scoped folder picker. If macOS
+  invalidates access after a rebuild, Conduit shows an explicit recovery step
+  instead of freezing during project discovery.
+- Searchable project discovery from `30_projects/*/README.md`, grouped by
+  explicit lifecycle state without inventing a second inventory
 - Real PTY terminals powered by SwiftTerm
 - Configurable CLI agent profiles
 - Multiple project-scoped terminal tabs
 - Durable tmux sessions created detached and out-of-band, with deterministic project-and-agent names
 - Reconnection to an existing tmux session by launching the same agent again; deterministic detach via `tmux detach-client`
 - Paste-semantics prompt delivery (bracketed paste aware) queued until the agent produces output
-- Compact pixel operator strip driven only by observed process state
+- Compact Codex and Claude character sprites inside session controls, with
+  deterministic pose changes driven only by observed terminal state
+- An explicitly generic pixel character for Shell, Gemini, OpenCode, and custom
+  profiles without copied identity art
 
 ### Rich input
 
@@ -76,7 +82,15 @@ To produce a normal `.app` bundle:
 open dist/Conduit.app
 ```
 
-The first speech-to-text use prompts for microphone and speech-recognition access. The app must remain unsandboxed because its purpose is to launch local shells and access your chosen MainFrame tree.
+The packaging script copies SwiftPM resource bundles into
+`Contents/Resources`, signs the complete app bundle with its local bundle
+identifier, and verifies the result. The installed app does not read sprite
+assets from another MainFrame project at runtime.
+
+The first MainFrame selection grants persistent access to that folder. The
+first speech-to-text use prompts for microphone and speech-recognition access.
+The app must remain unsandboxed because its purpose is to launch local shells
+and access your chosen MainFrame tree.
 
 ## MainFrame compatibility
 

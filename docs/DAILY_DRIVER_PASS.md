@@ -50,17 +50,38 @@ The bundle is capped in size and marked when truncated. It is context for inspec
 
 Shows approximate used and total memory, the largest resident processes, and currently loaded Ollama models. The only destructive control in this pass is explicit Ollama model unloading. General process killing remains in Activity Monitor.
 
-### Pixel operator strip
+### Agent identity in session controls
 
-Each session receives a tiny native pixel operator. Its state is projected from observable runtime facts:
+Codex and Claude sessions use copied character art inside the same compact
+control that carries the agent name, backend, detach action, and observed state.
+The app bundles those resources directly. It has no runtime dependency on the
+separate workstation or pixel-agent tracker.
 
+The pose is projected from observable terminal facts:
+
+- starting: process launch is underway
 - working: output received recently
 - ready: process running without recent output
 - detached: tmux client detached
 - exited: process ended without a nonzero code
 - failed: nonzero exit code observed
 
-The strip is decorative telemetry, not the source of truth.
+The detached pose communicates uncertainty about background progress. The
+exited pose does not mean the agent completed its task. Shell, Gemini, OpenCode,
+and custom profiles receive a generic pixel character with an accessibility
+hint that no dedicated sprite exists.
+
+### Responsive navigation and root recovery
+
+The project navigator is searchable and groups only explicit active lifecycle
+states. At 1080×720, project context collapses to a compact next-action row and
+details sheet so the terminal keeps useful space. Larger windows can show the
+full context panel beside the terminal.
+
+The selected MainFrame root is stored with a security-scoped bookmark. When a
+development rebuild changes the app identity or macOS invalidates folder
+access, startup stays responsive and presents a single folder reauthorization
+step. It does not hang the first window on a protected filesystem read.
 
 ## Deferred deliberately
 
