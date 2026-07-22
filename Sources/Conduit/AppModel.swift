@@ -37,6 +37,7 @@ final class AppModel: ObservableObject {
     @Published var showDiagnostics = false
     @Published var showResources = false
     @Published var showContextBundle = false
+    @Published var projectSearchFocusRequest = 0
     @Published var healthResults: [AgentHealthResult] = []
     @Published var resourceSnapshot = ResourceSnapshot.empty
     @Published var contextCandidates: [ContextDocument] = []
@@ -234,6 +235,10 @@ final class AppModel: ObservableObject {
         if let first = sessionsForSelectedProject.first {
             activeSessionID = first.id
         }
+    }
+
+    func requestProjectSearchFocus() {
+        projectSearchFocusRequest += 1
     }
 
     var sessionsForSelectedProject: [TerminalRuntime] {

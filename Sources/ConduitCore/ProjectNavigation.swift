@@ -36,4 +36,14 @@ public enum ProjectNavigation {
             .replacingOccurrences(of: " ", with: "-")
         return ["active", "in-progress", "doing"].contains(normalized)
     }
+
+    /// Returns the first scanner-ordered project matching a search query.
+    /// Keeping this rule pure lets the keyboard search path use exactly the
+    /// same authority-derived matching behavior as the visible sidebar.
+    public static func firstMatch(
+        in projects: [MainframeProject],
+        query: String
+    ) -> MainframeProject? {
+        projects.first { matches($0, query: query) }
+    }
 }

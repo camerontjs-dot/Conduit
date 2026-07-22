@@ -74,9 +74,11 @@ hint that no dedicated sprite exists.
 ### Responsive navigation and root recovery
 
 The project navigator is searchable and groups only explicit active lifecycle
-states. At 1080×720, project context collapses to a compact next-action row and
-details sheet so the terminal keeps useful space. Larger windows can show the
-full context panel beside the terminal.
+states. `⌘F` opens and focuses the navigator; typing a query and pressing Return
+selects its first scanner-ordered match, so choosing a project does not require
+a pointer. At 1080×720, project context collapses to a compact next-action row
+and details sheet so the terminal keeps useful space. Larger windows can show
+the full context panel beside the terminal.
 
 The selected MainFrame root is stored with a security-scoped bookmark. When a
 development rebuild changes the app identity or macOS invalidates folder

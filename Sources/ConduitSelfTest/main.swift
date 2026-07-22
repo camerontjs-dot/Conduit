@@ -67,6 +67,19 @@ check("project search is case insensitive",
       ProjectNavigation.matches(navigationProject, query: "MACOS"))
 check("project active grouping uses explicit state",
       ProjectNavigation.isActive(navigationProject))
+check("project search keyboard selection preserves scanner order",
+      ProjectNavigation.firstMatch(
+        in: [
+            MainframeProject(
+                slug: "other",
+                path: URL(fileURLWithPath: "/tmp/MainFrame/30_projects/other"),
+                readmePath: nil,
+                metadata: ProjectMetadata(title: "Other")
+            ),
+            navigationProject
+        ],
+        query: "conduit"
+      )?.id == navigationProject.id)
 check("sprite mapping resolves Codex exactly",
       AgentSpriteResolver.resolve(AgentProfile(name: "Codex", command: "codex"))
         == AgentSpriteResolution(skin: .codex, isExactMatch: true))

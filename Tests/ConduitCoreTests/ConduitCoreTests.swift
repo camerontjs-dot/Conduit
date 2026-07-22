@@ -67,6 +67,26 @@ final class ProjectNavigationTests: XCTestCase {
         XCTAssertFalse(ProjectNavigation.isActive(project(state: "parked")))
         XCTAssertFalse(ProjectNavigation.isActive(project(state: "active", isRoot: true)))
     }
+
+    func testFirstMatchPreservesScannerOrderForKeyboardSelection() {
+        let first = project(title: "Conduit Alpha", slug: "conduit-alpha")
+        let second = project(title: "Conduit Beta", slug: "conduit-beta")
+        let unrelated = project(title: "Image Lab", slug: "image-lab")
+
+        XCTAssertEqual(
+            ProjectNavigation.firstMatch(
+                in: [unrelated, first, second],
+                query: "conduit"
+            )?.id,
+            first.id
+        )
+        XCTAssertNil(
+            ProjectNavigation.firstMatch(
+                in: [unrelated, first, second],
+                query: "finance"
+            )
+        )
+    }
 }
 
 final class SettingsStoreTests: XCTestCase {

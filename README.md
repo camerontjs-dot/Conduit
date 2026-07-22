@@ -8,6 +8,7 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 
 1. Choose a MainFrame root.
 2. Select the root workspace or a project discovered under `30_projects/`.
+   Press `⌘F`, type a project name, and press Return for a keyboard-only switch.
 3. Launch or reconnect to Claude, Codex, Gemini, OpenCode, or a normal shell in a real pseudo-terminal.
 4. Compose multiline prompts, dictate them, paste screenshots, capture a screen region, or attach files and folders.
 5. Build a labeled context bundle from project coordination files.
@@ -22,7 +23,8 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
   invalidates access after a rebuild, Conduit shows an explicit recovery step
   instead of freezing during project discovery.
 - Searchable project discovery from `30_projects/*/README.md`, grouped by
-  explicit lifecycle state without inventing a second inventory
+  explicit lifecycle state without inventing a second inventory; `⌘F` focuses
+  the navigator and Return selects the first scanner-ordered match
 - Real PTY terminals powered by SwiftTerm
 - Configurable CLI agent profiles
 - Multiple project-scoped terminal tabs

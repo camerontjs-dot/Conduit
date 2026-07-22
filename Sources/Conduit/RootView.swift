@@ -6,9 +6,11 @@ import UniformTypeIdentifiers
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @State private var projectSearch = ""
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @FocusState private var isProjectSearchFocused: Bool
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 200, ideal: 235, max: 280)
         } detail: {
@@ -46,6 +48,13 @@ struct RootView: View {
         .onChange(of: model.speech.isRecording) { recording in
             if !recording { model.absorbSpeechTranscript() }
         }
+        .onChange(of: model.projectSearchFocusRequest) { _ in
+            columnVisibility = .all
+            Task {
+                await Task.yield()
+                isProjectSearchFocused = true
+            }
+        }
         .task {
             await Task.yield()
             await model.bootstrap()
@@ -58,63 +67,101 @@ struct RootView: View {
         let active = matches.filter(ProjectNavigation.isActive)
         let other = matches.filter { !$0.isMainframeRoot && !ProjectNavigation.isActive($0) }
 
-        return List(selection: $model.selectedProjectID) {
-            if !roots.isEmpty {
-                Section("Workspace") {
-                    ForEach(roots) { project in
-                        projectRow(project)
-                    }
-                }
-            }
-            if !active.isEmpty {
-                Section("Active") {
-                    ForEach(active) { project in
-                        projectRow(project)
-                    }
-                }
-            }
-            if !other.isEmpty {
-                Section("Other") {
-                    ForEach(other) { project in
-                        projectRow(project)
-                    }
-                }
-            }
-            if matches.isEmpty {
-                Text("No projects match “\(projectSearch)”.")
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField("Find a project", text: $projectSearch)
+                    .textFieldStyle(.plain)
+                    .focused($isProjectSearchFocused)
+                    .onSubmit(selectFirstSearchMatch)
+                    .accessibilityLabel("Find a project")
+                if !projectSearch.isEmpty {
+                    Button {
+                        projectSearch = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Clear project search")
+                    .help("Clear project search")
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            List(selection: $model.selectedProjectID) {
+                if !roots.isEmpty {
+                    Section("Workspace") {
+                        ForEach(roots) { project in
+                            projectRow(project)
+                        }
+                    }
+                }
+                if !active.isEmpty {
+                    Section("Active") {
+                        ForEach(active) { project in
+                            projectRow(project)
+                        }
+                    }
+                }
+                if !other.isEmpty {
+                    Section("Other") {
+                        ForEach(other) { project in
+                            projectRow(project)
+                        }
+                    }
+                }
+                if matches.isEmpty {
+                    Text("No projects match “\(projectSearch)”.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: model.selectedProjectID) { selectedID in
+                if let selectedID, let project = model.projects.first(where: { $0.id == selectedID }) {
+                    model.selectProject(project)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                HStack {
+                    Button(action: model.chooseMainframeRoot) {
+                        Label("Choose Root", systemImage: "folder")
+                    }
+                    .accessibilityLabel("Choose MainFrame Root")
+                    Spacer()
+                    Button {
+                        model.showDiagnostics = true
+                    } label: {
+                        Image(systemName: "stethoscope")
+                    }
+                    .accessibilityLabel("Conduit Doctor")
+                    .help("Conduit Doctor")
+                    Button(action: model.refreshProjects) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
+                    .accessibilityLabel("Refresh MainFrame projects")
+                    .help("Refresh MainFrame")
+                }
+                .padding(10)
+                .background(.bar)
             }
         }
-        .searchable(text: $projectSearch, prompt: "Find a project")
-        .onChange(of: model.selectedProjectID) { selectedID in
-            if let selectedID, let project = model.projects.first(where: { $0.id == selectedID }) {
-                model.selectProject(project)
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button(action: model.chooseMainframeRoot) {
-                    Label("Choose Root", systemImage: "folder")
-                }
-                .accessibilityLabel("Choose MainFrame Root")
-                Spacer()
-                Button {
-                    model.showDiagnostics = true
-                } label: {
-                    Image(systemName: "stethoscope")
-                }
-                .accessibilityLabel("Conduit Doctor")
-                .help("Conduit Doctor")
-                Button(action: model.refreshProjects) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
-                .accessibilityLabel("Refresh MainFrame projects")
-                .help("Refresh MainFrame")
-            }
-            .padding(10)
-            .background(.bar)
-        }
+    }
+
+    private func selectFirstSearchMatch() {
+        guard let project = ProjectNavigation.firstMatch(
+            in: model.projects,
+            query: projectSearch
+        ) else { return }
+        model.selectProject(project)
+        projectSearch = ""
+        isProjectSearchFocused = false
+        columnVisibility = .automatic
     }
 
     private func projectRow(_ project: MainframeProject) -> some View {

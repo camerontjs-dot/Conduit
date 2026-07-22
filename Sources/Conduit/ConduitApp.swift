@@ -20,6 +20,8 @@ struct ConduitApp: App {
         .defaultSize(width: 1280, height: 840)
         .commands {
             CommandMenu("Conduit") {
+                Button("Find Project") { model.requestProjectSearchFocus() }
+                    .keyboardShortcut("f", modifiers: [.command])
                 Button("New Shell") { model.launchDefaultShell() }
                     .keyboardShortcut("t", modifiers: [.command])
                 Menu("Launch or Reconnect Agent") {
