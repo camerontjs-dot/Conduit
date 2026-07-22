@@ -231,6 +231,12 @@ struct TmuxDriver: Sendable {
         _ = SubprocessRunner.run(tmuxPath, ["detach-client", "-s", "=\(session)"], timeout: 5)
     }
 
+    /// Kills the named session and its processes. Used when the operator wants
+    /// a true fresh start rather than durable detach/reconnect.
+    func killSession(_ name: String) {
+        _ = SubprocessRunner.run(tmuxPath, ["kill-session", "-t", "=\(name)"], timeout: 5)
+    }
+
     /// Delivers text into the session through a tmux buffer. `paste-buffer -p`
     /// honours the foreground application's bracketed-paste mode, so multiline
     /// prompts arrive as one block; the optional Enter is the explicit submit.

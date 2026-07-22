@@ -15,6 +15,10 @@ struct ConduitApp: App {
                 .frame(minWidth: 1080, minHeight: 720)
                 .task { await model.bootstrap() }
         }
+        // Size from the operator's frame / min size — not from SwiftTerm's
+        // preferred cell grid, which previously "zoomed" the window on attach.
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1280, height: 840)
         .commands {
             CommandMenu("Conduit") {
                 Button("New Shell") { model.launchDefaultShell() }

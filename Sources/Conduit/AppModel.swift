@@ -177,8 +177,37 @@ final class AppModel: ObservableObject {
         return launch(agent: shell)
     }
 
+    /// Detach (tmux durable) or terminate (PTY). Tab leaves the UI; tmux work
+    /// may keep running and will reconnect if the same agent is launched again.
     func closeSession(_ runtime: TerminalRuntime) {
         runtime.controller.closeSession()
+        recordSessionClosed(runtime, endedHard: false)
+        removeSessionTab(runtime)
+    }
+
+    /// Kill the process / tmux session and drop the tab. Next launch of that
+    /// agent on this project starts fresh (no reconnect to a stuck shell).
+    func endSession(_ runtime: TerminalRuntime) {
+        runtime.controller.endSession()
+        recordSessionClosed(runtime, endedHard: true)
+        removeSessionTab(runtime)
+        statusMessage = "Ended \(runtime.descriptor.agent.name) session."
+    }
+
+    /// End the current tab and immediately open a new one for the same agent.
+    @discardableResult
+    func restartSession(_ runtime: TerminalRuntime) -> TerminalRuntime? {
+        let agent = runtime.descriptor.agent
+        let projectPath = runtime.descriptor.projectPath
+        endSession(runtime)
+        if selectedProject?.path != projectPath,
+           let project = projects.first(where: { $0.path == projectPath }) {
+            selectProject(project)
+        }
+        return launch(agent: agent)
+    }
+
+    private func recordSessionClosed(_ runtime: TerminalRuntime, endedHard: Bool) {
         let controller = runtime.controller
         if let project = projects.first(where: { $0.path == runtime.descriptor.projectPath }) {
             appendEvent(
@@ -186,13 +215,16 @@ final class AppModel: ObservableObject {
                     agent: runtime.descriptor.agent.name,
                     title: controller.terminalTitle,
                     exitCode: controller.exitCode,
-                    detached: controller.isDetached,
+                    detached: !endedHard && controller.isDetached,
                     live: false,
                     at: Date()
                 ),
                 for: project
             )
         }
+    }
+
+    private func removeSessionTab(_ runtime: TerminalRuntime) {
         sessions.removeAll { $0.id == runtime.id }
         if activeSessionID == runtime.id {
             activeSessionID = sessionsForSelectedProject.last?.id

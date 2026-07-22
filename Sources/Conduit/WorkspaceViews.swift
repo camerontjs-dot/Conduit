@@ -8,49 +8,65 @@ struct WorkspaceHeader: View {
     let project: MainframeProject
 
     var body: some View {
-        HStack(spacing: 12) {
+        // Title + horizontally scrollable tools so a narrow detail column
+        // (wide sidebar drag, context panel open) never clips Shell/Claude/…
+        // off the trailing edge with no way to reach them.
+        HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.metadata.title).font(.headline)
+                Text(project.metadata.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(project.path.path)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
-            Spacer()
-            ForEach(model.enabledAgents) { agent in
-                Button(agent.name) { model.launch(agent: agent) }
-                    .buttonStyle(.bordered)
-                    .help("Launch or reconnect to \(agent.name) in \(project.metadata.title)")
-            }
-            Menu {
-                Button("Move clipboard selection to composer", action: model.copyClipboardSelectionToComposer)
-                Divider()
-                ForEach(model.enabledAgents) { agent in
-                    Button("Send to \(agent.name)") { model.forwardClipboardSelection(to: agent) }
+            // Keep the name readable; tools scroll rather than steal the leading edge.
+            .frame(minWidth: 120, idealWidth: 200, maxWidth: 320, alignment: .leading)
+            .layoutPriority(1)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(model.enabledAgents) { agent in
+                        Button(agent.name) { model.launch(agent: agent) }
+                            .buttonStyle(.bordered)
+                            .help("Launch or reconnect to \(agent.name) in \(project.metadata.title)")
+                    }
+                    Menu {
+                        Button("Move clipboard selection to composer", action: model.copyClipboardSelectionToComposer)
+                        Divider()
+                        ForEach(model.enabledAgents) { agent in
+                            Button("Send to \(agent.name)") { model.forwardClipboardSelection(to: agent) }
+                        }
+                    } label: {
+                        Image(systemName: "arrowshape.turn.up.right")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .help("Forward copied terminal output")
+                    Button(action: model.prepareContextBundle) {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .help("Build a labeled context bundle")
+                    Button { model.showResources = true } label: {
+                        Image(systemName: "gauge.with.dots.needle.67percent")
+                    }
+                    .help("Resource deck")
+                    Button { model.showDiagnostics = true } label: {
+                        Image(systemName: "stethoscope")
+                    }
+                    .help("Conduit Doctor")
+                    Button {
+                        model.showContext.toggle()
+                    } label: {
+                        Image(systemName: "sidebar.trailing")
+                    }
+                    .help("Toggle project context")
                 }
-            } label: {
-                Image(systemName: "arrowshape.turn.up.right")
+                .padding(.vertical, 1)
             }
-            .menuStyle(.borderlessButton)
-            .help("Forward copied terminal output")
-            Button(action: model.prepareContextBundle) {
-                Image(systemName: "doc.on.doc")
-            }
-            .help("Build a labeled context bundle")
-            Button { model.showResources = true } label: {
-                Image(systemName: "gauge.with.dots.needle.67percent")
-            }
-            .help("Resource deck")
-            Button { model.showDiagnostics = true } label: {
-                Image(systemName: "stethoscope")
-            }
-            .help("Conduit Doctor")
-            Button {
-                model.showContext.toggle()
-            } label: {
-                Image(systemName: "sidebar.trailing")
-            }
-            .help("Toggle project context")
+            .layoutPriority(0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
@@ -69,11 +85,12 @@ struct WorkSessionBar: View {
                     .font(.caption.bold())
                 TextField("Objective", text: model.objectiveBinding(for: project))
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 220)
+                    .frame(minWidth: 120)
+                    .layoutPriority(1)
                     .onSubmit { model.commitWorkSessionFields(for: project) }
                 TextField("Receipt note (optional)", text: model.notesBinding(for: project))
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 180)
+                    .frame(minWidth: 100)
                     .onSubmit { model.commitWorkSessionFields(for: project) }
                 Text(session.startedAt, style: .timer)
                     .font(.caption.monospacedDigit())
@@ -156,7 +173,11 @@ private struct SessionPill: View {
                     .font(.caption2)
             }
             .buttonStyle(.plain)
-            .help(controller.usesTmux ? "Detach session" : "Close session")
+            .help(
+                controller.usesTmux
+                    ? "Detach (keeps tmux running — relaunch reconnects). Right-click for End / Restart."
+                    : "Close session"
+            )
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
@@ -170,7 +191,14 @@ private struct SessionPill: View {
                 }
             }
             Divider()
-            Button(controller.usesTmux ? "Detach" : "Close") { model.closeSession(runtime) }
+            if controller.usesTmux {
+                Button("Detach (keep running)") { model.closeSession(runtime) }
+                Button("End session (kill process)", role: .destructive) { model.endSession(runtime) }
+                Button("Restart session") { _ = model.restartSession(runtime) }
+            } else {
+                Button("Close", role: .destructive) { model.closeSession(runtime) }
+                Button("Restart session") { _ = model.restartSession(runtime) }
+            }
         }
     }
 }

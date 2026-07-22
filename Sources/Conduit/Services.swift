@@ -138,6 +138,9 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         terminalView.process.send(data: bytes[...])
     }
 
+    /// Detach (tmux) or terminate (direct PTY). Does not kill a durable tmux
+    /// session — relaunching the same agent will reconnect. Use `endSession`
+    /// when the operator wants the process gone and a clean slate.
     func closeSession() {
         switch lifecycle {
         case .idle, .detached, .exited:
@@ -163,6 +166,24 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         } else {
             terminate()
         }
+    }
+
+    /// Kill the underlying process (and durable tmux session when present) so
+    /// the next launch creates a brand-new session instead of reconnecting.
+    func endSession() {
+        failPendingPrompts()
+        if usesTmux, let name = tmuxSessionName, let tmux = EnvironmentResolver.shared.resolve("tmux") {
+            // Kill first so has-session during processTerminated sees "gone".
+            TmuxDriver(tmuxPath: tmux).killSession(name)
+        }
+        // Detach→exited is blocked on the state machine (receipt honesty);
+        // an explicit operator kill may force the exited state.
+        if case .exited = lifecycle {
+            // already terminal
+        } else if !lifecycle.transition(to: .exited(code: nil)) {
+            lifecycle = .exited(code: nil)
+        }
+        terminalView.terminate()
     }
 
     func terminate() {
@@ -337,16 +358,70 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     }
 }
 
+/// Hosts a SwiftTerm view without letting it dictate SwiftUI / window ideal size.
+/// Returning `LocalProcessTerminalView` directly made macOS grow or reflow the
+/// window when a session attached (looked like a zoom; clipped both edges).
+final class TerminalContainerView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        // Never advertise a preferred size to Auto Layout / SwiftUI.
+        setContentHuggingPriority(.defaultLow, for: .horizontal)
+        setContentHuggingPriority(.defaultLow, for: .vertical)
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        autoresizesSubviews = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+    }
+
+    override var isFlipped: Bool { false }
+
+    func attach(_ terminal: LocalProcessTerminalView) {
+        if terminal.superview === self {
+            layoutTerminal(terminal)
+            return
+        }
+        terminal.removeFromSuperview()
+        terminal.translatesAutoresizingMaskIntoConstraints = true
+        terminal.autoresizingMask = [.width, .height]
+        addSubview(terminal)
+        layoutTerminal(terminal)
+    }
+
+    private func layoutTerminal(_ terminal: LocalProcessTerminalView) {
+        terminal.frame = bounds
+    }
+
+    override func layout() {
+        super.layout()
+        for sub in subviews {
+            sub.frame = bounds
+        }
+    }
+}
+
 @MainActor
 struct TerminalHostView: NSViewRepresentable {
     let controller: TerminalSessionController
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
+    func makeNSView(context: Context) -> TerminalContainerView {
+        let container = TerminalContainerView(frame: .zero)
         controller.startIfNeeded()
-        return controller.terminalView
+        container.attach(controller.terminalView)
+        return container
     }
 
-    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {}
+    func updateNSView(_ container: TerminalContainerView, context: Context) {
+        controller.startIfNeeded()
+        container.attach(controller.terminalView)
+    }
 }
 
 private enum AttachmentServiceError: LocalizedError {

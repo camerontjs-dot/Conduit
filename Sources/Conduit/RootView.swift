@@ -7,9 +7,12 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
+        // Cap the sidebar: min-only (no max) lets a drag expand it until the
+        // detail column is crushed — agent buttons clip, terminal minWidth
+        // can't be satisfied, and the pane goes blank. Max keeps detail usable.
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 210, ideal: 250)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 340)
         } detail: {
             if model.settings.mainframeRoot == nil {
                 onboarding
@@ -107,9 +110,12 @@ struct RootView: View {
             Divider()
             HSplitView {
                 terminalArea
+                    .layoutPriority(1)
                 if model.showContext {
                     ContextPanel(project: project)
-                        .frame(minWidth: 260, idealWidth: 330, maxWidth: 440)
+                        // Soft mins: hard 260+ crushed the terminal when the
+                        // leading sidebar was wide and the window was not.
+                        .frame(minWidth: 200, idealWidth: 300, maxWidth: 420)
                 }
             }
             Divider()
@@ -150,15 +156,27 @@ struct RootView: View {
                     systemImage: "terminal",
                     description: "Launch an agent or open a shell from the toolbar."
                 )
-            }
-            ForEach(model.sessionsForSelectedProject) { runtime in
-                TerminalHostView(controller: runtime.controller)
-                    .opacity(runtime.id == model.activeSessionID ? 1 : 0)
-                    .allowsHitTesting(runtime.id == model.activeSessionID)
-                    .accessibilityHidden(runtime.id != model.activeSessionID)
+            } else if let active = activeTerminalRuntime {
+                // Mount only the active terminal. Stacking every session as a
+                // full-size NSViewRepresentable (even at opacity 0) let SwiftTerm
+                // fight the window for ideal size and clipped the detail chrome.
+                TerminalHostView(controller: active.controller)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 480, minHeight: 360)
+        .clipped()
+        // Soft floor only — hard mins + context panel + sidebar crushed layout.
+        .frame(minWidth: 280, minHeight: 240)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Prefer the selected tab; fall back to the project's first session.
+    private var activeTerminalRuntime: TerminalRuntime? {
+        let sessions = model.sessionsForSelectedProject
+        if let id = model.activeSessionID, let match = sessions.first(where: { $0.id == id }) {
+            return match
+        }
+        return sessions.first
     }
 }
 
