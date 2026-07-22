@@ -18,11 +18,13 @@ struct WorkspaceHeader: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .help(project.metadata.title)
                 Text(project.path.path)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .help(project.path.path)
             }
             .frame(minWidth: 120, idealWidth: 210, maxWidth: 340, alignment: .leading)
             .layoutPriority(1)

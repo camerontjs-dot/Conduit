@@ -333,6 +333,7 @@ private struct ProjectRow: View {
             }
         }
         .padding(.vertical, 3)
+        .help(project.metadata.title)
         .accessibilityElement(children: .combine)
     }
 }
@@ -377,7 +378,7 @@ private struct PixelOnboardingMark: View {
             fill(7, 9, 2, 3, .secondary)
         }
         .frame(width: 88, height: 88)
-        .accessibilityLabel("Conduit pixel operator")
+        .accessibilityHidden(true)
     }
 }
 #endif

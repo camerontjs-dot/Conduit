@@ -111,6 +111,8 @@ struct ComposerView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .help(status)
+                        .accessibilityLabel(status)
                 }
                 Spacer()
                 Button(action: model.captureComposerToInbox) {
