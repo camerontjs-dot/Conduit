@@ -116,17 +116,23 @@ public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
 
 public struct ConduitSettings: Codable, Sendable {
     public var mainframeRoot: URL?
+    /// Security-scoped bookmark captured by the system folder picker. The URL
+    /// remains human-readable in config; this opaque value lets the installed
+    /// app renew access without treating a stored path as permission.
+    public var mainframeRootBookmark: Data?
     public var agents: [AgentProfile]
     public var showContextByDefault: Bool
     public var restoreSessions: Bool
 
     public init(
         mainframeRoot: URL? = nil,
+        mainframeRootBookmark: Data? = nil,
         agents: [AgentProfile] = AgentProfile.defaults,
         showContextByDefault: Bool = true,
         restoreSessions: Bool = true
     ) {
         self.mainframeRoot = mainframeRoot
+        self.mainframeRootBookmark = mainframeRootBookmark
         self.agents = agents
         self.showContextByDefault = showContextByDefault
         self.restoreSessions = restoreSessions
@@ -448,6 +454,19 @@ public actor SettingsStore {
     }
 
     public func load() -> ConduitSettings {
+        Self.loadSnapshot(file: file)
+    }
+
+    /// A tiny synchronous snapshot read for app startup. Writes remain
+    /// actor-isolated; reads do not need an executor hop that can delay first
+    /// window restoration.
+    public nonisolated static func loadSnapshot(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> ConduitSettings {
+        loadSnapshot(file: home.appendingPathComponent(".conduit/config.json"))
+    }
+
+    private nonisolated static func loadSnapshot(file: URL) -> ConduitSettings {
         guard let data = try? Data(contentsOf: file),
               let settings = try? JSONDecoder().decode(ConduitSettings.self, from: data) else {
             return ConduitSettings(mainframeRoot: MainframeScanner.autodetect())

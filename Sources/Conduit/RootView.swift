@@ -5,19 +5,19 @@ import UniformTypeIdentifiers
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var projectSearch = ""
 
     var body: some View {
-        // Cap the sidebar: min-only (no max) lets a drag expand it until the
-        // detail column is crushed — agent buttons clip, terminal minWidth
-        // can't be satisfied, and the pane goes blank. Max keeps detail usable.
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 340)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 235, max: 280)
         } detail: {
             if model.settings.mainframeRoot == nil {
                 onboarding
+            } else if model.rootAccessNeedsAuthorization {
+                rootAuthorization
             } else if let project = model.selectedProject {
-                workspace(project)
+                ProjectWorkspaceView(project: project)
             } else {
                 EmptyStateView(
                     title: "No MainFrame projects found",
@@ -46,17 +46,49 @@ struct RootView: View {
         .onChange(of: model.speech.isRecording) { recording in
             if !recording { model.absorbSpeechTranscript() }
         }
+        .task {
+            await Task.yield()
+            await model.bootstrap()
+        }
     }
 
     private var sidebar: some View {
-        List(selection: $model.selectedProjectID) {
-            Section("MainFrame") {
-                ForEach(model.projects) { project in
-                    ProjectRow(project: project)
-                        .tag(project.id)
-                        .contentShape(Rectangle())
-                        .onTapGesture { model.selectProject(project) }
+        let matches = model.projects.filter { ProjectNavigation.matches($0, query: projectSearch) }
+        let roots = matches.filter(\.isMainframeRoot)
+        let active = matches.filter(ProjectNavigation.isActive)
+        let other = matches.filter { !$0.isMainframeRoot && !ProjectNavigation.isActive($0) }
+
+        return List(selection: $model.selectedProjectID) {
+            if !roots.isEmpty {
+                Section("Workspace") {
+                    ForEach(roots) { project in
+                        projectRow(project)
+                    }
                 }
+            }
+            if !active.isEmpty {
+                Section("Active") {
+                    ForEach(active) { project in
+                        projectRow(project)
+                    }
+                }
+            }
+            if !other.isEmpty {
+                Section("Other") {
+                    ForEach(other) { project in
+                        projectRow(project)
+                    }
+                }
+            }
+            if matches.isEmpty {
+                Text("No projects match “\(projectSearch)”.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .searchable(text: $projectSearch, prompt: "Find a project")
+        .onChange(of: model.selectedProjectID) { selectedID in
+            if let selectedID, let project = model.projects.first(where: { $0.id == selectedID }) {
+                model.selectProject(project)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -70,15 +102,25 @@ struct RootView: View {
                 } label: {
                     Image(systemName: "stethoscope")
                 }
+                .accessibilityLabel("Conduit Doctor")
                 .help("Conduit Doctor")
                 Button(action: model.refreshProjects) {
                     Image(systemName: "arrow.clockwise")
                 }
+                .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
+                .accessibilityLabel("Refresh MainFrame projects")
                 .help("Refresh MainFrame")
             }
             .padding(10)
             .background(.bar)
         }
+    }
+
+    private func projectRow(_ project: MainframeProject) -> some View {
+        ProjectRow(project: project)
+            .tag(project.id)
+            .contentShape(Rectangle())
+            .onTapGesture { model.selectProject(project) }
     }
 
     private var onboarding: some View {
@@ -92,34 +134,86 @@ struct RootView: View {
                 .frame(maxWidth: 560)
             Button("Choose MainFrame Root", action: model.chooseMainframeRoot)
                 .buttonStyle(.borderedProminent)
+            if let status = model.statusMessage {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(40)
     }
 
-    private func workspace(_ project: MainframeProject) -> some View {
+    private var rootAuthorization: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "folder.badge.questionmark")
+                .font(.system(size: 44))
+                .foregroundStyle(.orange)
+            Text("Renew MainFrame Access")
+                .font(.title2.bold())
+            Text("macOS no longer recognizes this build's access to the saved folder. Choose the same MainFrame root once; Conduit will preserve that authorization for future launches.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 520)
+            if let root = model.settings.mainframeRoot {
+                Text(root.path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+            Button("Choose MainFrame Root", action: model.chooseMainframeRoot)
+                .buttonStyle(.borderedProminent)
+            if let status = model.statusMessage {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(40)
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct ProjectWorkspaceView: View {
+    @EnvironmentObject private var model: AppModel
+    let project: MainframeProject
+    @State private var showContextDetails = false
+
+    var body: some View {
         VStack(spacing: 0) {
             WorkspaceHeader(project: project)
             Divider()
             WorkSessionBar(project: project)
             Divider()
             SessionBar()
-            if !model.sessionsForSelectedProject.isEmpty {
-                Divider()
-                PixelAgentStrip()
-            }
             Divider()
-            HSplitView {
-                terminalArea
-                    .layoutPriority(1)
-                if model.showContext {
-                    ContextPanel(project: project)
-                        // Soft mins: hard 260+ crushed the terminal when the
-                        // leading sidebar was wide and the window was not.
-                        .frame(minWidth: 200, idealWidth: 300, maxWidth: 420)
+            GeometryReader { geometry in
+                if model.showContext && geometry.size.width >= 900 {
+                    HSplitView {
+                        terminalArea
+                            .layoutPriority(1)
+                        ContextPanel(project: project)
+                            .frame(minWidth: 260, idealWidth: 310, maxWidth: 400)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        if model.showContext {
+                            CompactContextBar(project: project) {
+                                showContextDetails = true
+                            }
+                            Divider()
+                        }
+                        terminalArea
+                    }
                 }
             }
+            .frame(minHeight: 240)
             Divider()
             ComposerView()
+        }
+        .sheet(isPresented: $showContextDetails) {
+            ContextPanel(project: project)
+                .frame(width: 560, height: 620)
         }
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $model.isDropTargeted) { providers in
             for provider in providers {
@@ -157,26 +251,65 @@ struct RootView: View {
                     description: "Launch an agent or open a shell from the toolbar."
                 )
             } else if let active = activeTerminalRuntime {
-                // Mount only the active terminal. Stacking every session as a
-                // full-size NSViewRepresentable (even at opacity 0) let SwiftTerm
-                // fight the window for ideal size and clipped the detail chrome.
                 TerminalHostView(controller: active.controller)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .clipped()
-        // Soft floor only — hard mins + context panel + sidebar crushed layout.
         .frame(minWidth: 280, minHeight: 240)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Prefer the selected tab; fall back to the project's first session.
     private var activeTerminalRuntime: TerminalRuntime? {
         let sessions = model.sessionsForSelectedProject
         if let id = model.activeSessionID, let match = sessions.first(where: { $0.id == id }) {
             return match
         }
         return sessions.first
+    }
+}
+
+private struct CompactContextBar: View {
+    let project: MainframeProject
+    let showDetails: () -> Void
+
+    private var summaryTitle: String {
+        project.metadata.nextAction == nil ? "Goal" : "Next action"
+    }
+
+    private var summary: String {
+        project.metadata.nextAction ?? project.metadata.goal ?? "Open the project context for README details."
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "scope")
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(summaryTitle.uppercased())
+                    .font(.caption2.bold())
+                    .foregroundStyle(.secondary)
+                Text(summary)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let state = project.metadata.projectState ?? project.metadata.status {
+                Text(state.uppercased())
+                    .font(.caption2.bold())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.09), in: Capsule())
+            }
+            Button("Details", action: showDetails)
+                .buttonStyle(.borderless)
+                .accessibilityHint("Opens the full project context")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color.accentColor.opacity(0.045))
     }
 }
 
@@ -197,6 +330,7 @@ private struct ProjectRow: View {
             }
         }
         .padding(.vertical, 3)
+        .accessibilityElement(children: .combine)
     }
 }
 

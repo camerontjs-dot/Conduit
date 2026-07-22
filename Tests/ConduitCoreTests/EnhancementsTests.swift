@@ -44,7 +44,10 @@ final class WorkSessionEventTests: XCTestCase {
             try log.append(event)
         }
         XCTAssertEqual(log.readEvents().count, 3)
-        XCTAssertEqual(WorkSessionEventLog.interruptedLogs(in: dir).map(\.url), [log.url])
+        XCTAssertEqual(
+            WorkSessionEventLog.interruptedLogs(in: dir).map { $0.url.resolvingSymlinksInPath() },
+            [log.url.resolvingSymlinksInPath()]
+        )
         try log.append(.closed(at: Date(timeIntervalSince1970: 1_700_000_003)))
         XCTAssertTrue(WorkSessionEventLog.interruptedLogs(in: dir).isEmpty)
     }

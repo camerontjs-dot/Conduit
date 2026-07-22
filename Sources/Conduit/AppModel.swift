@@ -13,10 +13,17 @@ struct ActiveWorkSession: Identifiable, Sendable {
     let log: WorkSessionEventLog
 }
 
+private enum ProjectScanResult: Sendable {
+    case success([MainframeProject])
+    case failure(String)
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var settings = ConduitSettings()
     @Published var projects: [MainframeProject] = []
+    @Published var rootAccessNeedsAuthorization = false
+    @Published var isScanningProjects = false
     @Published var selectedProjectID: String?
     @Published var sessions: [TerminalRuntime] = []
     @Published var activeSessionID: UUID?
@@ -50,6 +57,8 @@ final class AppModel: ObservableObject {
     private let worklogDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".conduit/worklog", isDirectory: true)
     private var hasBootstrapped = false
+    private var scopedRootURL: URL?
+    private var isUsingScopedRoot = false
 
     var selectedProject: MainframeProject? {
         projects.first { $0.id == selectedProjectID }
@@ -69,35 +78,80 @@ final class AppModel: ObservableObject {
         // logs, so guard it.
         guard !hasBootstrapped else { return }
         hasBootstrapped = true
+        statusMessage = "Loading Conduit configuration…"
 
         Task.detached(priority: .utility) {
             EnvironmentResolver.shared.prewarm()
         }
-        settings = await store.load()
+        settings = SettingsStore.loadSnapshot()
         showContext = settings.showContextByDefault
-        refreshProjects()
+        guard activateSavedRootAccess() else {
+            projects = []
+            selectedProjectID = nil
+            if settings.mainframeRoot != nil {
+                rootAccessNeedsAuthorization = true
+                statusMessage = "Choose Root once to renew macOS access to MainFrame."
+            }
+            return
+        }
+        statusMessage = "Scanning the configured MainFrame root…"
+        guard await refreshProjectsForBootstrap() else { return }
         recoverInterruptedWorkSessions()
         async let health: Void = refreshHealth()
         async let resources: Void = refreshResources()
         _ = await (health, resources)
     }
 
-    func refreshProjects() {
+    /// Startup scanning touches a protected user-selected folder. Keep that
+    /// filesystem walk off the main actor so AppKit can finish first-window
+    /// layout and present any privacy UI without a zero-sized window.
+    @discardableResult
+    private func refreshProjectsForBootstrap() async -> Bool {
         guard let root = settings.mainframeRoot else {
             projects = []
             selectedProjectID = nil
-            return
+            return false
         }
-        do {
-            projects = try scanner.scan(root: root)
-            if selectedProjectID == nil || !projects.contains(where: { $0.id == selectedProjectID }) {
-                selectedProjectID = projects.first?.id
+        guard !isScanningProjects else { return false }
+        isScanningProjects = true
+        defer { isScanningProjects = false }
+        let scanner = self.scanner
+        let result = await BlockingWork.run(qos: .userInitiated, timeout: 6) {
+            do {
+                return ProjectScanResult.success(try scanner.scan(root: root))
+            } catch {
+                return ProjectScanResult.failure(error.localizedDescription)
             }
-            statusMessage = "Loaded \(max(projects.count - 1, 0)) projects from MainFrame."
-            errorMessage = nil
-        } catch {
+        }
+        guard let result else {
             projects = []
-            errorMessage = error.localizedDescription
+            selectedProjectID = nil
+            rootAccessNeedsAuthorization = true
+            statusMessage = "MainFrame did not respond. Choose Root to renew macOS folder access."
+            return false
+        }
+        switch result {
+        case .success(let scanned):
+            projects = scanned
+            if selectedProjectID == nil || !scanned.contains(where: { $0.id == selectedProjectID }) {
+                selectedProjectID = scanned.first?.id
+            }
+            statusMessage = "Loaded \(max(scanned.count - 1, 0)) projects from MainFrame."
+            errorMessage = nil
+            rootAccessNeedsAuthorization = false
+            return true
+        case .failure(let message):
+            projects = []
+            errorMessage = message
+            return false
+        }
+    }
+
+    func refreshProjects() {
+        guard !isScanningProjects else { return }
+        Task {
+            statusMessage = "Refreshing MainFrame projects…"
+            _ = await refreshProjectsForBootstrap()
         }
     }
 
@@ -108,8 +162,25 @@ final class AppModel: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
+        panel.directoryURL = settings.mainframeRoot
         if panel.runModal() == .OK, let url = panel.url {
-            settings.mainframeRoot = url
+            endScopedRootAccess()
+            do {
+                let bookmark = try url.bookmarkData(
+                    options: [.withSecurityScope],
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                )
+                settings.mainframeRoot = url
+                settings.mainframeRootBookmark = bookmark
+                scopedRootURL = url
+                isUsingScopedRoot = url.startAccessingSecurityScopedResource()
+                rootAccessNeedsAuthorization = false
+            } catch {
+                rootAccessNeedsAuthorization = true
+                errorMessage = "Conduit could not preserve access to that folder: \(error.localizedDescription)"
+                return
+            }
             Task {
                 do {
                     try await store.save(settings)
@@ -119,6 +190,43 @@ final class AppModel: ObservableObject {
             }
             refreshProjects()
         }
+    }
+
+    private func activateSavedRootAccess() -> Bool {
+        guard let bookmark = settings.mainframeRootBookmark else {
+            return settings.mainframeRoot == nil
+        }
+        var isStale = false
+        do {
+            let url = try URL(
+                resolvingBookmarkData: bookmark,
+                options: [.withSecurityScope, .withoutUI],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            settings.mainframeRoot = url
+            scopedRootURL = url
+            isUsingScopedRoot = url.startAccessingSecurityScopedResource()
+            if isStale {
+                rootAccessNeedsAuthorization = true
+                statusMessage = "MainFrame access has expired. Choose Root to renew it."
+                endScopedRootAccess()
+                return false
+            }
+            return true
+        } catch {
+            rootAccessNeedsAuthorization = true
+            statusMessage = "MainFrame access could not be restored. Choose Root to renew it."
+            return false
+        }
+    }
+
+    private func endScopedRootAccess() {
+        if isUsingScopedRoot {
+            scopedRootURL?.stopAccessingSecurityScopedResource()
+        }
+        scopedRootURL = nil
+        isUsingScopedRoot = false
     }
 
     func selectProject(_ project: MainframeProject) {
@@ -180,9 +288,15 @@ final class AppModel: ObservableObject {
     /// Detach (tmux durable) or terminate (PTY). Tab leaves the UI; tmux work
     /// may keep running and will reconnect if the same agent is launched again.
     func closeSession(_ runtime: TerminalRuntime) {
+        let keptRunning = runtime.controller.usesTmux
         runtime.controller.closeSession()
         recordSessionClosed(runtime, endedHard: false)
         removeSessionTab(runtime)
+        if keptRunning {
+            statusMessage = "Detached \(runtime.descriptor.agent.name). Choose it from Launch to reconnect."
+        } else {
+            statusMessage = "Closed \(runtime.descriptor.agent.name) session."
+        }
     }
 
     /// Kill the process / tmux session and drop the tab. Next launch of that

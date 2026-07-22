@@ -7,10 +7,11 @@ struct WorkspaceHeader: View {
     @EnvironmentObject private var model: AppModel
     let project: MainframeProject
 
+    private var launchAgents: [AgentProfile] {
+        model.enabledAgents.filter { $0.kind != .shell }
+    }
+
     var body: some View {
-        // Title + horizontally scrollable tools so a narrow detail column
-        // (wide sidebar drag, context panel open) never clips Shell/Claude/…
-        // off the trailing edge with no way to reach them.
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(project.metadata.title)
@@ -23,50 +24,63 @@ struct WorkspaceHeader: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            // Keep the name readable; tools scroll rather than steal the leading edge.
-            .frame(minWidth: 120, idealWidth: 200, maxWidth: 320, alignment: .leading)
+            .frame(minWidth: 120, idealWidth: 210, maxWidth: 340, alignment: .leading)
             .layoutPriority(1)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(model.enabledAgents) { agent in
-                        Button(agent.name) { model.launch(agent: agent) }
-                            .buttonStyle(.bordered)
-                            .help("Launch or reconnect to \(agent.name) in \(project.metadata.title)")
-                    }
-                    Menu {
-                        Button("Move clipboard selection to composer", action: model.copyClipboardSelectionToComposer)
-                        Divider()
-                        ForEach(model.enabledAgents) { agent in
-                            Button("Send to \(agent.name)") { model.forwardClipboardSelection(to: agent) }
-                        }
-                    } label: {
-                        Image(systemName: "arrowshape.turn.up.right")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .help("Forward copied terminal output")
-                    Button(action: model.prepareContextBundle) {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .help("Build a labeled context bundle")
-                    Button { model.showResources = true } label: {
-                        Image(systemName: "gauge.with.dots.needle.67percent")
-                    }
-                    .help("Resource deck")
-                    Button { model.showDiagnostics = true } label: {
-                        Image(systemName: "stethoscope")
-                    }
-                    .help("Conduit Doctor")
-                    Button {
-                        model.showContext.toggle()
-                    } label: {
-                        Image(systemName: "sidebar.trailing")
-                    }
-                    .help("Toggle project context")
-                }
-                .padding(.vertical, 1)
+            Button {
+                model.launchDefaultShell()
+            } label: {
+                Label("Shell", systemImage: "terminal")
             }
-            .layoutPriority(0)
+            .buttonStyle(.bordered)
+            .help("Open or reconnect to the project shell")
+
+            Menu {
+                ForEach(launchAgents) { agent in
+                    Button(agent.name) { model.launch(agent: agent) }
+                }
+            } label: {
+                Label("Launch", systemImage: "sparkles")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(launchAgents.isEmpty)
+            .help("Launch or reconnect to an agent")
+
+            Menu {
+                Button("Move selection to composer", action: model.copyClipboardSelectionToComposer)
+                Divider()
+                ForEach(model.enabledAgents) { agent in
+                    Button("Send to \(agent.name)") { model.forwardClipboardSelection(to: agent) }
+                }
+            } label: {
+                Image(systemName: "arrowshape.turn.up.right")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Forward copied terminal output")
+            .help("Forward copied terminal output")
+
+            Menu {
+                Button("Build Context Bundle", action: model.prepareContextBundle)
+                Button("Resource Deck") { model.showResources = true }
+                Button("Conduit Doctor") { model.showDiagnostics = true }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Workspace tools")
+            .help("Context bundle, resources, and diagnostics")
+
+            Button {
+                model.showContext.toggle()
+            } label: {
+                Image(systemName: model.showContext ? "sidebar.trailing" : "sidebar.trailing.hide")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(model.showContext ? "Hide project context" : "Show project context")
+            .help("Toggle project context")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
@@ -76,27 +90,65 @@ struct WorkspaceHeader: View {
 struct WorkSessionBar: View {
     @EnvironmentObject private var model: AppModel
     let project: MainframeProject
+    @State private var showReceiptNote = false
 
     var body: some View {
         HStack(spacing: 10) {
             if let session = model.workSession(for: project) {
-                Circle().fill(.green).frame(width: 7, height: 7)
-                Text("Work session")
+                Label("Work", systemImage: "record.circle.fill")
                     .font(.caption.bold())
-                TextField("Objective", text: model.objectiveBinding(for: project))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 120)
-                    .layoutPriority(1)
-                    .onSubmit { model.commitWorkSessionFields(for: project) }
-                TextField("Receipt note (optional)", text: model.notesBinding(for: project))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 100)
-                    .onSubmit { model.commitWorkSessionFields(for: project) }
+                    .foregroundStyle(.green)
+                    .accessibilityLabel("Work session active")
                 Text(session.startedAt, style: .timer)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                Button("Close & Receipt") { model.closeWorkSession(for: project) }
+                TextField("Objective", text: model.objectiveBinding(for: project))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 150)
+                    .layoutPriority(1)
+                    .onSubmit { model.commitWorkSessionFields(for: project) }
+                    .accessibilityLabel("Work session objective")
+                Button {
+                    showReceiptNote.toggle()
+                } label: {
+                    Image(systemName: session.notes.isEmpty ? "note.text.badge.plus" : "note.text")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(session.notes.isEmpty ? "Add receipt note" : "Edit receipt note")
+                .help(session.notes.isEmpty ? "Add an optional receipt note" : "Edit the receipt note")
+                .popover(isPresented: $showReceiptNote) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Receipt note")
+                            .font(.headline)
+                        Text("Record an operator observation. This does not claim the terminal work succeeded.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("Optional observation", text: model.notesBinding(for: project))
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                model.commitWorkSessionFields(for: project)
+                                showReceiptNote = false
+                            }
+                        HStack {
+                            Spacer()
+                            Button("Done") {
+                                model.commitWorkSessionFields(for: project)
+                                showReceiptNote = false
+                            }
+                            .keyboardShortcut(.defaultAction)
+                        }
+                    }
+                    .padding()
+                    .frame(width: 360)
+                    .onDisappear { model.commitWorkSessionFields(for: project) }
+                }
+                Button {
+                    model.closeWorkSession(for: project)
+                } label: {
+                    Label("Receipt", systemImage: "checkmark.seal")
+                }
                     .buttonStyle(.bordered)
+                    .accessibilityLabel("Close work session and write receipt")
                     .help("Write an append-only receipt under 20_live/conduit/sessions")
             } else {
                 Image(systemName: "record.circle")
@@ -109,7 +161,7 @@ struct WorkSessionBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Color.secondary.opacity(0.04))
+        .background(Color.accentColor.opacity(0.04))
     }
 }
 
@@ -122,6 +174,9 @@ struct SessionBar: View {
         TimelineView(.periodic(from: .now, by: 0.7)) { timeline in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
+                    Text("SESSIONS")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
                     ForEach(model.sessionsForSelectedProject) { runtime in
                         SessionPill(runtime: runtime, date: timeline.date)
                             .environmentObject(model)
@@ -129,9 +184,11 @@ struct SessionBar: View {
                     Button {
                         model.launchDefaultShell()
                     } label: {
-                        Image(systemName: "plus")
+                        Label("New shell", systemImage: "plus")
                     }
                     .buttonStyle(.borderless)
+                    .font(.caption)
+                    .accessibilityHint("Starts or reconnects to the project shell")
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
@@ -156,16 +213,25 @@ private struct SessionPill: View {
     var body: some View {
         let state = controller.visualState(at: date)
         HStack(spacing: 6) {
-            Circle()
-                .fill(state.indicatorColor)
-                .frame(width: 7, height: 7)
-            Button(controller.terminalTitle) {
+            Button {
                 model.activeSessionID = runtime.id
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(state.indicatorColor)
+                        .frame(width: 7, height: 7)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(runtime.descriptor.agent.name)
+                            .font(.caption.bold())
+                        Text("\(state.label) · \(controller.backendLabel)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .buttonStyle(.plain)
-            Text(controller.backendLabel)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            .accessibilityLabel("\(runtime.descriptor.agent.name) session, \(state.label), \(controller.backendLabel)")
+            .accessibilityHint("Switches the terminal to this session")
             Button {
                 model.closeSession(runtime)
             } label: {
@@ -173,6 +239,8 @@ private struct SessionPill: View {
                     .font(.caption2)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(controller.usesTmux ? "Detach \(runtime.descriptor.agent.name) session" : "Close \(runtime.descriptor.agent.name) session")
+            .accessibilityHint(controller.usesTmux ? "Keeps the tmux process running; choose the agent from Launch to reconnect" : "Ends the direct terminal process")
             .help(
                 controller.usesTmux
                     ? "Detach (keeps tmux running — relaunch reconnects). Right-click for End / Restart."
@@ -219,6 +287,7 @@ struct ContextPanel: View {
                     Image(systemName: "folder")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Open project in Finder")
                 .help("Open in Finder")
             }
             .padding(12)

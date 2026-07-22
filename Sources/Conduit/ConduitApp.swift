@@ -13,7 +13,6 @@ struct ConduitApp: App {
             RootView()
                 .environmentObject(model)
                 .frame(minWidth: 1080, minHeight: 720)
-                .task { await model.bootstrap() }
         }
         // Size from the operator's frame / min size — not from SwiftTerm's
         // preferred cell grid, which previously "zoomed" the window on attach.

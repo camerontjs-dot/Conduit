@@ -15,6 +15,43 @@ enum BlockingWork {
             }
         }
     }
+
+    /// Returns nil when blocking filesystem work has not completed by the
+    /// deadline. The underlying system call may still be waiting for macOS
+    /// privacy authorization, but it can no longer stall app startup or hide
+    /// the recovery control from the operator.
+    static func run<T: Sendable>(
+        qos: DispatchQoS.QoSClass = .userInitiated,
+        timeout: TimeInterval,
+        _ body: @escaping @Sendable () -> T
+    ) async -> T? {
+        await withCheckedContinuation { continuation in
+            let gate = BlockingContinuationGate(continuation)
+            DispatchQueue.global(qos: qos).async {
+                gate.resume(returning: body())
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
+                gate.resume(returning: nil)
+            }
+        }
+    }
+}
+
+private final class BlockingContinuationGate<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Value?, Never>?
+
+    init(_ continuation: CheckedContinuation<Value?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: Value?) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
+    }
 }
 
 /// Runs a subprocess with argv directly (no shell), draining output

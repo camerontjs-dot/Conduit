@@ -50,6 +50,24 @@ check("frontmatter parses tags", frontmatter.tags == ["images", "agents"])
 check("frontmatter falls back to heading",
       FrontmatterParser.parse("# Plain\n", fallbackTitle: "F").title == "Plain")
 
+let navigationProject = MainframeProject(
+    slug: "conduit",
+    path: URL(fileURLWithPath: "/tmp/MainFrame/30_projects/conduit"),
+    readmePath: nil,
+    metadata: ProjectMetadata(
+        title: "Conduit",
+        projectState: "active",
+        nextAction: "Finish native smoke",
+        tags: ["macOS", "agents"]
+    )
+)
+check("project search uses authority metadata",
+      ProjectNavigation.matches(navigationProject, query: "native smoke"))
+check("project search is case insensitive",
+      ProjectNavigation.matches(navigationProject, query: "MACOS"))
+check("project active grouping uses explicit state",
+      ProjectNavigation.isActive(navigationProject))
+
 // MARK: - PromptEncoder
 
 let multiline = "line one\nline two"
@@ -279,6 +297,19 @@ if let smokeRoot = ProcessInfo.processInfo.environment["CONDUIT_SMOKE_ROOT"] {
         }
     } catch {
         check("real-tree scan (\(error.localizedDescription))", false)
+    }
+}
+
+// Optional installed-config smoke. This detects schema drift without baking a
+// user-specific path into the republishable product.
+if let configPath = ProcessInfo.processInfo.environment["CONDUIT_CONFIG_PATH"] {
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
+        let config = try JSONDecoder().decode(ConduitSettings.self, from: data)
+        check("saved config decodes", true)
+        check("saved config retains MainFrame root", config.mainframeRoot != nil)
+    } catch {
+        check("saved config decodes (\(error.localizedDescription))", false)
     }
 }
 

@@ -17,7 +17,7 @@ enum TerminalVisualState: String {
     var label: String {
         switch self {
         case .launching: return "starting"
-        case .working: return "working"
+        case .working: return "output active"
         case .running: return "ready"
         case .detached: return "detached"
         case .exited: return "exited"

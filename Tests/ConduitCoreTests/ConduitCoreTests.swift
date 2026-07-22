@@ -32,6 +32,65 @@ final class FrontmatterParserTests: XCTestCase {
     }
 }
 
+final class ProjectNavigationTests: XCTestCase {
+    private func project(
+        title: String = "Conduit",
+        slug: String = "conduit",
+        state: String? = "active",
+        nextAction: String? = "Finish native smoke",
+        isRoot: Bool = false
+    ) -> MainframeProject {
+        MainframeProject(
+            slug: slug,
+            path: URL(fileURLWithPath: isRoot ? "/tmp/MainFrame" : "/tmp/MainFrame/30_projects/\(slug)"),
+            readmePath: nil,
+            metadata: ProjectMetadata(
+                title: title,
+                projectState: state,
+                nextAction: nextAction,
+                tags: ["macOS", "agents"]
+            ),
+            isMainframeRoot: isRoot
+        )
+    }
+
+    func testSearchUsesAuthorityMetadataWithoutMutatingIt() {
+        let value = project()
+        XCTAssertTrue(ProjectNavigation.matches(value, query: "native smoke"))
+        XCTAssertTrue(ProjectNavigation.matches(value, query: "MACOS"))
+        XCTAssertFalse(ProjectNavigation.matches(value, query: "finance"))
+        XCTAssertEqual(value.metadata.projectState, "active")
+    }
+
+    func testActiveGroupingRecognizesExplicitStatesOnly() {
+        XCTAssertTrue(ProjectNavigation.isActive(project(state: "in_progress")))
+        XCTAssertFalse(ProjectNavigation.isActive(project(state: "parked")))
+        XCTAssertFalse(ProjectNavigation.isActive(project(state: "active", isRoot: true)))
+    }
+}
+
+final class SettingsStoreTests: XCTestCase {
+    func testSnapshotLoadsPersistedRootWithoutActorHop() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let directory = home.appendingPathComponent(".conduit")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let root = home.appendingPathComponent("Desktop/MainFrame")
+        let bookmark = Data([0x43, 0x4E, 0x44, 0x54])
+        let settings = ConduitSettings(
+            mainframeRoot: root,
+            mainframeRootBookmark: bookmark,
+            showContextByDefault: false
+        )
+        try JSONEncoder().encode(settings).write(to: directory.appendingPathComponent("config.json"))
+
+        let loaded = SettingsStore.loadSnapshot(home: home)
+        XCTAssertEqual(loaded.mainframeRoot, root)
+        XCTAssertEqual(loaded.mainframeRootBookmark, bookmark)
+        XCTAssertFalse(loaded.showContextByDefault)
+    }
+}
+
 final class MainframeScannerTests: XCTestCase {
     func testDiscoversRootAndProjects() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
