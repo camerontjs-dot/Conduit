@@ -92,6 +92,47 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
     ]
 }
 
+public enum AgentSpriteSkin: String, Codable, CaseIterable, Sendable {
+    case claude
+    case codex
+}
+
+public struct AgentSpriteResolution: Equatable, Sendable {
+    public let skin: AgentSpriteSkin?
+    public let isExactMatch: Bool
+
+    public init(skin: AgentSpriteSkin?, isExactMatch: Bool) {
+        self.skin = skin
+        self.isExactMatch = isExactMatch
+    }
+}
+
+/// Maps only identities backed by copied, provenance-noted art. Every other
+/// profile deliberately receives Conduit's generic in-code pixel character;
+/// a similar-looking name must never masquerade as a known agent identity.
+public enum AgentSpriteResolver {
+    public static func resolve(_ profile: AgentProfile) -> AgentSpriteResolution {
+        let name = normalized(profile.name)
+        let executable = normalized(URL(fileURLWithPath: profile.command).lastPathComponent)
+        if name == AgentSpriteSkin.codex.rawValue || executable == AgentSpriteSkin.codex.rawValue {
+            return AgentSpriteResolution(skin: .codex, isExactMatch: true)
+        }
+        if name == AgentSpriteSkin.claude.rawValue || executable == AgentSpriteSkin.claude.rawValue {
+            return AgentSpriteResolution(skin: .claude, isExactMatch: true)
+        }
+        return AgentSpriteResolution(skin: nil, isExactMatch: false)
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value
+            .lowercased()
+            .unicodeScalars
+            .filter(CharacterSet.alphanumerics.contains)
+            .map(String.init)
+            .joined()
+    }
+}
+
 public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var projectPath: URL

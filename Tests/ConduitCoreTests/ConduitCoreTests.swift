@@ -91,6 +91,32 @@ final class SettingsStoreTests: XCTestCase {
     }
 }
 
+final class AgentSpriteResolverTests: XCTestCase {
+    func testResolvesOnlyKnownCopiedIdentities() {
+        XCTAssertEqual(
+            AgentSpriteResolver.resolve(AgentProfile(name: "Codex", command: "codex")),
+            AgentSpriteResolution(skin: .codex, isExactMatch: true)
+        )
+        XCTAssertEqual(
+            AgentSpriteResolver.resolve(AgentProfile(name: "Claude Code", command: "/opt/bin/claude")),
+            AgentSpriteResolution(skin: .claude, isExactMatch: true)
+        )
+    }
+
+    func testUnmatchedProfilesReceiveHonestGenericFallback() {
+        for profile in [
+            AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell),
+            AgentProfile(name: "Gemini", command: "gemini"),
+            AgentProfile(name: "Codexish", command: "custom-agent")
+        ] {
+            XCTAssertEqual(
+                AgentSpriteResolver.resolve(profile),
+                AgentSpriteResolution(skin: nil, isExactMatch: false)
+            )
+        }
+    }
+}
+
 final class MainframeScannerTests: XCTestCase {
     func testDiscoversRootAndProjects() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -29,6 +29,14 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/release/Conduit" "$APP/Contents/MacOS/Conduit"
 cp "Sources/Conduit/Resources/Info.plist" "$APP/Contents/Info.plist"
 
+# Copy Conduit's sprites and dependency resources into the canonical macOS app
+# location. Both Conduit and the pinned SwiftTerm renderer probe this location
+# explicitly rather than relying on SwiftPM's executable-bundle accessor.
+for RESOURCE_BUNDLE in .build/release/*.bundle; do
+    [[ -d "$RESOURCE_BUNDLE" ]] || continue
+    cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
+done
+
 # Sign the complete bundle rather than relying on the linker's executable-only
 # ad-hoc signature. This binds Info.plist/resources and gives macOS privacy
 # controls the intended bundle identifier for local daily-driver installs.

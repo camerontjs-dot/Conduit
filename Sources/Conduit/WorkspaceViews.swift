@@ -33,6 +33,7 @@ struct WorkspaceHeader: View {
                 Label("Shell", systemImage: "terminal")
             }
             .buttonStyle(.bordered)
+            .accessibilityLabel("Open or reconnect project shell")
             .help("Open or reconnect to the project shell")
 
             Menu {
@@ -45,6 +46,7 @@ struct WorkspaceHeader: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .disabled(launchAgents.isEmpty)
+            .accessibilityLabel("Launch or reconnect agent")
             .help("Launch or reconnect to an agent")
 
             Menu {
@@ -188,6 +190,7 @@ struct SessionBar: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
+                    .accessibilityLabel("Open or reconnect project shell")
                     .accessibilityHint("Starts or reconnects to the project shell")
                 }
                 .padding(.horizontal, 10)
@@ -212,7 +215,9 @@ private struct SessionPill: View {
 
     var body: some View {
         let state = controller.visualState(at: date)
+        let sprite = AgentSpriteResolver.resolve(runtime.descriptor.agent)
         HStack(spacing: 6) {
+            AgentSpriteView(profile: runtime.descriptor.agent, state: state)
             Button {
                 model.activeSessionID = runtime.id
             } label: {
@@ -231,7 +236,11 @@ private struct SessionPill: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(runtime.descriptor.agent.name) session, \(state.label), \(controller.backendLabel)")
-            .accessibilityHint("Switches the terminal to this session")
+            .accessibilityHint(
+                sprite.isExactMatch
+                    ? "Switches the terminal to this session"
+                    : "Switches the terminal to this session. A generic character is shown because this profile has no dedicated sprite."
+            )
             Button {
                 model.closeSession(runtime)
             } label: {
@@ -247,10 +256,10 @@ private struct SessionPill: View {
                     : "Close session"
             )
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(runtime.id == model.activeSessionID ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
-        .clipShape(Capsule())
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(runtime.id == model.activeSessionID ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         .contextMenu {
             Button("Move clipboard selection to composer", action: model.copyClipboardSelectionToComposer)
             Menu("Send clipboard selection to") {

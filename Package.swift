@@ -30,7 +30,10 @@ let package = Package(
                 "ConduitCore",
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ],
-            exclude: ["Resources/Info.plist"]
+            exclude: ["Resources/Info.plist"],
+            resources: [
+                .copy("Resources/AgentSprites")
+            ]
         ),
         .testTarget(
             name: "ConduitCoreTests",

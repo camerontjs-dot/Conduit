@@ -67,6 +67,15 @@ check("project search is case insensitive",
       ProjectNavigation.matches(navigationProject, query: "MACOS"))
 check("project active grouping uses explicit state",
       ProjectNavigation.isActive(navigationProject))
+check("sprite mapping resolves Codex exactly",
+      AgentSpriteResolver.resolve(AgentProfile(name: "Codex", command: "codex"))
+        == AgentSpriteResolution(skin: .codex, isExactMatch: true))
+check("sprite mapping resolves Claude executable exactly",
+      AgentSpriteResolver.resolve(AgentProfile(name: "Claude Code", command: "/opt/bin/claude"))
+        == AgentSpriteResolution(skin: .claude, isExactMatch: true))
+check("sprite mapping keeps custom profiles generic",
+      AgentSpriteResolver.resolve(AgentProfile(name: "Codexish", command: "custom-agent"))
+        == AgentSpriteResolution(skin: nil, isExactMatch: false))
 
 // MARK: - PromptEncoder
 
