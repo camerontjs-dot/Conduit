@@ -254,7 +254,7 @@ struct TmuxDriver: Sendable {
     /// not provide the session (caller should fall back to a direct PTY).
     func ensureSession(name: String, directory: String, command: String) -> Bool {
         if hasSession(name) {
-            hideStatusLine(session: name)
+            applySessionOptions(session: name)
             return true
         }
         let result = SubprocessRunner.run(
@@ -263,22 +263,47 @@ struct TmuxDriver: Sendable {
             timeout: 8
         )
         guard result.status == 0 else { return false }
-        hideStatusLine(session: name)
+        applySessionOptions(session: name)
         return true
     }
 
-    /// Conduit renders session identity, lifecycle state, and tmux backing in
-    /// its own chrome, so tmux's status line is duplicate information drawn in
-    /// a palette Conduit does not control. Scoped to this session only, so an
-    /// operator attaching from a normal terminal elsewhere is unaffected, and
-    /// best-effort: a session is still perfectly usable if this fails.
-    private func hideStatusLine(session: String) {
-        _ = SubprocessRunner.run(
-            tmuxPath,
-            ["set-option", "-t", session, "status", "off"],
-            timeout: 4
-        )
+    /// Session-scoped tmux options, so an operator attaching from a normal
+    /// terminal elsewhere is unaffected. Best-effort: a session is still
+    /// perfectly usable if any of these fail.
+    private func applySessionOptions(session: String) {
+        for option in Self.sessionOptions {
+            _ = SubprocessRunner.run(
+                tmuxPath,
+                ["set-option", "-t", session] + option,
+                timeout: 4
+            )
+        }
     }
+
+    static let sessionOptions: [[String]] = [
+        // Conduit renders session identity, lifecycle state, and tmux backing
+        // in its own chrome, so tmux's status line is duplicate information
+        // drawn in a palette Conduit does not control.
+        ["status", "off"],
+        // tmux occupies the alternate screen, so the outer terminal has no
+        // scrollback for it. Without mouse mode SwiftTerm translates the wheel
+        // into arrow keys (see its scrollWheel alternate-buffer branch), which
+        // an agent CLI reads as "previous message" — scrolling walked the
+        // prompt history instead of the thread. With mouse on, the wheel
+        // reaches tmux, which scrolls the pane's real history.
+        //
+        // Drag-selection keeps working: tmux copies on drag-end, the server's
+        // `set-clipboard external` emits OSC 52, and SwiftTerm writes that to
+        // NSPasteboard — which is what Forward reads. Shift-drag still bypasses
+        // mouse reporting for native selection.
+        ["mouse", "on"],
+        // Copy-mode's default indicator and selection are bright yellow, which
+        // clashes with every palette the same way the status line did. A
+        // neutral grey stays legible in light and dark without reading as an
+        // accent or a state signal. tmux colours are its own 256 palette, so
+        // this cannot track the Conduit palette exactly — restraint over match.
+        ["mode-style", "fg=colour252,bg=colour238"]
+    ]
 
     /// Detaches every client attached to the session — deterministic, no
     /// prefix-key emulation, works with any operator tmux configuration.
