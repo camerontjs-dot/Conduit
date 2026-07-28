@@ -392,16 +392,28 @@ final class TerminalContainerView: NSView {
 
     override var isFlipped: Bool { false }
 
-    func attach(_ terminal: LocalProcessTerminalView) {
-        if terminal.superview === self {
-            layoutTerminal(terminal)
-            return
+    /// Attaches exactly one terminal. Returns true when the attached terminal
+    /// actually changed, so the caller can move keyboard focus only on a real
+    /// session switch. Previously an already-attached terminal short-circuited
+    /// without evicting the others, so every session stayed stacked full-size
+    /// and the last one added kept rendering — selecting an earlier session tab
+    /// looked like nothing happened.
+    @discardableResult
+    func attach(_ terminal: LocalProcessTerminalView) -> Bool {
+        var didChange = false
+        for sub in subviews where sub !== terminal {
+            sub.removeFromSuperview()
+            didChange = true
         }
-        terminal.removeFromSuperview()
-        terminal.translatesAutoresizingMaskIntoConstraints = true
-        terminal.autoresizingMask = [.width, .height]
-        addSubview(terminal)
+        if terminal.superview !== self {
+            terminal.removeFromSuperview()
+            terminal.translatesAutoresizingMaskIntoConstraints = true
+            terminal.autoresizingMask = [.width, .height]
+            addSubview(terminal)
+            didChange = true
+        }
         layoutTerminal(terminal)
+        return didChange
     }
 
     private func layoutTerminal(_ terminal: LocalProcessTerminalView) {
@@ -429,7 +441,12 @@ struct TerminalHostView: NSViewRepresentable {
 
     func updateNSView(_ container: TerminalContainerView, context: Context) {
         controller.startIfNeeded()
-        container.attach(controller.terminalView)
+        // Only claim focus when the session actually changed. `updateNSView`
+        // also runs for unrelated state (composer text, clock ticks), and
+        // stealing first responder there would make the composer untypable.
+        if container.attach(controller.terminalView), let window = container.window {
+            window.makeFirstResponder(controller.terminalView)
+        }
     }
 }
 
