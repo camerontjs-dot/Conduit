@@ -8,10 +8,12 @@ import SwiftTerm
 import SwiftUI
 
 final class ActivityTerminalView: LocalProcessTerminalView {
-    var onOutput: (() -> Void)?
+    /// Carries the slice size so observed output volume is counted at the one
+    /// place every PTY byte already passes through.
+    var onOutput: ((Int) -> Void)?
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
-        onOutput?()
+        onOutput?(slice.count)
         super.dataReceived(slice: slice)
     }
 }
@@ -21,11 +23,32 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     let descriptor: SessionDescriptor
     let terminalView: ActivityTerminalView
 
-    @Published private(set) var lifecycle: SessionLifecycle = .idle
+    @Published private(set) var lifecycle: SessionLifecycle = .idle {
+        didSet {
+            guard lifecycle.isTerminal else { return }
+            recordObservedUsage()
+        }
+    }
     @Published private(set) var terminalTitle: String
     @Published private(set) var lastOutputAt: Date?
     private(set) var usesTmux = false
     private(set) var tmuxSessionName: String?
+
+    // MARK: - Tier A observed usage
+    //
+    // Counters over what Conduit itself saw. Nothing here is read from the
+    // agent's own records, and output bytes are rendered volume — not tokens
+    // and not a proxy for them.
+    private(set) var observedOutputBytes = 0
+    private(set) var observedPromptsDelivered = 0
+    private(set) var observedPromptsFailed = 0
+    private(set) var attachedAt: Date?
+    /// Set once the terminal record has been emitted, so detach-then-exit or a
+    /// double transition cannot bank the same session twice.
+    private var usageRecorded = false
+    /// Invoked once per session with what Conduit observed. The controller
+    /// stays unaware of where it is written.
+    var onUsageRecord: ((SessionUsageRecord) -> Void)?
 
     private let useDetachedSessions: Bool
 
@@ -69,8 +92,8 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         self.terminalView = ActivityTerminalView(frame: .zero)
         super.init()
         terminalView.processDelegate = self
-        terminalView.onOutput = { [weak self] in
-            Task { @MainActor in self?.noteOutput() }
+        terminalView.onOutput = { [weak self] byteCount in
+            Task { @MainActor in self?.noteOutput(byteCount: byteCount) }
         }
         terminalView.font = NSFont.monospacedSystemFont(ofSize: TerminalTheme.fontSize, weight: .regular)
         // System colours are only the pre-theme fallback; TerminalHostView
@@ -81,6 +104,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
     func startIfNeeded() {
         guard lifecycle == .idle else { return }
+        attachedAt = Date()
         lifecycle.transition(to: .launching)
 
         if useDetachedSessions, let tmux = EnvironmentResolver.shared.resolve("tmux") {
@@ -263,7 +287,8 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
     // MARK: - Private
 
-    private func noteOutput() {
+    private func noteOutput(byteCount: Int) {
+        observedOutputBytes += byteCount
         lastOutputAt = Date()
         if lifecycle == .launching {
             lifecycle.transition(to: .running)
@@ -327,6 +352,11 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     }
 
     private func finishDelivery(_ id: UUID, delivered: Bool) {
+        if delivered {
+            observedPromptsDelivered += 1
+        } else {
+            observedPromptsFailed += 1
+        }
         deliveryCompletions.removeValue(forKey: id)?(delivered)
     }
 
@@ -334,8 +364,39 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         let queued = pendingPrompts
         pendingPrompts = []
         for prompt in queued {
+            observedPromptsFailed += 1
             prompt.completion?(false)
         }
+    }
+
+    /// Banks one observed-usage record for this session. Called on every
+    /// terminal transition; the `usageRecorded` latch means detach-then-exit
+    /// banks the detach only, and a session Conduit never attached to (no
+    /// `attachedAt`) is not recorded at all rather than recorded as zero.
+    private func recordObservedUsage() {
+        guard !usageRecorded, let attachedAt else { return }
+        let outcome: SessionUsageRecord.Outcome
+        switch lifecycle {
+        case .detached:
+            outcome = .detached
+        case .exited(let code):
+            outcome = (code ?? 0) == 0 ? .exitedClean : .exitedFailed
+        default:
+            return
+        }
+        usageRecorded = true
+        onUsageRecord?(
+            SessionUsageRecord(
+                agent: descriptor.agent.name,
+                projectSlug: descriptor.projectPath.lastPathComponent,
+                startedAt: attachedAt,
+                endedAt: Date(),
+                outcome: outcome,
+                outputBytes: observedOutputBytes,
+                promptsDelivered: observedPromptsDelivered,
+                promptsFailed: observedPromptsFailed
+            )
+        )
     }
 
     private func startDirectSession() {

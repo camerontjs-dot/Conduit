@@ -544,6 +544,136 @@ check("forwarder wraps with evidence boundary",
       forwarded.contains("unverified terminal output") && forwarded.contains("Re-run deterministic checks"))
 check("forwarder keeps the selection", forwarded.contains("Done!"))
 
+// MARK: - Tier A observed usage
+
+let usageEpoch = Date(timeIntervalSince1970: 1_800_000_000)
+func usageRecord(
+    _ agent: String,
+    seconds: TimeInterval,
+    outcome: SessionUsageRecord.Outcome,
+    bytes: Int = 0,
+    delivered: Int = 0,
+    failed: Int = 0
+) -> SessionUsageRecord {
+    SessionUsageRecord(
+        agent: agent,
+        projectSlug: "conduit",
+        startedAt: usageEpoch,
+        endedAt: usageEpoch.addingTimeInterval(seconds),
+        outcome: outcome,
+        outputBytes: bytes,
+        promptsDelivered: delivered,
+        promptsFailed: failed
+    )
+}
+
+let usageRecords = [
+    usageRecord("Claude", seconds: 60, outcome: .exitedClean, bytes: 100, delivered: 2),
+    usageRecord("Claude", seconds: 30, outcome: .detached, bytes: 50, delivered: 1, failed: 1),
+    usageRecord("Grok", seconds: 10, outcome: .exitedFailed, bytes: 7)
+]
+let usageRoster = ["Shell", "Claude", "Codex", "Antigravity", "Grok", "OpenCode"]
+let usageRows = AgentUsageLedger.aggregate(
+    records: usageRecords,
+    roster: usageRoster,
+    now: usageEpoch
+)
+
+check("usage keeps one row per configured agent", usageRows.count == usageRoster.count)
+check("usage rows follow roster order", usageRows.map(\.agent) == usageRoster)
+
+let claudeUsage = usageRows.first { $0.agent == "Claude" }
+check("usage sums sessions per agent", claudeUsage?.sessions == 2)
+check("usage sums attached seconds", claudeUsage?.attachedSeconds == 90)
+check("usage sums output bytes", claudeUsage?.outputBytes == 150)
+check("usage separates delivered from failed prompts",
+      claudeUsage?.promptsDelivered == 3 && claudeUsage?.promptsFailed == 1)
+check("usage counts outcomes distinctly",
+      claudeUsage?.cleanExits == 1 && claudeUsage?.detaches == 1 && claudeUsage?.failedExits == 0)
+check("usage records a failed exit as failed",
+      usageRows.first { $0.agent == "Grok" }?.failedExits == 1)
+
+// An agent Conduit never ran must read as zero *observed* sessions rather than
+// vanish — absence of a row would read as "no data exists anywhere", which is a
+// broader claim than Conduit can make.
+let antigravityUsage = usageRows.first { $0.agent == "Antigravity" }
+check("unused agent still gets a row", antigravityUsage != nil)
+check("unused agent reads zero observed sessions", antigravityUsage?.sessions == 0)
+check("unused agent reads zero live sessions", antigravityUsage?.liveSessions == 0)
+
+// Live sessions count toward totals but stay separately visible, so the UI can
+// never present a still-running session as a completed one.
+let liveRows = AgentUsageLedger.aggregate(
+    records: usageRecords,
+    live: [
+        LiveSessionUsage(
+            agent: "Codex",
+            startedAt: usageEpoch,
+            outputBytes: 12,
+            promptsDelivered: 1,
+            promptsFailed: 0
+        )
+    ],
+    roster: usageRoster,
+    now: usageEpoch.addingTimeInterval(45)
+)
+let codexUsage = liveRows.first { $0.agent == "Codex" }
+check("live session counts toward sessions", codexUsage?.sessions == 1)
+check("live session stays separately visible", codexUsage?.liveSessions == 1)
+check("live session accrues elapsed time", codexUsage?.attachedSeconds == 45)
+
+// A clock adjustment must never bank negative time against an agent.
+let skewedRows = AgentUsageLedger.aggregate(
+    records: [usageRecord("Claude", seconds: -500, outcome: .exitedClean)],
+    roster: ["Claude"],
+    now: usageEpoch
+)
+check("backwards clock never yields negative time",
+      skewedRows.first?.attachedSeconds == 0)
+
+// History for an agent no longer in the roster must still be reported.
+let retiredRows = AgentUsageLedger.aggregate(
+    records: [usageRecord("Gemini", seconds: 20, outcome: .exitedClean)],
+    roster: ["Claude"],
+    now: usageEpoch
+)
+check("retired agent history is not dropped",
+      retiredRows.contains { $0.agent == "Gemini" && $0.sessions == 1 })
+
+// The log round-trips and heals a torn final line, like the event log.
+let usageLogURL = FileManager.default.temporaryDirectory
+    .appendingPathComponent("conduit-usage-\(UUID().uuidString)")
+    .appendingPathComponent("observed-usage.jsonl")
+let usageLog = AgentUsageLog(url: usageLogURL)
+do {
+    try usageLog.append(usageRecords[0])
+    try usageLog.append(usageRecords[1])
+    let handle = try FileHandle(forUpdating: usageLogURL)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data("{\"partial\":".utf8))
+    try handle.close()
+    try usageLog.append(usageRecords[2])
+    let readBack = usageLog.readRecords()
+    check("usage log round-trips records", readBack.count == 3)
+    check("usage log preserves values", readBack.first == usageRecords[0])
+} catch {
+    check("usage log round-trips records", false)
+    check("usage log preserves values", false)
+}
+try? FileManager.default.removeItem(at: usageLogURL.deletingLastPathComponent())
+
+// The root guard mirrors the receipt writer: no 20_live, no writing.
+let strayRoot = FileManager.default.temporaryDirectory
+    .appendingPathComponent("conduit-stray-\(UUID().uuidString)")
+try? FileManager.default.createDirectory(at: strayRoot, withIntermediateDirectories: true)
+check("usage log refuses roots without 20_live", AgentUsageLog(mainframeRoot: strayRoot) == nil)
+try? FileManager.default.createDirectory(
+    at: strayRoot.appendingPathComponent("20_live"),
+    withIntermediateDirectories: true
+)
+check("usage log accepts a live root", AgentUsageLog(mainframeRoot: strayRoot) != nil)
+try? FileManager.default.removeItem(at: strayRoot)
+
 // MARK: - Optional real-tree smoke (set CONDUIT_SMOKE_ROOT=/path/to/MainFrame)
 
 if let smokeRoot = ProcessInfo.processInfo.environment["CONDUIT_SMOKE_ROOT"] {

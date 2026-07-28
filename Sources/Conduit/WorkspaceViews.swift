@@ -686,6 +686,7 @@ struct OperatorOpsDeck: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     let project: MainframeProject
+    @State private var isUsagePresented = false
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -696,6 +697,7 @@ struct OperatorOpsDeck: View {
             HStack(alignment: .top, spacing: 10) {
                 workSessionCard
                 terminalSessionsCard
+                agentUsageCard
                 resourcesCard
                 doctorCard
             }
@@ -738,6 +740,35 @@ struct OperatorOpsDeck: View {
             sub = "\(attached) attached · \(detached) detached"
         }
         return opsCard(key: "Terminal sessions", big: big, sub: sub)
+    }
+
+    /// Observed-usage summary. Opens the per-agent breakdown; the card itself
+    /// counts only agents Conduit actually ran, so it never implies coverage of
+    /// agents it never saw.
+    private var agentUsageCard: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let rows = model.observedUsageRows(at: context.date)
+            let active = rows.filter { $0.sessions > 0 }
+            let live = rows.reduce(0) { $0 + $1.liveSessions }
+            Button {
+                isUsagePresented = true
+            } label: {
+                opsCard(
+                    key: "Agent usage",
+                    big: "\(active.count)",
+                    sub: active.isEmpty
+                        ? "No agent sessions observed"
+                        : "\(active.count) of \(rows.count) agents · \(live) live"
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the observed per-agent usage breakdown")
+        }
+        .sheet(isPresented: $isUsagePresented) {
+            AgentUsageSheet()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
     }
 
     private var resourcesCard: some View {

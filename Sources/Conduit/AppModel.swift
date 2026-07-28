@@ -85,6 +85,9 @@ final class AppModel: ObservableObject {
     @Published var selectedProjectID: String?
     @Published var sessions: [TerminalRuntime] = []
     @Published var activeSessionID: UUID?
+    /// Completed observed-usage records for this root, loaded from the log at
+    /// bootstrap and appended to as sessions end.
+    @Published private(set) var completedUsage: [SessionUsageRecord] = []
     @Published var composerText = ""
     @Published var attachments: [Attachment] = []
     /// Ephemeral staging draft for terminal-selection forwarding. Nil when idle.
@@ -170,6 +173,54 @@ final class AppModel: ObservableObject {
         settings.agents.filter(\.enabled)
     }
 
+    // MARK: - Tier A observed usage
+
+    /// Append-only log of what Conduit observed, under the selected root.
+    /// Nil when no root is selected or the root is not a MainFrame live tree —
+    /// in that case usage is still shown for live sessions but nothing is
+    /// persisted, rather than being written somewhere arbitrary.
+    private var usageLog: AgentUsageLog? {
+        settings.mainframeRoot.flatMap { AgentUsageLog(mainframeRoot: $0) }
+    }
+
+    private func bankObservedUsage(_ record: SessionUsageRecord) {
+        completedUsage.append(record)
+        guard let usageLog else { return }
+        do {
+            try usageLog.append(record)
+        } catch {
+            // Usage is diagnostic, never evidence — a failed write must not
+            // interrupt a session close or a receipt.
+            statusMessage = "Usage note not written: \(error.localizedDescription)"
+        }
+    }
+
+    /// Rows for every configured agent, observed only. An agent with no
+    /// activity reads zero observed sessions, which is a true statement about
+    /// what Conduit saw — unlike a hidden row. Carries no token or cost data:
+    /// that is Tier B and is not implemented.
+    func observedUsageRows(at date: Date) -> [AgentObservedUsage] {
+        let live = sessions.compactMap { runtime -> LiveSessionUsage? in
+            let controller = runtime.controller
+            guard !controller.lifecycle.isTerminal,
+                  let startedAt = controller.attachedAt
+            else { return nil }
+            return LiveSessionUsage(
+                agent: runtime.descriptor.agent.name,
+                startedAt: startedAt,
+                outputBytes: controller.observedOutputBytes,
+                promptsDelivered: controller.observedPromptsDelivered,
+                promptsFailed: controller.observedPromptsFailed
+            )
+        }
+        return AgentUsageLedger.aggregate(
+            records: completedUsage,
+            live: live,
+            roster: settings.agents.map(\.name),
+            now: date
+        )
+    }
+
     /// Agents eligible as staging forward targets (enabled, non-shell).
     var forwardableAgents: [AgentProfile] {
         enabledAgents.filter { $0.kind != .shell }
@@ -199,6 +250,7 @@ final class AppModel: ObservableObject {
         }
         statusMessage = "Scanning the configured MainFrame root…"
         guard await refreshProjectsForBootstrap() else { return }
+        completedUsage = usageLog?.readRecords() ?? []
         recoverInterruptedWorkSessions()
         async let health: Void = refreshHealth()
         async let resources: Void = refreshResources()
@@ -385,6 +437,9 @@ final class AppModel: ObservableObject {
 
         let descriptor = SessionDescriptor(projectPath: project.path, agent: agent)
         let runtime = TerminalRuntime(descriptor: descriptor, useDetachedSessions: settings.restoreSessions)
+        runtime.controller.onUsageRecord = { [weak self] record in
+            Task { @MainActor in self?.bankObservedUsage(record) }
+        }
         sessions.append(runtime)
         activeSessionID = runtime.id
         appendEvent(
