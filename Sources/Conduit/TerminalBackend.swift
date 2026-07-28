@@ -253,13 +253,31 @@ struct TmuxDriver: Sendable {
     /// Creates the session detached if missing. Returns false when tmux could
     /// not provide the session (caller should fall back to a direct PTY).
     func ensureSession(name: String, directory: String, command: String) -> Bool {
-        if hasSession(name) { return true }
+        if hasSession(name) {
+            hideStatusLine(session: name)
+            return true
+        }
         let result = SubprocessRunner.run(
             tmuxPath,
             ["new-session", "-d", "-s", name, "-c", directory, command],
             timeout: 8
         )
-        return result.status == 0
+        guard result.status == 0 else { return false }
+        hideStatusLine(session: name)
+        return true
+    }
+
+    /// Conduit renders session identity, lifecycle state, and tmux backing in
+    /// its own chrome, so tmux's status line is duplicate information drawn in
+    /// a palette Conduit does not control. Scoped to this session only, so an
+    /// operator attaching from a normal terminal elsewhere is unaffected, and
+    /// best-effort: a session is still perfectly usable if this fails.
+    private func hideStatusLine(session: String) {
+        _ = SubprocessRunner.run(
+            tmuxPath,
+            ["set-option", "-t", session, "status", "off"],
+            timeout: 4
+        )
     }
 
     /// Detaches every client attached to the session — deterministic, no

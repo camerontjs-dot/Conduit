@@ -72,7 +72,9 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         terminalView.onOutput = { [weak self] in
             Task { @MainActor in self?.noteOutput() }
         }
-        terminalView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        terminalView.font = NSFont.monospacedSystemFont(ofSize: TerminalTheme.fontSize, weight: .regular)
+        // System colours are only the pre-theme fallback; TerminalHostView
+        // applies the palette as soon as the view is mounted.
         terminalView.nativeForegroundColor = NSColor.textColor
         terminalView.nativeBackgroundColor = NSColor.windowBackgroundColor
     }
@@ -428,19 +430,61 @@ final class TerminalContainerView: NSView {
     }
 }
 
+/// Palette-derived terminal presentation, matching the signed-off R1 mockup's
+/// `.terminal` / `.term-scroll` / `.term-pre` rules. Only base foreground,
+/// background, caret, and selection are themed: the 16-colour ANSI palette an
+/// agent emits is its own semantic signal, so recolouring it would change what
+/// the tool reported.
+struct TerminalTheme: Equatable {
+    /// Mockup `.term-pre` font-size 12.5px and line-height 1.55.
+    static let fontSize: CGFloat = 12.5
+    static let lineSpacing: CGFloat = 1.55
+
+    let foreground: NSColor
+    let background: NSColor
+    let caret: NSColor
+    let selection: NSColor
+
+    init(palette: ConduitPalette) {
+        foreground = NSColor(palette.text)
+        background = NSColor(palette.surface)
+        caret = NSColor(palette.accent)
+        selection = NSColor(palette.accentSoft)
+    }
+
+    func apply(to view: LocalProcessTerminalView) {
+        guard view.nativeForegroundColor != foreground
+            || view.nativeBackgroundColor != background
+            || view.caretColor != caret
+            || view.selectedTextBackgroundColor != selection
+            || view.lineSpacing != Self.lineSpacing
+        else { return }
+        view.nativeForegroundColor = foreground
+        view.nativeBackgroundColor = background
+        view.caretColor = caret
+        view.selectedTextBackgroundColor = selection
+        // Setting lineSpacing resets the font and resizes the terminal, so it
+        // stays behind the equality guard rather than running every update.
+        view.lineSpacing = Self.lineSpacing
+    }
+}
+
 @MainActor
 struct TerminalHostView: NSViewRepresentable {
     let controller: TerminalSessionController
+    let theme: TerminalTheme
 
     func makeNSView(context: Context) -> TerminalContainerView {
         let container = TerminalContainerView(frame: .zero)
         controller.startIfNeeded()
+        theme.apply(to: controller.terminalView)
         container.attach(controller.terminalView)
         return container
     }
 
     func updateNSView(_ container: TerminalContainerView, context: Context) {
         controller.startIfNeeded()
+        theme.apply(to: controller.terminalView)
         // Only claim focus when the session actually changed. `updateNSView`
         // also runs for unrelated state (composer text, clock ticks), and
         // stealing first responder there would make the composer untypable.

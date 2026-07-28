@@ -470,8 +470,23 @@ private struct ProjectWorkspaceView: View {
                     description: "Launch an agent or open a shell from the toolbar."
                 )
             } else if let active = activeTerminalRuntime {
-                TerminalHostView(controller: active.controller)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Mockup `.terminal`: a surface card inset from the stage, with
+                // `.term-scroll` padding so output never runs into the edge.
+                TerminalHostView(
+                    controller: active.controller,
+                    theme: TerminalTheme(palette: palette)
+                )
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(palette.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(palette.line, lineWidth: 1)
+                )
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .clipped()
