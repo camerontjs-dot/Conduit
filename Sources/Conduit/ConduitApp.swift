@@ -4,6 +4,14 @@ import SwiftUI
 @main
 struct ConduitApp: App {
     @StateObject private var model = AppModel()
+    @StateObject private var themeStore = ThemeStore()
+
+    private var contextCommandTitle: String {
+        if model.isContextDetailPinned {
+            return "Context Inspector Pinned"
+        }
+        return model.isContextInspectorPresented ? "Hide Context Inspector" : "Show Context Inspector"
+    }
 
     var body: some Scene {
         // A single window, not a WindowGroup: terminal NSViews are bound to one
@@ -12,6 +20,7 @@ struct ConduitApp: App {
         Window("Conduit", id: "main") {
             RootView()
                 .environmentObject(model)
+                .environmentObject(themeStore)
                 .frame(minWidth: 1080, minHeight: 720)
         }
         // Size from the operator's frame / min size — not from SwiftTerm's
@@ -48,8 +57,9 @@ struct ConduitApp: App {
                 Divider()
                 Button("Close Work Session & Write Receipt") { model.closeWorkSession(for: model.selectedProject) }
                     .keyboardShortcut("w", modifiers: [.command, .shift])
-                Button("Toggle Context") { model.showContext.toggle() }
+                Button(contextCommandTitle) { model.toggleContextPresentation() }
                     .keyboardShortcut("\\", modifiers: [.command])
+                    .disabled(model.isContextDetailPinned)
                 Button("Refresh MainFrame") { model.refreshProjects() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
             }
@@ -58,7 +68,8 @@ struct ConduitApp: App {
         Settings {
             SettingsView()
                 .environmentObject(model)
-                .frame(width: 680, height: 520)
+                .environmentObject(themeStore)
+                .frame(width: 680, height: 560)
         }
     }
 }

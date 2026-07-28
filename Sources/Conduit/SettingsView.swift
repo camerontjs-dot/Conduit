@@ -4,14 +4,41 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: ConduitPalette {
+        themeStore.palette(for: colorScheme)
+    }
 
     var body: some View {
         Form {
+            Section("Palette") {
+                ForEach(PaletteID.allCases, id: \.self) { id in
+                    paletteRow(id)
+                }
+            }
+
+            Section("Density") {
+                Picker("Density", selection: $model.density) {
+                    ForEach(Density.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Workspace density")
+                .accessibilityValue(model.density.displayName)
+
+                Text("Controls how densely workspace information is shown. Layout behavior is applied by density mode.")
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
+            }
+
             Section("MainFrame") {
                 HStack {
                     Text(model.settings.mainframeRoot?.path ?? "Not configured")
                         .lineLimit(1)
-                        .foregroundStyle(model.settings.mainframeRoot == nil ? .secondary : .primary)
+                        .foregroundStyle(model.settings.mainframeRoot == nil ? palette.dim : palette.text)
                     Spacer()
                     Button("Choose…", action: model.chooseMainframeRoot)
                 }
@@ -53,7 +80,7 @@ struct SettingsView: View {
                 }
                 Text("Conduit records process facts and Git state, but does not treat terminal prose as completion evidence.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(palette.dim)
             }
 
             HStack {
@@ -64,6 +91,47 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
+        .tint(palette.accent)
+        .background(palette.app)
+        .scrollContentBackground(.hidden)
+    }
+
+    private func paletteRow(_ id: PaletteID) -> some View {
+        let isSelected = themeStore.selectedPalette == id
+        let swatch = themeStore.accentSwatch(for: id, colorScheme: colorScheme)
+        return Button {
+            themeStore.select(id)
+        } label: {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(swatch)
+                    .frame(width: 18, height: 18)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(palette.line, lineWidth: 1)
+                    )
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(id.displayName)
+                        .foregroundStyle(palette.text)
+                    Text(id.mood)
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(swatch)
+                        .accessibilityLabel("Selected")
+                }
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(id.displayName) palette")
+        .accessibilityValue(isSelected ? "Selected" : id.mood)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 #endif

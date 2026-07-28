@@ -90,6 +90,255 @@ check("sprite mapping keeps custom profiles generic",
       AgentSpriteResolver.resolve(AgentProfile(name: "Codexish", command: "custom-agent"))
         == AgentSpriteResolution(skin: nil, isExactMatch: false))
 
+// MARK: - Density (Focused Flow R2)
+
+check("density case order is focused balanced operator",
+      Density.allCases.map(\.rawValue) == ["focused", "balanced", "operator"])
+check("density exposes exactly three modes", Density.allCases.count == 3)
+check("density product default is Focused",
+      Density.productDefault == .focused && Density.allCases.first == .focused)
+check("density display labels are Focused Balanced Operator",
+      Density.allCases.map(\.displayName) == ["Focused", "Balanced", "Operator"])
+check("density recovers valid raw values",
+      Density.resolved(fromStored: "focused") == .focused
+        && Density.resolved(fromStored: "balanced") == .balanced
+        && Density.resolved(fromStored: "operator") == .operator)
+check("density invalid and missing fall back to Focused",
+      Density.resolved(fromStored: nil) == .focused
+        && Density.resolved(fromStored: "") == .focused
+        && Density.resolved(fromStored: "compact") == .focused
+        && Density.resolved(fromStored: "FOCUSED") == .focused
+        && Density.resolved(fromStored: "Operator") == .focused)
+
+// MARK: - PaletteSpec (Focused Flow R2 base lock)
+
+check("palette case order is Harbor Sage Clay Heather Phosphor",
+      PaletteID.allCases.map(\.rawValue) == ["harbor", "sage", "clay", "heather", "phosphor"])
+check("palette product default is Harbor",
+      PaletteID.productDefault == .harbor && PaletteID.allCases.first == .harbor)
+check("palette exposes exactly five identifiers", PaletteID.allCases.count == 5)
+check("palette exposes exactly ten base variants", PaletteID.allBaseVariants.count == 10)
+
+let harborLight = PaletteID.harbor.baseTokens(variant: .light)
+check("Harbor light accent", harborLight.accent == "#456881")
+check("Harbor light on-accent", harborLight.onAccent == "#FFFFFF")
+check("Harbor light ink", harborLight.ink == "#35566D")
+check("Harbor light canvas", harborLight.canvas == "#F2F5F7")
+check("Harbor light app", harborLight.app == "#E4E9ED")
+check("Harbor light rail", harborLight.rail == "#EBEFF2")
+check("Harbor light surface", harborLight.surface == "#FCFDFE")
+check("Harbor light sink", harborLight.sink == "#DFE5EA")
+check("Harbor light text", harborLight.text == "#232A31")
+check("Harbor light dim", harborLight.dim == "#5C6772")
+check("Harbor light faint", harborLight.faint == "#93A0AB")
+check("Harbor light shade",
+      harborLight.shade == PaletteShade(red: 30, green: 48, blue: 62))
+check("Harbor light is soft", harborLight.soft)
+
+let harborDark = PaletteID.harbor.baseTokens(variant: .dark)
+check("Harbor dark accent", harborDark.accent == "#7FA8C8")
+check("Harbor dark on-accent", harborDark.onAccent == "#0D1417")
+check("Harbor dark ink", harborDark.ink == "#A3C4DD")
+check("Harbor dark canvas", harborDark.canvas == "#0F1417")
+check("Harbor dark app", harborDark.app == "#141A1E")
+check("Harbor dark rail", harborDark.rail == "#192025")
+check("Harbor dark surface", harborDark.surface == "#1E262B")
+check("Harbor dark sink", harborDark.sink == "#131A1E")
+check("Harbor dark text", harborDark.text == "#E1E6EA")
+check("Harbor dark dim", harborDark.dim == "#93A0AA")
+check("Harbor dark faint", harborDark.faint == "#64707A")
+check("Harbor dark has no shade", harborDark.shade == nil)
+check("Harbor dark is soft", harborDark.soft)
+
+let sageLight = PaletteID.sage.baseTokens(variant: .light)
+check("Sage light base tokens",
+      sageLight.accent == "#4F6B49"
+        && sageLight.onAccent == "#FFFFFF"
+        && sageLight.ink == "#3F5740"
+        && sageLight.canvas == "#F5F3EC"
+        && sageLight.app == "#E9EBE2"
+        && sageLight.rail == "#EEF0E7"
+        && sageLight.surface == "#FCFCF8"
+        && sageLight.sink == "#E4E7DC"
+        && sageLight.text == "#2A2E27"
+        && sageLight.dim == "#626B5D"
+        && sageLight.faint == "#98A08D"
+        && sageLight.shade == PaletteShade(red: 40, green: 50, blue: 32)
+        && sageLight.soft)
+let sageDark = PaletteID.sage.baseTokens(variant: .dark)
+check("Sage dark base tokens",
+      sageDark.accent == "#8FB183"
+        && sageDark.onAccent == "#14180F"
+        && sageDark.ink == "#A9C99E"
+        && sageDark.canvas == "#141A15"
+        && sageDark.app == "#191E1A"
+        && sageDark.rail == "#1E241F"
+        && sageDark.surface == "#232924"
+        && sageDark.sink == "#171C18"
+        && sageDark.text == "#E4E7DD"
+        && sageDark.dim == "#9AA393"
+        && sageDark.faint == "#6B7365"
+        && sageDark.shade == nil
+        && sageDark.soft)
+
+let clayLight = PaletteID.clay.baseTokens(variant: .light)
+check("Clay light base tokens",
+      clayLight.accent == "#97583E"
+        && clayLight.onAccent == "#FFFFFF"
+        && clayLight.ink == "#7C4530"
+        && clayLight.canvas == "#F5F0E9"
+        && clayLight.app == "#EAE1D6"
+        && clayLight.rail == "#F0E8DD"
+        && clayLight.surface == "#FDFBF7"
+        && clayLight.sink == "#E5DBCD"
+        && clayLight.text == "#2E2620"
+        && clayLight.dim == "#6D6055"
+        && clayLight.faint == "#A0917F"
+        && clayLight.shade == PaletteShade(red: 60, green: 42, blue: 28)
+        && clayLight.soft)
+let clayDark = PaletteID.clay.baseTokens(variant: .dark)
+check("Clay dark base tokens",
+      clayDark.accent == "#CB8A6E"
+        && clayDark.onAccent == "#17120E"
+        && clayDark.ink == "#E0A888"
+        && clayDark.canvas == "#17120E"
+        && clayDark.app == "#1D1712"
+        && clayDark.rail == "#221B15"
+        && clayDark.surface == "#271F18"
+        && clayDark.sink == "#1A140F"
+        && clayDark.text == "#EAE2D8"
+        && clayDark.dim == "#A3958A"
+        && clayDark.faint == "#736659"
+        && clayDark.shade == nil
+        && clayDark.soft)
+
+let heatherLight = PaletteID.heather.baseTokens(variant: .light)
+check("Heather light base tokens",
+      heatherLight.accent == "#635B8C"
+        && heatherLight.onAccent == "#FFFFFF"
+        && heatherLight.ink == "#4F4874"
+        && heatherLight.canvas == "#F4F3F7"
+        && heatherLight.app == "#E7E5EE"
+        && heatherLight.rail == "#EDEBF3"
+        && heatherLight.surface == "#FCFCFE"
+        && heatherLight.sink == "#E2E0EB"
+        && heatherLight.text == "#2A2833"
+        && heatherLight.dim == "#625D70"
+        && heatherLight.faint == "#9A94A8"
+        && heatherLight.shade == PaletteShade(red: 40, green: 36, blue: 58)
+        && heatherLight.soft)
+let heatherDark = PaletteID.heather.baseTokens(variant: .dark)
+check("Heather dark base tokens",
+      heatherDark.accent == "#A79FCE"
+        && heatherDark.onAccent == "#141318"
+        && heatherDark.ink == "#C3BCE0"
+        && heatherDark.canvas == "#141318"
+        && heatherDark.app == "#1A181F"
+        && heatherDark.rail == "#201E27"
+        && heatherDark.surface == "#26232E"
+        && heatherDark.sink == "#18161D"
+        && heatherDark.text == "#E5E2EC"
+        && heatherDark.dim == "#9D97AC"
+        && heatherDark.faint == "#6D6879"
+        && heatherDark.shade == nil
+        && heatherDark.soft)
+
+let phosphorLight = PaletteID.phosphor.baseTokens(variant: .light)
+check("Phosphor light base tokens",
+      phosphorLight.accent == "#C97A16"
+        && phosphorLight.onAccent == "#241A08"
+        && phosphorLight.ink == "#8A5410"
+        && phosphorLight.canvas == "#FAF8F4"
+        && phosphorLight.app == "#ECE7DE"
+        && phosphorLight.rail == "#F4F0E8"
+        && phosphorLight.surface == "#FFFFFF"
+        && phosphorLight.sink == "#E7E1D6"
+        && phosphorLight.text == "#221E18"
+        && phosphorLight.dim == "#6C665B"
+        && phosphorLight.faint == "#9C9488"
+        && phosphorLight.shade == PaletteShade(red: 40, green: 32, blue: 20)
+        && phosphorLight.soft == false)
+let phosphorDark = PaletteID.phosphor.baseTokens(variant: .dark)
+check("Phosphor dark base tokens",
+      phosphorDark.accent == "#E8A13B"
+        && phosphorDark.onAccent == "#201603"
+        && phosphorDark.ink == "#F2BE6E"
+        && phosphorDark.canvas == "#0B0E0C"
+        && phosphorDark.app == "#101311"
+        && phosphorDark.rail == "#181B18"
+        && phosphorDark.surface == "#1E221F"
+        && phosphorDark.sink == "#121614"
+        && phosphorDark.text == "#E7E3DA"
+        && phosphorDark.dim == "#9B978C"
+        && phosphorDark.faint == "#6B675E"
+        && phosphorDark.shade == nil
+        && phosphorDark.soft == false)
+
+let softFlags = PaletteID.allBaseVariants.map { ($0.id, $0.tokens.soft) }
+check("Phosphor alone is non-soft",
+      softFlags.filter { !$0.1 }.map(\.0) == [.phosphor, .phosphor]
+        && softFlags.filter { $0.1 }.count == 8)
+
+let lightShades = PaletteID.allCases.compactMap { id -> (PaletteID, PaletteShade?) in
+    (id, id.baseTokens(variant: .light).shade)
+}
+check("every light variant has a shade triple",
+      lightShades.allSatisfy { $0.1 != nil })
+check("every dark variant has no shade",
+      PaletteID.allCases.allSatisfy { $0.baseTokens(variant: .dark).shade == nil })
+
+let hexPattern = #"^#[0-9A-F]{6}$"#
+let hexRegex = try! NSRegularExpression(pattern: hexPattern)
+func isNormalizedHex(_ value: String) -> Bool {
+    let range = NSRange(value.startIndex..<value.endIndex, in: value)
+    return hexRegex.firstMatch(in: value, range: range) != nil
+}
+var allHexOK = true
+for entry in PaletteID.allBaseVariants {
+    let t = entry.tokens
+    for color in [t.accent, t.onAccent, t.ink, t.canvas, t.app, t.rail, t.surface, t.sink, t.text, t.dim, t.faint] {
+        if !isNormalizedHex(color) { allHexOK = false }
+    }
+}
+check("all base color literals are six-digit uppercase hex", allHexOK)
+
+check("mk accent-soft alpha",
+      PaletteMkConstants.accentSoftAlphaDark == 0.17
+        && PaletteMkConstants.accentSoftAlphaLight == 0.13)
+check("mk soft accent-glow",
+      PaletteMkConstants.softAccentGlowDark == 0.20
+        && PaletteMkConstants.softAccentGlowLight == 0.13)
+check("mk non-soft accent-glow",
+      PaletteMkConstants.nonSoftAccentGlowDark == 0.42
+        && PaletteMkConstants.nonSoftAccentGlowLight == 0.30)
+check("mk line",
+      PaletteMkConstants.lineDarkWhite == 0.10
+        && PaletteMkConstants.lineLightShade == 0.13)
+check("mk line-soft",
+      PaletteMkConstants.lineSoftDarkWhite == 0.05
+        && PaletteMkConstants.lineSoftLightShade == 0.06)
+check("mk soft scan",
+      PaletteMkConstants.softScanDarkWhite == 0.008
+        && PaletteMkConstants.softScanLightShade == 0.006)
+check("mk non-soft scan",
+      PaletteMkConstants.nonSoftScanDarkWhite == 0.022
+        && PaletteMkConstants.nonSoftScanLightShade == 0.015)
+check("mk desk darkening",
+      PaletteMkConstants.desk1DarkeningDark == 0.35
+        && PaletteMkConstants.desk1DarkeningLight == 0.05
+        && PaletteMkConstants.desk2DarkeningDark == 0.15
+        && PaletteMkConstants.desk2DarkeningLight == 0.13)
+check("mk shadow dark string",
+      PaletteMkConstants.shadowDark
+        == "0 26px 70px -18px rgba(0,0,0,.7),0 2px 10px rgba(0,0,0,.5)")
+check("mk shadow light string",
+      PaletteMkConstants.shadowLight
+        == "0 22px 60px -18px rgba(30,22,10,.3),0 2px 8px rgba(30,22,10,.1)")
+check("mk pop-shadow dark string",
+      PaletteMkConstants.popShadowDark == "0 18px 46px -8px rgba(0,0,0,.66)")
+check("mk pop-shadow light string",
+      PaletteMkConstants.popShadowLight == "0 14px 40px -10px rgba(20,15,5,.3)")
+
 // MARK: - PromptEncoder
 
 let multiline = "line one\nline two"

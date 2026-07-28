@@ -24,17 +24,6 @@ enum TerminalVisualState: String {
         case .failed: return "failed"
         }
     }
-
-    var indicatorColor: Color {
-        switch self {
-        case .launching: return .yellow
-        case .working: return .green
-        case .running: return .accentColor
-        case .detached: return .orange
-        case .exited: return .secondary
-        case .failed: return .red
-        }
-    }
 }
 
 enum AgentHealthState: String, Sendable {

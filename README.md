@@ -107,7 +107,10 @@ Conduit follows the public MainFrame contract rather than any private project in
 - Retrieved or displayed context is context for inspection, not verification.
 - Terminal output is never promoted into completion evidence merely because an agent said it was done.
 
-See [`DECISIONS.md`](DECISIONS.md) (public product ADRs), [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md), and [`docs/DAILY_DRIVER_PASS.md`](docs/DAILY_DRIVER_PASS.md).
+Start with the [`quick-start guide`](docs/QUICK_START.md). For design and
+implementation context, see [`DECISIONS.md`](DECISIONS.md) (public product
+ADRs), [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md), and
+[`docs/DAILY_DRIVER_PASS.md`](docs/DAILY_DRIVER_PASS.md).
 
 ## Status
 

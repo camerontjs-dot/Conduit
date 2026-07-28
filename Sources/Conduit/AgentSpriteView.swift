@@ -27,12 +27,77 @@ extension TerminalVisualState {
     }
 }
 
+/// Explicit seat/sprite presentation. Keeps unlaunched agents off the
+/// `TerminalVisualState` enum so "available" never masquerades as ready/running.
+enum AgentSpritePresentation: Equatable {
+    /// Enabled agent with no matching project runtime. Neutral inactive look only.
+    case available
+    /// Matching runtime; pose and mark follow observed terminal state only.
+    case launched(TerminalVisualState)
+}
+
 struct AgentSpriteView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
     let profile: AgentProfile
-    let state: TerminalVisualState
+    let presentation: AgentSpritePresentation
+    /// Default matches the session-pill chrome; operator seats pass a smaller size.
+    var frameSize: CGSize = CGSize(width: 38, height: 44)
+
+    init(
+        profile: AgentProfile,
+        state: TerminalVisualState,
+        frameSize: CGSize = CGSize(width: 38, height: 44)
+    ) {
+        self.profile = profile
+        self.presentation = .launched(state)
+        self.frameSize = frameSize
+    }
+
+    init(
+        profile: AgentProfile,
+        presentation: AgentSpritePresentation,
+        frameSize: CGSize = CGSize(width: 38, height: 44)
+    ) {
+        self.profile = profile
+        self.presentation = presentation
+        self.frameSize = frameSize
+    }
+
+    private var palette: ConduitPalette {
+        themeStore.palette(for: colorScheme)
+    }
 
     private var resolution: AgentSpriteResolution {
         AgentSpriteResolver.resolve(profile)
+    }
+
+    /// Available uses the idle sleeping pose without claiming an exited runtime.
+    private var pose: AgentSpritePose {
+        switch presentation {
+        case .available:
+            return .sleepingCoffee
+        case .launched(let state):
+            return state.spritePose
+        }
+    }
+
+    /// Lifecycle mark for the generic fallback and soft background wash.
+    /// Available uses faint — never the ready/running ramp entry.
+    private var markColor: Color {
+        switch presentation {
+        case .available:
+            return palette.faint
+        case .launched(let state):
+            return palette.color(forTerminalState: state)
+        }
+    }
+
+    private var washOpacity: Double {
+        switch presentation {
+        case .available: return 0.04
+        case .launched: return 0.08
+        }
     }
 
     var body: some View {
@@ -44,21 +109,21 @@ struct AgentSpriteView: View {
                     .antialiased(false)
                     .scaledToFit()
             } else {
-                GenericPixelOperator(state: state)
+                GenericPixelOperator(mark: markColor, palette: palette, side: min(frameSize.width, frameSize.height) * 0.78)
             }
         }
-        .frame(width: 38, height: 44)
+        .frame(width: frameSize.width, height: frameSize.height)
         .padding(.horizontal, 2)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(state.indicatorColor.opacity(0.08))
+                .fill(markColor.opacity(washOpacity))
         )
         .accessibilityHidden(true)
     }
 
     private var image: NSImage? {
         guard let skin = resolution.skin else { return nil }
-        return AgentSpriteResources.image(skin: skin, pose: state.spritePose)
+        return AgentSpriteResources.image(skin: skin, pose: pose)
     }
 }
 
@@ -90,7 +155,9 @@ private enum AgentSpriteResources {
 }
 
 private struct GenericPixelOperator: View {
-    let state: TerminalVisualState
+    let mark: Color
+    let palette: ConduitPalette
+    var side: CGFloat = 30
 
     var body: some View {
         Canvas { context, size in
@@ -106,18 +173,18 @@ private struct GenericPixelOperator: View {
                     with: .color(color)
                 )
             }
-            rect(3, 0, 1, 1, state.indicatorColor)
-            rect(3, 1, 1, 1, .secondary)
-            rect(1, 2, 6, 4, .secondary.opacity(0.85))
-            rect(2, 3, 4, 2, Color(nsColor: .windowBackgroundColor))
-            rect(2, 3, 1, 1, state.indicatorColor)
-            rect(5, 3, 1, 1, state.indicatorColor)
-            rect(0, 4, 1, 2, .secondary)
-            rect(7, 4, 1, 2, .secondary)
-            rect(2, 6, 1, 2, .secondary)
-            rect(5, 6, 1, 2, .secondary)
+            rect(3, 0, 1, 1, mark)
+            rect(3, 1, 1, 1, palette.dim)
+            rect(1, 2, 6, 4, palette.dim.opacity(0.85))
+            rect(2, 3, 4, 2, palette.surface)
+            rect(2, 3, 1, 1, mark)
+            rect(5, 3, 1, 1, mark)
+            rect(0, 4, 1, 2, palette.dim)
+            rect(7, 4, 1, 2, palette.dim)
+            rect(2, 6, 1, 2, palette.dim)
+            rect(5, 6, 1, 2, palette.dim)
         }
-        .frame(width: 30, height: 30)
+        .frame(width: side, height: side)
     }
 }
 #endif

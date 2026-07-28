@@ -13,6 +13,61 @@ struct ActiveWorkSession: Identifiable, Sendable {
     let log: WorkSessionEventLog
 }
 
+/// Presentation-only result of a successful receipt write.
+/// `RECORDED` may be shown only while a matching value exists for a project.
+/// Never infer this from a click, pending state, status text, or recovery.
+struct RecordedReceiptResult: Identifiable, Equatable, Sendable {
+    let id: UUID
+    /// Project identity used for per-project routing and dismissal.
+    let projectID: String
+    /// Exact URL returned by `WorkSessionReceiptWriter.write`.
+    let url: URL
+    /// Wall-clock time when the writer returned successfully.
+    let recordedAt: Date
+}
+
+/// Destination for an explicit terminal-selection staging draft.
+/// `thisComposer` appends without sending; `agent` delivers via TerminalForwarder.
+enum ForwardingDestination: Equatable, Hashable, Sendable {
+    case thisComposer
+    case agent(UUID)
+}
+
+/// Ephemeral operator-reviewed forward. Exists only while the staging card is open.
+struct ForwardingDraft: Identifiable, Equatable, Sendable {
+    let id: UUID
+    /// Editable terminal selection captured from the clipboard at staging open.
+    var selection: String
+    /// Optional operator note/context; never replaces the evidence boundary.
+    var note: String
+    /// Provenance frozen at capture: active session agent name, or `"terminal"`.
+    let sourceAgentName: String
+    var destination: ForwardingDestination
+
+    init(
+        id: UUID = UUID(),
+        selection: String,
+        note: String = "",
+        sourceAgentName: String,
+        destination: ForwardingDestination
+    ) {
+        self.id = id
+        self.selection = selection
+        self.note = note
+        self.sourceAgentName = sourceAgentName
+        self.destination = destination
+    }
+
+    var lineCount: Int {
+        if selection.isEmpty { return 0 }
+        return selection.reduce(1) { partial, character in
+            character == "\n" ? partial + 1 : partial
+        }
+    }
+
+    var characterCount: Int { selection.count }
+}
+
 private enum ProjectScanResult: Sendable {
     case success([MainframeProject])
     case failure(String)
@@ -20,6 +75,9 @@ private enum ProjectScanResult: Sendable {
 
 @MainActor
 final class AppModel: ObservableObject {
+    /// UserDefaults key for Focused Flow density. Independent of SettingsStore JSON.
+    static let densityStorageKey = "conduit.density"
+
     @Published var settings = ConduitSettings()
     @Published var projects: [MainframeProject] = []
     @Published var rootAccessNeedsAuthorization = false
@@ -29,7 +87,12 @@ final class AppModel: ObservableObject {
     @Published var activeSessionID: UUID?
     @Published var composerText = ""
     @Published var attachments: [Attachment] = []
+    /// Ephemeral staging draft for terminal-selection forwarding. Nil when idle.
+    @Published var forwardingDraft: ForwardingDraft?
+    /// Legacy settings-backed default; layout no longer embeds context in the workspace.
     @Published var showContext = true
+    /// Focused-density temporary trailing context overlay. Closed by default.
+    @Published var isContextInspectorPresented = false
     @Published var statusMessage: String?
     @Published var errorMessage: String?
     @Published var isDropTargeted = false
@@ -47,6 +110,30 @@ final class AppModel: ObservableObject {
     /// never discards a session; each closes explicitly with its own receipt.
     @Published var workSessions: [String: ActiveWorkSession] = [:]
 
+    /// Projects with an in-flight close→render→write. Neutral feedback only;
+    /// never a success claim and never sufficient to show `RECORDED`.
+    @Published private(set) var pendingReceiptProjectIDs: Set<String> = []
+
+    /// Successful receipt writes keyed by project id. Published only after
+    /// `writer.write` returns a real URL. Interrupted-session recovery never
+    /// inserts here.
+    @Published private(set) var recordedReceipts: [String: RecordedReceiptResult] = [:]
+
+    /// Focused Flow workspace density. Persists immediately under `conduit.density`.
+    /// Missing or invalid stored values become and persist as Focused.
+    @Published var density: Density = AppModel.loadPersistedDensity() {
+        didSet {
+            UserDefaults.standard.set(density.rawValue, forKey: Self.densityStorageKey)
+            // Temporary Focused overlay never carries across density changes.
+            isContextInspectorPresented = false
+        }
+    }
+
+    /// Balanced and Operator pin project context as the NavigationSplitView detail.
+    var isContextDetailPinned: Bool {
+        density != .focused
+    }
+
     let speech = SpeechTranscriber()
     private let store = SettingsStore()
     private let scanner = MainframeScanner()
@@ -61,6 +148,16 @@ final class AppModel: ObservableObject {
     private var scopedRootURL: URL?
     private var isUsingScopedRoot = false
 
+    /// Load density from UserDefaults; rewrite Focused when missing or invalid.
+    private static func loadPersistedDensity() -> Density {
+        let raw = UserDefaults.standard.string(forKey: densityStorageKey)
+        let resolved = Density.resolved(fromStored: raw)
+        if raw != resolved.rawValue {
+            UserDefaults.standard.set(resolved.rawValue, forKey: densityStorageKey)
+        }
+        return resolved
+    }
+
     var selectedProject: MainframeProject? {
         projects.first { $0.id == selectedProjectID }
     }
@@ -71,6 +168,11 @@ final class AppModel: ObservableObject {
 
     var enabledAgents: [AgentProfile] {
         settings.agents.filter(\.enabled)
+    }
+
+    /// Agents eligible as staging forward targets (enabled, non-shell).
+    var forwardableAgents: [AgentProfile] {
+        enabledAgents.filter { $0.kind != .shell }
     }
 
     func bootstrap() async {
@@ -239,6 +341,20 @@ final class AppModel: ObservableObject {
 
     func requestProjectSearchFocus() {
         projectSearchFocusRequest += 1
+    }
+
+    /// Shared by WorkspaceHeader and ⌘\ . Focused toggles the temporary overlay;
+    /// Balanced/Operator keep context pinned and never hide it from this control.
+    func toggleContextPresentation() {
+        guard !isContextDetailPinned else {
+            isContextInspectorPresented = false
+            return
+        }
+        isContextInspectorPresented.toggle()
+    }
+
+    func dismissContextInspector() {
+        isContextInspectorPresented = false
     }
 
     var sessionsForSelectedProject: [TerminalRuntime] {
@@ -476,34 +592,118 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func copyClipboardSelectionToComposer() {
-        guard let selection = NSPasteboard.general.string(forType: .string), !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Copy terminal text first, then use this action."
-            return
-        }
-        composerText += composerText.isEmpty ? selection : "\n\n\(selection)"
+    /// Opens staging with This composer pre-selected. Captures clipboard only.
+    func beginForwardingToComposer() {
+        beginForwardingStaging(destination: .thisComposer)
     }
 
-    func forwardClipboardSelection(to agent: AgentProfile) {
-        guard let selection = NSPasteboard.general.string(forType: .string) else {
+    /// Opens staging with a named agent pre-selected. Captures clipboard only.
+    func beginForwarding(to agent: AgentProfile) {
+        beginForwardingStaging(destination: .agent(agent.id))
+    }
+
+    /// Capture clipboard text + provenance into an ephemeral draft. Does not
+    /// launch, write a PTY, mutate the ordinary composer, or claim delivery.
+    func beginForwardingStaging(destination: ForwardingDestination) {
+        guard let selection = NSPasteboard.general.string(forType: .string),
+              !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Copy terminal text first, then forward it."
             return
         }
-        let prompt = TerminalForwarder.prompt(
+        let sourceName = activeSession?.descriptor.agent.name
+        let provenance = (sourceName?.isEmpty == false) ? sourceName! : "terminal"
+        forwardingDraft = ForwardingDraft(
             selection: selection,
-            sourceAgent: activeSession?.descriptor.agent.name,
-            destinationAgent: agent.name
+            sourceAgentName: provenance,
+            destination: destination
         )
-        guard !prompt.isEmpty else {
-            errorMessage = "The clipboard does not contain text."
+        errorMessage = nil
+    }
+
+    /// Dismiss the staging draft only. Clipboard, composer, sessions, and
+    /// attachments are untouched.
+    func cancelForwardingDraft() {
+        forwardingDraft = nil
+    }
+
+    /// Explicit confirmation: append to composer or deliver via TerminalForwarder.
+    func confirmForwardingDraft() {
+        guard let draft = forwardingDraft else { return }
+        let trimmedSelection = draft.selection.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSelection.isEmpty else {
+            errorMessage = "The selection is empty."
             return
         }
-        guard let destination = launch(agent: agent) else { return }
-        // Delivery is held inside the controller until the destination session
-        // is ready; the clipboard still holds the selection if it fails.
-        destination.controller.deliverPrompt(prompt) { [weak self] delivered in
-            guard let self, !delivered else { return }
-            self.errorMessage = "The forwarded output could not be delivered to \(agent.name). The selection is still on the clipboard."
+        let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch draft.destination {
+        case .thisComposer:
+            var block = draft.selection
+            if !note.isEmpty {
+                block += "\n\n\(note)"
+            }
+            composerText += composerText.isEmpty ? block : "\n\n\(block)"
+            forwardingDraft = nil
+            statusMessage = "Selection moved to the composer."
+            errorMessage = nil
+
+        case .agent(let agentID):
+            guard let agent = forwardableAgents.first(where: { $0.id == agentID }) else {
+                errorMessage = "That destination agent is no longer available. Choose another target or Cancel."
+                return
+            }
+            var prompt = TerminalForwarder.prompt(
+                selection: draft.selection,
+                sourceAgent: draft.sourceAgentName,
+                destinationAgent: agent.name
+            )
+            guard !prompt.isEmpty else {
+                errorMessage = "The selection is empty."
+                return
+            }
+            // Operator context is additive; TerminalForwarder's evidence warning stays intact.
+            if !note.isEmpty {
+                prompt += "\n\nOperator context:\n\(note)"
+            }
+            guard let destination = launch(agent: agent) else {
+                // launch already set an honest error; keep the draft recoverable.
+                return
+            }
+
+            let savedDraft = draft
+            // Distinguish queue acceptance (clear draft) from a later async
+            // delivery failure (restore if no newer draft). Sync completions
+            // fire re-entrantly during deliverPrompt while isSync is true.
+            var isSync = true
+            var syncResult: Bool?
+            destination.controller.deliverPrompt(prompt) { [weak self] delivered in
+                guard let self else { return }
+                if isSync {
+                    syncResult = delivered
+                    return
+                }
+                guard !delivered else { return }
+                if self.forwardingDraft == nil {
+                    self.forwardingDraft = savedDraft
+                }
+                self.errorMessage = "The forwarded output could not be delivered to \(agent.name). The staging draft has been restored."
+            }
+            isSync = false
+
+            if let syncResult {
+                if syncResult {
+                    forwardingDraft = nil
+                    statusMessage = "Forwarded selection to \(agent.name)."
+                    errorMessage = nil
+                } else {
+                    errorMessage = "The forwarded output could not be delivered to \(agent.name)."
+                }
+            } else {
+                // Accepted by the controller queue (pending readiness or in-flight).
+                forwardingDraft = nil
+                statusMessage = "Forwarding selection to \(agent.name)…"
+                errorMessage = nil
+            }
         }
     }
 
@@ -603,6 +803,33 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func isReceiptWritePending(for projectID: String) -> Bool {
+        pendingReceiptProjectIDs.contains(projectID)
+    }
+
+    func recordedReceipt(for projectID: String) -> RecordedReceiptResult? {
+        recordedReceipts[projectID]
+    }
+
+    /// Removes only the matching recorded result (identity + project).
+    func dismissRecordedReceipt(_ result: RecordedReceiptResult) {
+        guard recordedReceipts[result.projectID]?.id == result.id else { return }
+        recordedReceipts[result.projectID] = nil
+    }
+
+    /// Opens the exact URL returned by a successful write.
+    func openRecordedReceipt(_ result: RecordedReceiptResult) {
+        NSWorkspace.shared.open(result.url)
+    }
+
+    private func setReceiptWritePending(_ projectID: String, pending: Bool) {
+        if pending {
+            pendingReceiptProjectIDs.insert(projectID)
+        } else {
+            pendingReceiptProjectIDs.remove(projectID)
+        }
+    }
+
     func closeWorkSession(for project: MainframeProject?) {
         guard let project, let root = settings.mainframeRoot, let work = workSessions[project.id] else {
             errorMessage = "No active work session to close."
@@ -626,6 +853,13 @@ final class AppModel: ObservableObject {
         }
         workSessions[project.id] = nil
 
+        // Honest neutral pending only — never publish RECORDED from a click.
+        // Clear any prior success first so a later render/write failure cannot
+        // re-show a stale RECORDED reveal for this project.
+        let projectID = project.id
+        recordedReceipts[projectID] = nil
+        setReceiptWritePending(projectID, pending: true)
+
         let log = work.log
         let projectPath = project.path
         let writer = receiptWriter
@@ -637,6 +871,7 @@ final class AppModel: ObservableObject {
             try? log.append(.closed(at: Date()))
             guard let rendered = WorkSessionReceiptRenderer.render(events: log.readEvents()) else {
                 await MainActor.run { [weak self] in
+                    self?.setReceiptWritePending(projectID, pending: false)
                     self?.errorMessage = "The work session event log could not be rendered into a receipt."
                 }
                 return
@@ -644,11 +879,22 @@ final class AppModel: ObservableObject {
             do {
                 let url = try writer.write(root: root, receipt: rendered)
                 log.delete()
+                let recordedAt = Date()
                 await MainActor.run { [weak self] in
-                    self?.statusMessage = "Saved session receipt to \(url.lastPathComponent)."
+                    guard let self else { return }
+                    self.setReceiptWritePending(projectID, pending: false)
+                    // Sole success gate: writer returned a real URL.
+                    self.recordedReceipts[projectID] = RecordedReceiptResult(
+                        id: UUID(),
+                        projectID: projectID,
+                        url: url,
+                        recordedAt: recordedAt
+                    )
+                    self.statusMessage = "Saved session receipt to \(url.lastPathComponent)."
                 }
             } catch {
                 await MainActor.run { [weak self] in
+                    self?.setReceiptWritePending(projectID, pending: false)
                     self?.errorMessage = error.localizedDescription
                 }
             }
