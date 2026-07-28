@@ -252,9 +252,16 @@ struct TmuxDriver: Sendable {
 
     /// Creates the session detached if missing. Returns false when tmux could
     /// not provide the session (caller should fall back to a direct PTY).
-    func ensureSession(name: String, directory: String, command: String) -> Bool {
+    func ensureSession(
+        name: String,
+        directory: String,
+        command: String,
+        projectPath: String? = nil,
+        agentName: String? = nil
+    ) -> Bool {
         if hasSession(name) {
             applySessionOptions(session: name)
+            recordIdentity(session: name, projectPath: projectPath, agentName: agentName)
             return true
         }
         let result = SubprocessRunner.run(
@@ -264,7 +271,64 @@ struct TmuxDriver: Sendable {
         )
         guard result.status == 0 else { return false }
         applySessionOptions(session: name)
+        recordIdentity(session: name, projectPath: projectPath, agentName: agentName)
         return true
+    }
+
+    /// Stores identity on the tmux session itself as user options, so discovery
+    /// can read who a session belongs to instead of reversing its name. A name
+    /// is a display convenience; this is the record.
+    private func recordIdentity(session: String, projectPath: String?, agentName: String?) {
+        if let projectPath {
+            _ = SubprocessRunner.run(
+                tmuxPath,
+                ["set-option", "-t", session, Self.projectOption, projectPath],
+                timeout: 4
+            )
+        }
+        if let agentName {
+            _ = SubprocessRunner.run(
+                tmuxPath,
+                ["set-option", "-t", session, Self.agentOption, agentName],
+                timeout: 4
+            )
+        }
+    }
+
+    static let projectOption = "@conduit_project"
+    static let agentOption = "@conduit_agent"
+    /// Every `conduit-` session tmux currently knows about. Sessions Conduit
+    /// did not create are excluded by prefix; sessions it created before
+    /// identity options existed are included with nil identity rather than
+    /// dropped, so discovery never implies tmux is emptier than it is.
+    func listConduitSessions() -> [DiscoveredSession] {
+        listConduitSessionsDetailed().sessions
+    }
+
+    struct DiscoveryOutcome: Sendable {
+        let sessions: [DiscoveredSession]
+        let exitStatus: Int32
+        let rawOutput: String
+    }
+
+    /// Same listing, but keeps the raw result so an empty list can explain
+    /// itself instead of every failure looking like "no sessions".
+    func listConduitSessionsDetailed() -> DiscoveryOutcome {
+        let result = SubprocessRunner.run(
+            tmuxPath,
+            ["list-sessions", "-F", TmuxSessionListParser.format],
+            timeout: 6
+        )
+        // "no server running" is a normal empty, not a failure to report.
+        let noServer = result.output.contains("no server running")
+        guard result.status == 0 || noServer else {
+            return DiscoveryOutcome(sessions: [], exitStatus: result.status, rawOutput: result.output)
+        }
+        return DiscoveryOutcome(
+            sessions: TmuxSessionListParser.parse(result.output),
+            exitStatus: result.status,
+            rawOutput: noServer ? "" : result.output
+        )
     }
 
     /// Session-scoped tmux options, so an operator attaching from a normal

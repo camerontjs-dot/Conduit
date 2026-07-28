@@ -41,6 +41,34 @@ public enum SessionLifecycle: Equatable, Sendable {
 
 /// Deterministic tmux session naming shared by launch, reconnect, and detach.
 public enum TmuxSessionNaming {
+    /// Instance 1 keeps the historic name exactly, so sessions created before
+    /// multi-instance support stay reattachable rather than being orphaned.
+    /// Later instances append `-2`, `-3`, … to that same stem.
+    public static func sessionName(
+        projectPath: URL,
+        agentName: String,
+        instance: Int
+    ) -> String {
+        let base = sessionName(projectPath: projectPath, agentName: agentName)
+        guard instance > 1 else { return base }
+        return "\(base)-\(instance)"
+    }
+
+    /// The lowest instance number whose name is not already taken.
+    public static func nextInstance(
+        projectPath: URL,
+        agentName: String,
+        existingNames: Set<String>
+    ) -> Int {
+        var instance = 1
+        while existingNames.contains(
+            sessionName(projectPath: projectPath, agentName: agentName, instance: instance)
+        ) {
+            instance += 1
+        }
+        return instance
+    }
+
     public static func sessionName(projectPath: URL, agentName: String) -> String {
         let raw = "\(projectPath.standardizedFileURL.path)|\(agentName)"
         var hash: UInt64 = 14_695_981_039_346_656_037

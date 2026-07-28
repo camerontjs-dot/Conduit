@@ -38,6 +38,16 @@ struct ConduitApp: App {
                         Button(agent.name) { model.launch(agent: agent) }
                     }
                 }
+                // Separate from the menu above on purpose: launching keeps
+                // focusing an existing session, so opening a second one is an
+                // explicit choice rather than a surprise extra tab.
+                Menu("New Session For") {
+                    ForEach(model.enabledAgents) { agent in
+                        Button(agent.name) { model.launchAdditional(agent: agent) }
+                    }
+                }
+                Button("Resume Session…") { model.showResumeSessions = true }
+                    .keyboardShortcut("r", modifiers: [.command, .option])
                 Button(model.activeSession?.controller.usesTmux == true ? "Detach Active Session" : "Close Active Session") {
                     model.leaveActiveSession()
                 }

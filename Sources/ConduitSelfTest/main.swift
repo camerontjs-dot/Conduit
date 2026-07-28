@@ -544,6 +544,139 @@ check("forwarder wraps with evidence boundary",
       forwarded.contains("unverified terminal output") && forwarded.contains("Re-run deterministic checks"))
 check("forwarder keeps the selection", forwarded.contains("Done!"))
 
+// MARK: - Multi-instance naming and session discovery
+
+let instProject = URL(fileURLWithPath: "/tmp/MainFrame/30_projects/conduit")
+let instBase = TmuxSessionNaming.sessionName(projectPath: instProject, agentName: "Claude")
+
+// Instance 1 must keep the historic name, or every session created before
+// multi-instance support becomes unreachable.
+check("instance 1 keeps the legacy name",
+      TmuxSessionNaming.sessionName(projectPath: instProject, agentName: "Claude", instance: 1) == instBase)
+check("later instances get distinct names",
+      TmuxSessionNaming.sessionName(projectPath: instProject, agentName: "Claude", instance: 2) == "\(instBase)-2")
+check("instance names stay unique",
+      Set([1, 2, 3].map {
+          TmuxSessionNaming.sessionName(projectPath: instProject, agentName: "Claude", instance: $0)
+      }).count == 3)
+check("next instance is 1 when nothing exists",
+      TmuxSessionNaming.nextInstance(projectPath: instProject, agentName: "Claude", existingNames: []) == 1)
+check("next instance skips taken names",
+      TmuxSessionNaming.nextInstance(
+          projectPath: instProject,
+          agentName: "Claude",
+          existingNames: [instBase, "\(instBase)-2"]
+      ) == 3)
+// A detached session still occupies its name; reusing it would silently
+// reattach to someone else's session instead of opening a new one.
+check("next instance avoids a detached session's name",
+      TmuxSessionNaming.nextInstance(
+          projectPath: instProject,
+          agentName: "Claude",
+          existingNames: ["\(instBase)-2"]
+      ) == 1)
+
+// Parsed against output captured from a real tmux 3.6 server. The identity
+// options are unset here — this is exactly the shape a session created before
+// they existed produces, and it must survive rather than be dropped.
+let sep = TmuxSessionListParser.fieldSeparator
+// tmux rewrites control bytes in -F output to "_", which silently merged every
+// field into one. The separator must stay printable or discovery goes blind.
+check("field separator contains no control characters",
+      !sep.unicodeScalars.contains { $0.properties.generalCategory == .control })
+check("format uses the separator between all five fields",
+      TmuxSessionListParser.format.components(separatedBy: sep).count == 5)
+let legacyLine = "conduit-mainframe-shell-39764712\(sep)1785245247\(sep)0\(sep)\(sep)"
+let legacyParsed = TmuxSessionListParser.parse(legacyLine + "\n")
+check("parses a session with no identity options", legacyParsed.count == 1)
+check("keeps the tmux name", legacyParsed.first?.tmuxName == "conduit-mainframe-shell-39764712")
+check("reads creation time", legacyParsed.first?.createdAt == Date(timeIntervalSince1970: 1_785_245_247))
+check("leaves identity nil rather than inventing it",
+      legacyParsed.first?.projectPath == nil && legacyParsed.first?.agentName == nil)
+check("unidentified session is not marked identified", legacyParsed.first?.isIdentified == false)
+
+let fullLine = "conduit-x\(sep)1785245247\(sep)2\(sep)/tmp/MainFrame/30_projects/conduit\(sep)Claude"
+let fullParsed = TmuxSessionListParser.parse(fullLine)
+check("reads recorded identity", fullParsed.first?.agentName == "Claude")
+check("reads recorded project",
+      fullParsed.first?.projectPath?.standardizedFileURL.path == "/tmp/MainFrame/30_projects/conduit")
+check("reads attached client count", fullParsed.first?.attachedClients == 2)
+check("identified session reports identified", fullParsed.first?.isIdentified == true)
+
+check("ignores sessions Conduit did not create",
+      TmuxSessionListParser.parse("other-session\(sep)1\(sep)0\(sep)\(sep)").isEmpty)
+check("ignores malformed lines",
+      TmuxSessionListParser.parse("conduit-broken").isEmpty)
+check("parses multiple lines", TmuxSessionListParser.parse("\(legacyLine)\n\(fullLine)\n").count == 2)
+
+// Resuming a session with no recorded identity must not write the display
+// placeholder back as if it were known — that would turn a guess into a record.
+let unidentifiedResume = SessionDescriptor(
+    projectPath: instProject,
+    agent: AgentProfile(name: "Unidentified", command: "/bin/zsh", kind: .shell),
+    tmuxSessionName: "conduit-legacy",
+    recordsIdentity: DiscoveredSession(tmuxName: "conduit-legacy").isIdentified
+)
+check("resuming an unidentified session records no identity",
+      unidentifiedResume.recordsIdentity == false)
+let identifiedResume = SessionDescriptor(
+    projectPath: instProject,
+    agent: AgentProfile(name: "Claude", command: "claude"),
+    tmuxSessionName: "conduit-known",
+    recordsIdentity: DiscoveredSession(
+        tmuxName: "conduit-known", projectPath: instProject, agentName: "Claude"
+    ).isIdentified
+)
+check("resuming a known session keeps recording identity",
+      identifiedResume.recordsIdentity == true)
+check("a freshly launched session records identity by default",
+      SessionDescriptor(projectPath: instProject,
+                        agent: AgentProfile(name: "Claude", command: "claude")).recordsIdentity)
+
+let discEpoch = Date(timeIntervalSince1970: 1_800_000_000)
+let discOther = URL(fileURLWithPath: "/tmp/MainFrame/30_projects/other")
+let discovered = [
+    DiscoveredSession(tmuxName: "conduit-a", projectPath: instProject, agentName: "Claude",
+                      createdAt: discEpoch, attachedClients: 0),
+    DiscoveredSession(tmuxName: "conduit-b", projectPath: instProject, agentName: "Codex",
+                      createdAt: discEpoch.addingTimeInterval(60), attachedClients: 0),
+    DiscoveredSession(tmuxName: "conduit-c", projectPath: discOther, agentName: "Grok",
+                      createdAt: discEpoch, attachedClients: 1),
+    DiscoveredSession(tmuxName: "conduit-legacy", createdAt: nil, attachedClients: 0)
+]
+let classified = DiscoveredSessionCatalog.classify(
+    discovered: discovered,
+    selectedProjectPath: instProject,
+    openTmuxNames: ["conduit-b"],
+    knownProjects: [discOther: "Other Project"]
+)
+func relation(_ name: String) -> DiscoveredSessionRelation? {
+    classified.first { $0.session.tmuxName == name }?.relation
+}
+check("discovery keeps every session", classified.count == discovered.count)
+check("same-project session is resumable here", relation("conduit-a") == .resumableHere)
+check("already-open session is marked open", relation("conduit-b") == .alreadyOpen)
+check("other project is named", relation("conduit-c") == .otherProject(projectTitle: "Other Project"))
+// A session with no recorded identity must stay visible and stay unclaimed —
+// hiding it would imply tmux is empty, and guessing would invent an owner.
+check("unidentified session is listed, not dropped", relation("conduit-legacy") == .unidentified)
+check("unidentified session is not claimed by the selected project",
+      relation("conduit-legacy") != .resumableHere)
+check("resumable-here sorts first", classified.first?.session.tmuxName == "conduit-a")
+check("unidentified sorts last", classified.last?.session.tmuxName == "conduit-legacy")
+check("attached-elsewhere is reported, not hidden",
+      classified.first { $0.session.tmuxName == "conduit-c" }?.session.attachedClients == 1)
+
+// With no project selected nothing may be claimed as resumable here.
+let unscoped = DiscoveredSessionCatalog.classify(
+    discovered: discovered,
+    selectedProjectPath: nil,
+    openTmuxNames: [],
+    knownProjects: [:]
+)
+check("no selected project means nothing is resumable here",
+      !unscoped.contains { $0.relation == .resumableHere })
+
 // MARK: - Tier A observed usage
 
 let usageEpoch = Date(timeIntervalSince1970: 1_800_000_000)

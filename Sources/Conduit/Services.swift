@@ -108,10 +108,14 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         lifecycle.transition(to: .launching)
 
         if useDetachedSessions, let tmux = EnvironmentResolver.shared.resolve("tmux") {
-            let name = TmuxSessionNaming.sessionName(
-                projectPath: descriptor.projectPath,
-                agentName: descriptor.agent.name
-            )
+            // The descriptor carries the binding so a resumed session attaches
+            // to the discovered name and a second instance gets its own.
+            let name = descriptor.tmuxSessionName
+                ?? TmuxSessionNaming.sessionName(
+                    projectPath: descriptor.projectPath,
+                    agentName: descriptor.agent.name,
+                    instance: descriptor.instance
+                )
             let driver = TmuxDriver(tmuxPath: tmux)
             // Session creation happens out-of-band and detached, so the
             // session deterministically exists before the client attaches
@@ -119,7 +123,12 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             if driver.ensureSession(
                 name: name,
                 directory: descriptor.projectPath.path,
-                command: paneCommand()
+                command: paneCommand(),
+                // Only stamp identity when Conduit actually knows it; a
+                // resumed unidentified session keeps its blank record rather
+                // than inheriting a placeholder name.
+                projectPath: descriptor.recordsIdentity ? descriptor.projectPath.path : nil,
+                agentName: descriptor.recordsIdentity ? descriptor.agent.name : nil
             ) {
                 usesTmux = true
                 tmuxSessionName = name

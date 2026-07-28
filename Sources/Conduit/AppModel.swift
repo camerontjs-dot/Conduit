@@ -88,6 +88,11 @@ final class AppModel: ObservableObject {
     /// Completed observed-usage records for this root, loaded from the log at
     /// bootstrap and appended to as sessions end.
     @Published private(set) var completedUsage: [SessionUsageRecord] = []
+    /// Durable tmux sessions found on the server, refreshed on demand.
+    @Published private(set) var discoveredSessions: [DiscoveredSession] = []
+    @Published var showResumeSessions = false
+    /// Why discovery came back empty, when it did. Nil means a plain empty.
+    @Published private(set) var discoveryNote: String?
     @Published var composerText = ""
     @Published var attachments: [Attachment] = []
     /// Ephemeral staging draft for terminal-selection forwarding. Nil when idle.
@@ -435,7 +440,115 @@ final class AppModel: ObservableObject {
             }
         }
 
-        let descriptor = SessionDescriptor(projectPath: project.path, agent: agent)
+        return start(
+            descriptor: SessionDescriptor(
+                projectPath: project.path,
+                agent: agent,
+                instance: nextInstanceNumber(for: agent, in: project)
+            ),
+            project: project,
+            backendLabel: settings.restoreSessions ? "durable-requested" : "pty"
+        )
+    }
+
+    /// Explicitly opens an additional session for an agent that already has
+    /// one. Kept separate from `launch` so the ordinary click keeps focusing
+    /// the existing session rather than quietly multiplying tabs.
+    @discardableResult
+    func launchAdditional(agent: AgentProfile) -> TerminalRuntime? {
+        guard let project = selectedProject else {
+            errorMessage = "Choose a MainFrame project first."
+            return nil
+        }
+        beginWorkSessionIfNeeded(project)
+        let instance = nextInstanceNumber(for: agent, in: project)
+        let runtime = start(
+            descriptor: SessionDescriptor(
+                projectPath: project.path,
+                agent: agent,
+                instance: instance
+            ),
+            project: project,
+            backendLabel: settings.restoreSessions ? "durable-requested" : "pty"
+        )
+        statusMessage = "Opened \(agent.name) session \(instance)."
+        return runtime
+    }
+
+    /// Reattaches to a durable tmux session that already exists. The tmux name
+    /// comes from discovery, never re-derived, so the session that opens is the
+    /// one that was listed.
+    @discardableResult
+    func resume(_ discovered: DiscoveredSession) -> TerminalRuntime? {
+        guard let project = selectedProject else {
+            errorMessage = "Choose a MainFrame project first."
+            return nil
+        }
+        if let open = sessions.first(where: {
+            $0.descriptor.tmuxSessionName == discovered.tmuxName
+        }) {
+            activeSessionID = open.id
+            statusMessage = "That session is already open."
+            return open
+        }
+        // Resuming an unidentified session cannot invent an agent for it. The
+        // placeholder below is a display label only — `recordsIdentity: false`
+        // keeps it from being written back onto the tmux session as if it were
+        // known.
+        let knownAgent = discovered.agentName.flatMap { name in
+            settings.agents.first { $0.name == name }
+        }
+        let agent = knownAgent
+            ?? AgentProfile(
+                name: discovered.agentName ?? "Unidentified",
+                command: "/bin/zsh",
+                arguments: ["-l"],
+                kind: .shell
+            )
+
+        beginWorkSessionIfNeeded(project)
+        let runtime = start(
+            descriptor: SessionDescriptor(
+                projectPath: discovered.projectPath ?? project.path,
+                agent: agent,
+                title: discovered.agentName.map { "\($0) · resumed" } ?? "Unidentified · resumed",
+                tmuxSessionName: discovered.tmuxName,
+                recordsIdentity: discovered.isIdentified
+            ),
+            project: project,
+            backendLabel: "durable-resumed"
+        )
+        statusMessage = discovered.attachedClients > 0
+            ? "Resumed \(discovered.tmuxName) — another client is also attached."
+            : "Resumed \(discovered.tmuxName)."
+        return runtime
+    }
+
+    /// Lowest instance number not already taken by an open tab or a live tmux
+    /// session, so a new instance never collides with a detached one.
+    private func nextInstanceNumber(for agent: AgentProfile, in project: MainframeProject) -> Int {
+        var taken = Set(sessions.compactMap(\.descriptor.tmuxSessionName))
+        taken.formUnion(discoveredSessions.map(\.tmuxName))
+        return TmuxSessionNaming.nextInstance(
+            projectPath: project.path,
+            agentName: agent.name,
+            existingNames: taken
+        )
+    }
+
+    private func start(
+        descriptor: SessionDescriptor,
+        project: MainframeProject,
+        backendLabel: String
+    ) -> TerminalRuntime {
+        var descriptor = descriptor
+        if settings.restoreSessions && descriptor.tmuxSessionName == nil {
+            descriptor.tmuxSessionName = TmuxSessionNaming.sessionName(
+                projectPath: descriptor.projectPath,
+                agentName: descriptor.agent.name,
+                instance: descriptor.instance
+            )
+        }
         let runtime = TerminalRuntime(descriptor: descriptor, useDetachedSessions: settings.restoreSessions)
         runtime.controller.onUsageRecord = { [weak self] record in
             Task { @MainActor in self?.bankObservedUsage(record) }
@@ -444,13 +557,55 @@ final class AppModel: ObservableObject {
         activeSessionID = runtime.id
         appendEvent(
             .agentLaunched(
-                agent: agent.name,
-                backend: settings.restoreSessions ? "durable-requested" : "pty",
+                agent: descriptor.agent.name,
+                backend: backendLabel,
                 at: Date()
             ),
             for: project
         )
         return runtime
+    }
+
+    // MARK: - Durable session discovery
+
+    /// Refreshes the list of durable tmux sessions. Discovery is read-only —
+    /// it never creates, kills, or renames anything.
+    func refreshDiscoveredSessions() async {
+        guard let tmux = EnvironmentResolver.shared.resolve("tmux") else {
+            discoveredSessions = []
+            discoveryNote = "tmux was not found on PATH, so no durable sessions could be listed."
+            return
+        }
+        let driver = TmuxDriver(tmuxPath: tmux)
+        let outcome = await BlockingWork.run { driver.listConduitSessionsDetailed() }
+        discoveredSessions = outcome.sessions
+        // An empty list has several causes and they are not interchangeable:
+        // no server, a failed command, or output Conduit could not parse. Say
+        // which, rather than letting "none found" stand for all of them.
+        if outcome.sessions.isEmpty {
+            if outcome.exitStatus != 0 {
+                discoveryNote = "tmux list-sessions exited \(outcome.exitStatus): \(outcome.rawOutput.prefix(200))"
+            } else if !outcome.rawOutput.isEmpty {
+                discoveryNote = "tmux reported sessions Conduit could not parse: \(outcome.rawOutput.prefix(200))"
+            } else {
+                discoveryNote = nil
+            }
+        } else {
+            discoveryNote = nil
+        }
+    }
+
+    /// Discovered sessions classified against what is currently open.
+    var resumableSessions: [ResumableSession] {
+        DiscoveredSessionCatalog.classify(
+            discovered: discoveredSessions,
+            selectedProjectPath: selectedProject?.path,
+            openTmuxNames: Set(sessions.compactMap(\.descriptor.tmuxSessionName)),
+            knownProjects: Dictionary(
+                projects.map { ($0.path, $0.metadata.title) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        )
     }
 
     @discardableResult

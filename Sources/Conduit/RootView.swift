@@ -70,6 +70,11 @@ struct RootView: View {
                 .environmentObject(model)
                 .environmentObject(themeStore)
         }
+        .sheet(isPresented: $model.showResumeSessions) {
+            ResumeSessionsSheet()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
         .onChange(of: model.speech.isRecording) { recording in
             if !recording { model.absorbSpeechTranscript() }
         }

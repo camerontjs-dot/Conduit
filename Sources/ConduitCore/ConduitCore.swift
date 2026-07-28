@@ -140,19 +140,42 @@ public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
     public var agent: AgentProfile
     public var title: String
     public var createdAt: Date
+    /// The durable tmux session this descriptor binds to. Set explicitly so a
+    /// resumed session attaches to the name that was actually discovered, and
+    /// a second instance of the same agent gets its own name, instead of every
+    /// session re-deriving one shared name from project + agent.
+    ///
+    /// Nil means a direct PTY with no durable session.
+    public var tmuxSessionName: String?
+    /// Which instance of this agent-in-this-project the session is. Instance 1
+    /// keeps the historic tmux name; later instances are suffixed.
+    public var instance: Int
+    /// Whether Conduit actually knows whose session this is, and may therefore
+    /// record project/agent identity onto the tmux session.
+    ///
+    /// False when resuming a session that carried no identity: the agent shown
+    /// there is a display placeholder, and writing it back would turn a guess
+    /// into a permanent record.
+    public var recordsIdentity: Bool
 
     public init(
         id: UUID = UUID(),
         projectPath: URL,
         agent: AgentProfile,
         title: String? = nil,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        tmuxSessionName: String? = nil,
+        instance: Int = 1,
+        recordsIdentity: Bool = true
     ) {
         self.id = id
         self.projectPath = projectPath
         self.agent = agent
-        self.title = title ?? agent.name
+        self.title = title ?? (instance > 1 ? "\(agent.name) \(instance)" : agent.name)
         self.createdAt = createdAt
+        self.tmuxSessionName = tmuxSessionName
+        self.instance = instance
+        self.recordsIdentity = recordsIdentity
     }
 }
 
