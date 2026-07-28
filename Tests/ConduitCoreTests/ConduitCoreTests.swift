@@ -126,7 +126,8 @@ final class AgentSpriteResolverTests: XCTestCase {
     func testUnmatchedProfilesReceiveHonestGenericFallback() {
         for profile in [
             AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell),
-            AgentProfile(name: "Gemini", command: "gemini"),
+            AgentProfile(name: "Antigravity", command: "agy"),
+            AgentProfile(name: "Grok", command: "grok"),
             AgentProfile(name: "Codexish", command: "custom-agent")
         ] {
             XCTAssertEqual(

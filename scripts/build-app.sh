@@ -28,6 +28,9 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/release/Conduit" "$APP/Contents/MacOS/Conduit"
 cp "Sources/Conduit/Resources/Info.plist" "$APP/Contents/Info.plist"
+# CFBundleIconFile resolves against Contents/Resources, so the icon must be
+# copied explicitly; it is excluded from SwiftPM's resource processing.
+cp "Sources/Conduit/Resources/Conduit.icns" "$APP/Contents/Resources/Conduit.icns"
 
 # Copy Conduit's sprites and dependency resources into the canonical macOS app
 # location. Both Conduit and the pinned SwiftTerm renderer probe this location

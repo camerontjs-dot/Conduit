@@ -87,7 +87,8 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         AgentProfile(name: "Shell", command: "/bin/zsh", arguments: ["-l"], kind: .shell),
         AgentProfile(name: "Claude", command: "claude"),
         AgentProfile(name: "Codex", command: "codex"),
-        AgentProfile(name: "Gemini", command: "gemini"),
+        AgentProfile(name: "Antigravity", command: "agy"),
+        AgentProfile(name: "Grok", command: "grok"),
         AgentProfile(name: "OpenCode", command: "opencode")
     ]
 }
