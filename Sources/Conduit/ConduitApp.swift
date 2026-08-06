@@ -29,9 +29,14 @@ struct ConduitApp: App {
         .defaultSize(width: 1280, height: 840)
         .commands {
             CommandMenu("Conduit") {
-                Button("Find Project") { model.requestProjectSearchFocus() }
+                Button("New Task…") { model.showNewTask = true }
+                    .keyboardShortcut("n", modifiers: [.command])
+                Button("Find Tasks") { model.requestTaskSearchFocus() }
                     .keyboardShortcut("f", modifiers: [.command])
-                Button("New Shell") { model.launchDefaultShell() }
+                Button("Browse Projects…") { model.showProjectBrowser = true }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                Divider()
+                Button("Open Project Shell") { model.launchDefaultShell() }
                     .keyboardShortcut("t", modifiers: [.command])
                 Menu("Launch or Reconnect Agent") {
                     ForEach(model.enabledAgents.filter { $0.kind != .shell }) { agent in
@@ -48,13 +53,25 @@ struct ConduitApp: App {
                 }
                 Button("Resume Session…") { model.showResumeSessions = true }
                     .keyboardShortcut("r", modifiers: [.command, .option])
-                Button(model.activeSession?.controller.usesTmux == true ? "Detach Active Session" : "Close Active Session") {
+                Divider()
+                Button("Show Conversation") {
+                    model.selectedTaskRuntime?.selectedSurface = .conversation
+                }
+                .keyboardShortcut("1", modifiers: [.command])
+                .disabled(model.selectedTaskRuntime == nil)
+                Button("Show Raw Terminal") {
+                    model.selectedTaskRuntime?.selectedSurface = .raw
+                }
+                .keyboardShortcut("2", modifiers: [.command])
+                .disabled(model.selectedTaskRuntime == nil)
+                Divider()
+                Button(model.activeSessionForSelectedProject?.controller.usesTmux == true ? "Detach Active Session" : "Close Active Session") {
                     model.leaveActiveSession()
                 }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(model.activeSession == nil)
+                .disabled(model.activeSessionForSelectedProject == nil)
                 Button("End Active Session") { model.endActiveSession() }
-                    .disabled(model.activeSession == nil)
+                    .disabled(model.activeSessionForSelectedProject == nil)
                 Button("Capture to 00_inbox") { model.captureComposerToInbox() }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                 Divider()

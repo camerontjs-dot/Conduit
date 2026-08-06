@@ -7,32 +7,77 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 ## Daily loop
 
 1. Choose a MainFrame root.
-2. Select the root workspace or a project discovered under `30_projects/`.
-   Press `⌘F`, type a project name, and press Return for a keyboard-only switch.
-3. Launch or reconnect to Claude, Codex, Gemini, OpenCode, or a normal shell in a real pseudo-terminal.
-4. Compose multiline prompts, dictate them, paste screenshots, capture a screen region, or attach files and folders.
-5. Build a labeled context bundle from project coordination files.
-6. Forward selected terminal output to another agent with an explicit verification boundary.
-7. Close the work session and write an append-only receipt under `20_live/conduit/sessions/`.
+2. Choose a task from the left sidebar, or press `⌘N` to start one.
+   New Task explicitly chooses both an installed CLI agent and a scope: the
+   MainFrame root or a project discovered under `30_projects/`.
+3. Use the **All MainFrame** scope control when you want to filter task history
+   by project. Project browsing is navigation over MainFrame files, not a
+   second project registry.
+4. The task opens in Conversation while its real PTY starts independently in
+   the background. Press `⌘F` to search task history.
+5. Compose multiline prompts, dictate them, paste screenshots, capture a screen
+   region, or attach files and folders. Conduit records the exact native
+   composer submission and whether it is **Queued**, **Sent to terminal**, or
+   **Delivery failed**. Visible CLI output appears as a best-effort
+   **Derived from Raw** block and the thread is retained locally.
+6. Build a labeled context bundle from project coordination files.
+7. Open **Raw** for the live SwiftTerm PTY/TUI surface, approvals, direct CLI
+   input, and unsupported TUI behavior; return to Conversation with one click
+   or `⌘1`. Raw remains authoritative; Conduit retains source-labelled
+   conversation events, not an unprocessed Raw byte transcript.
+8. Forward selected terminal output to another agent with an explicit
+   verification boundary.
+9. Close the work session and write an append-only receipt under
+   `20_live/conduit/sessions/`.
 
 ## Current features
 
 ### Agent workspace
 
+- Conversation-first sessions with a per-session **Conversation / Raw**
+  switcher. Conversation shows exact native prompts plus bounded rendered
+  output labelled **Derived from Raw**. Generic activity is never called
+  private thinking, completion, or verification.
+- Raw keeps the unchanged SwiftTerm PTY as the authoritative live execution
+  surface and direct-control escape hatch.
+- Task-history sidebar with Pinned, Active, Recent, optional Archived, and a
+  secondary Discovered recovery section. Selecting history never reconnects a
+  process; reconnect is always explicit.
+- **All MainFrame** is the default task scope. The project browser filters
+  history from the live MainFrame scan, while New Task defaults to the scope
+  most recently submitted through that sheet.
+- Append-only task metadata under `~/.conduit/task-sessions/`: task identity,
+  fallback scope, optional recorded agent name, title, pin/archive changes,
+  and operational lifecycle only.
+- Separate append-only conversation history under
+  `~/.conduit/conversations/`: exact prompts, local attachment path
+  references, delivery revisions, and source-labelled rendered output.
+  Conduit does not copy a file merely because its path is attached, but any
+  text the CLI renders—including file contents or secrets—can enter a retained
+  **Derived from Raw** revision. Each rendered revision is capped at 16,000
+  characters; append-only earlier revisions remain in the local source.
+  Unprocessed Raw bytes and inferred completion are not stored there.
 - MainFrame root autodetection plus a security-scoped folder picker. If macOS
   invalidates access after a rebuild, Conduit shows an explicit recovery step
   instead of freezing during project discovery.
-- Searchable project discovery from `30_projects/*/README.md`, grouped by
-  explicit lifecycle state without inventing a second inventory; `⌘F` focuses
-  the navigator and Return selects the first scanner-ordered match
+- Searchable project discovery from `30_projects/*/README.md`, presented as a
+  secondary scope browser without inventing a second inventory
 - Real PTY terminals powered by SwiftTerm
 - Configurable CLI agent profiles
-- Multiple project-scoped terminal tabs
+- Multiple project-scoped task runtimes
+- Per-session surface selection, with new and resumed sessions opening in
+  Conversation
+- When a runtime detaches or ends, Conversation replaces the active composer
+  with applicable reconnect, restart, and New Task actions while Raw remains
+  available for inspection
 - Durable tmux sessions created detached and out-of-band, with deterministic project-and-agent names
 - Reconnection to an existing tmux session by launching the same agent again; deterministic detach via `tmux detach-client`
-- Paste-semantics prompt delivery (bracketed paste aware) queued until the agent produces output
-- Compact Codex and Claude character sprites inside session controls, with
-  deterministic pose changes driven only by observed terminal state
+- Paste-semantics prompt delivery (bracketed paste aware), queued until observed
+  output is quiet for 0.6 seconds or an eight-second cap is reached after its
+  first byte
+- Compact Codex and Claude character sprites in the Conversation activity
+  header, with deterministic pose changes driven only by observed terminal
+  state
 - An explicitly generic pixel character for Shell, Gemini, OpenCode, and custom
   profiles without copied identity art
 
@@ -44,6 +89,8 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 - Drag-and-drop and file/folder attachments
 - Copied terminal selection forwarding between agents
 - Automatic warning that forwarded terminal prose is unverified
+- Forwarded selections appear in Conversation with their unverified terminal
+  origin preserved
 
 ### MainFrame continuity
 
@@ -60,6 +107,11 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 - Conduit Doctor for CLI paths, versions, MainFrame structure, tmux, microphone, and speech permissions
 - Resource Deck for memory use, largest processes, loaded Ollama models, and one-click Ollama unloading
 - Native settings stored in `~/.conduit/config.json`
+- Task continuity stored as separate append-only metadata and conversation
+  JSONL streams under `~/.conduit/task-sessions/` and
+  `~/.conduit/conversations/`
+- Project-scoped work-session logs and MainFrame receipts remain a separate
+  evidence stream; Conduit does not import receipts into task history
 
 ## Requirements
 
@@ -114,4 +166,8 @@ ADRs), [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md), and
 
 ## Status
 
-The repository contains the complete application source, core tests, macOS CI, and a packaged Apple-silicon application artifact on successful pull-request runs. Hardware permissions, installed CLIs, and private MainFrame paths still require a local smoke test.
+The repository contains the application source, core tests, macOS CI, and the
+packaging path for an Apple-silicon application. Automated test results,
+candidate packaging, installed-app smoke, and interactive daily-driver
+acceptance are separate evidence. Hardware permissions, installed CLIs, tmux
+reattachment, and private MainFrame paths still require a local smoke test.

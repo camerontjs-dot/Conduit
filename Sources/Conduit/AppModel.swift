@@ -68,6 +68,19 @@ struct ForwardingDraft: Identifiable, Equatable, Sendable {
     var characterCount: Int { selection.count }
 }
 
+/// What Conduit can honestly claim about one task's local conversation file.
+///
+/// This is presentation/control state only. It never upgrades rendered terminal
+/// prose into verification or MainFrame project truth.
+enum ConversationRetentionState: Equatable, Sendable {
+    case legacyPreRetention
+    case loading
+    case pending
+    case persisted
+    case missingExpected
+    case failed(String)
+}
+
 private enum ProjectScanResult: Sendable {
     case success([MainframeProject])
     case failure(String)
@@ -77,6 +90,7 @@ private enum ProjectScanResult: Sendable {
 final class AppModel: ObservableObject {
     /// UserDefaults key for Focused Flow density. Independent of SettingsStore JSON.
     static let densityStorageKey = "conduit.density"
+    static let newTaskScopeStorageKey = "conduit.newTask.scope"
 
     @Published var settings = ConduitSettings()
     @Published var projects: [MainframeProject] = []
@@ -85,6 +99,26 @@ final class AppModel: ObservableObject {
     @Published var selectedProjectID: String?
     @Published var sessions: [TerminalRuntime] = []
     @Published var activeSessionID: UUID?
+    /// Durable, metadata-only task histories. MainFrame's current project scan
+    /// remains authoritative for project names, paths, and lifecycle state.
+    @Published private(set) var taskSessions: [TaskSessionSnapshot] = []
+    @Published var selectedTaskSessionID: TaskSessionID?
+    @Published var taskSearchText = ""
+    @Published var showArchivedTasks = false
+    /// Nil means all task histories under the selected MainFrame root.
+    @Published var taskScopeProjectID: String?
+    @Published var showNewTask = false
+    @Published var showProjectBrowser = false
+    @Published private(set) var taskSessionDiagnostics: [TaskSessionEventLogDiagnostic] = []
+    /// Source-labelled conversation content retained separately from task
+    /// metadata. MainFrame files and work-session receipts remain independent.
+    @Published private(set) var conversationHistoryByTask:
+        [TaskSessionID: [SessionPresentationEvent]] = [:]
+    @Published private(set) var conversationHistoryDiagnostics:
+        [TaskSessionID: [ConversationEventLogDiagnostic]] = [:]
+    @Published private(set) var conversationRetentionStateByTask:
+        [TaskSessionID: ConversationRetentionState] = [:]
+    @Published private(set) var taskReconnectabilityObservation: ExternalReconnectabilityObservation = .notChecked
     /// Completed observed-usage records for this root, loaded from the log at
     /// bootstrap and appended to as sessions end.
     @Published private(set) var completedUsage: [SessionUsageRecord] = []
@@ -108,7 +142,7 @@ final class AppModel: ObservableObject {
     @Published var showDiagnostics = false
     @Published var showResources = false
     @Published var showContextBundle = false
-    @Published var projectSearchFocusRequest = 0
+    @Published var taskSearchFocusRequest = 0
     @Published var healthResults: [AgentHealthResult] = []
     @Published var resourceSnapshot = ResourceSnapshot.empty
     @Published var contextCandidates: [ContextDocument] = []
@@ -152,9 +186,26 @@ final class AppModel: ObservableObject {
     private let resourceService = ResourceService()
     private let worklogDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".conduit/worklog", isDirectory: true)
+    private let taskSessionStore = TaskSessionEventStore(
+        directory: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".conduit/task-sessions", isDirectory: true)
+    )
+    private let conversationDirectory = FileManager.default
+        .homeDirectoryForCurrentUser
+        .appendingPathComponent(".conduit/conversations", isDirectory: true)
+    private lazy var conversationPersistence =
+        ConversationPersistenceCoordinator(directory: conversationDirectory)
+    /// Deduplicates content-free Recent-order facts across immutable revisions
+    /// of the same prompt/output event.
+    private var recordedConversationActivityKeys = Set<String>()
+    private var retentionMarkerTasks = Set<TaskSessionID>()
     private var hasBootstrapped = false
     private var scopedRootURL: URL?
     private var isUsingScopedRoot = false
+    /// Ephemeral navigation memory only. Runtime identity remains owned by the
+    /// live `sessions` array and is never persisted as project truth.
+    private var lastSelectedSessionIDByProject: [String: UUID] = [:]
+    private var explicitlyFinalizedRuntimeAttempts = Set<RuntimeAttemptID>()
 
     /// Load density from UserDefaults; rewrite Focused when missing or invalid.
     private static func loadPersistedDensity() -> Density {
@@ -170,8 +221,113 @@ final class AppModel: ObservableObject {
         projects.first { $0.id == selectedProjectID }
     }
 
-    var activeSession: TerminalRuntime? {
-        sessions.first { $0.id == activeSessionID }
+    /// The active session only when it belongs to the project currently on
+    /// screen. This prevents a project switch with no open tabs from silently
+    /// leaving the composer aimed at the previous project.
+    var activeSessionForSelectedProject: TerminalRuntime? {
+        guard let selectedProject else { return nil }
+        return sessions.first {
+            $0.id == activeSessionID
+                && session($0, belongsTo: selectedProject)
+                && !$0.controller.lifecycle.isTerminal
+        }
+    }
+
+    var selectedTaskSnapshot: TaskSessionSnapshot? {
+        guard let selectedTaskSessionID else { return nil }
+        return taskSessions.first { $0.id == selectedTaskSessionID }
+    }
+
+    var selectedTaskRuntime: TerminalRuntime? {
+        guard let selectedTaskSessionID else { return nil }
+        let matches = sessions.filter {
+            $0.descriptor.taskSessionID == selectedTaskSessionID
+        }
+        return matches.first(where: { !$0.controller.lifecycle.isTerminal })
+            ?? matches.first
+    }
+
+    var selectedTaskConversationEvents: [SessionPresentationEvent] {
+        if let runtime = selectedTaskRuntime {
+            return runtime.presentationEvents
+        }
+        guard let selectedTaskSessionID else { return [] }
+        return conversationHistoryByTask[selectedTaskSessionID] ?? []
+    }
+
+    var selectedTaskConversationDiagnostics: [ConversationEventLogDiagnostic] {
+        guard let selectedTaskSessionID else { return [] }
+        return conversationHistoryDiagnostics[selectedTaskSessionID] ?? []
+    }
+
+    var selectedTaskConversationRetentionState: ConversationRetentionState? {
+        guard let selectedTaskSessionID else { return nil }
+        return conversationRetentionStateByTask[selectedTaskSessionID]
+    }
+
+    var selectedTaskProject: MainframeProject? {
+        selectedTaskSnapshot.flatMap { project(for: $0) }
+    }
+
+    var selectedTaskAvailability: TaskSessionAvailability? {
+        guard let selectedTaskSnapshot else { return nil }
+        return TaskSessionAvailabilityResolver.resolve(
+            session: selectedTaskSnapshot,
+            context: taskAvailabilityContext
+        )
+    }
+
+    /// Last explicit New Task scope. It is navigation preference only, never
+    /// project authority, and falls back to the scanned MainFrame root.
+    var newTaskDefaultProjectID: String? {
+        let stored = UserDefaults.standard.string(forKey: Self.newTaskScopeStorageKey)
+        if let stored, projects.contains(where: { $0.id == stored }) {
+            return stored
+        }
+        return projects.first(where: \.isMainframeRoot)?.id ?? projects.first?.id
+    }
+
+    var taskAvailabilityContext: TaskSessionAvailabilityContext {
+        var live: [TaskSessionID: RuntimeAttemptID] = [:]
+        for runtime in sessions {
+            guard !runtime.controller.lifecycle.isTerminal,
+                  let taskID = runtime.descriptor.taskSessionID
+            else { continue }
+            live[taskID] = runtime.runtimeAttemptID
+        }
+        let reconnectable = Set(taskSessions.compactMap { task in
+            reconnectableDiscoveredSession(for: task) == nil ? nil : task.id
+        })
+        return TaskSessionAvailabilityContext(
+            liveRuntimeAttempts: live,
+            reconnectableTaskSessionIDs: reconnectable,
+            externalObservation: taskReconnectabilityObservation
+        )
+    }
+
+    var taskCatalogRows: [TaskSessionCatalogRow] {
+        let rootURL = settings.mainframeRoot
+        let baseRows = SessionCatalog.rows(
+            sessions: taskSessions,
+            availabilityContext: taskAvailabilityContext,
+            query: TaskSessionCatalogQuery(
+                workspaceRootURL: rootURL,
+                searchText: taskSearchText,
+                includeArchived: showArchivedTasks
+            )
+        )
+        guard let scopeID = taskScopeProjectID,
+              let project = projects.first(where: { $0.id == scopeID })
+        else { return baseRows }
+        if project.isMainframeRoot {
+            return baseRows.filter {
+                $0.session.metadata.workspace.projectPath == nil
+            }
+        }
+        let path = project.path.standardizedFileURL.path
+        return baseRows.filter {
+            $0.session.metadata.workspace.projectPath == path
+        }
     }
 
     var enabledAgents: [AgentProfile] {
@@ -198,6 +354,48 @@ final class AppModel: ObservableObject {
             // interrupt a session close or a receipt.
             statusMessage = "Usage note not written: \(error.localizedDescription)"
         }
+    }
+
+    private func handleUsageRecord(
+        _ record: SessionUsageRecord,
+        taskSessionID: TaskSessionID,
+        runtimeAttemptID: RuntimeAttemptID
+    ) {
+        bankObservedUsage(record)
+        if explicitlyFinalizedRuntimeAttempts.remove(runtimeAttemptID) != nil {
+            return
+        }
+        let authority: TaskSessionEventAuthority
+        let state: TaskSessionOperationalState
+        switch record.outcome {
+        case .detached:
+            authority = .processObserved
+            state = .runtimeDetached(runtimeAttemptID)
+            if let runtime = sessions.first(where: {
+                $0.runtimeAttemptID == runtimeAttemptID
+            }) {
+                noteDurableRuntimeAvailable(runtime)
+            }
+        case .exitedClean, .exitedFailed:
+            authority = .processObserved
+            state = .closed(.runtimeEnded)
+            if let runtime = sessions.first(where: {
+                $0.runtimeAttemptID == runtimeAttemptID
+            }), runtime.controller.usesTmux,
+               let tmuxName = runtime.descriptor.tmuxSessionName {
+                discoveredSessions.removeAll { $0.tmuxName == tmuxName }
+                taskReconnectabilityObservation = .notChecked
+                Task { await refreshDiscoveredSessions() }
+            }
+        }
+        _ = appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: taskSessionID,
+                occurredAt: record.endedAt,
+                authority: authority,
+                kind: .operationalStateChanged(state)
+            )
+        )
     }
 
     /// Rows for every configured agent, observed only. An agent with no
@@ -242,6 +440,11 @@ final class AppModel: ObservableObject {
         Task.detached(priority: .utility) {
             EnvironmentResolver.shared.prewarm()
         }
+        let taskStore = taskSessionStore
+        let taskLoad = await BlockingWork.run(qos: .utility) {
+            taskStore.load()
+        }
+        applyTaskSessionLoad(taskLoad)
         settings = SettingsStore.loadSnapshot()
         showContext = settings.showContextByDefault
         guard activateSavedRootAccess() else {
@@ -257,6 +460,7 @@ final class AppModel: ObservableObject {
         guard await refreshProjectsForBootstrap() else { return }
         completedUsage = usageLog?.readRecords() ?? []
         recoverInterruptedWorkSessions()
+        await refreshDiscoveredSessions()
         async let health: Void = refreshHealth()
         async let resources: Void = refreshResources()
         _ = await (health, resources)
@@ -316,6 +520,10 @@ final class AppModel: ObservableObject {
     }
 
     func chooseMainframeRoot() {
+        guard !sessions.contains(where: { !$0.controller.lifecycle.isTerminal }) else {
+            errorMessage = "Leave or end open task runtimes before switching the MainFrame root."
+            return
+        }
         let panel = NSOpenPanel()
         panel.title = "Choose your MainFrame root"
         panel.prompt = "Use MainFrame"
@@ -333,6 +541,14 @@ final class AppModel: ObservableObject {
                 )
                 settings.mainframeRoot = url
                 settings.mainframeRootBookmark = bookmark
+                selectedTaskSessionID = nil
+                selectedProjectID = nil
+                activeSessionID = nil
+                sessions.removeAll()
+                lastSelectedSessionIDByProject.removeAll()
+                taskScopeProjectID = nil
+                discoveredSessions = []
+                taskReconnectabilityObservation = .notChecked
                 scopedRootURL = url
                 isUsingScopedRoot = url.startAccessingSecurityScopedResource()
                 rootAccessNeedsAuthorization = false
@@ -389,15 +605,449 @@ final class AppModel: ObservableObject {
         isUsingScopedRoot = false
     }
 
-    func selectProject(_ project: MainframeProject) {
-        selectedProjectID = project.id
-        if let first = sessionsForSelectedProject.first {
-            activeSessionID = first.id
+    // MARK: - Task history
+
+    private func applyTaskSessionLoad(_ result: TaskSessionEventStoreLoadResult) {
+        taskSessions = result.snapshots
+        taskSessionDiagnostics = result.diagnostics
+        if let selectedTaskSessionID,
+           !result.snapshots.contains(where: { $0.id == selectedTaskSessionID }) {
+            self.selectedTaskSessionID = nil
         }
     }
 
-    func requestProjectSearchFocus() {
-        projectSearchFocusRequest += 1
+    private func loadConversationHistory(
+        for taskSessionID: TaskSessionID
+    ) {
+        let retentionWasExpected = taskSessions.first {
+            $0.id == taskSessionID
+        }?.conversationRetentionEnabled == true
+        conversationRetentionStateByTask[taskSessionID] = .loading
+        conversationPersistence.read(
+            taskSessionID: taskSessionID
+        ) { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                self.conversationHistoryByTask[taskSessionID] =
+                    result.log.events
+                self.conversationHistoryDiagnostics[taskSessionID] =
+                    result.log.diagnostics
+
+                if result.log.diagnostics.contains(where: {
+                    $0.kind == .unreadableLog
+                }) {
+                    self.conversationRetentionStateByTask[taskSessionID] =
+                        .failed("The local conversation file could not be read.")
+                } else if result.fileWasPresent {
+                    self.conversationRetentionStateByTask[taskSessionID] =
+                        .persisted
+                } else if retentionWasExpected {
+                    self.conversationRetentionStateByTask[taskSessionID] =
+                        .missingExpected
+                } else {
+                    self.conversationRetentionStateByTask[taskSessionID] =
+                        .legacyPreRetention
+                }
+            }
+        }
+    }
+
+    private func recordConversationRevision(
+        _ event: SessionPresentationEvent,
+        taskSessionID: TaskSessionID
+    ) {
+        conversationRetentionStateByTask[taskSessionID] = .pending
+        conversationPersistence.append(
+            event,
+            taskSessionID: taskSessionID
+        ) { [weak self] errorDescription in
+            Task { @MainActor in
+                guard let self else { return }
+                if let errorDescription {
+                    self.conversationRetentionStateByTask[taskSessionID] =
+                        .failed(errorDescription)
+                    self.errorMessage =
+                        "Conversation is visible but could not be retained locally: \(errorDescription)"
+                    return
+                }
+
+                self.conversationRetentionStateByTask[taskSessionID] =
+                    .persisted
+                if self.taskSessions.first(where: {
+                    $0.id == taskSessionID
+                })?.conversationRetentionEnabled != true,
+                   self.retentionMarkerTasks.insert(taskSessionID).inserted {
+                    let marked = self.appendTaskEvent(
+                        .conversationRetentionEnabled(
+                            taskSessionID: taskSessionID
+                        )
+                    )
+                    if !marked {
+                        self.retentionMarkerTasks.remove(taskSessionID)
+                    }
+                }
+                self.recordConversationActivityIfNeeded(
+                    event,
+                    taskSessionID: taskSessionID
+                )
+            }
+        }
+    }
+
+    private func recordConversationActivityIfNeeded(
+        _ event: SessionPresentationEvent,
+        taskSessionID: TaskSessionID
+    ) {
+        let phase: String
+        switch event.kind {
+        case .sessionOpened:
+            return
+        case .userPrompt:
+            phase = "prompt"
+        case .agentOutput(let output):
+            switch output.state {
+            case .live: phase = "output-first"
+            case .settled: phase = "output-settled"
+            case .closed: phase = "output-closed"
+            }
+        }
+        let key = "\(taskSessionID.rawValue.uuidString):\(event.id.uuidString):\(phase)"
+        guard recordedConversationActivityKeys.insert(key).inserted else {
+            return
+        }
+        _ = appendTaskEvent(
+            .conversationActivity(
+                taskSessionID: taskSessionID
+            )
+        )
+    }
+
+    @discardableResult
+    private func appendTaskEvent(_ event: TaskSessionEvent) -> Bool {
+        do {
+            try TaskSessionEventLog(
+                directory: taskSessionStore.directory,
+                taskSessionID: event.taskSessionID
+            ).append(event)
+            applyTaskSessionLoad(taskSessionStore.load())
+            return true
+        } catch {
+            errorMessage = "Could not record task history: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    private func workspaceSnapshot(for project: MainframeProject) -> WorkspaceScopeSnapshot {
+        if project.isMainframeRoot {
+            return .root(
+                RootWorkspaceScopeSnapshot(
+                    rootURL: project.path,
+                    fallbackTitle: project.metadata.title,
+                    fallbackSlug: project.slug
+                )
+            )
+        }
+        return .project(
+            ProjectWorkspaceScopeSnapshot(
+                rootURL: settings.mainframeRoot ?? project.path.deletingLastPathComponent(),
+                projectURL: project.path,
+                fallbackTitle: project.metadata.title,
+                fallbackSlug: project.slug
+            )
+        )
+    }
+
+    private func createTaskSessionIfNeeded(
+        id: TaskSessionID,
+        project: MainframeProject,
+        agentName: String?,
+        defaultTitle: String
+    ) -> Bool {
+        if taskSessions.contains(where: { $0.id == id }) {
+            return true
+        }
+        let metadata = TaskSessionMetadata(
+            workspace: workspaceSnapshot(for: project),
+            agentName: agentName,
+            defaultTitle: defaultTitle
+        )
+        return appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: id,
+                authority: .conduitRecorded,
+                kind: .created(metadata)
+            )
+        )
+    }
+
+    private func project(for task: TaskSessionSnapshot) -> MainframeProject? {
+        switch task.metadata.workspace {
+        case .root(let snapshot):
+            return projects.first {
+                $0.isMainframeRoot
+                    && $0.path.standardizedFileURL.path == snapshot.rootPath
+            }
+        case .project(let snapshot):
+            return projects.first {
+                $0.path.standardizedFileURL.path == snapshot.projectPath
+            }
+        }
+    }
+
+    private func task(
+        _ task: TaskSessionSnapshot,
+        belongsTo project: MainframeProject
+    ) -> Bool {
+        switch task.metadata.workspace {
+        case .root(let snapshot):
+            return project.isMainframeRoot
+                && project.path.standardizedFileURL.path == snapshot.rootPath
+        case .project(let snapshot):
+            return !project.isMainframeRoot
+                && project.path.standardizedFileURL.path == snapshot.projectPath
+        }
+    }
+
+    /// Applies the same deterministic identity checks used by `resume` before
+    /// the catalog labels a task reconnectable. A task binding alone proves
+    /// continuity, but it does not prove that the current project/agent
+    /// metadata is compatible with the observed tmux session.
+    private func reconnectableDiscoveredSession(
+        for task: TaskSessionSnapshot
+    ) -> DiscoveredSession? {
+        guard let project = project(for: task) else { return nil }
+        return discoveredSessions.first { discovered in
+            guard discovered.taskSessionBinding.taskSessionID == task.id else {
+                return false
+            }
+            if let discoveredPath = discovered.projectPath,
+               discoveredPath.standardizedFileURL
+                != project.path.standardizedFileURL {
+                return false
+            }
+            if let recordedAgent = task.metadata.agentName,
+               let discoveredAgent = discovered.agentName,
+               recordedAgent != discoveredAgent {
+                return false
+            }
+            return true
+        }
+    }
+
+    /// Selects history only. Reconnect remains an explicit operator action.
+    func selectTask(_ id: TaskSessionID) {
+        guard let task = taskSessions.first(where: { $0.id == id }) else {
+            errorMessage = "That task history is no longer available."
+            return
+        }
+        selectedTaskSessionID = task.id
+        if let project = project(for: task) {
+            selectedProjectID = project.id
+        } else {
+            selectedProjectID = nil
+        }
+        if let runtime = sessions.first(where: {
+            $0.descriptor.taskSessionID == task.id
+                && !$0.controller.lifecycle.isTerminal
+        }) {
+            activeSessionID = runtime.id
+            if let project = selectedProject {
+                lastSelectedSessionIDByProject[project.id] = runtime.id
+            }
+        } else {
+            activeSessionID = nil
+            loadConversationHistory(for: task.id)
+        }
+    }
+
+    @discardableResult
+    func createTask(agent: AgentProfile, project: MainframeProject) -> TerminalRuntime? {
+        guard enabledAgents.contains(where: { $0.id == agent.id }) else {
+            errorMessage = "That agent is not currently enabled."
+            return nil
+        }
+        guard let scannedProject = projects.first(where: { $0.id == project.id }) else {
+            errorMessage = "That workspace is not in the current MainFrame scan."
+            return nil
+        }
+        selectProject(scannedProject)
+        UserDefaults.standard.set(scannedProject.id, forKey: Self.newTaskScopeStorageKey)
+        beginWorkSessionIfNeeded(scannedProject)
+        let instance = nextInstanceNumber(for: agent, in: scannedProject)
+        let runtime = start(
+            descriptor: SessionDescriptor(
+                projectPath: scannedProject.path,
+                agent: agent,
+                instance: instance
+            ),
+            project: scannedProject,
+            backendLabel: settings.restoreSessions ? "durable-requested" : "pty",
+            entry: .started(
+                agentName: agent.name,
+                requestedBackend: settings.restoreSessions
+                    ? "durable tmux, with PTY fallback"
+                    : "direct PTY"
+            )
+        )
+        if runtime != nil {
+            showNewTask = false
+            statusMessage = "Started a new \(agent.name) task in \(scannedProject.metadata.title)."
+        }
+        return runtime
+    }
+
+    func renameTask(_ id: TaskSessionID, title: String?) {
+        guard taskSessions.contains(where: { $0.id == id }) else { return }
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let kind: TaskSessionEventKind = trimmed.isEmpty
+            ? .titleReset
+            : .titleOverridden(trimmed)
+        _ = appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: id,
+                authority: .operatorAsserted,
+                kind: kind
+            )
+        )
+    }
+
+    func setTaskPinned(_ id: TaskSessionID, pinned: Bool) {
+        guard taskSessions.contains(where: { $0.id == id }) else { return }
+        _ = appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: id,
+                authority: .operatorAsserted,
+                kind: .pinChanged(pinned)
+            )
+        )
+    }
+
+    func setTaskArchived(_ id: TaskSessionID, archived: Bool) {
+        guard let row = taskCatalogRow(id: id) else { return }
+        if archived,
+           (row.availability.kind == .running
+                || row.availability.kind == .reconnectable) {
+            errorMessage = "Detach or end this task before archiving its history."
+            return
+        }
+        _ = appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: id,
+                authority: .operatorAsserted,
+                kind: .archiveChanged(archived)
+            )
+        )
+    }
+
+    func reconnectTask(_ id: TaskSessionID) {
+        if let runtime = sessions.first(where: {
+            $0.descriptor.taskSessionID == id
+                && !$0.controller.lifecycle.isTerminal
+        }) {
+            if let task = taskSessions.first(where: { $0.id == id }),
+               let project = project(for: task) {
+                selectedProjectID = project.id
+            }
+            _ = selectSession(runtime)
+            return
+        }
+        guard let task = taskSessions.first(where: { $0.id == id }),
+              let discovered = reconnectableDiscoveredSession(for: task)
+        else {
+            errorMessage = "No identity-compatible tmux runtime was observed for this task. Refresh discovery or inspect the recovery details."
+            return
+        }
+        let explicitProject = project(for: task)
+        _ = resume(discovered, adoptingInto: explicitProject)
+    }
+
+    func leaveTask(_ id: TaskSessionID) {
+        guard let runtime = sessions.first(where: {
+            $0.descriptor.taskSessionID == id
+                && !$0.controller.lifecycle.isTerminal
+        }) else {
+            statusMessage = "This task has no open runtime to leave."
+            return
+        }
+        closeSession(runtime)
+    }
+
+    func endTask(_ id: TaskSessionID) {
+        guard let runtime = sessions.first(where: {
+            $0.descriptor.taskSessionID == id
+                && !$0.controller.lifecycle.isTerminal
+        }) else {
+            statusMessage = "Reconnect this task before ending its runtime."
+            return
+        }
+        endSession(runtime)
+    }
+
+    private func taskCatalogRow(id: TaskSessionID) -> TaskSessionCatalogRow? {
+        SessionCatalog.rows(
+            sessions: taskSessions,
+            availabilityContext: taskAvailabilityContext,
+            query: TaskSessionCatalogQuery(includeArchived: true)
+        ).first { $0.id == id }
+    }
+
+    func selectProject(_ project: MainframeProject) {
+        guard let scannedProject = projects.first(where: { $0.id == project.id }) else {
+            errorMessage = "That project is not in the current MainFrame scan. Refresh projects or choose the correct root."
+            return
+        }
+
+        if let currentProject = selectedProject,
+           let currentRuntime = activeSessionForSelectedProject {
+            lastSelectedSessionIDByProject[currentProject.id] = currentRuntime.id
+        }
+
+        selectedProjectID = scannedProject.id
+        let projectSessions = sessions.filter { session($0, belongsTo: scannedProject) }
+        let restored = lastSelectedSessionIDByProject[scannedProject.id].flatMap { rememberedID in
+            projectSessions.first {
+                $0.id == rememberedID
+                    && !$0.controller.lifecycle.isTerminal
+            }
+        }
+        let selected = restored
+            ?? projectSessions.first(where: { !$0.controller.lifecycle.isTerminal })
+            ?? projectSessions.first
+        activeSessionID = selected?.controller.lifecycle.isTerminal == false
+            ? selected?.id
+            : nil
+        selectedTaskSessionID = selected?.descriptor.taskSessionID
+        if let selected {
+            lastSelectedSessionIDByProject[scannedProject.id] = selected.id
+        } else {
+            lastSelectedSessionIDByProject[scannedProject.id] = nil
+        }
+    }
+
+    /// The sole view-facing path for selecting a live runtime. It refuses
+    /// cross-project or stale runtime objects instead of redirecting composer
+    /// and session commands outside the visible project scope.
+    @discardableResult
+    func selectSession(_ runtime: TerminalRuntime) -> Bool {
+        guard let openRuntime = sessions.first(where: { $0.id == runtime.id }) else {
+            errorMessage = "That session is no longer open."
+            return false
+        }
+        guard let project = selectedProject,
+              session(openRuntime, belongsTo: project) else {
+            errorMessage = "That session does not belong to the selected project."
+            return false
+        }
+        activeSessionID = openRuntime.controller.lifecycle.isTerminal
+            ? nil
+            : openRuntime.id
+        selectedTaskSessionID = openRuntime.descriptor.taskSessionID
+        lastSelectedSessionIDByProject[project.id] = openRuntime.id
+        return true
+    }
+
+    func requestTaskSearchFocus() {
+        taskSearchFocusRequest += 1
     }
 
     /// Shared by WorkspaceHeader and ⌘\ . Focused toggles the temporary overlay;
@@ -416,7 +1066,11 @@ final class AppModel: ObservableObject {
 
     var sessionsForSelectedProject: [TerminalRuntime] {
         guard let selectedProject else { return [] }
-        return sessions.filter { $0.descriptor.projectPath == selectedProject.path }
+        return sessions.filter { session($0, belongsTo: selectedProject) }
+    }
+
+    private func session(_ runtime: TerminalRuntime, belongsTo project: MainframeProject) -> Bool {
+        runtime.descriptor.projectPath.standardizedFileURL == project.path.standardizedFileURL
     }
 
     @discardableResult
@@ -427,16 +1081,40 @@ final class AppModel: ObservableObject {
         }
         beginWorkSessionIfNeeded(project)
 
-        if let existing = sessions.first(where: {
-            $0.descriptor.projectPath == project.path && $0.descriptor.agent.id == agent.id
+        let matchingRuntimes = sessions.filter {
+            $0.descriptor.projectPath.standardizedFileURL
+                == project.path.standardizedFileURL
+                && $0.descriptor.agent.id == agent.id
+        }
+        if let existing = matchingRuntimes.first(where: {
+            !$0.controller.lifecycle.isTerminal
         }) {
-            if existing.controller.lifecycle.isTerminal {
-                // Replace a finished tab with a fresh launch of the same agent.
-                closeSession(existing)
-            } else {
-                activeSessionID = existing.id
-                statusMessage = "Focused the existing \(agent.name) session."
-                return existing
+            _ = selectSession(existing)
+            statusMessage = "Focused the existing \(agent.name) task."
+            return existing
+        }
+        for stale in matchingRuntimes where stale.controller.lifecycle.isTerminal {
+            // Its process-observed terminal state is already recorded.
+            // Removing stale presentation must not overwrite that state with
+            // a second operator-close event.
+            removeSessionTab(stale)
+        }
+        if let durable = discoveredSessions.first(where: { discovered in
+            discovered.projectPath?.standardizedFileURL == project.path.standardizedFileURL
+                && discovered.agentName == agent.name
+                && !sessions.contains(where: { runtime in
+                    runtime.descriptor.tmuxSessionName == discovered.tmuxName
+                })
+        }) {
+            switch durable.taskSessionBinding {
+            case .valid:
+                return resume(durable)
+            case .absent:
+                errorMessage = "A legacy \(agent.name) tmux session was found. Resume it explicitly from Discovered so Conduit can create its task history."
+                return nil
+            case .malformed(let rawValue):
+                errorMessage = "The discovered \(agent.name) tmux session has a malformed task binding (\(rawValue)). It was left unchanged."
+                return nil
             }
         }
 
@@ -447,7 +1125,11 @@ final class AppModel: ObservableObject {
                 instance: nextInstanceNumber(for: agent, in: project)
             ),
             project: project,
-            backendLabel: settings.restoreSessions ? "durable-requested" : "pty"
+            backendLabel: settings.restoreSessions ? "durable-requested" : "pty",
+            entry: .started(
+                agentName: agent.name,
+                requestedBackend: settings.restoreSessions ? "durable tmux, with PTY fallback" : "direct PTY"
+            )
         )
     }
 
@@ -469,9 +1151,15 @@ final class AppModel: ObservableObject {
                 instance: instance
             ),
             project: project,
-            backendLabel: settings.restoreSessions ? "durable-requested" : "pty"
+            backendLabel: settings.restoreSessions ? "durable-requested" : "pty",
+            entry: .started(
+                agentName: agent.name,
+                requestedBackend: settings.restoreSessions ? "durable tmux, with PTY fallback" : "direct PTY"
+            )
         )
-        statusMessage = "Opened \(agent.name) session \(instance)."
+        if runtime != nil {
+            statusMessage = "Opened \(agent.name) session \(instance)."
+        }
         return runtime
     }
 
@@ -479,17 +1167,68 @@ final class AppModel: ObservableObject {
     /// comes from discovery, never re-derived, so the session that opens is the
     /// one that was listed.
     @discardableResult
-    func resume(_ discovered: DiscoveredSession) -> TerminalRuntime? {
-        guard let project = selectedProject else {
-            errorMessage = "Choose a MainFrame project first."
+    func resume(
+        _ discovered: DiscoveredSession,
+        adoptingInto explicitProject: MainframeProject? = nil
+    ) -> TerminalRuntime? {
+        let taskSessionID: TaskSessionID
+        switch discovered.taskSessionBinding {
+        case .valid(let existing):
+            taskSessionID = existing
+        case .absent:
+            // The operator chose Resume on a visible legacy session. Passing a
+            // fresh ID with its explicit tmux name is the reviewed adoption.
+            taskSessionID = TaskSessionID()
+        case .malformed(let rawValue):
+            errorMessage = "Did not resume \(discovered.tmuxName): its task binding is malformed (\(rawValue)). Raw tmux state was left unchanged."
             return nil
         }
+
+        let project: MainframeProject
+        if let discoveredPath = discovered.projectPath {
+            guard let knownProject = projects.first(where: {
+                $0.path.standardizedFileURL == discoveredPath.standardizedFileURL
+            }) else {
+                errorMessage = "That durable session belongs to \(discoveredPath.path), which is not in the current MainFrame project scan. Refresh projects or choose the correct root before resuming."
+                return nil
+            }
+            project = knownProject
+        } else {
+            guard let explicitProject,
+                  let knownProject = projects.first(where: {
+                      $0.id == explicitProject.id
+                  }) else {
+                errorMessage = "This legacy tmux session has no recorded project. Choose a MainFrame scope explicitly before adopting it."
+                return nil
+            }
+            project = knownProject
+        }
+        if case .valid(let boundTaskID) = discovered.taskSessionBinding,
+           let localTask = taskSessions.first(where: { $0.id == boundTaskID }) {
+            guard task(localTask, belongsTo: project) else {
+                errorMessage = "Did not reconnect \(discovered.tmuxName): its task history belongs to \(localTask.metadata.workspace.fallbackTitle), not \(project.metadata.title). Nothing was attached or rewritten."
+                return nil
+            }
+            if let recordedAgent = localTask.metadata.agentName,
+               let discoveredAgent = discovered.agentName,
+               recordedAgent != discoveredAgent {
+                errorMessage = "Did not reconnect \(discovered.tmuxName): tmux reports \(discoveredAgent), while its task history records \(recordedAgent). Nothing was attached or rewritten."
+                return nil
+            }
+        }
+        // Resolve all deterministic identity conflicts before navigation
+        // changes. The explicit Resume action may then reveal the target
+        // project while the attach itself remains separately guarded.
+        selectProject(project)
         if let open = sessions.first(where: {
             $0.descriptor.tmuxSessionName == discovered.tmuxName
         }) {
-            activeSessionID = open.id
-            statusMessage = "That session is already open."
-            return open
+            if !open.controller.lifecycle.isTerminal {
+                guard selectSession(open) else { return nil }
+                statusMessage = "That session is already open."
+                return open
+            }
+            removeSessionTab(open)
         }
         // Resuming an unidentified session cannot invent an agent for it. The
         // placeholder below is a display label only — `recordsIdentity: false`
@@ -509,15 +1248,25 @@ final class AppModel: ObservableObject {
         beginWorkSessionIfNeeded(project)
         let runtime = start(
             descriptor: SessionDescriptor(
-                projectPath: discovered.projectPath ?? project.path,
+                projectPath: project.path,
                 agent: agent,
                 title: discovered.agentName.map { "\($0) · resumed" } ?? "Unidentified · resumed",
                 tmuxSessionName: discovered.tmuxName,
+                taskSessionID: taskSessionID,
+                adoptsLegacyTaskSession: discovered.taskSessionBinding == .absent,
+                requiresExistingTmuxSession: true,
                 recordsIdentity: discovered.isIdentified
             ),
             project: project,
-            backendLabel: "durable-resumed"
+            backendLabel: "durable-resumed",
+            entry: .resumed(
+                agentName: discovered.agentName ?? "Unidentified session",
+                tmuxSessionName: discovered.tmuxName,
+                attachedElsewhere: discovered.attachedClients > 0
+            ),
+            requiresDurableSession: true
         )
+        guard let runtime else { return nil }
         statusMessage = discovered.attachedClients > 0
             ? "Resumed \(discovered.tmuxName) — another client is also attached."
             : "Resumed \(discovered.tmuxName)."
@@ -539,22 +1288,103 @@ final class AppModel: ObservableObject {
     private func start(
         descriptor: SessionDescriptor,
         project: MainframeProject,
-        backendLabel: String
-    ) -> TerminalRuntime {
+        backendLabel: String,
+        entry: SessionEntry,
+        requiresDurableSession: Bool = false
+    ) -> TerminalRuntime? {
         var descriptor = descriptor
-        if settings.restoreSessions && descriptor.tmuxSessionName == nil {
+        let useDurableSession = settings.restoreSessions
+            || requiresDurableSession
+        if useDurableSession && descriptor.tmuxSessionName == nil {
             descriptor.tmuxSessionName = TmuxSessionNaming.sessionName(
                 projectPath: descriptor.projectPath,
                 agentName: descriptor.agent.name,
                 instance: descriptor.instance
             )
         }
-        let runtime = TerminalRuntime(descriptor: descriptor, useDetachedSessions: settings.restoreSessions)
+        let taskSessionID = descriptor.taskSessionID ?? TaskSessionID()
+        let taskWasAlreadyKnown = taskSessions.contains {
+            $0.id == taskSessionID
+        }
+        let recordedAgentName = descriptor.recordsIdentity
+            ? descriptor.agent.name
+            : nil
+        let defaultTitle = recordedAgentName.map {
+            "\($0) · \(project.metadata.title)"
+        } ?? "Session · \(project.metadata.title)"
+        guard createTaskSessionIfNeeded(
+            id: taskSessionID,
+            project: project,
+            agentName: recordedAgentName,
+            defaultTitle: defaultTitle
+        ) else {
+            return nil
+        }
+        if taskWasAlreadyKnown,
+           conversationHistoryByTask[taskSessionID] == nil {
+            loadConversationHistory(for: taskSessionID)
+            statusMessage =
+                "Loading this task's local conversation history. Reconnect again after it appears."
+            return nil
+        }
+        descriptor.taskSessionID = taskSessionID
+        let runtimeAttemptID = RuntimeAttemptID()
+        guard appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: taskSessionID,
+                authority: .conduitRecorded,
+                kind: .operationalStateChanged(.runtimeOpened(runtimeAttemptID))
+            )
+        ) else {
+            return nil
+        }
+        let priorConversation =
+            conversationHistoryByTask[taskSessionID] ?? []
+        let runtime = TerminalRuntime(
+            descriptor: descriptor,
+            useDetachedSessions: useDurableSession,
+            entry: entry,
+            runtimeAttemptID: runtimeAttemptID,
+            priorEvents: priorConversation,
+            recordEventRevision: { [weak self] event in
+                self?.recordConversationRevision(
+                    event,
+                    taskSessionID: taskSessionID
+                )
+            }
+        )
         runtime.controller.onUsageRecord = { [weak self] record in
-            Task { @MainActor in self?.bankObservedUsage(record) }
+            Task { @MainActor in
+                self?.handleUsageRecord(
+                    record,
+                    taskSessionID: taskSessionID,
+                    runtimeAttemptID: runtimeAttemptID
+                )
+            }
         }
         sessions.append(runtime)
-        activeSessionID = runtime.id
+        _ = selectSession(runtime)
+        // The terminal used to start only when its SwiftTerm view appeared.
+        // Conversation is now the default, so process ownership must not depend
+        // on mounting the Raw surface.
+        runtime.controller.startIfNeeded()
+        if let issue = runtime.controller.launchIssue {
+            _ = appendTaskEvent(
+                TaskSessionEvent(
+                    taskSessionID: taskSessionID,
+                    authority: .processObserved,
+                    kind: .operationalStateChanged(
+                        .interrupted(runtimeAttemptID)
+                    )
+                )
+            )
+            errorMessage = issue.localizedDescription
+            removeSessionTab(runtime)
+            return nil
+        }
+        if runtime.controller.usesTmux {
+            noteDurableRuntimeAvailable(runtime)
+        }
         appendEvent(
             .agentLaunched(
                 agent: descriptor.agent.name,
@@ -568,30 +1398,106 @@ final class AppModel: ObservableObject {
 
     // MARK: - Durable session discovery
 
+    /// Upserts the one durable session Conduit just created, attached to, or
+    /// detached from. This is a narrow local fact, not a claim that the whole
+    /// tmux server was successfully observed.
+    private func noteDurableRuntimeAvailable(_ runtime: TerminalRuntime) {
+        guard runtime.controller.usesTmux,
+              let tmuxName = runtime.descriptor.tmuxSessionName,
+              let taskSessionID = runtime.descriptor.taskSessionID
+        else { return }
+        let previous = discoveredSessions.first { $0.tmuxName == tmuxName }
+        let attachedClients = runtime.controller.isDetached
+            ? max((previous?.attachedClients ?? 1) - 1, 0)
+            : max(previous?.attachedClients ?? 0, 1)
+        let observation = DiscoveredSession(
+            tmuxName: tmuxName,
+            projectPath: runtime.descriptor.recordsIdentity
+                ? runtime.descriptor.projectPath
+                : previous?.projectPath,
+            agentName: runtime.descriptor.recordsIdentity
+                ? runtime.descriptor.agent.name
+                : previous?.agentName,
+            taskSessionBinding: .valid(taskSessionID),
+            createdAt: previous?.createdAt ?? runtime.descriptor.createdAt,
+            attachedClients: attachedClients
+        )
+        discoveredSessions.removeAll { $0.tmuxName == tmuxName }
+        discoveredSessions.append(observation)
+    }
+
     /// Refreshes the list of durable tmux sessions. Discovery is read-only —
     /// it never creates, kills, or renames anything.
     func refreshDiscoveredSessions() async {
         guard let tmux = EnvironmentResolver.shared.resolve("tmux") else {
-            discoveredSessions = []
             discoveryNote = "tmux was not found on PATH, so no durable sessions could be listed."
+            taskReconnectabilityObservation = .failed(observedAt: Date())
             return
         }
         let driver = TmuxDriver(tmuxPath: tmux)
         let outcome = await BlockingWork.run { driver.listConduitSessionsDetailed() }
-        discoveredSessions = outcome.sessions
         // An empty list has several causes and they are not interchangeable:
         // no server, a failed command, or output Conduit could not parse. Say
         // which, rather than letting "none found" stand for all of them.
-        if outcome.sessions.isEmpty {
+        if !outcome.observationSucceeded {
+            // Positive observations survive a failed or partial refresh.
+            // Parsed rows are fresher positive facts, but missing rows are not
+            // negative evidence until a complete observation succeeds.
+            let parsedNames = Set(outcome.sessions.map(\.tmuxName))
+            discoveredSessions.removeAll {
+                parsedNames.contains($0.tmuxName)
+            }
+            discoveredSessions.append(contentsOf: outcome.sessions)
             if outcome.exitStatus != 0 {
                 discoveryNote = "tmux list-sessions exited \(outcome.exitStatus): \(outcome.rawOutput.prefix(200))"
-            } else if !outcome.rawOutput.isEmpty {
-                discoveryNote = "tmux reported sessions Conduit could not parse: \(outcome.rawOutput.prefix(200))"
+            } else {
+                discoveryNote = "tmux reported one or more Conduit sessions that could not be parsed. Parsed rows remain visible, but absence is not treated as evidence."
+            }
+            taskReconnectabilityObservation = .failed(observedAt: Date())
+        } else {
+            discoveredSessions = outcome.sessions
+            let hasMalformedTaskBinding = outcome.sessions.contains {
+                if case .malformed = $0.taskSessionBinding { return true }
+                return false
+            }
+            if hasMalformedTaskBinding {
+                discoveryNote = "tmux discovery succeeded, but at least one Conduit session has a malformed task binding. Positive matches remain usable; absence is not treated as evidence until that identity is reviewed."
+                taskReconnectabilityObservation = .failed(observedAt: Date())
             } else {
                 discoveryNote = nil
+                taskReconnectabilityObservation = .succeeded(observedAt: Date())
             }
-        } else {
-            discoveryNote = nil
+        }
+        if case .succeeded = taskReconnectabilityObservation {
+            reconcileInterruptedTaskSessions()
+        }
+    }
+
+    /// A successful tmux observation plus the absence of an in-process runtime
+    /// lets Conduit record that a previously-open attempt was interrupted.
+    /// Failed discovery remains unknown and never becomes negative evidence.
+    private func reconcileInterruptedTaskSessions() {
+        let liveTaskIDs = Set(sessions.compactMap(\.descriptor.taskSessionID))
+        // A malformed binding could belong to any prior attempt. Until it is
+        // repaired or reviewed, absence is not safe negative evidence.
+        guard !discoveredSessions.contains(where: {
+            if case .malformed = $0.taskSessionBinding { return true }
+            return false
+        }) else { return }
+        let candidates = taskSessions.compactMap { task -> (TaskSessionID, RuntimeAttemptID)? in
+            guard !liveTaskIDs.contains(task.id),
+                  case .runtimeOpened(let attempt)? = task.operationalState
+            else { return nil }
+            return (task.id, attempt)
+        }
+        for (taskID, attemptID) in candidates {
+            _ = appendTaskEvent(
+                TaskSessionEvent(
+                    taskSessionID: taskID,
+                    authority: .processObserved,
+                    kind: .operationalStateChanged(.interrupted(attemptID))
+                )
+            )
         }
     }
 
@@ -620,52 +1526,151 @@ final class AppModel: ObservableObject {
     /// may keep running and will reconnect if the same agent is launched again.
     func closeSession(_ runtime: TerminalRuntime) {
         let keptRunning = runtime.controller.usesTmux
+        explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
+        // Persist a deterministic closure before direct PTY termination can
+        // deallocate the runtime and its weak lifecycle callback.
+        runtime.closeAgentOutputCapture()
         runtime.controller.closeSession()
+        if let taskID = runtime.descriptor.taskSessionID {
+            let state: TaskSessionOperationalState = keptRunning
+                ? .runtimeDetached(runtime.runtimeAttemptID)
+                : .closed(.operatorClosed)
+            _ = appendTaskEvent(
+                TaskSessionEvent(
+                    taskSessionID: taskID,
+                    authority: keptRunning ? .conduitRecorded : .operatorAsserted,
+                    kind: .operationalStateChanged(state)
+                )
+            )
+        }
         recordSessionClosed(runtime, endedHard: false)
+        if keptRunning {
+            noteDurableRuntimeAvailable(runtime)
+            Task { await refreshDiscoveredSessions() }
+        }
         removeSessionTab(runtime)
         if keptRunning {
-            statusMessage = "Detached \(runtime.descriptor.agent.name). Choose it from Launch to reconnect."
+            statusMessage = "Detached \(runtime.descriptor.agent.name). Reconnect it from task history."
         } else {
             statusMessage = "Closed \(runtime.descriptor.agent.name) session."
         }
     }
 
     func leaveActiveSession() {
-        guard let activeSession else {
+        guard let activeSessionForSelectedProject else {
             statusMessage = "No active terminal session to leave."
             return
         }
-        closeSession(activeSession)
+        closeSession(activeSessionForSelectedProject)
     }
 
     func endActiveSession() {
-        guard let activeSession else {
+        guard let activeSessionForSelectedProject else {
             statusMessage = "No active terminal session to end."
             return
         }
-        endSession(activeSession)
+        endSession(activeSessionForSelectedProject)
     }
 
     /// Kill the process / tmux session and drop the tab. Next launch of that
     /// agent on this project starts fresh (no reconnect to a stuck shell).
-    func endSession(_ runtime: TerminalRuntime) {
-        runtime.controller.endSession()
-        recordSessionClosed(runtime, endedHard: true)
+    @discardableResult
+    func endSession(_ runtime: TerminalRuntime) -> Bool {
+        let tmuxName = runtime.controller.usesTmux
+            ? runtime.descriptor.tmuxSessionName
+            : nil
+        explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
+        runtime.closeAgentOutputCapture()
+        let runtimeEnded = runtime.controller.endSession()
+        if let taskID = runtime.descriptor.taskSessionID {
+            let state: TaskSessionOperationalState = runtimeEnded
+                ? .closed(.operatorEndedRuntime)
+                : .runtimeDetached(runtime.runtimeAttemptID)
+            _ = appendTaskEvent(
+                TaskSessionEvent(
+                    taskSessionID: taskID,
+                    authority: runtimeEnded
+                        ? .operatorAsserted
+                        : .conduitRecorded,
+                    kind: .operationalStateChanged(state)
+                )
+            )
+        }
+        recordSessionClosed(runtime, endedHard: runtimeEnded)
+        if let tmuxName {
+            if runtimeEnded {
+                discoveredSessions.removeAll { $0.tmuxName == tmuxName }
+                taskReconnectabilityObservation = .notChecked
+            } else {
+                noteDurableRuntimeAvailable(runtime)
+            }
+            Task { await refreshDiscoveredSessions() }
+        }
         removeSessionTab(runtime)
-        statusMessage = "Ended \(runtime.descriptor.agent.name) session."
+        if runtimeEnded {
+            statusMessage = "Ended \(runtime.descriptor.agent.name) session."
+        } else {
+            statusMessage = "Left the \(runtime.descriptor.agent.name) client."
+            errorMessage = "Conduit could not confirm that tmux ended the underlying runtime. It remains available for explicit reconnection until a successful observation proves otherwise."
+        }
+        return runtimeEnded
     }
 
-    /// End the current tab and immediately open a new one for the same agent.
+    /// End the current runtime and open a new attempt under the same task
+    /// identity. This never routes to another same-agent task.
     @discardableResult
     func restartSession(_ runtime: TerminalRuntime) -> TerminalRuntime? {
-        let agent = runtime.descriptor.agent
-        let projectPath = runtime.descriptor.projectPath
-        endSession(runtime)
-        if selectedProject?.path != projectPath,
-           let project = projects.first(where: { $0.path == projectPath }) {
-            selectProject(project)
+        guard let taskSessionID = runtime.descriptor.taskSessionID else {
+            errorMessage = "This legacy runtime has no task identity, so Conduit cannot restart it without breaking continuity."
+            return nil
         }
-        return launch(agent: agent)
+        guard runtime.descriptor.recordsIdentity else {
+            errorMessage = "This runtime has no verified agent identity. End or leave it, then start a new task explicitly."
+            return nil
+        }
+        let agent = runtime.descriptor.agent
+        let descriptor = runtime.descriptor
+        guard let project = projects.first(where: {
+            $0.path.standardizedFileURL
+                == descriptor.projectPath.standardizedFileURL
+        }) else {
+            errorMessage = "This runtime's MainFrame workspace is no longer in the current project scan."
+            return nil
+        }
+        let wasDurable = runtime.controller.usesTmux
+        guard endSession(runtime) else {
+            errorMessage = "The underlying tmux runtime could not be confirmed ended, so Conduit did not launch a replacement."
+            return nil
+        }
+        selectProject(project)
+        beginWorkSessionIfNeeded(project)
+        return start(
+            descriptor: SessionDescriptor(
+                projectPath: descriptor.projectPath,
+                agent: agent,
+                tmuxSessionName: wasDurable
+                    ? descriptor.tmuxSessionName
+                    : nil,
+                taskSessionID: taskSessionID,
+                instance: descriptor.instance,
+                recordsIdentity: true
+            ),
+            project: project,
+            backendLabel: wasDurable
+                ? "durable-restarted"
+                : (settings.restoreSessions
+                    ? "durable-requested"
+                    : "pty"),
+            entry: .started(
+                agentName: agent.name,
+                requestedBackend: wasDurable
+                    ? "fresh durable tmux runtime"
+                    : (settings.restoreSessions
+                        ? "durable tmux, with PTY fallback"
+                        : "direct PTY")
+            ),
+            requiresDurableSession: wasDurable
+        )
     }
 
     private func recordSessionClosed(_ runtime: TerminalRuntime, endedHard: Bool) {
@@ -686,9 +1691,23 @@ final class AppModel: ObservableObject {
     }
 
     private func removeSessionTab(_ runtime: TerminalRuntime) {
+        if let taskSessionID = runtime.descriptor.taskSessionID {
+            // Never present volatile runtime memory as retained history. This
+            // read is queued behind every prior append/close revision.
+            conversationHistoryByTask.removeValue(forKey: taskSessionID)
+            loadConversationHistory(for: taskSessionID)
+        }
         sessions.removeAll { $0.id == runtime.id }
+        let staleProjectIDs = lastSelectedSessionIDByProject.compactMap { projectID, rememberedID in
+            rememberedID == runtime.id ? projectID : nil
+        }
+        for projectID in staleProjectIDs {
+            lastSelectedSessionIDByProject[projectID] = nil
+        }
         if activeSessionID == runtime.id {
-            activeSessionID = sessionsForSelectedProject.last?.id
+            // Task-first navigation keeps the just-left task selected so its
+            // detached/closed history remains visible. Reconnection is explicit.
+            activeSessionID = nil
         }
     }
 
@@ -696,11 +1715,14 @@ final class AppModel: ObservableObject {
         let prompt = PromptAssembler.assemble(text: composerText, attachments: attachments)
         guard !prompt.isEmpty else { return }
 
-        let controller: TerminalSessionController
-        if let activeSession {
-            controller = activeSession.controller
-        } else if let runtime = launchDefaultShell() {
-            controller = runtime.controller
+        let runtime: TerminalRuntime
+        if let activeSessionForSelectedProject {
+            runtime = activeSessionForSelectedProject
+        } else if selectedTaskSnapshot != nil {
+            errorMessage = "This task has no open runtime. Reconnect it or start a new task before sending."
+            return
+        } else if let launched = launchDefaultShell() {
+            runtime = launched
             statusMessage = "Opened a shell; the prompt will be delivered when it is ready."
         } else {
             return
@@ -708,11 +1730,31 @@ final class AppModel: ObservableObject {
 
         let savedText = composerText
         let savedAttachments = attachments
+        let eventID = runtime.recordPrompt(
+            text: savedText,
+            attachmentPaths: savedAttachments.map(\.url.path),
+            renderedPayload: prompt
+        )
+        runtime.selectedSurface = .conversation
         composerText = ""
         attachments = []
-        let agentName = controller.descriptor.agent.name
-        controller.deliverPrompt(prompt) { [weak self] delivered in
-            guard let self, !delivered else { return }
+        let agentName = runtime.controller.descriptor.agent.name
+        runtime.controller.deliverPrompt(
+            prompt,
+            willDeliver: { [weak runtime] baseline in
+                runtime?.beginAgentOutputCapture(
+                    promptEventID: eventID,
+                    promptText: prompt,
+                    baseline: baseline
+                )
+            }
+        ) { [weak self, weak runtime] delivered in
+            guard let self else { return }
+            runtime?.updatePromptDelivery(
+                eventID: eventID,
+                to: delivered ? .delivered : .failed
+            )
+            guard !delivered else { return }
             // Delivery failed — restore what the user typed so it is never lost,
             // unless they have already started composing something new.
             if self.composerText.isEmpty && self.attachments.isEmpty {
@@ -820,7 +1862,7 @@ final class AppModel: ObservableObject {
             errorMessage = "Copy terminal text first, then forward it."
             return
         }
-        let sourceName = activeSession?.descriptor.agent.name
+        let sourceName = activeSessionForSelectedProject?.descriptor.agent.name
         let provenance = (sourceName?.isEmpty == false) ? sourceName! : "terminal"
         forwardingDraft = ForwardingDraft(
             selection: selection,
@@ -879,6 +1921,13 @@ final class AppModel: ObservableObject {
                 // launch already set an honest error; keep the draft recoverable.
                 return
             }
+            let eventID = destination.recordPrompt(
+                origin: .forwardedTerminalOutput(sourceAgentName: draft.sourceAgentName),
+                text: draft.selection + (note.isEmpty ? "" : "\n\nOperator context:\n\(note)"),
+                attachmentPaths: [],
+                renderedPayload: prompt
+            )
+            destination.selectedSurface = .conversation
 
             let savedDraft = draft
             // Distinguish queue acceptance (clear draft) from a later async
@@ -886,8 +1935,21 @@ final class AppModel: ObservableObject {
             // fire re-entrantly during deliverPrompt while isSync is true.
             var isSync = true
             var syncResult: Bool?
-            destination.controller.deliverPrompt(prompt) { [weak self] delivered in
+            destination.controller.deliverPrompt(
+                prompt,
+                willDeliver: { [weak destination] baseline in
+                    destination?.beginAgentOutputCapture(
+                        promptEventID: eventID,
+                        promptText: prompt,
+                        baseline: baseline
+                    )
+                }
+            ) { [weak self] delivered in
                 guard let self else { return }
+                destination.updatePromptDelivery(
+                    eventID: eventID,
+                    to: delivered ? .delivered : .failed
+                )
                 if isSync {
                     syncResult = delivered
                     return
@@ -1189,13 +2251,305 @@ final class AppModel: ObservableObject {
 @MainActor
 final class TerminalRuntime: ObservableObject, Identifiable {
     nonisolated let id: UUID
+    nonisolated let runtimeAttemptID: RuntimeAttemptID
     let descriptor: SessionDescriptor
     let controller: TerminalSessionController
+    @Published var selectedSurface: SessionSurface = .productDefault
+    @Published private(set) var presentationEvents: [SessionPresentationEvent]
+    @Published private(set) var isAwaitingAgentOutput = false
+    @Published private(set) var activeOutputEventID: UUID?
+    @Published private(set) var conversationCaptureNotice: String?
 
-    init(descriptor: SessionDescriptor, useDetachedSessions: Bool) {
+    private struct ActiveOutputCapture {
+        let id: UUID
+        let promptEventID: UUID
+        let promptText: String
+        let baseline: RawDerivedSnapshot
+    }
+
+    private let recordEventRevision: ((SessionPresentationEvent) -> Void)?
+    private var activeOutputCapture: ActiveOutputCapture?
+    private let reductionQueue = DispatchQueue(
+        label: "dev.camerontjs.conduit.raw-derived-reduction",
+        qos: .userInitiated
+    )
+    private var reductionGeneration = 0
+    private var lastAppliedReductionGeneration = 0
+    private var outputSettleWorkItem: DispatchWorkItem?
+    private var lastPersistedOutputAt: Date?
+    private var lastPersistedOutputText = ""
+    private let outputPersistenceInterval: TimeInterval = 2
+    private let outputSettleInterval: TimeInterval = 1.1
+
+    init(
+        descriptor: SessionDescriptor,
+        useDetachedSessions: Bool,
+        entry: SessionEntry,
+        runtimeAttemptID: RuntimeAttemptID = RuntimeAttemptID(),
+        priorEvents: [SessionPresentationEvent] = [],
+        recordEventRevision: ((SessionPresentationEvent) -> Void)? = nil
+    ) {
         self.id = descriptor.id
+        self.runtimeAttemptID = runtimeAttemptID
         self.descriptor = descriptor
         self.controller = TerminalSessionController(descriptor: descriptor, useDetachedSessions: useDetachedSessions)
+        self.recordEventRevision = recordEventRevision
+        let opening = SessionPresentation.openingEvent(entry)
+        self.presentationEvents = priorEvents + [opening]
+        recordEventRevision?(opening)
+        controller.onRenderedOutput = { [weak self] capture in
+            self?.recordRenderedOutput(capture)
+        }
+        controller.onTerminalBoundary = { [weak self] in
+            self?.closeAgentOutputCapture()
+        }
+        controller.onDirectRawInput = { [weak self] in
+            guard let self else { return }
+            guard self.activeOutputCapture != nil
+                    || self.activeOutputEventID != nil
+                    || self.isAwaitingAgentOutput
+            else { return }
+            self.closeAgentOutputCapture()
+            self.conversationCaptureNotice =
+                "Raw interaction ended the prior output capture. Inspect Raw for the exact terminal state."
+        }
+    }
+
+    @discardableResult
+    func recordPrompt(
+        origin: PromptOrigin = .composer,
+        text: String,
+        attachmentPaths: [String],
+        renderedPayload: String
+    ) -> UUID {
+        let event = SessionPresentation.promptEvent(
+            origin: origin,
+            text: text,
+            attachmentPaths: attachmentPaths,
+            renderedPayload: renderedPayload
+        )
+        presentationEvents.append(event)
+        recordEventRevision?(event)
+        return event.id
+    }
+
+    func updatePromptDelivery(
+        eventID: UUID,
+        to delivery: PromptDeliveryState
+    ) {
+        presentationEvents = SessionPresentation.updatingPromptDelivery(
+            in: presentationEvents,
+            eventID: eventID,
+            to: delivery
+        )
+        if let event = presentationEvents.first(where: { $0.id == eventID }) {
+            recordEventRevision?(event)
+        }
+        if delivery == .failed {
+            closeAgentOutputCapture()
+        }
+    }
+
+    /// Opens a best-effort raw-derived block at the exact point Conduit hands
+    /// the prompt to the terminal. Output before this boundary remains startup
+    /// or unrelated terminal activity and is not projected as a response.
+    func beginAgentOutputCapture(
+        promptEventID: UUID,
+        promptText: String,
+        baseline: RawDerivedCapture
+    ) {
+        closeAgentOutputCapture()
+        conversationCaptureNotice = nil
+        guard case .available(let snapshot) = baseline else {
+            activeOutputCapture = nil
+            activeOutputEventID = nil
+            isAwaitingAgentOutput = false
+            conversationCaptureNotice =
+                "Conversation capture is unavailable for this prompt. Inspect Raw for the exact terminal output."
+            return
+        }
+        activeOutputCapture = ActiveOutputCapture(
+            id: UUID(),
+            promptEventID: promptEventID,
+            promptText: promptText,
+            baseline: snapshot
+        )
+        activeOutputEventID = nil
+        isAwaitingAgentOutput = true
+        reductionGeneration += 1
+        lastAppliedReductionGeneration = reductionGeneration
+        lastPersistedOutputAt = nil
+        lastPersistedOutputText = ""
+    }
+
+    func closeAgentOutputCapture() {
+        outputSettleWorkItem?.cancel()
+        outputSettleWorkItem = nil
+        reductionGeneration += 1
+        lastAppliedReductionGeneration = reductionGeneration
+        guard let eventID = activeOutputEventID,
+              let event = presentationEvents.first(where: { $0.id == eventID }),
+              case .agentOutput(let output) = event.kind
+        else {
+            activeOutputCapture = nil
+            activeOutputEventID = nil
+            isAwaitingAgentOutput = false
+            return
+        }
+        let closed = SessionPresentationEvent(
+            id: event.id,
+            occurredAt: event.occurredAt,
+            authority: event.authority,
+            kind: .agentOutput(output.withState(.closed))
+        )
+        presentationEvents = SessionPresentation.upsertingAgentOutput(
+            in: presentationEvents,
+            event: closed
+        )
+        recordEventRevision?(closed)
+        activeOutputCapture = nil
+        activeOutputEventID = nil
+        isAwaitingAgentOutput = false
+        lastPersistedOutputAt = nil
+        lastPersistedOutputText = ""
+    }
+
+    private func recordRenderedOutput(_ observed: RawDerivedCapture) {
+        guard let capture = activeOutputCapture else { return }
+        switch observed {
+        case .unavailable:
+            closeAgentOutputCapture()
+            conversationCaptureNotice =
+                "Rendered output could not be separated safely from prior Raw history. Inspect Raw for the exact terminal output."
+        case .available(let current):
+            reductionGeneration += 1
+            let generation = reductionGeneration
+            let captureID = capture.id
+            let promptText = capture.promptText
+            let baseline = capture.baseline
+            reductionQueue.async { [weak self] in
+                let reduction = RawDerivedOutputReducer.derive(
+                    baseline: baseline,
+                    current: current,
+                    promptText: promptText
+                )
+                Task { @MainActor in
+                    self?.applyRenderedReduction(
+                        reduction,
+                        current: current,
+                        captureID: captureID,
+                        generation: generation
+                    )
+                }
+            }
+        }
+    }
+
+    private func applyRenderedReduction(
+        _ reduction: RawDerivedOutputReduction,
+        current: RawDerivedSnapshot,
+        captureID: UUID,
+        generation: Int
+    ) {
+        guard let capture = activeOutputCapture,
+              capture.id == captureID,
+              generation > lastAppliedReductionGeneration
+        else { return }
+        lastAppliedReductionGeneration = generation
+
+        guard case .output(let derived) = reduction else {
+            closeAgentOutputCapture()
+            conversationCaptureNotice =
+                "Rendered output could not be separated safely from prior Raw history. Inspect Raw for the exact terminal output."
+            return
+        }
+        guard !derived.text.isEmpty else { return }
+
+        let event: SessionPresentationEvent
+        if let eventID = activeOutputEventID,
+           let previous = presentationEvents.first(where: { $0.id == eventID }),
+           case .agentOutput(let previousOutput) = previous.kind {
+            event = SessionPresentation.agentOutputEvent(
+                // Generic PTY rendering has no deterministic agent-turn
+                // boundary. Timeline proximity is shown without claiming a
+                // structured response association.
+                promptEventID: nil,
+                text: derived.text,
+                state: .live,
+                extraction: previousOutput.extraction,
+                truncated: derived.truncated,
+                id: previous.id,
+                occurredAt: previous.occurredAt
+            )
+        } else {
+            event = SessionPresentation.agentOutputEvent(
+                promptEventID: nil,
+                text: derived.text,
+                state: .live,
+                extraction: current.extraction,
+                truncated: derived.truncated
+            )
+        }
+
+        presentationEvents = SessionPresentation.upsertingAgentOutput(
+            in: presentationEvents,
+            event: event
+        )
+        activeOutputEventID = event.id
+        persistOutputRevisionIfNeeded(event)
+        scheduleOutputSettled(eventID: event.id)
+    }
+
+    private func persistOutputRevisionIfNeeded(
+        _ event: SessionPresentationEvent
+    ) {
+        guard case .agentOutput(let output) = event.kind else { return }
+        let now = Date()
+        let elapsed = lastPersistedOutputAt.map {
+            now.timeIntervalSince($0)
+        } ?? .infinity
+        let characterDelta = abs(
+            output.text.count - lastPersistedOutputText.count
+        )
+        guard lastPersistedOutputAt == nil
+                || elapsed >= outputPersistenceInterval
+                || characterDelta >= 4_096
+        else { return }
+        recordEventRevision?(event)
+        lastPersistedOutputAt = now
+        lastPersistedOutputText = output.text
+    }
+
+    private func scheduleOutputSettled(eventID: UUID) {
+        outputSettleWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.markOutputSettled(eventID: eventID)
+        }
+        outputSettleWorkItem = item
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + outputSettleInterval,
+            execute: item
+        )
+    }
+
+    private func markOutputSettled(eventID: UUID) {
+        guard activeOutputEventID == eventID,
+              let event = presentationEvents.first(where: { $0.id == eventID }),
+              case .agentOutput(let output) = event.kind
+        else { return }
+        let settled = SessionPresentationEvent(
+            id: event.id,
+            occurredAt: event.occurredAt,
+            authority: event.authority,
+            kind: .agentOutput(output.withState(.settled))
+        )
+        presentationEvents = SessionPresentation.upsertingAgentOutput(
+            in: presentationEvents,
+            event: settled
+        )
+        recordEventRevision?(settled)
+        lastPersistedOutputAt = Date()
+        lastPersistedOutputText = output.text
     }
 }
 #endif

@@ -14,6 +14,7 @@ struct ResumeSessionsSheet: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var isRefreshing = false
+    @State private var legacyAdoption: LegacyAdoptionSelection?
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -30,6 +31,11 @@ struct ResumeSessionsSheet: View {
         .frame(minWidth: 620, minHeight: 380)
         .background(palette.canvas)
         .task { await refresh() }
+        .sheet(item: $legacyAdoption) { selection in
+            LegacySessionScopeSheet(session: selection.session)
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
     }
 
     private var header: some View {
@@ -114,12 +120,24 @@ struct ResumeSessionsSheet: View {
 
     @ViewBuilder
     private func action(for row: ResumableSession) -> some View {
-        switch row.relation {
-        case .alreadyOpen:
+        if case .malformed = row.session.taskSessionBinding {
+            Text("needs attention")
+                .font(.system(size: 10))
+                .foregroundStyle(palette.faint)
+                .help("The tmux task binding is malformed. Conduit will not attach or overwrite it.")
+        } else if case .alreadyOpen = row.relation {
             Text("open")
                 .font(.system(size: 10))
                 .foregroundStyle(palette.faint)
-        case .resumableHere, .unidentified, .otherProject:
+        } else if row.session.projectPath == nil {
+            Button("Choose Scope…") {
+                legacyAdoption = LegacyAdoptionSelection(session: row.session)
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(palette.accent)
+            .help("Explicitly choose the MainFrame scope for this legacy session")
+        } else {
             Button("Resume") {
                 model.resume(row.session)
                 dismiss()
@@ -173,5 +191,74 @@ struct ResumeSessionsSheet: View {
         formatter.unitsStyle = .abbreviated
         return formatter
     }()
+}
+
+private struct LegacyAdoptionSelection: Identifiable {
+    let id = UUID()
+    let session: DiscoveredSession
+}
+
+private struct LegacySessionScopeSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    let session: DiscoveredSession
+
+    private var palette: ConduitPalette {
+        themeStore.palette(for: colorScheme)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Choose a scope for this legacy session")
+                    .font(.headline)
+                    .foregroundStyle(palette.text)
+                Text("tmux did not record a project for \(session.tmuxName). Your choice creates local task metadata; Conduit will not infer a scope from the session name.")
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+
+            Divider().overlay(palette.line)
+
+            List(model.projects) { project in
+                Button {
+                    if model.resume(session, adoptingInto: project) != nil {
+                        dismiss()
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: project.isMainframeRoot ? "shippingbox" : "folder")
+                            .foregroundStyle(palette.dim)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(project.metadata.title)
+                                .foregroundStyle(palette.text)
+                            Text(project.path.path)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(palette.faint)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Adopt into \(project.metadata.title)")
+            }
+            .scrollContentBackground(.hidden)
+
+            Divider().overlay(palette.line)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(12)
+        }
+        .frame(width: 520, height: 460)
+        .background(palette.canvas)
+    }
 }
 #endif

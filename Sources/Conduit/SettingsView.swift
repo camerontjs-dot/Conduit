@@ -72,6 +72,18 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Local conversation history") {
+                Text("Select a task in the left sidebar to reopen its retained thread. New prompts, local attachment references, and source-labelled rendered output are stored in ~/.conduit/conversations.")
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
+                Text("Attaching a path does not copy that file, but text the CLI renders—including file contents or secrets—may be retained. Each rendered projection revision is capped at 16,000 characters; append-only earlier revisions remain in the local source.")
+                    .font(.caption)
+                    .foregroundStyle(palette.faint)
+                Text("Raw PTY bytes are not stored there. Conduit does not silently upload, index, expire, or clear this history.")
+                    .font(.caption)
+                    .foregroundStyle(palette.faint)
+            }
+
             Section("Utilities") {
                 HStack {
                     Button("Run Conduit Doctor") { model.showDiagnostics = true }

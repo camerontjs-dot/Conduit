@@ -89,6 +89,145 @@ final class ProjectNavigationTests: XCTestCase {
     }
 }
 
+final class SessionPresentationTests: XCTestCase {
+    func testConversationIsTheDefaultAndRawRemainsAvailable() {
+        XCTAssertEqual(SessionSurface.productDefault, .conversation)
+        XCTAssertEqual(SessionSurface.allCases, [.conversation, .raw])
+        XCTAssertEqual(SessionSurface.allCases.map(\.displayName), ["Conversation", "Raw"])
+        XCTAssertEqual(
+            PromptDeliveryState.delivered.displayName,
+            "Sent to terminal"
+        )
+    }
+
+    func testOpeningEventIsConduitRecordedAndRoundTrips() throws {
+        let id = UUID()
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = SessionPresentation.openingEvent(
+            .resumed(
+                agentName: "Codex",
+                tmuxSessionName: "conduit-mainframe-codex",
+                attachedElsewhere: true
+            ),
+            id: id,
+            occurredAt: date
+        )
+
+        XCTAssertEqual(event.authority, .conduitRecorded)
+        XCTAssertEqual(event.id, id)
+        let data = try JSONEncoder().encode(event)
+        XCTAssertEqual(try JSONDecoder().decode(SessionPresentationEvent.self, from: data), event)
+    }
+
+    func testPromptRetainsExactIngredientsAndStartsQueued() {
+        let event = SessionPresentation.promptEvent(
+            text: "Review this change",
+            attachmentPaths: ["/tmp/example.swift"],
+            renderedPayload: "Review this change\n\nAttachments:\n- /tmp/example.swift"
+        )
+
+        guard case .userPrompt(let prompt) = event.kind else {
+            return XCTFail("Expected a user prompt event")
+        }
+        XCTAssertEqual(prompt.text, "Review this change")
+        XCTAssertEqual(prompt.attachmentPaths, ["/tmp/example.swift"])
+        XCTAssertEqual(
+            prompt.renderedPayload,
+            "Review this change\n\nAttachments:\n- /tmp/example.swift"
+        )
+        XCTAssertEqual(prompt.delivery, .queued)
+        XCTAssertEqual(prompt.origin, .composer)
+        XCTAssertEqual(event.authority, .conduitRecorded)
+    }
+
+    func testForwardedPromptPreservesUnverifiedTerminalOrigin() {
+        let event = SessionPresentation.promptEvent(
+            origin: .forwardedTerminalOutput(sourceAgentName: "Claude"),
+            text: "selected terminal prose",
+            attachmentPaths: [],
+            renderedPayload: "Evidence boundary: this is unverified terminal output."
+        )
+
+        guard case .userPrompt(let prompt) = event.kind else {
+            return XCTFail("Expected a user prompt event")
+        }
+        XCTAssertEqual(
+            prompt.origin,
+            .forwardedTerminalOutput(sourceAgentName: "Claude")
+        )
+        XCTAssertTrue(prompt.renderedPayload.contains("unverified terminal output"))
+    }
+
+    func testDeliveryReducerChangesOnlyMatchingPrompt() {
+        let opened = SessionPresentation.openingEvent(
+            .started(agentName: "Claude", requestedBackend: "direct PTY")
+        )
+        let first = SessionPresentation.promptEvent(
+            text: "First",
+            attachmentPaths: [],
+            renderedPayload: "First"
+        )
+        let second = SessionPresentation.promptEvent(
+            text: "Second",
+            attachmentPaths: [],
+            renderedPayload: "Second"
+        )
+
+        let updated = SessionPresentation.updatingPromptDelivery(
+            in: [opened, first, second],
+            eventID: first.id,
+            to: .failed
+        )
+
+        XCTAssertEqual(updated[0], opened)
+        XCTAssertEqual(updated[2], second)
+        guard case .userPrompt(let prompt) = updated[1].kind else {
+            return XCTFail("Expected the matching prompt to remain a prompt")
+        }
+        XCTAssertEqual(prompt.text, "First")
+        XCTAssertEqual(prompt.delivery, .failed)
+
+        let terminal = SessionPresentation.updatingPromptDelivery(
+            in: updated,
+            eventID: first.id,
+            to: .delivered
+        )
+        XCTAssertEqual(terminal, updated, "A failed delivery must not later become delivered")
+    }
+
+    func testAgentOutputKeepsRawDerivedAuthorityAndStableTimelinePosition() {
+        let promptID = UUID()
+        let first = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Working…",
+            extraction: .renderedBuffer,
+            truncated: false
+        )
+        let revised = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Visible response",
+            state: .settled,
+            extraction: .renderedBuffer,
+            truncated: false,
+            id: first.id,
+            occurredAt: first.occurredAt
+        )
+
+        let projected = SessionPresentation.upsertingAgentOutput(
+            in: [first],
+            event: revised
+        )
+
+        XCTAssertEqual(projected, [revised])
+        XCTAssertEqual(revised.authority, .derivedFromRaw)
+        guard case .agentOutput(let output) = revised.kind else {
+            return XCTFail("Expected agent output")
+        }
+        XCTAssertEqual(output.promptEventID, promptID)
+        XCTAssertEqual(output.state, .settled)
+    }
+}
+
 final class SettingsStoreTests: XCTestCase {
     func testSnapshotLoadsPersistedRootWithoutActorHop() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

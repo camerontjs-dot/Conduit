@@ -147,6 +147,18 @@ public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
     ///
     /// Nil means a direct PTY with no durable session.
     public var tmuxSessionName: String?
+    /// Stable user-facing task history this concrete runtime attempt belongs
+    /// to. Optional for descriptors decoded from before task continuity
+    /// existed and for deliberately unbound direct PTY sessions.
+    public var taskSessionID: TaskSessionID?
+    /// True only after the operator explicitly chose a discovered legacy tmux
+    /// session whose task option was absent. Optional keeps pre-task-history
+    /// descriptor payloads decodable as a conservative false.
+    public var adoptsLegacyTaskSession: Bool?
+    /// True for an explicit reconnect. If the named tmux session disappears,
+    /// Conduit must stop instead of creating or launching a replacement.
+    /// Optional keeps older descriptor payloads conservatively false.
+    public var requiresExistingTmuxSession: Bool?
     /// Which instance of this agent-in-this-project the session is. Instance 1
     /// keeps the historic tmux name; later instances are suffixed.
     public var instance: Int
@@ -165,6 +177,9 @@ public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
         title: String? = nil,
         createdAt: Date = Date(),
         tmuxSessionName: String? = nil,
+        taskSessionID: TaskSessionID? = nil,
+        adoptsLegacyTaskSession: Bool = false,
+        requiresExistingTmuxSession: Bool = false,
         instance: Int = 1,
         recordsIdentity: Bool = true
     ) {
@@ -174,6 +189,9 @@ public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
         self.title = title ?? (instance > 1 ? "\(agent.name) \(instance)" : agent.name)
         self.createdAt = createdAt
         self.tmuxSessionName = tmuxSessionName
+        self.taskSessionID = taskSessionID
+        self.adoptsLegacyTaskSession = adoptsLegacyTaskSession
+        self.requiresExistingTmuxSession = requiresExistingTmuxSession
         self.instance = instance
         self.recordsIdentity = recordsIdentity
     }

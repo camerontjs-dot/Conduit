@@ -8,13 +8,51 @@ import SwiftTerm
 import SwiftUI
 
 final class ActivityTerminalView: LocalProcessTerminalView {
-    /// Carries the slice size so observed output volume is counted at the one
-    /// place every PTY byte already passes through.
+    /// Reports observed byte volume after SwiftTerm has interpreted the chunk.
+    /// Rendered snapshots are coalesced separately; translating the entire
+    /// buffer for every PTY read makes long streams quadratic in practice.
     var onOutput: ((Int) -> Void)?
+    /// Direct SwiftTerm keyboard/mouse input only. Native composer delivery
+    /// writes to `process` or tmux out of band and intentionally bypasses this.
+    var onDirectRawInput: (() -> Void)?
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
-        onOutput?(slice.count)
         super.dataReceived(slice: slice)
+        onOutput?(slice.count)
+    }
+
+    override func send(
+        source: TerminalView,
+        data: ArraySlice<UInt8>
+    ) {
+        onDirectRawInput?()
+        super.send(source: source, data: data)
+    }
+
+    /// SwiftTerm's rendered active surface. Direct PTYs may include their
+    /// bounded normal-buffer scrollback; the strict reducer always compares it
+    /// with a same-source baseline before any text can reach Conversation.
+    func renderedSnapshot() -> String {
+        let terminal = getTerminal()
+        let kind: Terminal.BufferKind = terminal.isCurrentBufferAlternate
+            ? .active
+            : .normal
+        return String(
+            decoding: terminal.getBufferAsData(kind: kind),
+            as: UTF8.self
+        )
+    }
+
+    /// A fallback that provably contains no scrollback. SwiftTerm's alternate
+    /// buffer has only the active screen; its normal buffer may include prior
+    /// history and is therefore never used to replace a failed tmux capture.
+    func scrollbackFreeRenderedSnapshot() -> String? {
+        let terminal = getTerminal()
+        guard terminal.isCurrentBufferAlternate else { return nil }
+        return String(
+            decoding: terminal.getBufferAsData(kind: .active),
+            as: UTF8.self
+        )
     }
 }
 
@@ -26,9 +64,11 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     @Published private(set) var lifecycle: SessionLifecycle = .idle {
         didSet {
             guard lifecycle.isTerminal else { return }
+            onTerminalBoundary?()
             recordObservedUsage()
         }
     }
+    @Published private(set) var launchIssue: TerminalLaunchIssue?
     @Published private(set) var terminalTitle: String
     @Published private(set) var lastOutputAt: Date?
     private(set) var usesTmux = false
@@ -49,6 +89,9 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     /// Invoked once per session with what Conduit observed. The controller
     /// stays unaware of where it is written.
     var onUsageRecord: ((SessionUsageRecord) -> Void)?
+    /// Called only when durable attach is intentionally blocked. The AppModel
+    /// may surface this later without inferring failure from terminal prose.
+    var onLaunchIssue: ((TerminalLaunchIssue) -> Void)?
 
     private let useDetachedSessions: Bool
 
@@ -57,6 +100,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     private struct PendingPrompt {
         let text: String
         let submit: Bool
+        let willDeliver: ((RawDerivedCapture) -> Void)?
         let completion: ((Bool) -> Void)?
     }
 
@@ -68,22 +112,52 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     private var isReadyForInput = false
     private var firstOutputAt: Date?
     private var pendingPrompts: [PendingPrompt] = []
+    /// Exactly one prompt write may own the next rendered-output boundary.
+    /// Later prompts stay queued until that write observes a quiet boundary or
+    /// the bounded hard cap expires. Neither condition is agent completion.
+    private var deliveryWriteInProgress = false
+    private var awaitingPromptOutputBoundary = false
+    private var promptBoundaryStartedAt: Date?
+    private var promptBoundaryFirstOutputAt: Date?
+    private var promptBoundaryWorkItem: DispatchWorkItem?
+    private var conversationCaptureExtraction: AgentOutputExtraction?
     /// Serial queue: tmux delivery is three blocking subprocess calls; running
     /// them here (never overlapping, FIFO) keeps back-to-back prompts from
     /// interleaving into one merged or reordered message, and keeps the waits
     /// off the cooperative pool.
     private let deliveryQueue = DispatchQueue(label: "dev.camerontjs.conduit.delivery")
+    private let captureQueue = DispatchQueue(label: "dev.camerontjs.conduit.capture")
     private var deliveryCompletions: [UUID: (Bool) -> Void] = [:]
+    private var paneCaptureScheduled = false
+    private var paneCaptureNeedsFollowup = false
+    private var renderedCaptureScheduled = false
+    private var renderedCaptureNeedsFollowup = false
+    private var lastAcceptedRenderedBuffer = ""
+    private var lastAcceptedTmuxPane = ""
+
+    /// Rendered terminal changes for the convenience Conversation projection.
+    /// These callbacks never carry completion or verification authority.
+    var onRenderedOutput: ((RawDerivedCapture) -> Void)?
+    /// Direct input through the Raw SwiftTerm surface. The runtime should close
+    /// or de-associate its active derived block before later output arrives.
+    var onDirectRawInput: (() -> Void)?
+    /// Lets the runtime close a live capture on a deterministic process
+    /// boundary. A quiet terminal is deliberately not such a boundary.
+    var onTerminalBoundary: (() -> Void)?
 
     private let readinessQuiescence: TimeInterval = 0.6
     private let readinessHardCap: TimeInterval = 8.0
+    private let renderedCaptureInterval: TimeInterval = 0.08
 
     var isDetached: Bool { lifecycle == .detached }
     var exitCode: Int32? {
         if case .exited(let code) = lifecycle { return code }
         return nil
     }
-    var backendLabel: String { usesTmux ? "tmux" : "PTY" }
+    var backendLabel: String {
+        if launchIssue != nil { return "blocked" }
+        return usesTmux ? "tmux" : "PTY"
+    }
 
     init(descriptor: SessionDescriptor, useDetachedSessions: Bool) {
         self.descriptor = descriptor
@@ -93,7 +167,16 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         super.init()
         terminalView.processDelegate = self
         terminalView.onOutput = { [weak self] byteCount in
-            Task { @MainActor in self?.noteOutput(byteCount: byteCount) }
+            Task { @MainActor in
+                self?.noteOutput(byteCount: byteCount)
+            }
+        }
+        terminalView.onDirectRawInput = { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.conversationCaptureExtraction = nil
+                self.onDirectRawInput?()
+            }
         }
         terminalView.font = NSFont.monospacedSystemFont(ofSize: TerminalTheme.fontSize, weight: .regular)
         // System colours are only the pre-theme fallback; TerminalHostView
@@ -104,7 +187,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
     func startIfNeeded() {
         guard lifecycle == .idle else { return }
-        attachedAt = Date()
+        launchIssue = nil
         lifecycle.transition(to: .launching)
 
         if useDetachedSessions, let tmux = EnvironmentResolver.shared.resolve("tmux") {
@@ -120,7 +203,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             // Session creation happens out-of-band and detached, so the
             // session deterministically exists before the client attaches
             // and before any prompt delivery.
-            if driver.ensureSession(
+            let ensureResult = driver.ensureSession(
                 name: name,
                 directory: descriptor.projectPath.path,
                 command: paneCommand(),
@@ -128,8 +211,16 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 // resumed unidentified session keeps its blank record rather
                 // than inheriting a placeholder name.
                 projectPath: descriptor.recordsIdentity ? descriptor.projectPath.path : nil,
-                agentName: descriptor.recordsIdentity ? descriptor.agent.name : nil
-            ) {
+                agentName: descriptor.recordsIdentity ? descriptor.agent.name : nil,
+                taskSessionID: descriptor.taskSessionID,
+                // Only the explicit Resume path may adopt a discovered legacy
+                // session. A generated-name collision is never permission.
+                adoptUnboundExistingSession: descriptor.adoptsLegacyTaskSession == true,
+                requireExistingSession: descriptor.requiresExistingTmuxSession == true
+            )
+            switch ensureResult {
+            case .ready:
+                attachedAt = Date()
                 usesTmux = true
                 tmuxSessionName = name
                 terminalView.startProcess(
@@ -139,10 +230,21 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 )
                 terminalTitle = "\(descriptor.title) · durable"
                 return
+            case .directPTYFallback:
+                break
+            case .blocked(let issue):
+                failLaunch(issue)
+                return
             }
+        } else if descriptor.requiresExistingTmuxSession == true {
+            let name = descriptor.tmuxSessionName
+                ?? descriptor.title
+            failLaunch(.tmuxUnavailableForReconnect(sessionName: name))
+            return
         }
 
         usesTmux = false
+        attachedAt = Date()
         startDirectSession()
     }
 
@@ -150,7 +252,12 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     /// session is ready (output quiesced) so prompts to a just-launched agent
     /// are neither dropped nor mangled. `completion(false)` fires if the bytes
     /// could not be delivered, so the caller can restore what the user typed.
-    func deliverPrompt(_ text: String, submit: Bool = true, completion: ((Bool) -> Void)? = nil) {
+    func deliverPrompt(
+        _ text: String,
+        submit: Bool = true,
+        willDeliver: ((RawDerivedCapture) -> Void)? = nil,
+        completion: ((Bool) -> Void)? = nil
+    ) {
         let normalized = PromptEncoder.normalized(text)
         guard !normalized.isEmpty else { completion?(true); return }
         // Refuse to swallow a prompt aimed at a session that has already ended.
@@ -159,12 +266,20 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             return
         }
         startIfNeeded()
-        let prompt = PendingPrompt(text: normalized, submit: submit, completion: completion)
-        if isReadyForInput {
-            enqueueDelivery(prompt)
-        } else {
-            pendingPrompts.append(prompt)
+        // A blocked durable attach starts no replacement process. Report the
+        // prompt as undelivered rather than leaving it queued forever.
+        guard !lifecycle.isTerminal else {
+            completion?(false)
+            return
         }
+        let prompt = PendingPrompt(
+            text: normalized,
+            submit: submit,
+            willDeliver: willDeliver,
+            completion: completion
+        )
+        pendingPrompts.append(prompt)
+        drainPromptQueueIfPossible()
     }
 
     func interrupt() {
@@ -199,26 +314,45 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 self.terminalView.terminate()
             }
         } else {
+            flushRenderedBufferCapture(
+                requiresScrollbackFreeBuffer: false
+            )
             terminate()
         }
     }
 
     /// Kill the underlying process (and durable tmux session when present) so
     /// the next launch creates a brand-new session instead of reconnecting.
-    func endSession() {
+    @discardableResult
+    func endSession() -> Bool {
         failPendingPrompts()
-        if usesTmux, let name = tmuxSessionName, let tmux = EnvironmentResolver.shared.resolve("tmux") {
-            // Kill first so has-session during processTerminated sees "gone".
-            TmuxDriver(tmuxPath: tmux).killSession(name)
+        let runtimeEnded: Bool
+        if usesTmux {
+            if let name = tmuxSessionName,
+               let tmux = EnvironmentResolver.shared.resolve("tmux") {
+                // Kill first so has-session during processTerminated sees
+                // "gone", and keep the result honest when tmux is unreachable.
+                runtimeEnded = TmuxDriver(tmuxPath: tmux).killSession(name)
+            } else {
+                runtimeEnded = false
+            }
+        } else {
+            runtimeEnded = true
         }
+
+        let terminalState: SessionLifecycle = runtimeEnded
+            ? .exited(code: nil)
+            : .detached
         // Detach→exited is blocked on the state machine (receipt honesty);
-        // an explicit operator kill may force the exited state.
-        if case .exited = lifecycle {
-            // already terminal
-        } else if !lifecycle.transition(to: .exited(code: nil)) {
-            lifecycle = .exited(code: nil)
+        // an explicit operator action may force the terminal presentation
+        // state after the out-of-band result has been classified.
+        if lifecycle.isTerminal {
+            lifecycle = terminalState
+        } else if !lifecycle.transition(to: terminalState) {
+            lifecycle = terminalState
         }
         terminalView.terminate()
+        return runtimeEnded
     }
 
     func terminate() {
@@ -231,6 +365,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     }
 
     func visualState(at date: Date) -> TerminalVisualState {
+        if launchIssue != nil { return .failed }
         switch lifecycle {
         case .idle, .launching:
             return .launching
@@ -277,10 +412,40 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             // its real code is unknowable through the client.
             let driver = TmuxDriver(tmuxPath: tmux)
             deliveryQueue.async { [weak self] in
-                let alive = driver.hasSession(name)
+                let finalSnapshot = driver.capturePaneSnapshot(session: name)
+                let presence = driver.sessionPresence(name)
                 Task { @MainActor in
                     guard let self, !self.lifecycle.isTerminal else { return }
-                    self.lifecycle.transition(to: alive ? .detached : .exited(code: nil))
+                    if self.conversationCaptureExtraction == .tmuxPane {
+                        if let finalSnapshot {
+                            self.acceptRenderedSnapshot(
+                                finalSnapshot,
+                                extraction: .tmuxPane
+                            )
+                        } else {
+                            self.reportCaptureUnavailable(
+                                .tmuxPaneCaptureFailed,
+                                expected: .tmuxPane
+                            )
+                        }
+                    } else if self.conversationCaptureExtraction
+                                == .renderedBuffer {
+                        self.flushRenderedBufferCapture(
+                            requiresScrollbackFreeBuffer: true
+                        )
+                    }
+                    switch presence {
+                    case .present:
+                        self.lifecycle.transition(to: .detached)
+                    case .absent:
+                        self.lifecycle.transition(to: .exited(code: nil))
+                    case .unknown:
+                        // The attach client ended, but a failed observation is
+                        // not proof that the durable runtime ended. Preserve a
+                        // reconnectable/unknown path rather than recording a
+                        // false exit.
+                        self.lifecycle.transition(to: .detached)
+                    }
                     self.failPendingPrompts()
                 }
             }
@@ -289,6 +454,9 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
         // Direct PTY: SwiftTerm hands us the raw waitpid status; decode it so
         // the receipt records a real exit code, not 256 for a 1.
+        flushRenderedBufferCapture(
+            requiresScrollbackFreeBuffer: false
+        )
         let decoded = exitCode.map { POSIXExitStatus.decode($0) }
         lifecycle.transition(to: .exited(code: decoded))
         failPendingPrompts()
@@ -296,15 +464,183 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
     // MARK: - Private
 
+    private func failLaunch(_ issue: TerminalLaunchIssue) {
+        launchIssue = issue
+        onLaunchIssue?(issue)
+        usesTmux = false
+        tmuxSessionName = nil
+        attachedAt = nil
+        failPendingPrompts()
+        lifecycle.transition(to: .exited(code: nil))
+    }
+
     private func noteOutput(byteCount: Int) {
         observedOutputBytes += byteCount
-        lastOutputAt = Date()
+        let observedAt = Date()
+        lastOutputAt = observedAt
         if lifecycle == .launching {
             lifecycle.transition(to: .running)
         }
+
+        if awaitingPromptOutputBoundary,
+           promptBoundaryFirstOutputAt == nil {
+            promptBoundaryFirstOutputAt = observedAt
+        }
+
+        switch conversationCaptureExtraction {
+        case .tmuxPane:
+            scheduleTmuxPaneCapture()
+        case .renderedBuffer:
+            scheduleRenderedBufferCapture(
+                requiresScrollbackFreeBuffer: usesTmux
+            )
+        case .structuredAdapter, .none:
+            break
+        }
+
         guard firstOutputAt == nil else { return }
-        firstOutputAt = Date()
+        firstOutputAt = observedAt
         scheduleReadinessCheck()
+    }
+
+    private func acceptRenderedSnapshot(
+        _ snapshot: String,
+        extraction: AgentOutputExtraction
+    ) {
+        guard conversationCaptureExtraction == extraction else { return }
+        switch extraction {
+        case .renderedBuffer:
+            guard snapshot != lastAcceptedRenderedBuffer else { return }
+            lastAcceptedRenderedBuffer = snapshot
+        case .tmuxPane:
+            guard snapshot != lastAcceptedTmuxPane else { return }
+            lastAcceptedTmuxPane = snapshot
+        case .structuredAdapter:
+            return
+        }
+        onRenderedOutput?(
+            .available(
+                RawDerivedSnapshot(
+                    text: snapshot,
+                    extraction: extraction
+                )
+            )
+        )
+    }
+
+    private func reportCaptureUnavailable(
+        _ reason: RawDerivedCaptureUnavailableReason,
+        expected extraction: AgentOutputExtraction
+    ) {
+        guard conversationCaptureExtraction == extraction else { return }
+        conversationCaptureExtraction = nil
+        onRenderedOutput?(.unavailable(reason))
+    }
+
+    /// Coalesces direct rendered-buffer translation to at most one pass per
+    /// interval. A tmux fallback is allowed only while SwiftTerm is in its
+    /// scrollback-free alternate buffer.
+    private func scheduleRenderedBufferCapture(
+        requiresScrollbackFreeBuffer: Bool
+    ) {
+        if renderedCaptureScheduled {
+            renderedCaptureNeedsFollowup = true
+            return
+        }
+        renderedCaptureScheduled = true
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + renderedCaptureInterval
+        ) { [weak self] in
+            guard let self else { return }
+            let snapshot = requiresScrollbackFreeBuffer
+                ? self.terminalView.scrollbackFreeRenderedSnapshot()
+                : self.terminalView.renderedSnapshot()
+            let followup = self.renderedCaptureNeedsFollowup
+            self.renderedCaptureNeedsFollowup = false
+            self.renderedCaptureScheduled = false
+
+            if let snapshot {
+                self.acceptRenderedSnapshot(
+                    snapshot,
+                    extraction: .renderedBuffer
+                )
+            } else {
+                self.reportCaptureUnavailable(
+                    .renderedFallbackMayIncludeHistory,
+                    expected: .renderedBuffer
+                )
+            }
+            if followup,
+               self.conversationCaptureExtraction == .renderedBuffer {
+                self.scheduleRenderedBufferCapture(
+                    requiresScrollbackFreeBuffer:
+                        requiresScrollbackFreeBuffer
+                )
+            }
+        }
+    }
+
+    private func flushRenderedBufferCapture(
+        requiresScrollbackFreeBuffer: Bool
+    ) {
+        guard conversationCaptureExtraction == .renderedBuffer else {
+            return
+        }
+        let snapshot = requiresScrollbackFreeBuffer
+            ? terminalView.scrollbackFreeRenderedSnapshot()
+            : terminalView.renderedSnapshot()
+        if let snapshot {
+            acceptRenderedSnapshot(
+                snapshot,
+                extraction: .renderedBuffer
+            )
+        } else {
+            reportCaptureUnavailable(
+                .renderedFallbackMayIncludeHistory,
+                expected: .renderedBuffer
+            )
+        }
+    }
+
+    /// The outer SwiftTerm is an alternate-screen tmux client, so its buffer
+    /// has no useful pane scrollback. Capture a bounded rendered pane out of
+    /// band on a throttled serial queue. Failure is explicit; it never falls
+    /// back to an unbounded current-screen projection.
+    private func scheduleTmuxPaneCapture() {
+        guard usesTmux,
+              let name = tmuxSessionName,
+              let tmux = EnvironmentResolver.shared.resolve("tmux")
+        else { return }
+        if paneCaptureScheduled {
+            paneCaptureNeedsFollowup = true
+            return
+        }
+        paneCaptureScheduled = true
+        let driver = TmuxDriver(tmuxPath: tmux)
+        captureQueue.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            let snapshot = driver.capturePaneSnapshot(session: name)
+            Task { @MainActor in
+                guard let self else { return }
+                let followup = self.paneCaptureNeedsFollowup
+                self.paneCaptureNeedsFollowup = false
+                self.paneCaptureScheduled = false
+                if let snapshot {
+                    self.acceptRenderedSnapshot(
+                        snapshot,
+                        extraction: .tmuxPane
+                    )
+                } else if !followup {
+                    self.reportCaptureUnavailable(
+                        .tmuxPaneCaptureFailed,
+                        expected: .tmuxPane
+                    )
+                }
+                if followup,
+                   self.conversationCaptureExtraction == .tmuxPane {
+                    self.scheduleTmuxPaneCapture()
+                }
+            }
+        }
     }
 
     /// Polls output quiescence: once output has been idle for
@@ -328,11 +664,83 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     private func becomeReadyForInput() {
         guard !isReadyForInput else { return }
         isReadyForInput = true
-        let queued = pendingPrompts
-        pendingPrompts = []
-        for prompt in queued {
-            enqueueDelivery(prompt)
+        drainPromptQueueIfPossible()
+    }
+
+    private func drainPromptQueueIfPossible() {
+        guard isReadyForInput,
+              !deliveryWriteInProgress,
+              !awaitingPromptOutputBoundary,
+              !lifecycle.isTerminal,
+              !pendingPrompts.isEmpty
+        else { return }
+        deliveryWriteInProgress = true
+        let prompt = pendingPrompts.removeFirst()
+        enqueueDelivery(prompt)
+    }
+
+    /// Starts the one output boundary immediately before a serialized terminal
+    /// write. Merely queueing a prompt never moves the boundary.
+    private func beginPromptWrite(
+        _ prompt: PendingPrompt,
+        baseline: RawDerivedCapture
+    ) {
+        switch baseline {
+        case .available(let snapshot):
+            conversationCaptureExtraction = snapshot.extraction
+        case .unavailable:
+            conversationCaptureExtraction = nil
         }
+        awaitingPromptOutputBoundary = true
+        promptBoundaryStartedAt = Date()
+        promptBoundaryFirstOutputAt = nil
+        prompt.willDeliver?(baseline)
+        schedulePromptBoundaryCheck()
+    }
+
+    private func directPromptBaseline() -> RawDerivedCapture {
+        let snapshot = terminalView.renderedSnapshot()
+        guard !snapshot.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty else {
+            return .unavailable(.terminalSnapshotUnavailable)
+        }
+        return .available(
+            RawDerivedSnapshot(
+                text: snapshot,
+                extraction: .renderedBuffer
+            )
+        )
+    }
+
+    /// Captures a bounded tmux pane on the delivery queue. If tmux cannot
+    /// provide it, the only permitted fallback is SwiftTerm's active alternate
+    /// buffer, captured synchronously on the main queue before the write.
+    private nonisolated static func tmuxPromptBaseline(
+        driver: TmuxDriver,
+        sessionName: String,
+        safeRenderedFallback: () -> String?
+    ) -> RawDerivedCapture {
+        if let snapshot = driver.capturePaneSnapshot(session: sessionName) {
+            return .available(
+                RawDerivedSnapshot(
+                    text: snapshot,
+                    extraction: .tmuxPane
+                )
+            )
+        }
+        if let fallback = safeRenderedFallback(),
+           !fallback.trimmingCharacters(
+               in: .whitespacesAndNewlines
+           ).isEmpty {
+            return .available(
+                RawDerivedSnapshot(
+                    text: fallback,
+                    extraction: .renderedBuffer
+                )
+            )
+        }
+        return .unavailable(.terminalSnapshotUnavailable)
     }
 
     private func enqueueDelivery(_ prompt: PendingPrompt) {
@@ -345,18 +753,42 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             let text = prompt.text
             let submit = prompt.submit
             deliveryQueue.async { [weak self] in
-                let delivered = driver.paste(session: name, text: text, submit: submit)
+                let delivered = driver.paste(
+                    session: name,
+                    text: text,
+                    submit: submit
+                ) { [weak self] in
+                    let baseline = Self.tmuxPromptBaseline(
+                        driver: driver,
+                        sessionName: name
+                    ) {
+                        DispatchQueue.main.sync { [weak self] in
+                            self?.terminalView
+                                .scrollbackFreeRenderedSnapshot()
+                        }
+                    }
+                    return DispatchQueue.main.sync { [weak self] in
+                        guard let self, !self.lifecycle.isTerminal else {
+                            return false
+                        }
+                        self.beginPromptWrite(prompt, baseline: baseline)
+                        return true
+                    }
+                }
                 Task { @MainActor in self?.finishDelivery(id, delivered: delivered) }
             }
         } else {
             // Direct PTY writes must happen on the main actor (view access);
-            // enqueueDelivery is already called in FIFO order here.
+            // this is the exact serialized write boundary.
+            beginPromptWrite(prompt, baseline: directPromptBaseline())
             let bracketed = terminalView.getTerminal().bracketedPasteMode
             let bytes = PromptEncoder.encode(text: prompt.text, bracketedPaste: bracketed, submit: prompt.submit)
             if !bytes.isEmpty {
                 terminalView.process.send(data: bytes[...])
             }
+            observedPromptsDelivered += 1
             prompt.completion?(true)
+            deliveryWriteInProgress = false
         }
     }
 
@@ -367,6 +799,63 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             observedPromptsFailed += 1
         }
         deliveryCompletions.removeValue(forKey: id)?(delivered)
+        deliveryWriteInProgress = false
+        if !delivered {
+            cancelPromptOutputBoundary()
+            drainPromptQueueIfPossible()
+        } else if !awaitingPromptOutputBoundary {
+            // The hard cap may have elapsed while a slow write command was
+            // still returning. Do not strand the next serialized prompt.
+            drainPromptQueueIfPossible()
+        }
+    }
+
+    /// A delivery boundary becomes available after output has been quiet for
+    /// the same bounded quiescence interval, or after the hard cap from the
+    /// actual write. This serializes writes; it does not identify an agent turn
+    /// or imply completion.
+    private func schedulePromptBoundaryCheck() {
+        promptBoundaryWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.checkPromptOutputBoundary()
+        }
+        promptBoundaryWorkItem = item
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + readinessQuiescence,
+            execute: item
+        )
+    }
+
+    private func checkPromptOutputBoundary() {
+        guard awaitingPromptOutputBoundary,
+              let started = promptBoundaryStartedAt,
+              !lifecycle.isTerminal
+        else { return }
+        let now = Date()
+        let sinceWrite = now.timeIntervalSince(started)
+        let isQuiet: Bool
+        if promptBoundaryFirstOutputAt != nil,
+           let lastOutputAt {
+            isQuiet = now.timeIntervalSince(lastOutputAt)
+                >= readinessQuiescence
+        } else {
+            isQuiet = false
+        }
+
+        if isQuiet || sinceWrite >= readinessHardCap {
+            cancelPromptOutputBoundary()
+            drainPromptQueueIfPossible()
+        } else {
+            schedulePromptBoundaryCheck()
+        }
+    }
+
+    private func cancelPromptOutputBoundary() {
+        promptBoundaryWorkItem?.cancel()
+        promptBoundaryWorkItem = nil
+        awaitingPromptOutputBoundary = false
+        promptBoundaryStartedAt = nil
+        promptBoundaryFirstOutputAt = nil
     }
 
     private func failPendingPrompts() {
@@ -376,6 +865,15 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             observedPromptsFailed += 1
             prompt.completion?(false)
         }
+        let inFlight = Array(deliveryCompletions.values)
+        deliveryCompletions = [:]
+        for completion in inFlight {
+            observedPromptsFailed += 1
+            completion(false)
+        }
+        deliveryWriteInProgress = false
+        cancelPromptOutputBoundary()
+        conversationCaptureExtraction = nil
     }
 
     /// Banks one observed-usage record for this session. Called on every

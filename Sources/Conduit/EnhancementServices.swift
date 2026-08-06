@@ -18,7 +18,7 @@ enum TerminalVisualState: String {
         switch self {
         case .launching: return "starting"
         case .working: return "output active"
-        case .running: return "ready"
+        case .running: return "running"
         case .detached: return "detached"
         case .exited: return "exited"
         case .failed: return "failed"

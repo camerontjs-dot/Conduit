@@ -7,11 +7,9 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
-    @State private var projectSearch = ""
     /// Both supported compositions use `.all`: Focused two-column shows rail+workspace;
     /// Balanced/Operator three-column pins all three including context detail.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @FocusState private var isProjectSearchFocused: Bool
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -75,16 +73,21 @@ struct RootView: View {
                 .environmentObject(model)
                 .environmentObject(themeStore)
         }
+        .sheet(isPresented: $model.showNewTask) {
+            NewTaskView()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
+        .sheet(isPresented: $model.showProjectBrowser) {
+            ProjectScopeBrowser()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
         .onChange(of: model.speech.isRecording) { recording in
             if !recording { model.absorbSpeechTranscript() }
         }
-        .onChange(of: model.projectSearchFocusRequest) { _ in
-            // Keep density-appropriate columns (rail visible); do not collapse pinned detail.
+        .onChange(of: model.taskSearchFocusRequest) { _ in
             columnVisibility = densityColumnVisibility
-            Task {
-                await Task.yield()
-                isProjectSearchFocused = true
-            }
         }
         .onChange(of: model.density) { _ in
             columnVisibility = densityColumnVisibility
@@ -104,7 +107,8 @@ struct RootView: View {
                 workspaceColumn
             }
 
-            if model.isContextInspectorPresented, let project = model.selectedProject {
+            if model.isContextInspectorPresented,
+               let project = model.selectedTaskProject ?? model.selectedProject {
                 focusedContextOverlay(project: project)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     .zIndex(1)
@@ -126,7 +130,7 @@ struct RootView: View {
 
     private var sidebarColumn: some View {
         sidebar
-            .navigationSplitViewColumnWidth(min: 200, ideal: 235, max: 280)
+            .navigationSplitViewColumnWidth(min: 225, ideal: 275, max: 340)
             .background(palette.rail)
     }
 
@@ -136,13 +140,15 @@ struct RootView: View {
                 onboarding
             } else if model.rootAccessNeedsAuthorization {
                 rootAuthorization
-            } else if let project = model.selectedProject {
+            } else if let project = model.selectedTaskProject ?? model.selectedProject {
                 ProjectWorkspaceView(project: project)
+            } else if let task = model.selectedTaskSnapshot {
+                HistoricalTaskWorkspaceView(task: task)
             } else {
                 EmptyStateView(
-                    title: "No MainFrame projects found",
-                    systemImage: "folder.badge.questionmark",
-                    description: "Choose another MainFrame root or create a project under 30_projects."
+                    title: "No task selected",
+                    systemImage: "bubble.left.and.bubble.right",
+                    description: "Start a new task or choose one from task history."
                 )
             }
         }
@@ -151,8 +157,8 @@ struct RootView: View {
 
     private var contextDetailColumn: some View {
         Group {
-            if let project = model.selectedProject {
-                ContextPanel(project: project)
+            if let project = model.selectedTaskProject ?? model.selectedProject {
+                projectContextColumn(project: project)
             } else {
                 EmptyStateView(
                     title: "No project selected",
@@ -201,7 +207,7 @@ struct RootView: View {
 
                     Divider()
 
-                    ContextPanel(project: project)
+                    projectContextColumn(project: project)
                 }
                 .frame(width: 320)
                 .frame(maxHeight: .infinity)
@@ -211,6 +217,14 @@ struct RootView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Project context inspector")
+    }
+
+    private func projectContextColumn(project: MainframeProject) -> some View {
+        VStack(spacing: 0) {
+            WorkSessionBar(project: project)
+            Divider().overlay(palette.line)
+            ContextPanel(project: project)
+        }
     }
 
     /// Always-reachable palette picker. Swatches resolve each palette's accent
@@ -242,120 +256,7 @@ struct RootView: View {
     }
 
     private var sidebar: some View {
-        let matches = model.projects.filter { ProjectNavigation.matches($0, query: projectSearch) }
-        let roots = matches.filter(\.isMainframeRoot)
-        let active = matches.filter(ProjectNavigation.isActive)
-        let other = matches.filter { !$0.isMainframeRoot && !ProjectNavigation.isActive($0) }
-
-        return VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(palette.dim)
-                    .accessibilityHidden(true)
-                TextField("Find a project", text: $projectSearch)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(palette.text)
-                    .focused($isProjectSearchFocused)
-                    .onSubmit(selectFirstSearchMatch)
-                    .accessibilityLabel("Find a project")
-                if !projectSearch.isEmpty {
-                    Button {
-                        projectSearch = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(palette.dim)
-                    .accessibilityLabel("Clear project search")
-                    .help("Clear project search")
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            List(selection: $model.selectedProjectID) {
-                if !roots.isEmpty {
-                    Section("Workspace") {
-                        ForEach(roots) { project in
-                            projectRow(project)
-                        }
-                    }
-                }
-                if !active.isEmpty {
-                    Section("Active") {
-                        ForEach(active) { project in
-                            projectRow(project)
-                        }
-                    }
-                }
-                if !other.isEmpty {
-                    Section("Other") {
-                        ForEach(other) { project in
-                            projectRow(project)
-                        }
-                    }
-                }
-                if matches.isEmpty {
-                    Text("No projects match “\(projectSearch)”.")
-                        .foregroundStyle(palette.dim)
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(palette.rail)
-            .onChange(of: model.selectedProjectID) { selectedID in
-                if let selectedID, let project = model.projects.first(where: { $0.id == selectedID }) {
-                    model.selectProject(project)
-                }
-            }
-
-            // Work-session card lives in the project rail (below list, above footer).
-            if let project = model.selectedProject {
-                WorkSessionBar(project: project)
-            }
-
-            HStack {
-                Button(action: model.chooseMainframeRoot) {
-                    Label("Choose Root", systemImage: "folder")
-                }
-                .accessibilityLabel("Choose MainFrame Root")
-                Spacer()
-                Button {
-                    model.showDiagnostics = true
-                } label: {
-                    Image(systemName: "stethoscope")
-                }
-                .accessibilityLabel("Conduit Doctor")
-                .help("Conduit Doctor")
-                Button(action: model.refreshProjects) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
-                .accessibilityLabel("Refresh MainFrame projects")
-                .help("Refresh MainFrame")
-            }
-            .padding(10)
-            .background(palette.surface)
-        }
-    }
-
-    private func selectFirstSearchMatch() {
-        guard let project = ProjectNavigation.firstMatch(
-            in: model.projects,
-            query: projectSearch
-        ) else { return }
-        model.selectProject(project)
-        projectSearch = ""
-        isProjectSearchFocused = false
-        columnVisibility = densityColumnVisibility
-    }
-
-    private func projectRow(_ project: MainframeProject) -> some View {
-        ProjectRow(project: project)
-            .tag(project.id)
-            .contentShape(Rectangle())
-            .onTapGesture { model.selectProject(project) }
+        TaskSidebarView()
     }
 
     private var onboarding: some View {
@@ -432,12 +333,8 @@ private struct ProjectWorkspaceView: View {
                 OperatorOpsDeck(project: project)
                 Divider()
             }
-            SessionBar()
-            Divider()
-            terminalArea
+            SessionSurfaceView(runtime: selectedTaskRuntime)
                 .frame(minHeight: 240)
-            Divider()
-            ComposerView()
         }
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $model.isDropTargeted) { providers in
             for provider in providers {
@@ -465,76 +362,44 @@ private struct ProjectWorkspaceView: View {
         }
     }
 
-    private var terminalArea: some View {
-        ZStack {
-            palette.sink
-            if model.sessionsForSelectedProject.isEmpty {
-                EmptyStateView(
-                    title: "No terminal session",
-                    systemImage: "terminal",
-                    description: "Launch an agent or open a shell from the toolbar."
-                )
-            } else if let active = activeTerminalRuntime {
-                // Mockup `.terminal`: a surface card inset from the stage, with
-                // `.term-scroll` padding so output never runs into the edge.
-                TerminalHostView(
-                    controller: active.controller,
-                    theme: TerminalTheme(palette: palette)
-                )
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(palette.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(palette.line, lineWidth: 1)
-                )
-                .padding(.horizontal, 10)
-                .padding(.top, 6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .clipped()
-        .frame(minWidth: 280, minHeight: 240)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var activeTerminalRuntime: TerminalRuntime? {
-        let sessions = model.sessionsForSelectedProject
-        if let id = model.activeSessionID, let match = sessions.first(where: { $0.id == id }) {
-            return match
-        }
-        return sessions.first
+    private var selectedTaskRuntime: TerminalRuntime? {
+        model.selectedTaskRuntime
     }
 }
 
-private struct ProjectRow: View {
+private struct HistoricalTaskWorkspaceView: View {
+    @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
-    let project: MainframeProject
+    let task: TaskSessionSnapshot
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
     }
 
     var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: project.isMainframeRoot ? "shippingbox.fill" : "folder.fill")
-                .foregroundStyle(project.isMainframeRoot ? palette.text : palette.dim)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.metadata.title)
-                    .lineLimit(1)
-                    .foregroundStyle(palette.text)
-                if let state = project.metadata.projectState ?? project.metadata.status {
-                    Text(state.uppercased())
-                        .font(.caption2)
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.displayTitle)
+                        .font(.headline)
+                        .foregroundStyle(palette.text)
+                    Text("\(task.metadata.workspace.fallbackTitle) is not in the current MainFrame scan")
+                        .font(.caption)
                         .foregroundStyle(palette.dim)
                 }
+                Spacer()
+                Button("Browse Projects") {
+                    model.showProjectBrowser = true
+                }
+                .buttonStyle(.bordered)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            Divider().overlay(palette.line)
+            SessionSurfaceView(runtime: model.selectedTaskRuntime)
         }
-        .padding(.vertical, 3)
-        .help(project.metadata.title)
-        .accessibilityElement(children: .combine)
+        .background(palette.app)
     }
 }
 

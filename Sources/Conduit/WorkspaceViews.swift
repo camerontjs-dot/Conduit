@@ -13,10 +13,6 @@ struct WorkspaceHeader: View {
         themeStore.palette(for: colorScheme)
     }
 
-    private var launchAgents: [AgentProfile] {
-        model.enabledAgents.filter { $0.kind != .shell }
-    }
-
     /// Focused hides action titles; Balanced/Operator show icon + label.
     private var showsActionLabels: Bool {
         model.density != .focused
@@ -62,18 +58,18 @@ struct WorkspaceHeader: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.metadata.title)
+                Text(model.selectedTaskSnapshot?.displayTitle ?? project.metadata.title)
                     .font(.headline)
                     .foregroundStyle(palette.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .help(project.metadata.title)
-                Text(project.path.path)
+                    .help(model.selectedTaskSnapshot?.displayTitle ?? project.metadata.title)
+                Text(taskSubtitle)
                     .font(.caption)
                     .foregroundStyle(palette.dim)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(project.path.path)
+                    .help(taskSubtitle)
             }
             .frame(minWidth: 120, idealWidth: 210, maxWidth: 340, alignment: .leading)
             .layoutPriority(1)
@@ -85,26 +81,13 @@ struct WorkspaceHeader: View {
             Spacer(minLength: 4)
 
             Button {
-                model.launchDefaultShell()
+                model.showNewTask = true
             } label: {
-                actionLabel("Shell", systemImage: "terminal")
+                actionLabel("New Task", systemImage: "plus")
             }
-            .buttonStyle(.bordered)
-            .accessibilityLabel("Open or reconnect project shell")
-            .help("Open or reconnect to the project shell")
-
-            Menu {
-                ForEach(launchAgents) { agent in
-                    Button(agent.name) { model.launch(agent: agent) }
-                }
-            } label: {
-                actionLabel("Launch", systemImage: "sparkles")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .disabled(launchAgents.isEmpty)
-            .accessibilityLabel("Launch or reconnect agent")
-            .help("Launch or reconnect to an agent")
+            .buttonStyle(.borderedProminent)
+            .accessibilityLabel("New Task")
+            .help("Start an agent task and choose its MainFrame scope")
 
             Menu {
                 Button("Move selection to composer", action: model.beginForwardingToComposer)
@@ -122,6 +105,12 @@ struct WorkspaceHeader: View {
 
             Menu {
                 Button("Build Context Bundle", action: model.prepareContextBundle)
+                Button("Open Project Shell", action: {
+                    model.launchDefaultShell()
+                })
+                Button("Resume Durable Session…") {
+                    model.showResumeSessions = true
+                }
                 Button("Resource Deck") { model.showResources = true }
                 Button("Conduit Doctor") { model.showDiagnostics = true }
             } label: {
@@ -145,6 +134,14 @@ struct WorkspaceHeader: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
+    }
+
+    private var taskSubtitle: String {
+        guard let task = model.selectedTaskSnapshot else {
+            return project.path.path
+        }
+        let agent = task.metadata.agentName ?? "Agent not recorded"
+        return "\(agent) · \(project.metadata.title) · \(project.path.path)"
     }
 
     @ViewBuilder
@@ -1065,7 +1062,7 @@ private struct LaunchedOperatorSeat: View {
         let state = controller.visualState(at: date)
         let isActive = runtime.id == model.activeSessionID
         Button {
-            model.activeSessionID = runtime.id
+            model.selectSession(runtime)
         } label: {
             seatChrome(
                 state: state,
@@ -1074,7 +1071,7 @@ private struct LaunchedOperatorSeat: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(agent.name), \(state.label)")
-        .accessibilityHint("Switches the terminal to the existing \(agent.name) session")
+        .accessibilityHint("Switches to the existing \(agent.name) session")
         .help("Select \(agent.name) session")
     }
 
@@ -1144,7 +1141,7 @@ private struct SessionPill: View {
         HStack(spacing: 6) {
             AgentSpriteView(profile: runtime.descriptor.agent, state: state)
             Button {
-                model.activeSessionID = runtime.id
+                model.selectSession(runtime)
             } label: {
                 HStack(spacing: 6) {
                     Circle()
@@ -1164,8 +1161,8 @@ private struct SessionPill: View {
             .accessibilityLabel("\(runtime.descriptor.agent.name) session, \(state.label), \(controller.backendLabel)")
             .accessibilityHint(
                 sprite.isExactMatch
-                    ? "Switches the terminal to this session"
-                    : "Switches the terminal to this session. A generic character is shown because this profile has no dedicated sprite."
+                    ? "Switches to this session"
+                    : "Switches to this session. A generic character is shown because this profile has no dedicated sprite."
             )
             Button {
                 model.closeSession(runtime)

@@ -4,6 +4,7 @@
 // CI still runs the full XCTest suite with Xcode.
 
 import ConduitCore
+import Dispatch
 import Foundation
 
 var passed = 0
@@ -89,6 +90,756 @@ check("sprite mapping resolves Claude executable exactly",
 check("sprite mapping keeps custom profiles generic",
       AgentSpriteResolver.resolve(AgentProfile(name: "Codexish", command: "custom-agent"))
         == AgentSpriteResolution(skin: nil, isExactMatch: false))
+
+// MARK: - Conversation-first session presentation
+
+check("conversation is the session-surface default",
+      SessionSurface.productDefault == .conversation)
+check("raw remains the second first-class session surface",
+      SessionSurface.allCases == [.conversation, .raw])
+check("session-surface labels are Conversation and Raw",
+      SessionSurface.allCases.map(\.displayName) == ["Conversation", "Raw"])
+check("prompt handoff label does not imply agent acceptance",
+      PromptDeliveryState.delivered.displayName == "Sent to terminal")
+
+let presentationDate = Date(timeIntervalSince1970: 1_800_000_000)
+let openingEvent = SessionPresentation.openingEvent(
+    .resumed(
+        agentName: "Codex",
+        tmuxSessionName: "conduit-mainframe-codex",
+        attachedElsewhere: true
+    ),
+    occurredAt: presentationDate
+)
+check("session opening is Conduit-recorded",
+      openingEvent.authority == .conduitRecorded)
+check("session opening event round-trips",
+      (try? JSONDecoder().decode(
+        SessionPresentationEvent.self,
+        from: JSONEncoder().encode(openingEvent)
+      )) == openingEvent)
+
+let firstPromptEvent = SessionPresentation.promptEvent(
+    text: "Review this change",
+    attachmentPaths: ["/tmp/example.swift"],
+    renderedPayload: "Review this change\n\nAttachments:\n- /tmp/example.swift"
+)
+let secondPromptEvent = SessionPresentation.promptEvent(
+    text: "Keep this queued",
+    attachmentPaths: [],
+    renderedPayload: "Keep this queued"
+)
+if case .userPrompt(let submitted) = firstPromptEvent.kind {
+    check("prompt event retains human text", submitted.text == "Review this change")
+    check("prompt event retains local attachment paths",
+          submitted.attachmentPaths == ["/tmp/example.swift"])
+    check("prompt event retains exact rendered payload",
+          submitted.renderedPayload == "Review this change\n\nAttachments:\n- /tmp/example.swift")
+    check("prompt event starts queued", submitted.delivery == .queued)
+    check("native composer prompt retains its origin", submitted.origin == .composer)
+} else {
+    check("prompt event retains human text", false)
+    check("prompt event retains local attachment paths", false)
+    check("prompt event retains exact rendered payload", false)
+    check("prompt event starts queued", false)
+    check("native composer prompt retains its origin", false)
+}
+let forwardedPresentation = SessionPresentation.promptEvent(
+    origin: .forwardedTerminalOutput(sourceAgentName: "Claude"),
+    text: "selected terminal prose",
+    attachmentPaths: [],
+    renderedPayload: "Evidence boundary: this is unverified terminal output."
+)
+if case .userPrompt(let forwardedPrompt) = forwardedPresentation.kind {
+    check("forwarded prompt retains unverified terminal origin",
+          forwardedPrompt.origin == .forwardedTerminalOutput(sourceAgentName: "Claude")
+            && forwardedPrompt.renderedPayload.contains("unverified terminal output"))
+} else {
+    check("forwarded prompt retains unverified terminal origin", false)
+}
+let reducedPresentation = SessionPresentation.updatingPromptDelivery(
+    in: [openingEvent, firstPromptEvent, secondPromptEvent],
+    eventID: firstPromptEvent.id,
+    to: .delivered
+)
+check("delivery reducer preserves opening event",
+      reducedPresentation[0] == openingEvent)
+check("delivery reducer preserves unrelated prompt",
+      reducedPresentation[2] == secondPromptEvent)
+if case .userPrompt(let deliveredPrompt) = reducedPresentation[1].kind {
+    check("delivery reducer updates matching prompt only",
+          deliveredPrompt.delivery == .delivered
+            && deliveredPrompt.text == "Review this change")
+} else {
+    check("delivery reducer updates matching prompt only", false)
+}
+let visibleOutput = SessionPresentation.agentOutputEvent(
+    promptEventID: firstPromptEvent.id,
+    text: "Visible terminal response",
+    extraction: .renderedBuffer,
+    truncated: false
+)
+let settledOutput = SessionPresentation.agentOutputEvent(
+    promptEventID: firstPromptEvent.id,
+    text: "Visible terminal response, settled",
+    state: .settled,
+    extraction: .renderedBuffer,
+    truncated: false,
+    id: visibleOutput.id,
+    occurredAt: visibleOutput.occurredAt
+)
+let outputProjection = SessionPresentation.upsertingAgentOutput(
+    in: [visibleOutput],
+    event: settledOutput
+)
+check("raw-derived output keeps explicit authority",
+      settledOutput.authority == .derivedFromRaw)
+check("agent-output revision keeps one stable timeline item",
+      outputProjection == [settledOutput])
+let derivedOutput = RawDerivedOutputReducer.derive(
+    baseline: RawDerivedSnapshot(
+        text: "Agent\nReady",
+        extraction: .renderedBuffer
+    ),
+    current: RawDerivedSnapshot(
+        text: "Agent\nReady\nQuestion\n\nVisible answer",
+        extraction: .renderedBuffer
+    ),
+    promptText: "Question"
+)
+let derivedOutputMatches: Bool
+if case .output(let result) = derivedOutput {
+    derivedOutputMatches = result.text == "Visible answer"
+        && result.strategy == .appendedSuffix
+} else {
+    derivedOutputMatches = false
+}
+check("rendered-buffer reducer removes exact prompt echo",
+      derivedOutputMatches)
+check("terminal delivery state cannot regress",
+      SessionPresentation.updatingPromptDelivery(
+        in: reducedPresentation,
+        eventID: firstPromptEvent.id,
+        to: .failed
+      ) == reducedPresentation)
+
+// MARK: - Metadata-only TaskSession continuity and catalog
+
+let taskHistorySessionID = TaskSessionID(
+    rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+)
+let taskHistoryAttemptID = RuntimeAttemptID(
+    rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+)
+check("task and runtime attempt identities stay distinct",
+      taskHistorySessionID.rawValue != taskHistoryAttemptID.rawValue)
+check("task identity round-trips as one value",
+      (try? JSONDecoder().decode(
+        TaskSessionID.self,
+        from: JSONEncoder().encode(taskHistorySessionID)
+      )) == taskHistorySessionID)
+
+let taskHistoryRoot = URL(fileURLWithPath: "/tmp/MainFrame/./")
+let taskHistoryProject = URL(
+    fileURLWithPath: "/tmp/MainFrame/30_projects/../30_projects/conduit"
+)
+let taskHistoryScope = WorkspaceScopeSnapshot.project(
+    ProjectWorkspaceScopeSnapshot(
+        rootURL: taskHistoryRoot,
+        projectURL: taskHistoryProject,
+        fallbackTitle: "Conduit",
+        fallbackSlug: "conduit"
+    )
+)
+check("task workspace root path is standardized",
+      taskHistoryScope.rootPath == "/tmp/MainFrame")
+check("task project path is standardized",
+      taskHistoryScope.projectPath == "/tmp/MainFrame/30_projects/conduit")
+check("task workspace keeps fallback title and slug",
+      taskHistoryScope.fallbackTitle == "Conduit"
+        && taskHistoryScope.fallbackSlug == "conduit")
+let taskHistoryUnknownAgent = TaskSessionMetadata(
+    workspace: taskHistoryScope,
+    agentName: nil,
+    defaultTitle: ""
+)
+let taskHistoryUnknownAgentEvent = TaskSessionEvent(
+    taskSessionID: taskHistorySessionID,
+    authority: .conduitRecorded,
+    kind: .created(taskHistoryUnknownAgent)
+)
+let taskHistoryUnknownAgentSnapshot = TaskSessionProjection.project(
+    taskSessionID: taskHistorySessionID,
+    events: [taskHistoryUnknownAgentEvent]
+)
+check("unknown agent identity stays absent instead of persisting a placeholder",
+      taskHistoryUnknownAgentSnapshot?.metadata.agentName == nil
+        && taskHistoryUnknownAgentSnapshot?.displayTitle == "Conduit")
+
+let taskHistoryDate = Date(timeIntervalSince1970: 1_800_010_000)
+let taskHistoryMetadata = TaskSessionMetadata(
+    workspace: taskHistoryScope,
+    agentName: "Codex",
+    defaultTitle: "Codex · Conduit"
+)
+let taskHistoryEvents = [
+    TaskSessionEvent(
+        taskSessionID: taskHistorySessionID,
+        occurredAt: taskHistoryDate,
+        recordedAt: taskHistoryDate,
+        authority: .conduitRecorded,
+        kind: .created(taskHistoryMetadata)
+    ),
+    TaskSessionEvent(
+        taskSessionID: taskHistorySessionID,
+        occurredAt: taskHistoryDate.addingTimeInterval(1),
+        recordedAt: taskHistoryDate.addingTimeInterval(1),
+        authority: .operatorAsserted,
+        kind: .titleOverridden("  Release review  ")
+    ),
+    TaskSessionEvent(
+        taskSessionID: taskHistorySessionID,
+        occurredAt: taskHistoryDate.addingTimeInterval(2),
+        recordedAt: taskHistoryDate.addingTimeInterval(2),
+        authority: .operatorAsserted,
+        kind: .pinChanged(true)
+    ),
+    TaskSessionEvent(
+        taskSessionID: taskHistorySessionID,
+        occurredAt: taskHistoryDate.addingTimeInterval(3),
+        recordedAt: taskHistoryDate.addingTimeInterval(3),
+        authority: .conduitRecorded,
+        kind: .operationalStateChanged(.runtimeOpened(taskHistoryAttemptID))
+    )
+]
+let taskHistorySnapshot = TaskSessionProjection.project(
+    taskSessionID: taskHistorySessionID,
+    events: taskHistoryEvents
+)
+check("task projection applies an explicit trimmed title",
+      taskHistorySnapshot?.displayTitle == "Release review")
+check("task projection applies pin and operational metadata",
+      taskHistorySnapshot?.isPinned == true
+        && taskHistorySnapshot?.operationalState == .runtimeOpened(taskHistoryAttemptID))
+check("runtime detach can be Conduit-recorded or process-observed",
+      TaskSessionEvent(
+        taskSessionID: taskHistorySessionID,
+        authority: .conduitRecorded,
+        kind: .operationalStateChanged(.runtimeDetached(taskHistoryAttemptID))
+      ).hasValidAuthority
+        && TaskSessionEvent(
+            taskSessionID: taskHistorySessionID,
+            authority: .processObserved,
+            kind: .operationalStateChanged(.runtimeDetached(taskHistoryAttemptID))
+        ).hasValidAuthority)
+
+let taskHistoryResetEvents = taskHistoryEvents + [
+    TaskSessionEvent(
+        taskSessionID: taskHistorySessionID,
+        occurredAt: taskHistoryDate.addingTimeInterval(4),
+        recordedAt: taskHistoryDate.addingTimeInterval(4),
+        authority: .operatorAsserted,
+        kind: .titleReset
+    ),
+    TaskSessionEvent(
+        taskSessionID: taskHistorySessionID,
+        occurredAt: taskHistoryDate.addingTimeInterval(5),
+        recordedAt: taskHistoryDate.addingTimeInterval(5),
+        authority: .operatorAsserted,
+        kind: .archiveChanged(true)
+    )
+]
+let taskHistoryReset = TaskSessionProjection.project(
+    taskSessionID: taskHistorySessionID,
+    events: taskHistoryResetEvents
+)
+check("task title reset restores deterministic default",
+      taskHistoryReset?.displayTitle == "Codex · Conduit")
+check("task archive is metadata, not deletion",
+      taskHistoryReset?.isArchived == true)
+let taskHistoryEncoded = (
+    try? String(
+        decoding: JSONEncoder().encode(taskHistoryResetEvents),
+        as: UTF8.self
+    ).lowercased()
+) ?? ""
+check("task continuity metadata retains no transcript fields",
+      !taskHistoryEncoded.contains("prompt")
+        && !taskHistoryEncoded.contains("attachment")
+        && !taskHistoryEncoded.contains("renderedpayload"))
+
+if let taskHistorySnapshot {
+    check("live runtime observation wins availability projection",
+          TaskSessionAvailabilityResolver.resolve(
+            session: taskHistorySnapshot,
+            context: TaskSessionAvailabilityContext(
+                liveRuntimeAttempts: [taskHistorySessionID: taskHistoryAttemptID],
+                reconnectableTaskSessionIDs: [taskHistorySessionID],
+                externalObservation: .succeeded(observedAt: taskHistoryDate)
+            )
+          ) == .running(taskHistoryAttemptID))
+    check("reconnectable observation is distinct from running",
+          TaskSessionAvailabilityResolver.resolve(
+            session: taskHistorySnapshot,
+            context: TaskSessionAvailabilityContext(
+                reconnectableTaskSessionIDs: [taskHistorySessionID],
+                externalObservation: .succeeded(observedAt: taskHistoryDate)
+            )
+          ) == .reconnectable)
+}
+
+let taskHistorySecondID = TaskSessionID(
+    rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+)
+let taskHistorySecondEvents = [
+    TaskSessionEvent(
+        taskSessionID: taskHistorySecondID,
+        occurredAt: taskHistoryDate.addingTimeInterval(3),
+        recordedAt: taskHistoryDate.addingTimeInterval(3),
+        authority: .conduitRecorded,
+        kind: .created(
+            TaskSessionMetadata(
+                workspace: taskHistoryScope,
+                agentName: "Claude",
+                defaultTitle: "Alpha review"
+            )
+        )
+    )
+]
+let taskHistorySecond = TaskSessionProjection.project(
+    taskSessionID: taskHistorySecondID,
+    events: taskHistorySecondEvents
+)
+if let taskHistorySnapshot, let taskHistorySecond {
+    let taskHistoryRows = SessionCatalog.rows(
+        sessions: [taskHistorySecond, taskHistorySnapshot],
+        availabilityContext: TaskSessionAvailabilityContext(),
+        query: TaskSessionCatalogQuery(
+            workspaceRootURL: taskHistoryRoot,
+            projectURL: taskHistoryProject
+        )
+    )
+    check("catalog keeps pinned sessions first",
+          taskHistoryRows.first?.id == taskHistorySessionID)
+    check("catalog searches title case-insensitively",
+          SessionCatalog.rows(
+            sessions: [taskHistorySecond, taskHistorySnapshot],
+            availabilityContext: TaskSessionAvailabilityContext(),
+            query: TaskSessionCatalogQuery(searchText: "ALPHA")
+          ).map(\.id) == [taskHistorySecondID])
+}
+
+// MARK: - Append-only TaskSession event storage
+
+withTempDir { temporaryDirectory in
+    func taskLogID(_ value: String) -> TaskSessionID {
+        TaskSessionID(rawValue: UUID(uuidString: value)!)
+    }
+
+    func taskLogMetadata(_ title: String) -> TaskSessionMetadata {
+        TaskSessionMetadata(
+            workspace: taskHistoryScope,
+            agentName: "Codex",
+            defaultTitle: title
+        )
+    }
+
+    func taskLogEvent(
+        _ taskSessionID: TaskSessionID,
+        id: UUID = UUID(),
+        at date: Date,
+        authority: TaskSessionEventAuthority,
+        kind: TaskSessionEventKind
+    ) -> TaskSessionEvent {
+        TaskSessionEvent(
+            id: id,
+            taskSessionID: taskSessionID,
+            occurredAt: date,
+            recordedAt: date,
+            authority: authority,
+            kind: kind
+        )
+    }
+
+    func encodedTaskLogEvent(_ event: TaskSessionEvent) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(event)
+    }
+
+    func appendTaskLogBytes(_ data: Data, to url: URL) throws {
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: data)
+    }
+
+    func appendTaskLogLines(_ lines: [Data], to url: URL) throws {
+        var bytes = Data()
+        for line in lines {
+            bytes.append(line)
+            bytes.append(UInt8(ascii: "\n"))
+        }
+        try appendTaskLogBytes(bytes, to: url)
+    }
+
+    let taskLogDate = Date(timeIntervalSince1970: 1_800_020_000)
+
+    // Canonical append/read/discovery/load, including deterministic UUID order.
+    let appendDirectory = temporaryDirectory.appendingPathComponent("append-load")
+    let taskLogFirstID = taskLogID(
+        "00000000-0000-0000-0000-000000000101"
+    )
+    let taskLogSecondID = taskLogID(
+        "00000000-0000-0000-0000-000000000102"
+    )
+    let taskLogFirst = TaskSessionEventLog(
+        directory: appendDirectory,
+        taskSessionID: taskLogFirstID
+    )
+    let taskLogSecond = TaskSessionEventLog(
+        directory: appendDirectory,
+        taskSessionID: taskLogSecondID
+    )
+    let taskLogCreation = taskLogEvent(
+        taskLogFirstID,
+        at: taskLogDate,
+        authority: .conduitRecorded,
+        kind: .created(taskLogMetadata("Stored first task"))
+    )
+    let taskLogPin = taskLogEvent(
+        taskLogFirstID,
+        at: taskLogDate.addingTimeInterval(1),
+        authority: .operatorAsserted,
+        kind: .pinChanged(true)
+    )
+    try taskLogSecond.append(
+        taskLogEvent(
+            taskLogSecondID,
+            at: taskLogDate.addingTimeInterval(2),
+            authority: .conduitRecorded,
+            kind: .created(taskLogMetadata("Stored second task"))
+        )
+    )
+    try taskLogFirst.append(taskLogCreation)
+    try taskLogFirst.append(taskLogPin)
+    let taskLogFilenames = try FileManager.default.contentsOfDirectory(
+        atPath: appendDirectory.path
+    ).sorted()
+    check("task log uses one canonical UUID file per task",
+          taskLogFilenames == [
+            "00000000-0000-0000-0000-000000000101.jsonl",
+            "00000000-0000-0000-0000-000000000102.jsonl"
+          ])
+    let taskLogRead = taskLogFirst.read()
+    check("task log append and read retain file order",
+          taskLogRead.events == [taskLogCreation, taskLogPin]
+            && taskLogRead.diagnostics.isEmpty)
+    let taskLogStore = TaskSessionEventStore(directory: appendDirectory)
+    check("task log discovery is deterministic",
+          taskLogStore.logs().logs.map(\.taskSessionID)
+            == [taskLogFirstID, taskLogSecondID])
+    let taskLogLoaded = taskLogStore.load()
+    check("task log store projects valid snapshots",
+          taskLogLoaded.snapshots.map(\.id)
+            == [taskLogFirstID, taskLogSecondID]
+            && taskLogLoaded.snapshots.first?.isPinned == true
+            && taskLogLoaded.diagnostics.isEmpty)
+
+    let conversationDirectory = temporaryDirectory
+        .appendingPathComponent("conversations")
+    let conversationLog = ConversationEventLog(
+        directory: conversationDirectory,
+        taskSessionID: taskLogFirstID
+    )
+    let retainedPrompt = SessionPresentation.promptEvent(
+        text: "Retain this locally",
+        attachmentPaths: ["/tmp/reference.md"],
+        renderedPayload: "Retain this locally\n\nAttachments:\n- /tmp/reference.md",
+        occurredAt: taskLogDate
+    )
+    let retainedDelivery = SessionPresentation.updatingPromptDelivery(
+        in: [retainedPrompt],
+        eventID: retainedPrompt.id,
+        to: .delivered
+    )[0]
+    try conversationLog.append(retainedPrompt)
+    try conversationLog.append(retainedDelivery)
+    let retainedConversation = conversationLog.read()
+    check("conversation log projects the latest append-only revision",
+          retainedConversation.events == [retainedDelivery]
+            && retainedConversation.diagnostics.isEmpty)
+
+    // Concurrent writers must retain every whole event. `flock` is the
+    // cross-process authority; this in-process pressure check also catches
+    // stale-offset overwrites and line interleaving.
+    let concurrentDirectory = temporaryDirectory
+        .appendingPathComponent("concurrent")
+    let concurrentID = taskLogID(
+        "00000000-0000-0000-0000-000000000105"
+    )
+    let concurrentLog = TaskSessionEventLog(
+        directory: concurrentDirectory,
+        taskSessionID: concurrentID
+    )
+    let concurrentCreation = taskLogEvent(
+        concurrentID,
+        at: taskLogDate,
+        authority: .conduitRecorded,
+        kind: .created(taskLogMetadata("Concurrent task"))
+    )
+    try concurrentLog.append(concurrentCreation)
+    let concurrentEvents = (0..<32).map { index in
+        taskLogEvent(
+            concurrentID,
+            at: taskLogDate.addingTimeInterval(Double(index + 1)),
+            authority: .operatorAsserted,
+            kind: .pinChanged(index.isMultiple(of: 2))
+        )
+    }
+    let concurrentErrorLock = NSLock()
+    var concurrentErrors: [String] = []
+    DispatchQueue.concurrentPerform(
+        iterations: concurrentEvents.count
+    ) { index in
+        do {
+            try concurrentLog.append(concurrentEvents[index])
+        } catch {
+            concurrentErrorLock.lock()
+            concurrentErrors.append(String(describing: error))
+            concurrentErrorLock.unlock()
+        }
+    }
+    let concurrentRead = concurrentLog.read()
+    check("task log concurrent appends retain every whole event",
+          concurrentErrors.isEmpty
+            && concurrentRead.diagnostics.isEmpty
+            && concurrentRead.events.count == concurrentEvents.count + 1
+            && Set(concurrentRead.events.map(\.id))
+                == Set(([concurrentCreation] + concurrentEvents).map(\.id)))
+
+    // A mismatched event cannot create or contaminate another task's file.
+    let mismatchExpectedID = taskLogID(
+        "00000000-0000-0000-0000-000000000110"
+    )
+    let mismatchActualID = taskLogID(
+        "00000000-0000-0000-0000-000000000111"
+    )
+    let mismatchLog = TaskSessionEventLog(
+        directory: appendDirectory,
+        taskSessionID: mismatchExpectedID
+    )
+    var mismatchRejected = false
+    do {
+        try mismatchLog.append(
+            taskLogEvent(
+                mismatchActualID,
+                at: taskLogDate,
+                authority: .conduitRecorded,
+                kind: .created(taskLogMetadata("Wrong task"))
+            )
+        )
+    } catch let error as TaskSessionEventLogError {
+        mismatchRejected = error == .mismatchedTaskSessionID(
+            expected: mismatchExpectedID,
+            actual: mismatchActualID
+        )
+    }
+    check("task log rejects mismatched task identity",
+          mismatchRejected
+            && !FileManager.default.fileExists(atPath: mismatchLog.url.path))
+
+    // Torn bytes remain visible, while a following append starts a clean line.
+    let tornDirectory = temporaryDirectory.appendingPathComponent("torn")
+    let tornID = taskLogID("00000000-0000-0000-0000-000000000120")
+    let tornLog = TaskSessionEventLog(
+        directory: tornDirectory,
+        taskSessionID: tornID
+    )
+    let tornCreation = taskLogEvent(
+        tornID,
+        at: taskLogDate,
+        authority: .conduitRecorded,
+        kind: .created(taskLogMetadata("Torn task"))
+    )
+    let tornPin = taskLogEvent(
+        tornID,
+        at: taskLogDate.addingTimeInterval(1),
+        authority: .operatorAsserted,
+        kind: .pinChanged(true)
+    )
+    try tornLog.append(tornCreation)
+    try appendTaskLogBytes(Data("{\"broken\"".utf8), to: tornLog.url)
+    try tornLog.append(tornPin)
+    let tornBytesBeforeRead = try Data(contentsOf: tornLog.url)
+    let tornRead = tornLog.read()
+    check("task log heals a torn final line",
+          String(decoding: tornBytesBeforeRead, as: UTF8.self)
+            .contains("{\"broken\"\n")
+            && tornRead.events == [tornCreation, tornPin]
+            && tornRead.diagnostics.map(\.kind) == [.malformedLine])
+    let tornBytesAfterRead = try Data(contentsOf: tornLog.url)
+    check("task log read preserves torn source bytes",
+          tornBytesAfterRead == tornBytesBeforeRead)
+
+    // Unsupported, invalid-authority, mismatched, and malformed lines are
+    // diagnosed but never rewritten or promoted into a snapshot.
+    let corruptDirectory = temporaryDirectory.appendingPathComponent("corrupt")
+    let corruptID = taskLogID(
+        "00000000-0000-0000-0000-000000000130"
+    )
+    let corruptOtherID = taskLogID(
+        "00000000-0000-0000-0000-000000000131"
+    )
+    let corruptLog = TaskSessionEventLog(
+        directory: corruptDirectory,
+        taskSessionID: corruptID
+    )
+    let corruptCreation = taskLogEvent(
+        corruptID,
+        at: taskLogDate,
+        authority: .conduitRecorded,
+        kind: .created(taskLogMetadata("Recoverable task"))
+    )
+    try corruptLog.append(corruptCreation)
+    let unsupported = TaskSessionEvent(
+        schemaVersion: TaskSessionEvent.currentSchemaVersion + 1,
+        taskSessionID: corruptID,
+        occurredAt: taskLogDate.addingTimeInterval(1),
+        recordedAt: taskLogDate.addingTimeInterval(1),
+        authority: .operatorAsserted,
+        kind: .pinChanged(true)
+    )
+    let invalidAuthority = taskLogEvent(
+        corruptID,
+        at: taskLogDate.addingTimeInterval(2),
+        authority: .conduitRecorded,
+        kind: .pinChanged(true)
+    )
+    let wrongTask = taskLogEvent(
+        corruptOtherID,
+        at: taskLogDate.addingTimeInterval(3),
+        authority: .operatorAsserted,
+        kind: .pinChanged(true)
+    )
+    try appendTaskLogLines(
+        [
+            try encodedTaskLogEvent(unsupported),
+            try encodedTaskLogEvent(invalidAuthority),
+            try encodedTaskLogEvent(wrongTask),
+            Data("not-json".utf8)
+        ],
+        to: corruptLog.url
+    )
+    let corruptBytes = try Data(contentsOf: corruptLog.url)
+    let corruptRead = corruptLog.read()
+    check("task log diagnoses unsupported and invalid records",
+          corruptRead.events == [corruptCreation]
+            && corruptRead.diagnostics.map(\.kind) == [
+                .unsupportedSchemaVersion,
+                .invalidAuthority,
+                .mismatchedTaskSessionID,
+                .malformedLine
+            ])
+    let corruptLoad = TaskSessionEventStore(
+        directory: corruptDirectory
+    ).load()
+    check("task store projects valid records around corrupt lines",
+          corruptLoad.snapshots.map(\.id) == [corruptID]
+            && corruptLoad.diagnostics.map(\.kind)
+                == corruptRead.diagnostics.map(\.kind))
+    let corruptBytesAfterLoad = try Data(contentsOf: corruptLog.url)
+    check("task store load preserves corrupt source bytes",
+          corruptBytesAfterLoad == corruptBytes)
+
+    // Duplicate event IDs are retained by the raw read and applied once by
+    // projection, so retrying a record is idempotent.
+    let duplicateDirectory = temporaryDirectory
+        .appendingPathComponent("duplicate")
+    let duplicateTaskID = taskLogID(
+        "00000000-0000-0000-0000-000000000140"
+    )
+    let duplicateEventID = UUID(
+        uuidString: "00000000-0000-0000-0000-000000000141"
+    )!
+    let duplicateLog = TaskSessionEventLog(
+        directory: duplicateDirectory,
+        taskSessionID: duplicateTaskID
+    )
+    let duplicateEvents = [
+        taskLogEvent(
+            duplicateTaskID,
+            at: taskLogDate,
+            authority: .conduitRecorded,
+            kind: .created(taskLogMetadata("Idempotent task"))
+        ),
+        taskLogEvent(
+            duplicateTaskID,
+            id: duplicateEventID,
+            at: taskLogDate.addingTimeInterval(1),
+            authority: .operatorAsserted,
+            kind: .pinChanged(true)
+        ),
+        taskLogEvent(
+            duplicateTaskID,
+            id: duplicateEventID,
+            at: taskLogDate.addingTimeInterval(2),
+            authority: .operatorAsserted,
+            kind: .pinChanged(false)
+        )
+    ]
+    for event in duplicateEvents {
+        try duplicateLog.append(event)
+    }
+    let duplicateStore = TaskSessionEventStore(directory: duplicateDirectory)
+    let duplicateFirstLoad = duplicateStore.load()
+    check("task log retains duplicate records in file order",
+          duplicateLog.read().events == duplicateEvents)
+    check("task projection is idempotent across duplicate event IDs",
+          duplicateFirstLoad == duplicateStore.load()
+            && duplicateFirstLoad.snapshots.first?.isPinned == true)
+
+    let missingDirectory = temporaryDirectory.appendingPathComponent("missing")
+    let missingStore = TaskSessionEventStore(directory: missingDirectory)
+    check("missing task log directory is clean empty",
+          missingStore.logs().logs.isEmpty
+            && missingStore.logs().diagnostics.isEmpty
+            && missingStore.load().snapshots.isEmpty
+            && missingStore.load().diagnostics.isEmpty
+            && !FileManager.default.fileExists(atPath: missingDirectory.path))
+
+    let invalidDirectory = temporaryDirectory.appendingPathComponent("invalid")
+    let unprojectableID = taskLogID(
+        "00000000-0000-0000-0000-000000000150"
+    )
+    let unprojectableLog = TaskSessionEventLog(
+        directory: invalidDirectory,
+        taskSessionID: unprojectableID
+    )
+    try unprojectableLog.append(
+        taskLogEvent(
+            unprojectableID,
+            at: taskLogDate,
+            authority: .operatorAsserted,
+            kind: .pinChanged(true)
+        )
+    )
+    let invalidFilenameURL = invalidDirectory
+        .appendingPathComponent("not-a-task-id.jsonl")
+    let invalidFilenameBytes = Data("preserve-invalid-name\n".utf8)
+    try invalidFilenameBytes.write(to: invalidFilenameURL)
+    let invalidLoad = TaskSessionEventStore(directory: invalidDirectory).load()
+    let invalidFilenameBytesAfterLoad = try Data(
+        contentsOf: invalidFilenameURL
+    )
+    check("task store diagnoses invalid and unprojectable logs",
+          invalidLoad.snapshots.isEmpty
+            && Set(invalidLoad.diagnostics.map(\.kind))
+                == Set([.invalidFilename, .unprojectableLog])
+            && invalidFilenameBytesAfterLoad
+                == invalidFilenameBytes)
+}
 
 // MARK: - Density (Focused Flow R2)
 
@@ -584,8 +1335,8 @@ let sep = TmuxSessionListParser.fieldSeparator
 // field into one. The separator must stay printable or discovery goes blind.
 check("field separator contains no control characters",
       !sep.unicodeScalars.contains { $0.properties.generalCategory == .control })
-check("format uses the separator between all five fields",
-      TmuxSessionListParser.format.components(separatedBy: sep).count == 5)
+check("format uses the separator between all six fields",
+      TmuxSessionListParser.format.components(separatedBy: sep).count == 6)
 let legacyLine = "conduit-mainframe-shell-39764712\(sep)1785245247\(sep)0\(sep)\(sep)"
 let legacyParsed = TmuxSessionListParser.parse(legacyLine + "\n")
 check("parses a session with no identity options", legacyParsed.count == 1)
@@ -594,6 +1345,12 @@ check("reads creation time", legacyParsed.first?.createdAt == Date(timeIntervalS
 check("leaves identity nil rather than inventing it",
       legacyParsed.first?.projectPath == nil && legacyParsed.first?.agentName == nil)
 check("unidentified session is not marked identified", legacyParsed.first?.isIdentified == false)
+check("legacy five-field discovery has an absent task binding",
+      legacyParsed.first?.taskSessionBinding == .absent)
+
+let emptyTaskBindingParsed = TmuxSessionListParser.parse(legacyLine + sep)
+check("empty sixth discovery field has an absent task binding",
+      emptyTaskBindingParsed.first?.taskSessionBinding == .absent)
 
 let fullLine = "conduit-x\(sep)1785245247\(sep)2\(sep)/tmp/MainFrame/30_projects/conduit\(sep)Claude"
 let fullParsed = TmuxSessionListParser.parse(fullLine)
@@ -602,6 +1359,23 @@ check("reads recorded project",
       fullParsed.first?.projectPath?.standardizedFileURL.path == "/tmp/MainFrame/30_projects/conduit")
 check("reads attached client count", fullParsed.first?.attachedClients == 2)
 check("identified session reports identified", fullParsed.first?.isIdentified == true)
+
+let tmuxBindingTaskID = TaskSessionID(
+    rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000301")!
+)
+let boundLine = fullLine + sep + tmuxBindingTaskID.rawValue.uuidString.lowercased()
+let boundParsed = TmuxSessionListParser.parse(boundLine)
+check("reads a valid task-session binding",
+      boundParsed.first?.taskSessionBinding == .valid(tmuxBindingTaskID)
+        && boundParsed.first?.taskSessionBinding.taskSessionID == tmuxBindingTaskID)
+
+let malformedTaskBinding = "not-a-task-session-uuid"
+let malformedBindingLine = fullLine + sep + malformedTaskBinding
+let malformedBindingParsed = TmuxSessionListParser.parse(malformedBindingLine)
+check("preserves a malformed task-session binding instead of treating it as absent",
+      malformedBindingParsed.first?.taskSessionBinding
+        == .malformed(rawValue: malformedTaskBinding)
+        && malformedBindingParsed.first?.taskSessionBinding.taskSessionID == nil)
 
 check("ignores sessions Conduit did not create",
       TmuxSessionListParser.parse("other-session\(sep)1\(sep)0\(sep)\(sep)").isEmpty)
@@ -629,9 +1403,31 @@ let identifiedResume = SessionDescriptor(
 )
 check("resuming a known session keeps recording identity",
       identifiedResume.recordsIdentity == true)
+let defaultTaskDescriptor = SessionDescriptor(
+    projectPath: instProject,
+    agent: AgentProfile(name: "Claude", command: "claude")
+)
 check("a freshly launched session records identity by default",
-      SessionDescriptor(projectPath: instProject,
-                        agent: AgentProfile(name: "Claude", command: "claude")).recordsIdentity)
+      defaultTaskDescriptor.recordsIdentity)
+check("session descriptor task identity defaults to absent",
+      defaultTaskDescriptor.taskSessionID == nil)
+check("session descriptor reconnect safeguards default off",
+      defaultTaskDescriptor.adoptsLegacyTaskSession == false
+        && defaultTaskDescriptor.requiresExistingTmuxSession == false)
+
+let boundTaskDescriptor = SessionDescriptor(
+    projectPath: instProject,
+    agent: AgentProfile(name: "Codex", command: "codex"),
+    tmuxSessionName: "conduit-bound",
+    taskSessionID: tmuxBindingTaskID,
+    adoptsLegacyTaskSession: true,
+    requiresExistingTmuxSession: true
+)
+check("session descriptor task identity round-trips",
+      (try? JSONDecoder().decode(
+        SessionDescriptor.self,
+        from: JSONEncoder().encode(boundTaskDescriptor)
+      )) == boundTaskDescriptor)
 
 let discEpoch = Date(timeIntervalSince1970: 1_800_000_000)
 let discOther = URL(fileURLWithPath: "/tmp/MainFrame/30_projects/other")

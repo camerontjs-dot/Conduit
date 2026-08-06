@@ -1,5 +1,32 @@
 import Foundation
 
+/// Exact observation of the task-continuity option on a tmux session.
+///
+/// An absent option is a recoverable legacy state. A malformed non-empty
+/// value is preserved for diagnosis and must never be treated as absence.
+public enum DiscoveredTaskSessionBinding: Equatable, Sendable {
+    case absent
+    case valid(TaskSessionID)
+    case malformed(rawValue: String)
+
+    public init(optionValue: String?) {
+        guard let optionValue, !optionValue.isEmpty else {
+            self = .absent
+            return
+        }
+        guard let uuid = UUID(uuidString: optionValue) else {
+            self = .malformed(rawValue: optionValue)
+            return
+        }
+        self = .valid(TaskSessionID(rawValue: uuid))
+    }
+
+    public var taskSessionID: TaskSessionID? {
+        guard case .valid(let id) = self else { return nil }
+        return id
+    }
+}
+
 /// A durable tmux session Conduit found on the server, as reported by tmux.
 ///
 /// Identity comes from tmux user options written at creation, not from parsing
@@ -11,6 +38,7 @@ public struct DiscoveredSession: Equatable, Sendable {
     public let tmuxName: String
     public let projectPath: URL?
     public let agentName: String?
+    public let taskSessionBinding: DiscoveredTaskSessionBinding
     public let createdAt: Date?
     /// tmux reports how many clients are attached. Non-zero means something is
     /// already looking at this session — possibly another Conduit window or a
@@ -21,12 +49,14 @@ public struct DiscoveredSession: Equatable, Sendable {
         tmuxName: String,
         projectPath: URL? = nil,
         agentName: String? = nil,
+        taskSessionBinding: DiscoveredTaskSessionBinding = .absent,
         createdAt: Date? = nil,
         attachedClients: Int = 0
     ) {
         self.tmuxName = tmuxName
         self.projectPath = projectPath
         self.agentName = agentName
+        self.taskSessionBinding = taskSessionBinding
         self.createdAt = createdAt
         self.attachedClients = attachedClients
     }
@@ -53,7 +83,8 @@ public enum TmuxSessionListParser {
         "#{session_created}",
         "#{session_attached}",
         "#{@conduit_project}",
-        "#{@conduit_agent}"
+        "#{@conduit_agent}",
+        "#{@conduit_task_session}"
     ].joined(separator: fieldSeparator)
 
     public static func parse(_ output: String) -> [DiscoveredSession] {
@@ -76,6 +107,11 @@ public enum TmuxSessionListParser {
                     tmuxName: name,
                     projectPath: field(3).map { URL(fileURLWithPath: $0) },
                     agentName: field(4),
+                    // Five-field rows were emitted before task continuity and
+                    // intentionally decode as an absent legacy binding.
+                    taskSessionBinding: DiscoveredTaskSessionBinding(
+                        optionValue: field(5)
+                    ),
                     createdAt: field(1).flatMap(TimeInterval.init).map(Date.init(timeIntervalSince1970:)),
                     attachedClients: field(2).flatMap(Int.init) ?? 0
                 )

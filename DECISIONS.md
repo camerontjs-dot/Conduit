@@ -156,7 +156,7 @@ MainFrame-only coordination decisions live outside this tree.
 
 **Context:** A small status affordance helps scanning many sessions without implying a control-room truth model.
 
-**Decision:** Drive a compact pixel operator strip only from observable runtime state (working, ready, detached, exited, failed). It is not the source of truth for task or agent success.
+**Decision:** Drive a compact pixel operator strip only from observable runtime state (working, running, detached, exited, failed). It is not the source of truth for task or agent success.
 
 **Consequences:** No coupling to external trackers is required for 0.2. Future projections of recorded MainFrame state remain optional and separate.
 
@@ -277,6 +277,252 @@ smoke gate.
 redundant VoiceOver elements. Their textual state remains the accessible source
 of meaning. Public redistribution of the copied art is not asserted by this
 decision; the bundled provenance note records that boundary.
+
+---
+
+## D-022: Conversation is the default; Raw remains the terminal authority
+
+**Status:** Accepted (conversation-first redesign)
+
+**Context:** The terminal-first workspace preserved CLI compatibility but made
+Conduit feel like a terminal application with agent features. Independent CLI
+agents do not provide one uniform structured message or approval stream, so a
+native conversation view cannot honestly reconstruct every agent response from
+arbitrary ANSI/TUI output.
+
+**Decision:** Each open terminal runtime has two views over the same controller:
+Conversation and Raw. Conversation is the default and initially records only
+actions Conduit performed itself: launch/reattach requests, exact native
+composer submissions, local attachment paths, forwarded terminal selections,
+and queued/delivered/failed terminal handoff. An entry request does not prove
+that process attach succeeded. Live lifecycle remains an
+observed controller state rather than invented history. Raw hosts the unchanged
+SwiftTerm PTY and remains one action away for the complete live terminal view,
+approvals, debugging, and direct CLI access.
+
+The process starts independently of whether Raw is mounted. Conversation events
+are per runtime and separate from project-scoped work-session receipt events.
+Forwarded selections retain their explicit unverified-terminal-output origin.
+No assistant response, approval, waiting state, completion, or verification
+result is inferred merely because prose appeared in the terminal.
+
+**Rejected alternatives:** Parsing all terminal output into assistant messages
+would turn cursor movement, redraws, commands, tool logs, and agent claims into
+false structure. Mounting an invisible terminal to start the process could
+steal focus and distort layout. Replacing SwiftTerm would violate the real-PTY
+contract.
+
+**Consequences:** Agent-specific adapters may later add capability-declared,
+source-labelled events, but adapter failure must always degrade to Raw.
+Conversation history is intentionally conservative and initially process-local;
+future persistence requires a reviewed retention and provenance policy. The
+native composer is shown in Conversation, while Raw prioritizes terminal space
+and direct terminal input.
+
+---
+
+## D-023: Task-session continuity retains metadata, not transcripts
+
+**Status:** Accepted (task-history persistence contract)
+
+**Context:** Conversation-first navigation needs stable task identity across
+runtime attempts, editable titles, pins, archives, workspace scoping, and an
+honest distinction between running, reconnectable, and recently closed work.
+Persisting the current in-memory presentation array would also retain prompt
+and attachment content and would turn a mutable UI projection into history.
+Using project metadata as the session catalog would instead create a second
+project control plane beside MainFrame.
+
+**Decision:** `TaskSessionID` identifies one user-facing continuity record;
+`RuntimeAttemptID` identifies one concrete PTY/tmux attempt. Task-session
+history is append-only local operational metadata under
+`~/.conduit/task-sessions/`. It may retain a standardized MainFrame root or
+project path, fallback title/slug, agent name, deterministic default title,
+explicit title override/reset, pin/archive changes, and operational lifecycle
+facts. It does not retain prompts, attachment references, raw terminal bytes,
+agent prose, approvals, generated summaries, or inferred completion.
+Agent identity is optional: a resumed session with no recorded identity retains
+nil rather than writing a presentation placeholder such as `Unidentified`.
+
+The session catalog is a pure, rebuildable index over those local events plus
+current live-runtime observations, external reconnectability observations, and
+the current MainFrame file scan. Cached or in-memory catalog rows are never
+project authority and never form a shadow project database. MainFrame remains
+authoritative for current project metadata; stored title/slug values are
+historical fallbacks only.
+
+Corrupt, partially understood, or unsupported-version task-session logs are
+preserved for diagnosis rather than deleted during recovery. A failed or stale
+external observation cannot turn absence into a closed or unavailable claim.
+It also cannot authorize a duplicate direct-PTY fallback when Conduit cannot
+determine whether the named tmux session exists.
+No operational state means completed, successful, correct, or verified.
+
+**Rejected alternatives:** SQLite or another Conduit-owned project registry
+would create a competing project source of truth. Persisting the conversation
+projection would silently introduce transcript retention. Importing
+work-session receipts as task history would conflate a project-level evidence
+record with one terminal task.
+
+**Consequences:** The project-scoped `WorkSessionEvent` and append-only receipt
+stream remain separate and unchanged. Explicit export or later transcript
+retention requires another reviewed decision. A future on-disk derived index
+must be safe to delete and rebuild from the append-only metadata logs.
+
+---
+
+## D-024: Task history is primary navigation; runtime actions remain explicit
+
+**Status:** Accepted (conversation-first information architecture)
+
+**Context:** D-022 defines Conversation and Raw as two views over one live
+runtime. D-023 defines the metadata that can survive after that runtime is
+gone. The application still needs one navigation contract that joins those
+pieces without turning a project picker into the main workspace, treating a
+history click as permission to launch a process, or presenting a receipt as a
+conversation transcript.
+
+**Decision:** The left rail is a task-history catalog. It groups non-archived
+records as Pinned, Active, and Recent, exposes Archived only when the operator
+asks for it, and keeps tmux recovery not represented by loaded task history in
+a visually secondary Discovered section. The default filter is **All
+MainFrame**. A project selected from the
+scope browser narrows the catalog using the current MainFrame scan; it does not
+create or update project records.
+
+New Task requires an explicit enabled agent profile and an explicit scanned
+MainFrame scope. It may default to the scope most recently submitted through
+that sheet, but the operator reviews both values before launch. Selecting an
+existing task changes navigation only. It may focus a runtime that is already
+open, but it never starts, attaches, or resurrects one. Reconnect, Resume,
+Leave, and End remain separate controls with labels that describe the runtime
+effect.
+
+For an open runtime, Conversation is the default central surface and Raw is a
+first-class secondary surface available from the segmented control, the
+Conversation header, or `⌘2`. Raw hosts the real SwiftTerm PTY/TUI and remains
+the live execution authority. Neither Raw bytes nor the in-memory Conversation
+projection are written into task history. After relaunch, a task can therefore
+show identity, scope, agent, last activity, and operational availability, but
+not prior prompts or agent replies.
+
+Task history and work-session receipts remain separate. Task history is local
+operational continuity under `~/.conduit/task-sessions/`; work-session events
+remain project-scoped evidence inputs whose rendered receipts append under
+MainFrame `20_live/conduit/sessions/`. Neither stream may infer completed,
+successful, correct, or verified work from terminal prose or a runtime ending.
+
+**Rejected alternatives:** A project-first rail would keep the old
+terminal-application information architecture. Reconnecting on row selection
+would turn navigation into an external side effect. Persisting Conversation or
+Raw would add transcript retention without a reviewed policy. Treating receipts
+as task messages would collapse operational continuity and evidence into one
+misleading timeline.
+
+**Consequences:** Historical task selection is safe to browse. Reconnection is
+deliberate rather than a row-selection side effect. The normal workspace feels
+like an agent application while the full terminal remains one action away. A
+future adapter may add source-labelled events, but it must declare its
+capability and fall back to Raw; it cannot weaken the no-inference or
+no-transcript-retention boundaries without another decision.
+
+---
+
+## D-025: Prompt readiness waits for bounded output quiescence
+
+**Status:** Accepted (conversation-first hardening)
+
+**Context:** D-016 replaced a fixed pre-launch forwarding delay with
+output-gated delivery, but its first-output/no-timers clause treated the first
+byte as a usable prompt boundary. A tmux attachment can emit redraw bytes before
+the attached CLI has reached a stable input surface.
+
+**Decision:** Preserve D-016's paste semantics and serialized delivery, but
+supersede its readiness clause. After the first observed output byte, Conduit
+waits until output has been quiet for 0.6 seconds. If output continues, an
+eight-second hard cap measured from that first byte bounds the wait. These
+timers govern when queued prompt bytes are handed to the terminal only. They
+must never be interpreted as evidence that an agent is ready, working,
+finished, correct, or verified. Conversation labels the resulting native
+composer handoff **Queued**, **Sent to terminal**, or **Delivery failed**.
+
+**Rejected alternatives:** Flushing on the first byte can race tmux attach
+redraw. Returning to a fixed delay ignores observed output. Treating output
+quiescence as agent state or completion would invent structured facts from
+terminal behavior.
+
+**Consequences:** After output begins, a queued prompt waits for an observed
+quiet boundary unless the hard cap expires first. The handoff remains bounded
+when startup output continues, and its label remains deliberately narrower than
+an agent-response or completion claim.
+
+---
+
+## D-026: Conversation history is local, append-only, and source-labelled
+
+**Status:** Accepted (conversation-history retention)
+
+**Context:** D-022 made Conversation the default but kept it process-local.
+D-023 and D-024 deliberately retained task metadata without content until a
+retention and provenance policy was reviewed. That made the first redesign
+honest, but it also meant an agent response visible in Raw did not appear in
+Conversation and selecting a sidebar task after relaunch showed no thread.
+Independent agent CLIs still do not provide one common structured event stream.
+
+**Decision:** Supersede only the no-conversation-retention clauses in D-022,
+D-023, and D-024. New Conversation events are retained in a separate local
+append-only stream at
+`~/.conduit/conversations/<TaskSessionID>.jsonl`. Task metadata remains under
+`~/.conduit/task-sessions/`; MainFrame project files and work-session receipts
+remain separate authorities.
+
+The retained stream may contain launch/reattach requests, exact native-composer
+text, local attachment path references, terminal delivery state, and bounded
+rendered output. Attaching a path does not itself copy that file into history,
+but any text the CLI renders—including file contents or secrets—can enter a
+retained **Derived from Raw** revision. Each rendered revision is capped at
+16,000 characters; append-only earlier revisions remain in the local source.
+The stream does not store an unprocessed PTY byte transcript. Files are
+owner-readable and owner-writable only; the directory is owner-accessible only.
+Event updates are immutable revisions in the JSONL source. A read projects the
+latest valid revision without rewriting or deleting earlier bytes.
+
+Generic terminal output is derived from SwiftTerm's rendered buffer or a
+rendered tmux pane snapshot captured after prompt delivery. It is always labelled
+**Derived from Raw** and may include prompt echo, tool logs, status chrome, or
+agent prose. Output quietness may display as **Output quiet**, but never as
+finished, accepted, successful, correct, or verified. Conduit shows generic
+runtime progress as **Agent activity**. It does not reconstruct or claim access
+to private chain-of-thought. A future capability-declared adapter may add
+tool-reported assistant messages, visible reasoning summaries, approvals, and
+turn boundaries, but adapter failure must degrade to Raw.
+
+Raw remains the execution authority and one action away. Approval-looking
+terminal prose is not a native approval. Agent claims about files, tests, or
+completion are not evidence. Existing tmux scrollback is not silently imported
+when local history is first enabled. A content-free task marker records that a
+task entered the retention contract after its first successful conversation
+append. If marked history is later absent, Conduit calls it unavailable; an
+unmarked task remains a possible pre-retention or never-recorded gap. Neither
+case is presented as a complete empty transcript.
+Selecting retained history remains read-only and never starts or reconnects a
+process.
+
+**Rejected alternatives:** Regex-stripping PTY byte chunks cannot safely handle
+split UTF-8, control sequences, cursor movement, or TUI repaint. Calling generic
+terminal prose an assistant message or “thinking” would invent structure.
+Putting content into the task-session metadata stream would weaken its
+navigation-only boundary. Treating Raw as the only history would keep the app
+terminal-first and would not survive relaunch in the native thread.
+
+**Consequences:** New prompts and source-labelled rendered output survive
+relaunch in the same sidebar task. The conversation directory can contain
+sensitive prompt text, path references, file contents, secrets, tool output,
+and terminal chrome that the CLI rendered. It must not be uploaded or indexed
+silently. The 16,000-character bound applies to each projected revision, not
+the append-only source as a whole. There is no automatic expiry, pruning,
+transcript-body search, or destructive clear-history control in this slice.
+Structured adapter work remains a separate, version-gated phase.
 
 ---
 

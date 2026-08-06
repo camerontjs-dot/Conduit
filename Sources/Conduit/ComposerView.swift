@@ -16,7 +16,7 @@ struct ComposerView: View {
     }
 
     private var sendTargetLabel: String {
-        if let session = model.activeSession {
+        if let session = model.activeSessionForSelectedProject {
             return "Send target: \(session.descriptor.agent.name)"
         }
         return "Send target: new shell"
