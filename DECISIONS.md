@@ -563,6 +563,37 @@ a silent chip.
 
 ---
 
+## D-028: First-prompt capture may prompt-anchor; empty baselines stay open
+
+**Status:** Accepted (Raw-derived cold-start recovery)
+
+**Context:** Operator smoke showed first OpenCode prompts often failed with
+“could not be separated safely” while a second prompt on the same session
+succeeded. Empty or unusable pre-delivery baselines and full TUI repaints were
+the main causes.
+
+**Decision:**
+
+1. Tmux baseline capture retries briefly; empty same-surface baselines remain
+   *available* so Conversation can open a capture window instead of hard-failing.
+2. When the baseline is empty, or screen-delta finds no stable LCS anchor,
+   Conduit may project text **after** an exact whole-line prompt match in the
+   current rendering (`promptAnchored`). Decorative TUI prefixes (box drawing,
+   simple markers) before the prompt text are allowed; partial/prefixed prompt
+   paraphrases are not guessed.
+3. Oversized comparisons still decline without importing the whole screen.
+4. Notices continue to name the concrete unavailable reason when projection fails.
+
+**Rejected alternatives:** Importing the full current pane when baseline is empty
+would mix pre-prompt history into Conversation. Lowering LCS thresholds alone
+would still fail empty-baseline cold starts.
+
+**Consequences:** First prompts on TUI agents are more likely to show a
+Derived-from-Raw block when the delivered prompt text is visible as a line.
+Projection remains best-effort and source-labelled; Raw stays authoritative.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

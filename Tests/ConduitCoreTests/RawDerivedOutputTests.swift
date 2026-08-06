@@ -100,13 +100,71 @@ final class RawDerivedOutputTests: XCTestCase {
         XCTAssertTrue(result.text.hasSuffix(String(repeating: "z", count: 20)))
     }
 
-    func testEmptyBaselineIsUnavailableInsteadOfImportingCurrentScreen() {
+    func testEmptyBaselineWithoutPromptIsUnavailableInsteadOfImportingScreen() {
         let reduction = RawDerivedOutputReducer.derive(
             baseline: snapshot("\n\n"),
             current: snapshot("Earlier pane history\nNew response")
         )
 
         XCTAssertEqual(reduction, .unavailable(.baselineUnavailable))
+    }
+
+    func testEmptyBaselineWithExactPromptAnchorsPostPromptText() {
+        let result = deriveOutput(
+            baseline: "\n\n",
+            current: """
+            chrome
+            say hello
+
+            Hello!
+            Build done
+            """,
+            promptText: "say hello"
+        )
+
+        XCTAssertEqual(result.strategy, .promptAnchored)
+        XCTAssertEqual(result.text, "Hello!\nBuild done")
+        XCTAssertFalse(result.text.contains("chrome"))
+    }
+
+    func testNoStableAnchorFallsBackToPromptAnchor() {
+        let result = deriveOutput(
+            baseline: "Old full-screen interface",
+            current: """
+            New interface
+            say it
+            Hello.
+            footer
+            """,
+            promptText: "say it"
+        )
+
+        XCTAssertEqual(result.strategy, .promptAnchored)
+        XCTAssertEqual(result.text, "Hello.\nfooter")
+    }
+
+    func testOpenCodeStyleTUIPaneCanPromptAnchorFirstResponse() {
+        // Mirrors the cold-start smoke case: empty-ish pre-prompt baseline and
+        // a full TUI repaint that includes the exact prompt line.
+        let current = """
+          ┃                                                                                         Greeting
+          ┃  say hello
+          ┃                                                                                         Context
+                                                                                                    10,504 tokens
+             + Thought: 130ms                                                                       5% used
+             Hello!
+             ▣  Build · Big Pickle · 2.4s                                                           LSPs are disabled
+        """
+        let result = deriveOutput(
+            baseline: "",
+            current: current,
+            promptText: "say hello\n",
+            extraction: .tmuxPane
+        )
+
+        XCTAssertEqual(result.strategy, .promptAnchored)
+        XCTAssertTrue(result.text.contains("Hello!"))
+        XCTAssertFalse(result.text.contains("say hello"))
     }
 
     func testMultilinePromptEchoAndCRLFNormalizeDeterministically() {

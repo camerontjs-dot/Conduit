@@ -11,6 +11,10 @@ public enum RawDerivedOutputStrategy: String, Codable, Equatable, Sendable {
     case appendedSuffix
     /// A line diff removed unchanged screen chrome and retained changed lines.
     case screenDelta
+    /// Baseline was empty or unusable; text after an exact whole-line prompt
+    /// match in the current rendering was retained instead of inventing a
+    /// full-screen import.
+    case promptAnchored
 }
 
 /// One already-rendered terminal snapshot and the surface that produced it.
@@ -168,8 +172,22 @@ public enum RawDerivedOutputReducer {
 
         let baselineLines = canonicalLines(baseline.text)
         let currentLines = canonicalLines(current.text)
-        guard !baselineLines.isEmpty else {
-            return .unavailable(.baselineUnavailable)
+
+        // Cold-start / first-prompt path: empty baseline must not import the
+        // whole screen, but an exact whole-line prompt match is a stable,
+        // source-local anchor for the text that followed delivery.
+        if baselineLines.isEmpty {
+            return finalize(
+                lines: linesAfterExactPrompt(
+                    in: currentLines,
+                    promptText: promptText
+                ),
+                strategy: .promptAnchored,
+                promptText: nil,
+                maximumCharacters: maximumCharacters,
+                emptyReason: .baselineUnavailable,
+                allowEmpty: false
+            )
         }
 
         let candidate: [String]
@@ -187,17 +205,57 @@ public enum RawDerivedOutputReducer {
                 candidate = delta
                 strategy = .screenDelta
             case .unavailable(let reason):
-                return .unavailable(reason)
+                // Oversized comparisons stay hard fails. Smaller full-TUI
+                // repaints may still recover via an exact prompt line anchor.
+                if reason == .comparisonTooLarge {
+                    return .unavailable(reason)
+                }
+                return finalize(
+                    lines: linesAfterExactPrompt(
+                        in: currentLines,
+                        promptText: promptText
+                    ),
+                    strategy: .promptAnchored,
+                    promptText: nil,
+                    maximumCharacters: maximumCharacters,
+                    emptyReason: reason,
+                    allowEmpty: false
+                )
             }
         }
 
+        // Empty appended/screen deltas remain valid "no new visible text"
+        // results rather than capture failures.
+        return finalize(
+            lines: candidate,
+            strategy: strategy,
+            promptText: promptText,
+            maximumCharacters: maximumCharacters,
+            emptyReason: .noStableAnchor,
+            allowEmpty: true
+        )
+    }
+
+    private static func finalize(
+        lines: [String]?,
+        strategy: RawDerivedOutputStrategy,
+        promptText: String?,
+        maximumCharacters: Int,
+        emptyReason: RawDerivedOutputUnavailableReason,
+        allowEmpty: Bool
+    ) -> RawDerivedOutputReduction {
+        guard let lines else {
+            return .unavailable(emptyReason)
+        }
         let withoutEcho = removingExactPromptEcho(
-            from: candidate,
+            from: lines,
             promptText: promptText
         )
         let unbounded = trimBlankEdges(withoutEcho).joined(separator: "\n")
+        guard !unbounded.isEmpty || allowEmpty else {
+            return .unavailable(emptyReason)
+        }
         let bounded = bound(unbounded, maximumCharacters: maximumCharacters)
-
         return .output(
             RawDerivedOutputResult(
                 text: bounded.text,
@@ -205,6 +263,66 @@ public enum RawDerivedOutputReducer {
                 truncated: bounded.truncated
             )
         )
+    }
+
+    /// Returns lines after the last whole-line match of the prompt, or nil when
+    /// the prompt is absent/partial. Matching allows only decorative leading
+    /// chrome (box-drawing, bullets, simple prompt markers) before the exact
+    /// prompt text so TUI panes like `┃  say hello` still anchor safely.
+    private static func linesAfterExactPrompt(
+        in lines: [String],
+        promptText: String?
+    ) -> [String]? {
+        guard let promptText else { return nil }
+        let promptLines = trimBlankEdges(canonicalLines(promptText))
+        guard !promptLines.isEmpty, promptLines.count <= lines.count else {
+            return nil
+        }
+
+        let lastStart = lines.count - promptLines.count
+        var matchStart: Int?
+        for start in 0...lastStart {
+            let end = start + promptLines.count
+            let window = Array(lines[start..<end])
+            if windowMatchesPrompt(window, promptLines: promptLines) {
+                matchStart = start
+            }
+        }
+        guard let matchStart else { return nil }
+        let after = Array(lines[(matchStart + promptLines.count)...])
+        return after
+    }
+
+    private static func windowMatchesPrompt(
+        _ window: [String],
+        promptLines: [String]
+    ) -> Bool {
+        guard window.count == promptLines.count else { return false }
+        for (line, promptLine) in zip(window, promptLines) {
+            if !lineMatchesPromptLine(line, promptLine: promptLine) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private static func lineMatchesPromptLine(
+        _ line: String,
+        promptLine: String
+    ) -> Bool {
+        if line == promptLine { return true }
+        let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+        let trimmedPrompt = promptLine.trimmingCharacters(in: .whitespaces)
+        if trimmedLine.isEmpty || trimmedPrompt.isEmpty {
+            return false
+        }
+        if trimmedLine == trimmedPrompt { return true }
+        guard trimmedLine.hasSuffix(trimmedPrompt) else { return false }
+        let prefix = trimmedLine.dropLast(trimmedPrompt.count)
+        // Only allow decorative TUI/prompt chrome in the prefix.
+        let decorative = CharacterSet.whitespaces
+            .union(CharacterSet(charactersIn: "┃│|▌▍>›•·▸▹►▻$%#"))
+        return prefix.unicodeScalars.allSatisfy { decorative.contains($0) }
     }
 
     // A normal SwiftTerm buffer is currently bounded to roughly 500 scrollback

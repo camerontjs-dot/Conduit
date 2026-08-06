@@ -700,11 +700,8 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
     private func directPromptBaseline() -> RawDerivedCapture {
         let snapshot = terminalView.renderedSnapshot()
-        guard !snapshot.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ).isEmpty else {
-            return .unavailable(.terminalSnapshotUnavailable)
-        }
+        // Empty is still a valid same-surface baseline: first-prompt capture can
+        // prompt-anchor once the agent paints, instead of refusing the boundary.
         return .available(
             RawDerivedSnapshot(
                 text: snapshot,
@@ -713,21 +710,35 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         )
     }
 
-    /// Captures a bounded tmux pane on the delivery queue. If tmux cannot
-    /// provide it, the only permitted fallback is SwiftTerm's active alternate
-    /// buffer, captured synchronously on the main queue before the write.
+    /// Captures a bounded tmux pane on the delivery queue. Retries briefly so
+    /// first-prompt cold starts are less likely to miss a painted pane. If
+    /// tmux still cannot provide a non-empty pane, the permitted fallback is
+    /// SwiftTerm's active alternate buffer. As a last resort an empty
+    /// same-surface baseline is returned so Conversation can still open a
+    /// prompt-anchored capture instead of hard-failing the boundary.
     private nonisolated static func tmuxPromptBaseline(
         driver: TmuxDriver,
         sessionName: String,
         safeRenderedFallback: () -> String?
     ) -> RawDerivedCapture {
-        if let snapshot = driver.capturePaneSnapshot(session: sessionName) {
-            return .available(
-                RawDerivedSnapshot(
-                    text: snapshot,
-                    extraction: .tmuxPane
-                )
-            )
+        var lastEmptyPane: String?
+        for attempt in 0..<3 {
+            if let snapshot = driver.capturePaneSnapshot(session: sessionName) {
+                if !snapshot.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty {
+                    return .available(
+                        RawDerivedSnapshot(
+                            text: snapshot,
+                            extraction: .tmuxPane
+                        )
+                    )
+                }
+                lastEmptyPane = snapshot
+            }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
         }
         if let fallback = safeRenderedFallback(),
            !fallback.trimmingCharacters(
@@ -740,7 +751,22 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 )
             )
         }
-        return .unavailable(.terminalSnapshotUnavailable)
+        if let lastEmptyPane {
+            return .available(
+                RawDerivedSnapshot(
+                    text: lastEmptyPane,
+                    extraction: .tmuxPane
+                )
+            )
+        }
+        // Keep the extraction surface stable so later pane snapshots can still
+        // project with the prompt-anchored reducer instead of hard-failing.
+        return .available(
+            RawDerivedSnapshot(
+                text: "",
+                extraction: .tmuxPane
+            )
+        )
     }
 
     private func enqueueDelivery(_ prompt: PendingPrompt) {
