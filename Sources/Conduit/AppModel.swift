@@ -1712,8 +1712,11 @@ final class AppModel: ObservableObject {
     }
 
     func sendComposer() {
-        let prompt = PromptAssembler.assemble(text: composerText, attachments: attachments)
-        guard !prompt.isEmpty else { return }
+        let assembled = PromptAssembler.assemble(
+            text: composerText,
+            attachments: attachments
+        )
+        guard !assembled.isEmpty else { return }
 
         let runtime: TerminalRuntime
         if let activeSessionForSelectedProject {
@@ -1730,21 +1733,34 @@ final class AppModel: ObservableObject {
 
         let savedText = composerText
         let savedAttachments = attachments
+        let deliveryPayload = deliveryPayload(
+            assembled: assembled,
+            runtime: runtime,
+            attachmentCount: savedAttachments.count
+        )
         let eventID = runtime.recordPrompt(
             text: savedText,
             attachmentPaths: savedAttachments.map(\.url.path),
-            renderedPayload: prompt
+            renderedPayload: deliveryPayload
         )
         runtime.selectedSurface = .conversation
         composerText = ""
+        let attachmentCount = savedAttachments.count
         attachments = []
+        if attachmentCount > 0 {
+            statusMessage = attachmentCount == 1
+                ? "Sent with 1 attachment."
+                : "Sent with \(attachmentCount) attachments."
+        }
         let agentName = runtime.controller.descriptor.agent.name
+        // Capture uses the human-visible assembled prompt for echo stripping,
+        // not the host envelope wrapper.
         runtime.controller.deliverPrompt(
-            prompt,
+            deliveryPayload,
             willDeliver: { [weak runtime] baseline in
                 runtime?.beginAgentOutputCapture(
                     promptEventID: eventID,
-                    promptText: prompt,
+                    promptText: assembled,
                     baseline: baseline
                 )
             }
@@ -1765,6 +1781,30 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Builds the terminal delivery string. CLI agents receive a compact
+    /// Conduit host envelope; Conversation still stores human text separately.
+    private func deliveryPayload(
+        assembled: String,
+        runtime: TerminalRuntime,
+        attachmentCount: Int
+    ) -> String {
+        let agent = runtime.descriptor.agent
+        guard HostEnvelope.shouldInject(for: agent) else { return assembled }
+        let projectPath = runtime.descriptor.projectPath.path
+        let taskID = selectedTaskSnapshot?.id.rawValue.uuidString
+            ?? runtime.descriptor.taskSessionID?.rawValue.uuidString
+        let context = HostEnvelope.Context(
+            taskSessionID: taskID,
+            projectPath: projectPath,
+            agentName: agent.name,
+            surface: runtime.selectedSurface.rawValue,
+            tmuxSessionName: runtime.controller.tmuxSessionName
+                ?? runtime.descriptor.tmuxSessionName,
+            attachmentCount: attachmentCount
+        )
+        return HostEnvelope.wrap(prompt: assembled, context: context)
+    }
+
     func addFiles() {
         let panel = NSOpenPanel()
         panel.title = "Attach files or folders"
@@ -1778,32 +1818,55 @@ final class AppModel: ObservableObject {
 
     func addAttachments(_ urls: [URL]) {
         let existing = Set(attachments.map(\.url))
-        attachments.append(contentsOf: urls.filter { !existing.contains($0) }.map { Attachment(url: $0) })
+        let fresh = urls.filter { !existing.contains($0) }.map { Attachment(url: $0) }
+        guard !fresh.isEmpty else {
+            if !urls.isEmpty {
+                statusMessage = urls.count == 1
+                    ? "Already attached \(urls[0].lastPathComponent)."
+                    : "Those files are already attached."
+            }
+            return
+        }
+        attachments.append(contentsOf: fresh)
+        if fresh.count == 1 {
+            statusMessage = "Attached \(fresh[0].url.lastPathComponent)."
+        } else {
+            statusMessage = "Attached \(fresh.count) items (\(attachments.count) ready to send)."
+        }
     }
 
     func removeAttachment(_ attachment: Attachment) {
         attachments.removeAll { $0.id == attachment.id }
+        if attachments.isEmpty {
+            statusMessage = "Attachment removed."
+        } else {
+            statusMessage = "Attachment removed · \(attachments.count) remaining."
+        }
     }
 
     func pasteImage() {
         do {
             let url = try AttachmentService.saveImageFromPasteboard()
             addAttachments([url])
-            statusMessage = "Pasted \(url.lastPathComponent)."
+            // addAttachments already sets status; keep a paste-specific phrase.
+            statusMessage = "Pasted image \(url.lastPathComponent)."
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Could not paste image: \(error.localizedDescription)"
         }
     }
 
     func captureScreen() {
+        statusMessage = "Capturing screen area…"
         Task {
             do {
                 let url = try await AttachmentService.captureScreenSelection()
                 addAttachments([url])
-                statusMessage = "Captured \(url.lastPathComponent)."
+                statusMessage = "Captured screenshot \(url.lastPathComponent)."
             } catch is CancellationError {
+                statusMessage = "Screen capture cancelled."
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = "Screen capture failed: \(error.localizedDescription)"
+                statusMessage = nil
             }
         }
     }
@@ -2364,8 +2427,14 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             activeOutputCapture = nil
             activeOutputEventID = nil
             isAwaitingAgentOutput = false
+            let reason: String
+            if case .unavailable(let detail) = baseline {
+                reason = detail.displayName
+            } else {
+                reason = "terminal snapshot unavailable"
+            }
             conversationCaptureNotice =
-                "Conversation capture is unavailable for this prompt. Inspect Raw for the exact terminal output."
+                "Conversation capture is unavailable for this prompt (\(reason)). Inspect Raw for the exact terminal output."
             return
         }
         activeOutputCapture = ActiveOutputCapture(
@@ -2417,10 +2486,10 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     private func recordRenderedOutput(_ observed: RawDerivedCapture) {
         guard let capture = activeOutputCapture else { return }
         switch observed {
-        case .unavailable:
+        case .unavailable(let reason):
             closeAgentOutputCapture()
             conversationCaptureNotice =
-                "Rendered output could not be separated safely from prior Raw history. Inspect Raw for the exact terminal output."
+                "Rendered output could not be separated safely from prior Raw history (\(reason.displayName)). Inspect Raw for the exact terminal output."
         case .available(let current):
             reductionGeneration += 1
             let generation = reductionGeneration
@@ -2459,8 +2528,14 @@ final class TerminalRuntime: ObservableObject, Identifiable {
 
         guard case .output(let derived) = reduction else {
             closeAgentOutputCapture()
+            let reason: String
+            if case .unavailable(let detail) = reduction {
+                reason = detail.displayName
+            } else {
+                reason = "reduction declined"
+            }
             conversationCaptureNotice =
-                "Rendered output could not be separated safely from prior Raw history. Inspect Raw for the exact terminal output."
+                "Rendered output could not be separated safely from prior Raw history (\(reason)). Inspect Raw for the exact terminal output."
             return
         }
         guard !derived.text.isEmpty else { return }

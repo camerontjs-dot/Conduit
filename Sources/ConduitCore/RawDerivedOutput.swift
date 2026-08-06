@@ -46,6 +46,18 @@ public enum RawDerivedCaptureUnavailableReason:
     case renderedFallbackMayIncludeHistory
     /// The terminal had no rendered snapshot available at the boundary.
     case terminalSnapshotUnavailable
+
+    /// Short operator-facing label for Conversation notices.
+    public var displayName: String {
+        switch self {
+        case .tmuxPaneCaptureFailed:
+            return "tmux pane capture failed"
+        case .renderedFallbackMayIncludeHistory:
+            return "rendered fallback may include history"
+        case .terminalSnapshotUnavailable:
+            return "terminal snapshot unavailable"
+        }
+    }
 }
 
 /// A terminal-controller observation delivered to the Conversation projector.
@@ -73,6 +85,20 @@ public enum RawDerivedOutputUnavailableReason:
     case comparisonTooLarge
     /// A repaint shared too little stable structure to identify only new lines.
     case noStableAnchor
+
+    /// Short operator-facing label for Conversation notices.
+    public var displayName: String {
+        switch self {
+        case .baselineUnavailable:
+            return "empty baseline at prompt boundary"
+        case .extractionChanged:
+            return "capture surface changed mid-prompt"
+        case .comparisonTooLarge:
+            return "rendered comparison too large"
+        case .noStableAnchor:
+            return "no stable screen anchor"
+        }
+    }
 }
 
 /// A strict reduction either yields bounded derived text or declines to make a

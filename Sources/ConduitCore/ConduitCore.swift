@@ -411,6 +411,110 @@ public enum PromptAssembler {
     }
 }
 
+/// Compact Conduit-recorded host context prepended to CLI prompt delivery.
+///
+/// This is not completion evidence, private reasoning, or a substitute for Raw.
+/// Conversation still records the human prompt text separately from the
+/// rendered delivery payload that may include this envelope.
+public enum HostEnvelope {
+    public struct Context: Equatable, Sendable {
+        public var taskSessionID: String?
+        public var projectPath: String?
+        public var agentName: String
+        public var surface: String
+        public var tmuxSessionName: String?
+        public var attachmentCount: Int
+
+        public init(
+            taskSessionID: String? = nil,
+            projectPath: String? = nil,
+            agentName: String,
+            surface: String = "conversation",
+            tmuxSessionName: String? = nil,
+            attachmentCount: Int = 0
+        ) {
+            self.taskSessionID = taskSessionID
+            self.projectPath = projectPath
+            self.agentName = agentName
+            self.surface = surface
+            self.tmuxSessionName = tmuxSessionName
+            self.attachmentCount = attachmentCount
+        }
+    }
+
+    /// Whether Conduit should inject a host envelope for this agent profile.
+    public static func shouldInject(for agent: AgentProfile) -> Bool {
+        agent.kind != .shell
+    }
+
+    public static func render(_ context: Context) -> String {
+        var lines = ["<<CONDUIT_HOST"]
+        if let task = context.taskSessionID, !task.isEmpty {
+            lines.append("task: \(task)")
+        }
+        if let project = context.projectPath, !project.isEmpty {
+            lines.append("project: \(project)")
+        }
+        lines.append("agent: \(context.agentName)")
+        lines.append("surface: \(context.surface)")
+        if let tmux = context.tmuxSessionName, !tmux.isEmpty {
+            lines.append("tmux: \(tmux)")
+        }
+        if context.attachmentCount > 0 {
+            lines.append("attachments: \(context.attachmentCount)")
+        }
+        lines.append("note: host context only; not completion or verification")
+        lines.append(">>")
+        return lines.joined(separator: "\n")
+    }
+
+    public static func wrap(prompt: String, context: Context) -> String {
+        let envelope = render(context)
+        let body = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.isEmpty { return envelope }
+        return envelope + "\n\n" + body
+    }
+}
+
+/// Presentation-only compaction for Derived-from-Raw blocks.
+///
+/// Does not mutate retained JSONL; Conversation may show this form while the
+/// source event keeps the full projected text.
+public enum ConversationDisplayText {
+    /// Collapses long blank runs and trailing per-line whitespace so TUI chrome
+    /// is less sparse without inventing content.
+    public static func compactDerived(_ text: String) -> String {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        var compacted: [String] = []
+        var blankRun = 0
+        for raw in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(raw).replacingOccurrences(
+                of: "\\s+$",
+                with: "",
+                options: .regularExpression
+            )
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                blankRun += 1
+                if blankRun <= 1 {
+                    compacted.append("")
+                }
+            } else {
+                blankRun = 0
+                compacted.append(line)
+            }
+        }
+        while compacted.first?.isEmpty == true {
+            compacted.removeFirst()
+        }
+        while compacted.last?.isEmpty == true {
+            compacted.removeLast()
+        }
+        return compacted.joined(separator: "\n")
+    }
+}
+
 public enum InboxWriterError: LocalizedError {
     case missingInbox(URL)
     case emptyCapture

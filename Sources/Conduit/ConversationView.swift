@@ -10,6 +10,10 @@ struct ConversationView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var runtime: TerminalRuntime
     @ObservedObject private var controller: TerminalSessionController
+    /// When true, new timeline events pin the thread to the latest card.
+    /// Live character growth only scrolls *within* the active output card.
+    @State private var followLatest = true
+    @State private var expandedOutputIDs: Set<UUID> = []
 
     init(runtime: TerminalRuntime) {
         self._runtime = ObservedObject(wrappedValue: runtime)
@@ -20,6 +24,9 @@ struct ConversationView: View {
         themeStore.palette(for: colorScheme)
     }
 
+    /// Default max height for Derived-from-Raw cards before internal scroll.
+    private let collapsedOutputMaxHeight: CGFloat = 280
+
     var body: some View {
         VStack(spacing: 0) {
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
@@ -28,7 +35,7 @@ struct ConversationView: View {
             Divider().overlay(palette.line)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: 10) {
                         boundaryCard
                         if !model.selectedTaskConversationDiagnostics.isEmpty {
                             retainedHistoryDiagnosticCard
@@ -48,26 +55,55 @@ struct ConversationView: View {
                         if let notice = runtime.conversationCaptureNotice {
                             captureNoticeCard(notice)
                         }
+                        Color.clear
+                            .frame(height: 1)
+                            .id("conversation-bottom")
                     }
-                    .padding(18)
-                    .frame(maxWidth: 820, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: 860, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: runtime.presentationEvents.count) { _ in
-                    guard let last = runtime.presentationEvents.last else { return }
+                    guard followLatest else { return }
                     withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        proxy.scrollTo("conversation-bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: latestOutputCharacterCount) { _ in
-                    guard let eventID = runtime.activeOutputEventID else { return }
-                    proxy.scrollTo(eventID, anchor: .bottom)
-                }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { _ in
+                            if followLatest {
+                                followLatest = false
+                            }
+                        }
+                )
+            }
+            if !followLatest {
+                jumpToLatestBar
             }
         }
         .background(palette.canvas)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(runtime.descriptor.agent.name) conversation")
+    }
+
+    private var jumpToLatestBar: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button {
+                followLatest = true
+            } label: {
+                Label("Jump to latest", systemImage: "arrow.down.to.line")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        .background(palette.rail)
+        .accessibilityHint("Resumes following new conversation events")
     }
 
     private func activityHeader(at date: Date) -> some View {
@@ -97,6 +133,20 @@ struct ConversationView: View {
                     .foregroundStyle(palette.faint)
             }
             Spacer(minLength: 4)
+            Button {
+                followLatest.toggle()
+            } label: {
+                Image(systemName: followLatest ? "lock.fill" : "lock.open")
+                    .font(.caption)
+                    .foregroundStyle(followLatest ? palette.accent : palette.dim)
+            }
+            .buttonStyle(.borderless)
+            .help(
+                followLatest
+                    ? "Following latest messages. Click to stop auto-scroll."
+                    : "Not following. Click to follow latest messages."
+            )
+            .accessibilityLabel(followLatest ? "Following latest" : "Not following latest")
             Button("Open Raw") {
                 runtime.selectedSurface = .raw
             }
@@ -228,8 +278,15 @@ struct ConversationView: View {
         let stateLabel = output.state == .live && !isCurrentCapture
             ? "Capture interrupted"
             : output.state.displayName
+        let displayText = ConversationDisplayText.compactDerived(output.text)
+        let isExpanded = expandedOutputIDs.contains(event.id)
+        let lineCount = displayText.split(
+            separator: "\n",
+            omittingEmptySubsequences: false
+        ).count
+        let shouldClamp = !isExpanded && lineCount > 12
 
-        return VStack(alignment: .leading, spacing: 9) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 7) {
                 Image(systemName: "terminal")
                     .foregroundStyle(palette.dim)
@@ -239,6 +296,10 @@ struct ConversationView: View {
                 Text("· \(stateLabel)")
                     .font(.caption)
                     .foregroundStyle(palette.dim)
+                if isCurrentCapture && output.state == .live {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
                 Spacer(minLength: 4)
                 Button("Open Raw") {
                     runtime.selectedSurface = .raw
@@ -246,11 +307,12 @@ struct ConversationView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(palette.accent)
             }
-            Text(output.text)
-                .font(.body)
-                .foregroundStyle(palette.text)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            derivedOutputBody(
+                displayText: displayText,
+                clamped: shouldClamp,
+                eventID: event.id,
+                isLive: isCurrentCapture && output.state == .live
+            )
             HStack(spacing: 6) {
                 Text(output.extraction.displayName)
                     .font(.caption2)
@@ -260,20 +322,70 @@ struct ConversationView: View {
                         .font(.caption2)
                         .foregroundStyle(palette.faint)
                 }
+                if displayText != output.text {
+                    Text("· blanks compacted for display")
+                        .font(.caption2)
+                        .foregroundStyle(palette.faint)
+                }
                 Spacer(minLength: 4)
+                if lineCount > 12 {
+                    Button(isExpanded ? "Collapse" : "Expand") {
+                        if isExpanded {
+                            expandedOutputIDs.remove(event.id)
+                        } else {
+                            expandedOutputIDs.insert(event.id)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                }
                 authorityLine(event)
             }
         }
-        .padding(12)
+        .padding(10)
         .background(palette.surface)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(palette.line, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .frame(maxWidth: 720, alignment: .leading)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: 780, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func derivedOutputBody(
+        displayText: String,
+        clamped: Bool,
+        eventID: UUID,
+        isLive: Bool
+    ) -> some View {
+        let textView = Text(displayText)
+            .font(.system(.callout, design: .monospaced))
+            .foregroundStyle(palette.text)
+            .textSelection(.enabled)
+            .lineSpacing(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+        if clamped {
+            ScrollViewReader { innerProxy in
+                ScrollView {
+                    textView
+                        .padding(.vertical, 2)
+                        .id("output-body-\(eventID)")
+                }
+                .frame(maxHeight: collapsedOutputMaxHeight, alignment: .top)
+                .onChange(of: displayText.count) { _ in
+                    guard isLive else { return }
+                    innerProxy.scrollTo("output-body-\(eventID)", anchor: .bottom)
+                }
+            }
+        } else {
+            textView
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func sessionOpenedCard(
@@ -402,15 +514,6 @@ struct ConversationView: View {
         return "\(seconds / 60)m ago"
     }
 
-    private var latestOutputCharacterCount: Int {
-        guard let eventID = runtime.activeOutputEventID,
-              let event = runtime.presentationEvents.first(where: {
-                  $0.id == eventID
-              }),
-              case .agentOutput(let output) = event.kind
-        else { return 0 }
-        return output.text.count
-    }
 }
 
 private extension PromptOrigin {
@@ -540,8 +643,9 @@ struct ConversationHistoryView: View {
         let stateLabel = output.state == .live
             ? "Capture interrupted"
             : output.state.displayName
+        let displayText = ConversationDisplayText.compactDerived(output.text)
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Label("Rendered Raw output", systemImage: "terminal")
                     .font(.caption.weight(.semibold))
@@ -550,17 +654,25 @@ struct ConversationHistoryView: View {
                     .font(.caption)
                     .foregroundStyle(palette.dim)
             }
-            Text(output.text)
-                .foregroundStyle(palette.text)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("This projection may include prompt echo, tool output, or terminal chrome.")
+            ScrollView {
+                Text(displayText)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(palette.text)
+                    .textSelection(.enabled)
+                    .lineSpacing(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 280, alignment: .top)
+            Text("Projection may include prompt echo, tool output, or terminal chrome.")
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
             HStack(spacing: 6) {
                 Text(output.extraction.displayName)
                 if output.truncated {
                     Text("· older projected text omitted")
+                }
+                if displayText != output.text {
+                    Text("· blanks compacted for display")
                 }
                 Spacer(minLength: 4)
                 Text(
@@ -571,17 +683,17 @@ struct ConversationHistoryView: View {
                         )
                 )
             }
-                .font(.caption2)
-                .foregroundStyle(palette.faint)
+            .font(.caption2)
+            .foregroundStyle(palette.faint)
         }
-        .padding(12)
+        .padding(10)
         .background(palette.surface)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(palette.line, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .frame(maxWidth: 720, alignment: .leading)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: 780, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

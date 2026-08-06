@@ -1267,6 +1267,29 @@ withTempDir { root in
     )
     check("prompt assembler lists attachment paths",
           assembled.contains("Review these") && assembled.contains("/tmp/a.png"))
+
+    let envelope = HostEnvelope.wrap(
+        prompt: "say hello",
+        context: HostEnvelope.Context(
+            taskSessionID: "t1",
+            projectPath: "/tmp/MainFrame",
+            agentName: "Grok",
+            surface: "conversation",
+            tmuxSessionName: "conduit-mainframe-grok-1",
+            attachmentCount: 0
+        )
+    )
+    check("host envelope wraps CLI prompts",
+          envelope.contains("<<CONDUIT_HOST")
+            && envelope.contains("agent: Grok")
+            && envelope.contains("say hello")
+            && envelope.contains("not completion or verification"))
+    check("host envelope skips shell agents",
+          HostEnvelope.shouldInject(
+              for: AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell)
+          ) == false)
+    check("display text compacts blank runs",
+          ConversationDisplayText.compactDerived("a\n\n\n\nb\n") == "a\n\nb")
 }
 
 // MARK: - Context bundle + forwarder

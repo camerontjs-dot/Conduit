@@ -271,32 +271,7 @@ struct ComposerView: View {
     private var ordinaryComposer: some View {
         VStack(spacing: 6) {
             if !model.attachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(model.attachments) { attachment in
-                            HStack(spacing: 6) {
-                                Image(systemName: attachment.url.hasDirectoryPath ? "folder" : "doc")
-                                    .foregroundStyle(palette.dim)
-                                Text(attachment.url.lastPathComponent)
-                                    .lineLimit(1)
-                                    .foregroundStyle(palette.text)
-                                Button {
-                                    model.removeAttachment(attachment)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(palette.faint)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Remove \(attachment.url.lastPathComponent)")
-                            }
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(palette.lineSoft)
-                            .clipShape(RoundedRectangle(cornerRadius: 7))
-                        }
-                    }
-                }
+                attachmentChipRow
             }
 
             HStack(alignment: .center, spacing: 9) {
@@ -309,12 +284,35 @@ struct ComposerView: View {
                 .help(model.speech.isRecording ? "Stop dictation" : "Dictate prompt")
 
                 Button(action: model.addFiles) {
-                    Image(systemName: "paperclip")
-                        .foregroundStyle(palette.dim)
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "paperclip")
+                            .foregroundStyle(
+                                model.attachments.isEmpty ? palette.dim : palette.accent
+                            )
+                        if !model.attachments.isEmpty {
+                            Text("\(model.attachments.count)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(palette.onAccent)
+                                .padding(.horizontal, 3)
+                                .padding(.vertical, 1)
+                                .background(palette.accent)
+                                .clipShape(Capsule())
+                                .offset(x: 8, y: -7)
+                        }
+                    }
+                    .frame(minWidth: 18, minHeight: 16)
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("Attach files or folders")
-                .help("Attach files or folders")
+                .accessibilityLabel(
+                    model.attachments.isEmpty
+                        ? "Attach files or folders"
+                        : "Attach files or folders, \(model.attachments.count) attached"
+                )
+                .help(
+                    model.attachments.isEmpty
+                        ? "Attach files or folders"
+                        : "\(model.attachments.count) attached — click to add more"
+                )
 
                 Menu {
                     Button("Paste image", action: model.pasteImage)
@@ -337,7 +335,10 @@ struct ComposerView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 9))
                     .overlay {
                         RoundedRectangle(cornerRadius: 9)
-                            .stroke(palette.line)
+                            .stroke(
+                                model.isDropTargeted ? palette.accent : palette.line,
+                                lineWidth: model.isDropTargeted ? 2 : 1
+                            )
                     }
                     .overlay(alignment: .topLeading) {
                         if model.composerText.isEmpty && !model.speech.isRecording {
@@ -368,11 +369,17 @@ struct ComposerView: View {
                     .font(.caption2.bold())
                     .foregroundStyle(palette.accent)
                     .lineLimit(1)
+                if !model.attachments.isEmpty {
+                    Text("· \(model.attachments.count) attached")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(palette.accent)
+                        .accessibilityLabel("\(model.attachments.count) attachments ready")
+                }
                 if let status = model.statusMessage {
                     Text("· \(status)")
                         .font(.caption)
                         .foregroundStyle(palette.dim)
-                        .lineLimit(1)
+                        .lineLimit(2)
                         .truncationMode(.middle)
                         .help(status)
                         .accessibilityLabel(status)
@@ -388,6 +395,67 @@ struct ComposerView: View {
                 .help("Append this prompt and attachments to MainFrame 00_inbox")
             }
         }
+    }
+
+    private var attachmentChipRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(model.attachments) { attachment in
+                    HStack(spacing: 6) {
+                        attachmentThumbnail(for: attachment.url)
+                        Text(attachment.url.lastPathComponent)
+                            .lineLimit(1)
+                            .foregroundStyle(palette.text)
+                            .help(attachment.url.path)
+                        Button {
+                            model.removeAttachment(attachment)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(palette.faint)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove \(attachment.url.lastPathComponent)")
+                    }
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(palette.lineSoft)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(palette.accent.opacity(0.35), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Attached \(attachment.url.lastPathComponent)")
+                }
+            }
+        }
+        .accessibilityLabel("\(model.attachments.count) attachments")
+    }
+
+    @ViewBuilder
+    private func attachmentThumbnail(for url: URL) -> some View {
+        if url.hasDirectoryPath {
+            Image(systemName: "folder.fill")
+                .foregroundStyle(palette.dim)
+                .frame(width: 22, height: 22)
+        } else if Self.isImageURL(url), let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: "doc.fill")
+                .foregroundStyle(palette.dim)
+                .frame(width: 22, height: 22)
+        }
+    }
+
+    private static func isImageURL(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return ["png", "jpg", "jpeg", "gif", "webp", "tif", "tiff", "bmp", "heic"].contains(ext)
     }
 }
 #endif

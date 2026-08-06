@@ -526,6 +526,43 @@ Structured adapter work remains a separate, version-gated phase.
 
 ---
 
+## D-027: Conversation readability, attachment feedback, and host envelope
+
+**Status:** Accepted (daily-driver UX and harness affordances)
+
+**Context:** Operator smoke of conversation history showed that long
+Derived-from-Raw cards were hard to read (auto-scroll to end, sparse TUI
+chrome, no inner scroll), attachment success was easy to miss, and agents
+inside Conduit had to forensically discover host identity.
+
+**Decision:**
+
+1. Conversation output cards use denser monospaced display text, collapse
+   blank runs for presentation only, clamp tall blocks with internal scroll
+   plus Expand/Collapse, and stop force-scrolling the whole thread on every
+   live character tick. Outer auto-follow is optional and can be paused.
+2. Attachment actions report clear status, show chips with image thumbnails
+   when possible, and surface an attached count on the paperclip control.
+3. CLI (non-shell) prompt *delivery* may prepend a compact `<<CONDUIT_HOST…>>`
+   envelope (task, project, agent, surface, tmux, attachment count). Conversation
+   still stores the human composer text separately. The envelope is host
+   context only, not completion or verification. Shell prompts stay unwrapped.
+
+Capture-unavailable notices include the concrete reason string so operators can
+distinguish empty baseline, surface change, and capture failure.
+
+**Rejected alternatives:** Mutating retained JSONL to “clean” TUI text would
+rewrite evidence. Injecting host envelopes into human-visible Conversation
+prompt bubbles would blur what the operator typed. Auto-expanding every output
+card would recreate the unreadable full-height problem.
+
+**Consequences:** Reading long agent turns is practical in Conversation without
+claiming structured assistant messages. Agents can see intentional host context
+when Conduit delivers a CLI prompt. Attachment UX no longer depends on noticing
+a silent chip.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

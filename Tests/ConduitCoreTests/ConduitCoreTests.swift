@@ -338,6 +338,45 @@ final class PromptAssemblerTests: XCTestCase {
     }
 }
 
+final class HostEnvelopeTests: XCTestCase {
+    func testWrapPrependsHostBlockWithoutDroppingPrompt() {
+        let wrapped = HostEnvelope.wrap(
+            prompt: "say hello",
+            context: HostEnvelope.Context(
+                taskSessionID: "TASK-1",
+                projectPath: "/Users/admin/Desktop/MainFrame",
+                agentName: "Grok",
+                surface: "conversation",
+                tmuxSessionName: "conduit-mainframe-grok-1",
+                attachmentCount: 1
+            )
+        )
+        XCTAssertTrue(wrapped.hasPrefix("<<CONDUIT_HOST\n"))
+        XCTAssertTrue(wrapped.contains("task: TASK-1"))
+        XCTAssertTrue(wrapped.contains("agent: Grok"))
+        XCTAssertTrue(wrapped.contains("attachments: 1"))
+        XCTAssertTrue(wrapped.contains("not completion or verification"))
+        XCTAssertTrue(wrapped.hasSuffix("say hello"))
+    }
+
+    func testShellAgentsDoNotInject() {
+        let shell = AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell)
+        let cli = AgentProfile(name: "Grok", command: "grok", kind: .cli)
+        XCTAssertFalse(HostEnvelope.shouldInject(for: shell))
+        XCTAssertTrue(HostEnvelope.shouldInject(for: cli))
+    }
+}
+
+final class ConversationDisplayTextTests: XCTestCase {
+    func testCompactDerivedCollapsesBlankRunsAndTrimsEdges() {
+        let raw = "\n\n  line one  \n\n\n\nline two\n\n"
+        let compact = ConversationDisplayText.compactDerived(raw)
+        // Leading indentation is kept (TUI alignment); trailing spaces and
+        // edge blank lines are removed; internal blank runs collapse to one.
+        XCTAssertEqual(compact, "  line one\n\nline two")
+    }
+}
+
 final class PaletteSpecTests: XCTestCase {
     func testCaseOrderAndProductDefault() {
         XCTAssertEqual(
