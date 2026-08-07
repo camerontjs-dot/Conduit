@@ -59,7 +59,15 @@ struct ConversationView: View {
 
     private var showsControlStrip: Bool {
         guard !controller.lifecycle.isTerminal else { return false }
-        return model.settings.showConversationControls || activeOutputHasInteractiveMenu
+        // Progressive disclosure: chrome only when menus need it, or Settings on.
+        return activeOutputHasInteractiveMenu
+            || model.settings.showConversationControls
+    }
+
+    /// Density-aware conversation metrics (Focused Flow + progressive disclosure).
+    /// Knowledge: hide non-action chrome; denser stream for scanning SA.
+    private var layout: ConversationLayoutMetrics {
+        ConversationLayoutMetrics(density: model.density)
     }
 
     var body: some View {
@@ -74,7 +82,7 @@ struct ConversationView: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 22) {
+                    LazyVStack(alignment: .leading, spacing: layout.turnSpacing) {
                         if !model.selectedTaskConversationDiagnostics.isEmpty {
                             retainedHistoryDiagnosticCard
                         }
@@ -97,9 +105,9 @@ struct ConversationView: View {
                             .frame(height: 1)
                             .id("conversation-bottom")
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 18)
-                    .frame(maxWidth: 760, alignment: .leading)
+                    .padding(.horizontal, layout.horizontalPadding)
+                    .padding(.vertical, layout.verticalPadding)
+                    .frame(maxWidth: layout.contentMaxWidth, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: streamContentSignature) { _ in
@@ -196,8 +204,8 @@ struct ConversationView: View {
                     "These keys go to the live agent PTY without treating the action as Raw typing, so capture can continue."
                 )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
         .background(palette.rail)
     }
 
@@ -291,8 +299,8 @@ struct ConversationView: View {
             .foregroundStyle(palette.accent)
             .accessibilityHint("Opens the live PTY view and direct CLI controls")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, layout.headerVerticalPadding)
         .background(palette.surface)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
@@ -357,14 +365,14 @@ struct ConversationView: View {
     }
 
     private var waitingForVisibleOutputCard: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             ProgressView()
                 .controlSize(.mini)
-            Text("Waiting for the next turn…")
-                .font(.callout)
+            Text("Waiting…")
+                .font(.caption)
                 .foregroundStyle(palette.dim)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
@@ -406,7 +414,7 @@ struct ConversationView: View {
                 sessionBoundary(entry, event: event)
             }
         case .exchange(let user, let outputs):
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: layout.withinTurnSpacing) {
                 if let user, case .userPrompt(let prompt) = user.kind {
                     promptBlock(prompt, event: user)
                 }
@@ -456,15 +464,18 @@ struct ConversationView: View {
         _ prompt: SubmittedPrompt,
         event: SessionPresentationEvent
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: layout.blockSpacing) {
             HStack(spacing: 6) {
                 Text("You")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.accent)
                 if case .forwardedTerminalOutput(let sourceAgentName) = prompt.origin {
-                    Text("· forwarded from \(sourceAgentName)")
+                    Text("· \(sourceAgentName)")
                         .font(.caption2)
                         .foregroundStyle(palette.dim)
+                }
+                if prompt.delivery != .delivered {
+                    deliveryMark(prompt.delivery)
                 }
                 Spacer(minLength: 4)
                 Text(relativeOrClock(event.occurredAt))
@@ -473,15 +484,15 @@ struct ConversationView: View {
             }
             if !prompt.text.isEmpty {
                 Text(prompt.text)
-                    .font(.body)
+                    .font(.callout)
                     .foregroundStyle(palette.text)
                     .textSelection(.enabled)
-                    .lineSpacing(3)
+                    .lineSpacing(layout.lineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if !prompt.attachmentPaths.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(prompt.attachmentPaths, id: \.self) { path in
                         Label(path, systemImage: "paperclip")
                             .font(.caption2.monospaced())
@@ -492,16 +503,14 @@ struct ConversationView: View {
                     }
                 }
             }
-            deliveryMark(prompt.delivery)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(palette.accent.opacity(0.45))
                 .frame(width: 2)
-                .padding(.vertical, 2)
         }
-        .padding(.leading, 10)
+        .padding(.leading, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
@@ -519,10 +528,10 @@ struct ConversationView: View {
         let blocks = ConversationDisplayText.proseBlocks(in: displayText)
         let showLive = isCurrentCapture && output.state == .live
 
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: layout.blockSpacing) {
             HStack(spacing: 6) {
                 Text(runtime.descriptor.agent.name)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.ink)
                 if showLive {
                     ProgressView()
@@ -544,26 +553,30 @@ struct ConversationView: View {
             if displayText.isEmpty {
                 if showLive {
                     Text("…")
-                        .font(.body)
+                        .font(.callout)
                         .foregroundStyle(palette.faint)
                 }
             } else if interactiveMenu {
-                // Menus stay explicit; prose above options when present.
-                let menuStripped = displayText
                 ConversationProseView(
-                    blocks: ConversationDisplayText.proseBlocks(in: menuStripped),
-                    palette: palette
+                    blocks: ConversationDisplayText.proseBlocks(in: displayText),
+                    palette: palette,
+                    layout: layout
                 )
                 interactiveMenuPanel(options: menuOptions)
             } else {
-                ConversationProseView(blocks: blocks, palette: palette)
+                ConversationProseView(
+                    blocks: blocks,
+                    palette: palette,
+                    layout: layout
+                )
             }
 
+            // Progressive disclosure: one faint provenance line, not a footer stack.
             if !displayText.isEmpty || showLive {
                 sourceDisclosure(output: output, event: event)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
@@ -575,9 +588,9 @@ struct ConversationView: View {
         let sourceLabel: String = {
             switch event.authority {
             case .derivedFromRaw:
-                return "Projected from Raw"
+                return "from Raw"
             case .toolReported:
-                return "Structured adapter"
+                return "adapter"
             default:
                 return event.authority.displayName
             }
@@ -586,13 +599,9 @@ struct ConversationView: View {
         if output.truncated {
             bits.append("truncated")
         }
-        let display = ConversationDisplayText.workstationDerived(output.text)
-        if display != output.text {
-            bits.append("chrome filtered")
-        }
         return Text(bits.joined(separator: " · "))
             .font(.caption2)
-            .foregroundStyle(palette.faint)
+            .foregroundStyle(palette.faint.opacity(0.85))
             .help(
                 "\(output.extraction.displayName). Raw remains the live terminal authority."
             )
@@ -792,14 +801,97 @@ struct ConversationView: View {
     }
 }
 
+// MARK: - Density metrics
+
+/// Conversation stream metrics keyed to Focused Flow density.
+/// Synthesized from Conduit usability notes (progressive disclosure, SA without
+/// chrome overload) and Focused Flow compact rules.
+private struct ConversationLayoutMetrics {
+    let density: Density
+
+    var turnSpacing: CGFloat {
+        switch density {
+        case .focused: return 10
+        case .balanced: return 12
+        case .operator: return 14
+        }
+    }
+
+    var withinTurnSpacing: CGFloat {
+        switch density {
+        case .focused: return 6
+        case .balanced: return 8
+        case .operator: return 10
+        }
+    }
+
+    var blockSpacing: CGFloat {
+        switch density {
+        case .focused: return 3
+        case .balanced: return 4
+        case .operator: return 5
+        }
+    }
+
+    var proseSpacing: CGFloat {
+        switch density {
+        case .focused: return 5
+        case .balanced: return 6
+        case .operator: return 8
+        }
+    }
+
+    var lineSpacing: CGFloat {
+        switch density {
+        case .focused: return 1.5
+        case .balanced: return 2
+        case .operator: return 2.5
+        }
+    }
+
+    var horizontalPadding: CGFloat {
+        switch density {
+        case .focused: return 14
+        case .balanced: return 16
+        case .operator: return 18
+        }
+    }
+
+    var verticalPadding: CGFloat {
+        switch density {
+        case .focused: return 8
+        case .balanced: return 10
+        case .operator: return 12
+        }
+    }
+
+    var headerVerticalPadding: CGFloat {
+        switch density {
+        case .focused: return 5
+        case .balanced: return 6
+        case .operator: return 7
+        }
+    }
+
+    var contentMaxWidth: CGFloat {
+        // Wider usable column — less empty side margin on workstation displays.
+        switch density {
+        case .focused: return 880
+        case .balanced: return 920
+        case .operator: return 980
+        }
+    }
+}
+
 // MARK: - Document prose
 
 private struct ConversationProseView: View {
     let blocks: [ConversationProseBlock]
     let palette: ConduitPalette
+    var layout: ConversationLayoutMetrics = ConversationLayoutMetrics(density: .focused)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: layout.proseSpacing) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .heading(let level, let text):
@@ -810,38 +902,39 @@ private struct ConversationProseView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 case .paragraph(let text):
                     Text(text)
-                        .font(.body)
+                        .font(.callout)
                         .foregroundStyle(palette.text)
                         .textSelection(.enabled)
-                        .lineSpacing(4)
+                        .lineSpacing(layout.lineSpacing)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .bullets(let items):
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
                         ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Text("•")
+                                    .font(.callout)
                                     .foregroundStyle(palette.dim)
                                 Text(item)
-                                    .font(.body)
+                                    .font(.callout)
                                     .foregroundStyle(palette.text)
                                     .textSelection(.enabled)
-                                    .lineSpacing(3)
+                                    .lineSpacing(layout.lineSpacing)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }
                 case .code(_, let body):
                     Text(body)
-                        .font(.system(.callout, design: .monospaced))
+                        .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(palette.text)
                         .textSelection(.enabled)
-                        .padding(10)
+                        .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(palette.sink.opacity(0.65))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 6)
                                 .strokeBorder(palette.line, lineWidth: 1)
                         )
                 }
@@ -852,9 +945,9 @@ private struct ConversationProseView: View {
 
     private func headingFont(_ level: Int) -> Font {
         switch level {
-        case 1: return .title3.weight(.semibold)
-        case 2: return .headline
-        default: return .subheadline.weight(.semibold)
+        case 1: return .headline
+        case 2: return .subheadline.weight(.semibold)
+        default: return .callout.weight(.semibold)
         }
     }
 }
@@ -876,13 +969,18 @@ struct ConversationHistoryView: View {
         SessionPresentation.conversationTurns(from: events)
     }
 
+    private var layout: ConversationLayoutMetrics {
+        // History has no live density binding; use Focused compact defaults.
+        ConversationLayoutMetrics(density: .focused)
+    }
+
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 22) {
+        LazyVStack(alignment: .leading, spacing: layout.turnSpacing) {
             ForEach(turns) { turn in
                 historyTurn(turn)
             }
         }
-        .frame(maxWidth: 760, alignment: .leading)
+        .frame(maxWidth: layout.contentMaxWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -894,7 +992,7 @@ struct ConversationHistoryView: View {
                 historyBoundary(entry, event: event)
             }
         case .exchange(let user, let outputs):
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: layout.withinTurnSpacing) {
                 if let user, case .userPrompt(let prompt) = user.kind {
                     historyPrompt(prompt, event: user)
                 }
@@ -944,11 +1042,14 @@ struct ConversationHistoryView: View {
         _ prompt: SubmittedPrompt,
         event: SessionPresentationEvent
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: layout.blockSpacing) {
             HStack(spacing: 6) {
                 Text("You")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.accent)
+                if prompt.delivery != .delivered {
+                    historicalDeliveryMark(prompt.delivery)
+                }
                 Spacer(minLength: 4)
                 Text(
                     event.occurredAt.formatted(
@@ -961,10 +1062,10 @@ struct ConversationHistoryView: View {
             }
             if !prompt.text.isEmpty {
                 Text(prompt.text)
-                    .font(.body)
+                    .font(.callout)
                     .foregroundStyle(palette.text)
                     .textSelection(.enabled)
-                    .lineSpacing(3)
+                    .lineSpacing(layout.lineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(prompt.attachmentPaths, id: \.self) { path in
@@ -974,14 +1075,13 @@ struct ConversationHistoryView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            historicalDeliveryMark(prompt.delivery)
         }
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(palette.accent.opacity(0.45))
                 .frame(width: 2)
         }
-        .padding(.leading, 10)
+        .padding(.leading, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -991,10 +1091,10 @@ struct ConversationHistoryView: View {
     ) -> some View {
         let displayText = ConversationDisplayText.workstationDerived(output.text)
         let blocks = ConversationDisplayText.proseBlocks(in: displayText)
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: layout.blockSpacing) {
             HStack {
                 Text("Agent")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.ink)
                 Spacer(minLength: 4)
                 Text(
@@ -1011,15 +1111,15 @@ struct ConversationHistoryView: View {
                     .font(.callout)
                     .foregroundStyle(palette.faint)
             } else {
-                ConversationProseView(blocks: blocks, palette: palette)
+                ConversationProseView(
+                    blocks: blocks,
+                    palette: palette,
+                    layout: layout
+                )
             }
-            Text(
-                event.authority == .derivedFromRaw
-                    ? "Projected from Raw"
-                    : event.authority.displayName
-            )
-            .font(.caption2)
-            .foregroundStyle(palette.faint)
+            Text(event.authority == .derivedFromRaw ? "from Raw" : event.authority.displayName)
+                .font(.caption2)
+                .foregroundStyle(palette.faint.opacity(0.85))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1032,7 +1132,7 @@ struct ConversationHistoryView: View {
         let color: Color
         switch delivery {
         case .queued:
-            label = "Delivery unconfirmed"
+            label = "Unconfirmed"
             symbol = "questionmark.circle"
             color = palette.dim
         case .delivered:

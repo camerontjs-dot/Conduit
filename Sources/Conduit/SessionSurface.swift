@@ -122,18 +122,18 @@ private struct ActiveSessionSurface: View {
             .accessibilityLabel("Session view")
 
             if runtime.selectedSurface == .raw {
-                Label("Live PTY view and direct CLI controls", systemImage: "terminal")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
+                Text("Live PTY")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
             } else {
-                Label("Local thread with source-labelled output; Raw remains authoritative", systemImage: "checklist")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
+                Text("Thread · Raw authoritative")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
         .background(palette.rail)
     }
 
