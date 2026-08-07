@@ -1377,6 +1377,15 @@ final class AppModel: ObservableObject {
         }
         sessions.append(runtime)
         _ = selectSession(runtime)
+        // After durable reattach, rebuild any incomplete turn projection from
+        // the live pane (missed paint while Conduit was away).
+        if case .resumed = entry {
+            Task { @MainActor [weak runtime] in
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                runtime?.controller.startIfNeeded()
+                runtime?.resyncConversationCapture()
+            }
+        }
         // The terminal used to start only when its SwiftTerm view appeared.
         // Conversation is now the default, so process ownership must not depend
         // on mounting the Raw surface.
@@ -1731,6 +1740,17 @@ final class AppModel: ObservableObject {
         )
         guard !assembled.isEmpty else { return }
 
+        // Slash commands are agent CLI surface commands (skills, /compact, …).
+        // Route them as typed control input so agent autocomplete/menus work.
+        let trimmedComposer = composerText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if attachments.isEmpty,
+           AgentSlashCatalog.looksLikeSlashCommand(trimmedComposer) {
+            sendSlashCommand(trimmedComposer)
+            return
+        }
+
         let runtime: TerminalRuntime
         if let activeSessionForSelectedProject {
             runtime = activeSessionForSelectedProject
@@ -1792,6 +1812,42 @@ final class AppModel: ObservableObject {
             }
             self.errorMessage = "The prompt could not be delivered to \(agentName). It has been kept in the composer."
         }
+    }
+
+    /// Slash / skill commands must hit the agent TUI as typed control input
+    /// (same path as Raw), not as a Conduit host-envelope prompt paste.
+    func sendSlashCommand(_ command: String) {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("/"), trimmed.count > 1 else {
+            sendComposer()
+            return
+        }
+        guard let runtime = activeSessionForSelectedProject
+                ?? selectedTaskRuntime,
+              !runtime.controller.lifecycle.isTerminal
+        else {
+            errorMessage = "No live agent session for slash commands. Launch or reconnect a task first."
+            return
+        }
+
+        let eventID = runtime.recordPrompt(
+            text: trimmed,
+            attachmentPaths: [],
+            renderedPayload: trimmed
+        )
+        let baseline = runtime.controller.currentCaptureBaseline()
+        runtime.beginAgentOutputCapture(
+            promptEventID: eventID,
+            promptText: trimmed,
+            baseline: baseline
+        )
+        runtime.controller.armConversationCapture(from: baseline)
+        runtime.controller.injectControlInput(trimmed, submit: true)
+        runtime.updatePromptDelivery(eventID: eventID, to: .delivered)
+        // Keep capture following the TUI response (menus, compact, etc.).
+        runtime.controller.refreshConversationCapture()
+        composerText = ""
+        statusMessage = "Sent \(trimmed) to \(runtime.descriptor.agent.name) as a CLI command."
     }
 
     /// Builds the terminal delivery string. CLI agents receive a compact
@@ -2437,16 +2493,93 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         controller.onTerminalBoundary = { [weak self] in
             self?.closeAgentOutputCapture()
         }
+        // Direct Raw typing no longer ends capture. Surface switches and slash
+        // menus stay on the same turn; process boundaries still close cleanly.
         controller.onDirectRawInput = { [weak self] in
-            guard let self else { return }
-            guard self.activeOutputCapture != nil
-                    || self.activeOutputEventID != nil
-                    || self.isAwaitingAgentOutput
-            else { return }
-            self.closeAgentOutputCapture()
-            self.conversationCaptureNotice =
-                "Raw interaction ended the prior output capture. Inspect Raw for the exact terminal state."
+            self?.handleDirectRawInputWhileCapturing()
         }
+    }
+
+    /// Keep capture live and pull a fresh snapshot so Conversation does not
+    /// lag while the operator is in Raw.
+    private func handleDirectRawInputWhileCapturing() {
+        guard activeOutputCapture != nil
+                || activeOutputEventID != nil
+                || isAwaitingAgentOutput
+        else { return }
+        conversationCaptureNotice = nil
+        controller.refreshConversationCapture()
+    }
+
+    /// Re-arm capture after reconnect or surface return and pull pane text that
+    /// arrived while Conversation was not the focused reading surface.
+    func resyncConversationCapture() {
+        let hadNotice = conversationCaptureNotice != nil
+        conversationCaptureNotice = nil
+
+        if let capture = activeOutputCapture {
+            controller.armConversationCapture(
+                from: .available(capture.baseline)
+            )
+            controller.refreshConversationCapture()
+            return
+        }
+
+        // Recovery: last operator prompt has no closed assistant block yet.
+        // Empty same-surface baseline + prompt-anchored reduction rebuilds the
+        // visible agent reply after reconnect (missed paint while detached).
+        guard let lastPrompt = presentationEvents.last(where: {
+            if case .userPrompt = $0.kind { return true }
+            return false
+        }),
+        case .userPrompt(let prompt) = lastPrompt.kind
+        else { return }
+
+        let linkedOutputs = presentationEvents.compactMap { event
+            -> AgentVisibleOutput? in
+            guard case .agentOutput(let output) = event.kind,
+                  output.promptEventID == lastPrompt.id
+            else { return nil }
+            return output
+        }
+        let hasClosedOutput = linkedOutputs.contains { $0.state == .closed }
+        guard !hasClosedOutput else { return }
+
+        let needsRecovery = hadNotice
+            || isAwaitingAgentOutput
+            || linkedOutputs.isEmpty
+            || linkedOutputs.contains { $0.state == .live || $0.state == .settled }
+        guard needsRecovery else { return }
+
+        let liveBaseline = controller.currentCaptureBaseline()
+        let emptyBaseline: RawDerivedCapture
+        switch liveBaseline {
+        case .available(let snap):
+            emptyBaseline = .available(
+                RawDerivedSnapshot(text: "", extraction: snap.extraction)
+            )
+        case .unavailable(let reason):
+            emptyBaseline = .unavailable(reason)
+        }
+
+        beginAgentOutputCapture(
+            promptEventID: lastPrompt.id,
+            promptText: prompt.text,
+            baseline: emptyBaseline
+        )
+        guard activeOutputCapture != nil || isAwaitingAgentOutput else { return }
+        // Reuse the open projection card when one already exists for this prompt
+        // so reconnect catch-up grows the same turn instead of duplicating it.
+        if let existing = presentationEvents.last(where: { event in
+            guard case .agentOutput(let output) = event.kind else { return false }
+            return output.promptEventID == lastPrompt.id
+        }) {
+            activeOutputEventID = existing.id
+            isAwaitingAgentOutput = false
+        }
+        // Empty same-surface arm → prompt-anchored reduction on next snapshot.
+        controller.armConversationCapture(from: emptyBaseline)
+        controller.refreshConversationCapture()
     }
 
     @discardableResult

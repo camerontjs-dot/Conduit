@@ -287,7 +287,7 @@ struct SettingsView: View {
                 isOn: $model.settings.showConversationControls
             )
             .help("Number keys, arrows, Esc, and Enter for agent permission menus without opening Raw.")
-            Text("Menu replies from Conversation are injected into the live PTY without ending output capture. Typing in Raw still ends capture for that turn.")
+            Text("Menu replies and slash commands from Conversation inject into the live PTY without ending capture. Switching to Raw keeps capture warm so the turn stream can catch up.")
                 .font(.caption)
                 .foregroundStyle(palette.dim)
         }

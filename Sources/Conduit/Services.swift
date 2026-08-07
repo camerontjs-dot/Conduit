@@ -174,7 +174,10 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         terminalView.onDirectRawInput = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                self.conversationCaptureExtraction = nil
+                // Keep Conversation capture armed while the operator uses Raw.
+                // Ending capture on every keystroke made surface switches and
+                // slash menus break the turn stream. Capture still closes on
+                // process boundaries and the next Conduit prompt delivery.
                 self.onDirectRawInput?()
             }
         }
@@ -982,6 +985,82 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         terminalView.process.send(data: bytes[...])
     }
 
+    /// Arms Derived-from-Raw capture using an already-taken baseline without
+    /// delivering a prompt. Used for slash-command inject and reconnect catch-up.
+    func armConversationCapture(from baseline: RawDerivedCapture) {
+        switch baseline {
+        case .available(let snapshot):
+            conversationCaptureExtraction = snapshot.extraction
+            // Empty recovery baselines must not seed last-accepted, or the
+            // immediate refresh would be treated as a no-op.
+            if snapshot.text.isEmpty {
+                lastAcceptedRenderedBuffer = ""
+                lastAcceptedTmuxPane = ""
+            } else {
+                switch snapshot.extraction {
+                case .renderedBuffer:
+                    lastAcceptedRenderedBuffer = snapshot.text
+                case .tmuxPane:
+                    lastAcceptedTmuxPane = snapshot.text
+                case .structuredAdapter:
+                    break
+                }
+            }
+        case .unavailable:
+            conversationCaptureExtraction = nil
+        }
+    }
+
+    /// Current same-surface baseline for capture start/resync.
+    func currentCaptureBaseline() -> RawDerivedCapture {
+        if usesTmux, let name = tmuxSessionName,
+           let tmux = EnvironmentResolver.shared.resolve("tmux") {
+            return Self.tmuxPromptBaseline(
+                driver: TmuxDriver(tmuxPath: tmux),
+                sessionName: name,
+                safeRenderedFallback: { [weak self] in
+                    self?.terminalView.scrollbackFreeRenderedSnapshot()
+                }
+            )
+        }
+        return directPromptBaseline()
+    }
+
+    /// Forces an immediate rendered snapshot into the capture pipeline so
+    /// Conversation can catch up after Raw interaction or reconnect.
+    func refreshConversationCapture() {
+        // Clear last-accepted so the next snapshot is always applied.
+        lastAcceptedRenderedBuffer = ""
+        lastAcceptedTmuxPane = ""
+        switch conversationCaptureExtraction {
+        case .tmuxPane:
+            guard let name = tmuxSessionName,
+                  let tmux = EnvironmentResolver.shared.resolve("tmux")
+            else { return }
+            let driver = TmuxDriver(tmuxPath: tmux)
+            captureQueue.async { [weak self] in
+                let snapshot = driver.capturePaneSnapshot(session: name)
+                Task { @MainActor in
+                    guard let self,
+                          self.conversationCaptureExtraction == .tmuxPane
+                    else { return }
+                    if let snapshot {
+                        self.acceptRenderedSnapshot(
+                            snapshot,
+                            extraction: .tmuxPane
+                        )
+                    }
+                }
+            }
+        case .renderedBuffer:
+            flushRenderedBufferCapture(
+                requiresScrollbackFreeBuffer: usesTmux
+            )
+        case .structuredAdapter, .none:
+            break
+        }
+    }
+
     /// Common menu navigation keys for agent permission TUIs.
     func injectControlKey(_ key: TerminalControlKey) {
         injectControlInput(key.bytes, submit: false)
@@ -1123,6 +1202,9 @@ struct TerminalTheme: Equatable {
 struct TerminalHostView: NSViewRepresentable {
     let controller: TerminalSessionController
     let theme: TerminalTheme
+    /// When false, host the terminal for capture continuity without stealing
+    /// keyboard focus (Conversation surface keeps the composer first-responder).
+    var claimsFocus: Bool = true
 
     func makeNSView(context: Context) -> TerminalContainerView {
         let container = TerminalContainerView(frame: .zero)
@@ -1135,10 +1217,12 @@ struct TerminalHostView: NSViewRepresentable {
     func updateNSView(_ container: TerminalContainerView, context: Context) {
         controller.startIfNeeded()
         theme.apply(to: controller.terminalView)
-        // Only claim focus when the session actually changed. `updateNSView`
-        // also runs for unrelated state (composer text, clock ticks), and
-        // stealing first responder there would make the composer untypable.
-        if container.attach(controller.terminalView), let window = container.window {
+        // Only claim focus when the session actually changed and Raw is the
+        // active surface. Unrelated updateNSView passes must not yank focus
+        // from the Conversation composer.
+        if container.attach(controller.terminalView),
+           claimsFocus,
+           let window = container.window {
             window.makeFirstResponder(controller.terminalView)
         }
     }

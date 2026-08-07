@@ -6,6 +6,8 @@ import SwiftUI
 struct ComposerTextView: NSViewRepresentable {
     @Binding var text: String
     var onSubmit: () -> Void
+    /// Tab while a slash menu is open. Return true when the key was handled.
+    var onTabComplete: (() -> Bool)? = nil
     var placeholder: String
     var textColor: NSColor
     var backgroundColor: NSColor
@@ -26,6 +28,9 @@ struct ComposerTextView: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.onSubmit = { [weak coordinator = context.coordinator] in
             coordinator?.parent.onSubmit()
+        }
+        textView.onTabComplete = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onTabComplete?() ?? false
         }
         textView.isRichText = false
         textView.allowsUndo = true
@@ -55,6 +60,9 @@ struct ComposerTextView: NSViewRepresentable {
         textView.onSubmit = { [weak coordinator = context.coordinator] in
             coordinator?.parent.onSubmit()
         }
+        textView.onTabComplete = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onTabComplete?() ?? false
+        }
         textView.backgroundColor = backgroundColor
         textView.textColor = textColor
         textView.insertionPointColor = insertionPointColor
@@ -83,6 +91,7 @@ struct ComposerTextView: NSViewRepresentable {
 
 final class KeyHandlingTextView: NSTextView {
     var onSubmit: (() -> Void)?
+    var onTabComplete: (() -> Bool)?
 
     override func keyDown(with event: NSEvent) {
         let isReturn =
@@ -101,6 +110,12 @@ final class KeyHandlingTextView: NSTextView {
                 onSubmit?()
             }
             return
+        }
+        // Tab completes the top slash/skill match when available.
+        if event.keyCode == 48, event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
+            if onTabComplete?() == true {
+                return
+            }
         }
         super.keyDown(with: event)
     }

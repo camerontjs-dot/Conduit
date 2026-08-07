@@ -268,10 +268,22 @@ struct ComposerView: View {
 
     // MARK: - Ordinary composer
 
+    private var slashMatches: [AgentSlashCommand] {
+        AgentSlashCatalog.matches(
+            query: model.composerText,
+            projectPath: model.selectedTaskProject?.path
+                ?? model.selectedProject?.path
+        )
+    }
+
     private var ordinaryComposer: some View {
         VStack(spacing: 6) {
             if !model.attachments.isEmpty {
                 attachmentChipRow
+            }
+
+            if !slashMatches.isEmpty {
+                slashCommandMenu
             }
 
             HStack(alignment: .center, spacing: 9) {
@@ -332,6 +344,11 @@ struct ComposerView: View {
                             guard !isStaging else { return }
                             model.sendComposer()
                         },
+                        onTabComplete: {
+                            guard let first = slashMatches.first else { return false }
+                            model.composerText = first.command
+                            return true
+                        },
                         placeholder: "",
                         textColor: .labelColor,
                         backgroundColor: .textBackgroundColor,
@@ -348,7 +365,7 @@ struct ComposerView: View {
                     }
 
                     if model.composerText.isEmpty && !model.speech.isRecording {
-                        Text("Ask the active agent… Return sends, Shift-Return newline")
+                        Text("Ask the active agent… / for skills · Return sends")
                             .foregroundStyle(palette.faint)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 14)
@@ -363,7 +380,7 @@ struct ComposerView: View {
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Prompt composer")
-                .accessibilityHint("Return sends to the named target. Shift Return inserts a newline.")
+                .accessibilityHint("Return sends. Type / for agent skills and slash commands. Shift Return inserts a newline.")
 
                 Button("Send", action: model.sendComposer)
                     .buttonStyle(.borderedProminent)
@@ -402,6 +419,69 @@ struct ComposerView: View {
                 .help("Append this prompt and attachments to MainFrame 00_inbox")
             }
         }
+    }
+
+    private var slashCommandMenu: some View {
+        let matches = Array(slashMatches.prefix(10))
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Skills & slash commands")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(palette.faint)
+                Spacer()
+                Text("Tab completes · Return sends as CLI command")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+
+            Divider().overlay(palette.line)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(matches) { item in
+                        slashRow(item, isTop: item.id == matches.first?.id)
+                    }
+                }
+            }
+            .frame(maxHeight: 180)
+        }
+        .background(palette.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(palette.line, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Slash command suggestions")
+    }
+
+    private func slashRow(_ item: AgentSlashCommand, isTop: Bool) -> some View {
+        Button {
+            model.sendSlashCommand(item.command)
+        } label: {
+            HStack(spacing: 10) {
+                Text(item.command)
+                    .font(.callout.monospaced().weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                    .frame(minWidth: 110, alignment: .leading)
+                Text(item.summary)
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(item.source == .builtin ? "built-in" : "skill")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(isTop ? palette.accentSoft : Color.clear)
+        .accessibilityLabel("\(item.command), \(item.summary)")
     }
 
     private var attachmentChipRow: some View {

@@ -1329,6 +1329,15 @@ withTempDir { root in
         from: [turnOpen, turnPrompt, turnOutput]
     )
     check("conversation turns group prompt+output", turns.count == 2)
+    check("slash catalog recognizes /compact",
+          AgentSlashCatalog.looksLikeSlashCommand("/compact"))
+    check("slash catalog rejects absolute paths",
+          AgentSlashCatalog.looksLikeSlashCommand("/Users/admin/x") == false)
+    check(
+        "slash catalog matches /com to compact",
+        AgentSlashCatalog.matches(query: "/com", projectPath: nil)
+            .contains(where: { $0.command == "/compact" })
+    )
 
     let agyAuto = AgentProfile(
         name: "Antigravity",

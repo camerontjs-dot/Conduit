@@ -436,6 +436,44 @@ final class ConversationDisplayTextTests: XCTestCase {
     }
 }
 
+final class AgentSlashCatalogTests: XCTestCase {
+    func testLooksLikeSlashCommandAcceptsCompact() {
+        XCTAssertTrue(AgentSlashCatalog.looksLikeSlashCommand("/compact"))
+        XCTAssertTrue(AgentSlashCatalog.looksLikeSlashCommand("  /model opus  "))
+        XCTAssertFalse(AgentSlashCatalog.looksLikeSlashCommand("/Users/admin/file"))
+        XCTAssertFalse(AgentSlashCatalog.looksLikeSlashCommand("hello"))
+        XCTAssertFalse(AgentSlashCatalog.looksLikeSlashCommand("/"))
+    }
+
+    func testMatchesFiltersBuiltinByPrefix() {
+        let hits = AgentSlashCatalog.matches(
+            query: "/com",
+            projectPath: nil
+        )
+        XCTAssertTrue(hits.contains(where: { $0.command == "/compact" }))
+        XCTAssertFalse(hits.contains(where: { $0.command == "/help" }))
+    }
+
+    func testDiscoverSkillsFromMarkdownCommands() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("conduit-slash-\(UUID().uuidString)", isDirectory: true)
+        let commands = dir.appendingPathComponent(".claude/commands", isDirectory: true)
+        try FileManager.default.createDirectory(at: commands, withIntermediateDirectories: true)
+        try "# My Skill\nDoes a thing.".write(
+            to: commands.appendingPathComponent("my-skill.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let hits = AgentSlashCatalog.matches(
+            query: "/my",
+            projectPath: dir
+        )
+        XCTAssertTrue(hits.contains(where: { $0.command == "/my-skill" }))
+    }
+}
+
 final class ConversationTurnGroupingTests: XCTestCase {
     func testGroupsPromptWithFollowingOutputs() {
         let open = SessionPresentation.openingEvent(

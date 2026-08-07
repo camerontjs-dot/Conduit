@@ -46,12 +46,16 @@ private struct ActiveSessionSurface: View {
         VStack(spacing: 0) {
             surfacePicker
             Divider().overlay(palette.line)
-            Group {
-                switch runtime.selectedSurface {
-                case .conversation:
+            // Keep the live PTY mounted under Conversation so capture and
+            // buffer continuity survive surface switches. Raw only raises it.
+            ZStack {
+                rawTerminal
+                    .opacity(runtime.selectedSurface == .raw ? 1 : 0)
+                    .allowsHitTesting(runtime.selectedSurface == .raw)
+                    .accessibilityHidden(runtime.selectedSurface != .raw)
+
+                if runtime.selectedSurface == .conversation {
                     ConversationView(runtime: runtime)
-                case .raw:
-                    rawTerminal
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -62,6 +66,14 @@ private struct ActiveSessionSurface: View {
                 } else {
                     ComposerView()
                 }
+            }
+        }
+        .onChange(of: runtime.selectedSurface) { surface in
+            if surface == .conversation {
+                runtime.resyncConversationCapture()
+            } else {
+                // Pull once while entering Raw so the projection stays warm.
+                runtime.controller.refreshConversationCapture()
             }
         }
     }
@@ -128,7 +140,8 @@ private struct ActiveSessionSurface: View {
     private var rawTerminal: some View {
         TerminalHostView(
             controller: runtime.controller,
-            theme: TerminalTheme(palette: palette)
+            theme: TerminalTheme(palette: palette),
+            claimsFocus: runtime.selectedSurface == .raw
         )
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
