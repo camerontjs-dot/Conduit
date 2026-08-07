@@ -1725,6 +1725,41 @@ check(
     AgentUsageMeters.fraction(10, of: 0) == 0
 )
 
+let weekNow = Date(timeIntervalSince1970: 1_800_000_000)
+let weekRecord = SessionUsageRecord(
+    agent: "Claude",
+    projectSlug: "demo",
+    startedAt: weekNow.addingTimeInterval(-3600),
+    endedAt: weekNow.addingTimeInterval(-1800),
+    outcome: .exitedClean,
+    outputBytes: 10,
+    promptsDelivered: 3,
+    promptsFailed: 0
+)
+let weekLive = LiveSessionUsage(
+    agent: "Claude",
+    startedAt: weekNow.addingTimeInterval(-600),
+    outputBytes: 1,
+    promptsDelivered: 1,
+    promptsFailed: 0
+)
+let weekUse = AgentUsageMeters.weekUsage(
+    agent: "Claude",
+    records: [weekRecord],
+    live: [weekLive],
+    now: weekNow
+)
+check("week usage counts session prompts", weekUse.totalPrompts == 4)
+check("week usage counts live session prompts", weekUse.liveSessionPrompts == 1)
+check(
+    "usage budget unset when zeros",
+    AgentUsageBudget().hasAnyLimit == false
+)
+check(
+    "usage budget set when weekly prompts",
+    AgentUsageBudget(weeklyPromptLimit: 50).hasAnyLimit
+)
+
 let mgJSON = """
 [{"doc_id":"d1","chunk_index":0,"display_path":"10_knowledge/x.md","title":"X","chunk_text":"hello","trust_profile":"durable_knowledge","rrf_score":0.03,"signal":"fused"}]
 """.data(using: .utf8)!

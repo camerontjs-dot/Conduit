@@ -444,6 +444,33 @@ final class AppModel: ObservableObject {
         )
     }
 
+    /// Live attach observations used by week/session budget meters.
+    func liveUsageSnapshots() -> [LiveSessionUsage] {
+        sessions.compactMap { runtime -> LiveSessionUsage? in
+            let controller = runtime.controller
+            guard !controller.lifecycle.isTerminal,
+                  let startedAt = controller.attachedAt
+            else { return nil }
+            return LiveSessionUsage(
+                agent: runtime.descriptor.agent.name,
+                startedAt: startedAt,
+                outputBytes: controller.observedOutputBytes,
+                promptsDelivered: controller.observedPromptsDelivered,
+                promptsFailed: controller.observedPromptsFailed
+            )
+        }
+    }
+
+    /// This calendar week's observed usage for one agent profile name.
+    func weekUsage(for agentName: String, at date: Date) -> AgentUsageMeters.WeekWindowUsage {
+        AgentUsageMeters.weekUsage(
+            agent: agentName,
+            records: completedUsage,
+            live: liveUsageSnapshots(),
+            now: date
+        )
+    }
+
     // MARK: - MindGraph (operator query station)
 
     /// Runs one scoped MindGraph query via MainFrame `bin/mindgraph`.

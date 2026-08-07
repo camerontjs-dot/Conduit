@@ -395,9 +395,11 @@ struct TaskSidebarView: View {
 
     private var discoveredSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            sectionLabel("Discovered", count: discoveredRows.count)
+            // Not Conduit task history: live durable sessions you can open or
+            // continue from here (including work started outside the UI).
+            sectionLabel("Continue outside Conduit", count: discoveredRows.count)
 
-            Text("Durable tmux sessions not represented by loaded task history")
+            Text("tmux sessions still running on this Mac — open to inspect Raw or keep working. Not the same as app-store chat history.")
                 .font(.system(size: 9))
                 .foregroundStyle(palette.faint)
                 .fixedSize(horizontal: false, vertical: true)
@@ -406,8 +408,20 @@ struct TaskSidebarView: View {
             ForEach(discoveredRows, id: \.session.tmuxName) { row in
                 discoveredRow(row)
             }
+
+            Button {
+                model.showResumeSessions = true
+            } label: {
+                Label("Browse all reconnectable…", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(palette.accent)
+            .padding(.horizontal, 7)
+            .padding(.top, 2)
+            .accessibilityLabel("Browse all reconnectable sessions")
+            .help("List every durable tmux session Conduit can attach to")
         }
-        .opacity(0.88)
     }
 
     private func discoveredRow(_ row: ResumableSession) -> some View {

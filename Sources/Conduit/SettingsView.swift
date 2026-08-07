@@ -257,6 +257,47 @@ struct SettingsView: View {
                             .lineLimit(2)
                             .help(ArgumentTokenizer.join(resolved))
                     }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Usage limits (Conduit-observed, not vendor tokens)")
+                            .font(.caption)
+                            .foregroundStyle(palette.dim)
+                        HStack {
+                            Text("Week prompts")
+                                .font(.caption2)
+                                .foregroundStyle(palette.faint)
+                                .frame(width: 100, alignment: .leading)
+                            TextField(
+                                "0 = none",
+                                value: $agent.usageBudget.weeklyPromptLimit,
+                                format: .number
+                            )
+                            .frame(maxWidth: 90)
+                            Text("Week minutes")
+                                .font(.caption2)
+                                .foregroundStyle(palette.faint)
+                            TextField(
+                                "0 = none",
+                                value: $agent.usageBudget.weeklyAttachedMinutesLimit,
+                                format: .number
+                            )
+                            .frame(maxWidth: 90)
+                        }
+                        HStack {
+                            Text("Session prompts")
+                                .font(.caption2)
+                                .foregroundStyle(palette.faint)
+                                .frame(width: 100, alignment: .leading)
+                            TextField(
+                                "0 = none",
+                                value: $agent.usageBudget.sessionPromptLimit,
+                                format: .number
+                            )
+                            .frame(maxWidth: 90)
+                            Text("0 disables a limit")
+                                .font(.caption2)
+                                .foregroundStyle(palette.faint)
+                        }
+                    }
                 }
                 .padding(.vertical, 4)
             }

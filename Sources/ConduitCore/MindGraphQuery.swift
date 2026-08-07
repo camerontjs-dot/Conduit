@@ -221,7 +221,7 @@ public enum MindGraphQuerySupport {
     }
 }
 
-/// Relative meters for Tier A observed usage (no token/cost claims).
+/// Relative and budget meters for Tier A observed usage (no token/cost claims).
 public enum AgentUsageMeters {
     public struct Scales: Equatable, Sendable {
         public let maxAttachedSeconds: TimeInterval
@@ -249,8 +249,93 @@ public enum AgentUsageMeters {
         }
     }
 
+    /// Observed usage inside a calendar week for one agent name.
+    public struct WeekWindowUsage: Equatable, Sendable {
+        public let agent: String
+        public let promptsDelivered: Int
+        public let promptsFailed: Int
+        public let attachedSeconds: TimeInterval
+        public let sessions: Int
+        /// Prompts delivered on currently live attaches for this agent.
+        public let liveSessionPrompts: Int
+
+        public var totalPrompts: Int { promptsDelivered + promptsFailed }
+
+        public init(
+            agent: String,
+            promptsDelivered: Int = 0,
+            promptsFailed: Int = 0,
+            attachedSeconds: TimeInterval = 0,
+            sessions: Int = 0,
+            liveSessionPrompts: Int = 0
+        ) {
+            self.agent = agent
+            self.promptsDelivered = promptsDelivered
+            self.promptsFailed = promptsFailed
+            self.attachedSeconds = attachedSeconds
+            self.sessions = sessions
+            self.liveSessionPrompts = liveSessionPrompts
+        }
+    }
+
     public static func fraction(_ value: Double, of maximum: Double) -> Double {
         guard maximum > 0, value > 0 else { return 0 }
         return min(1, value / maximum)
+    }
+
+    /// Start of the operator's current calendar week (local timezone).
+    public static func startOfWeek(
+        containing date: Date,
+        calendar: Calendar = .current
+    ) -> Date {
+        let comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return calendar.date(from: comps) ?? date
+    }
+
+    /// Aggregate completed records + live attaches for `agent` since week start.
+    public static func weekUsage(
+        agent: String,
+        records: [SessionUsageRecord],
+        live: [LiveSessionUsage],
+        now: Date,
+        calendar: Calendar = .current
+    ) -> WeekWindowUsage {
+        let weekStart = startOfWeek(containing: now, calendar: calendar)
+        var promptsDelivered = 0
+        var promptsFailed = 0
+        var attached: TimeInterval = 0
+        var sessions = 0
+
+        for record in records where record.agent == agent {
+            // Count a session if it ended this week or overlapped the week.
+            guard record.endedAt >= weekStart || record.startedAt >= weekStart else {
+                continue
+            }
+            sessions += 1
+            promptsDelivered += record.promptsDelivered
+            promptsFailed += record.promptsFailed
+            let start = max(record.startedAt, weekStart)
+            let end = max(start, record.endedAt)
+            attached += max(0, end.timeIntervalSince(start))
+        }
+
+        var livePrompts = 0
+        for session in live where session.agent == agent {
+            sessions += 1
+            promptsDelivered += session.promptsDelivered
+            promptsFailed += session.promptsFailed
+            livePrompts += session.promptsDelivered + session.promptsFailed
+            let start = max(session.startedAt, weekStart)
+            attached += max(0, now.timeIntervalSince(start))
+        }
+
+        return WeekWindowUsage(
+            agent: agent,
+            promptsDelivered: promptsDelivered,
+            promptsFailed: promptsFailed,
+            attachedSeconds: attached,
+            sessions: sessions,
+            liveSessionPrompts: livePrompts
+        )
     }
 }

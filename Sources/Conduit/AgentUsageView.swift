@@ -2,12 +2,8 @@
 import ConduitCore
 import SwiftUI
 
-/// Tier A usage surface: **only what Conduit observed.**
-///
-/// Deliberately carries no token or cost column. Those are reported by each
-/// CLI's own records, are counted differently by each vendor, and are not read
-/// here — showing a blank or zero for them would read as "none used", which is
-/// a claim Conduit cannot make.
+/// Tier A usage surface: Conduit-observed activity plus **operator-set**
+/// weekly/session budgets (not vendor token quotas).
 struct AgentUsageSheet: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
@@ -24,11 +20,10 @@ struct AgentUsageSheet: View {
             Divider().overlay(palette.line)
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let rows = model.observedUsageRows(at: context.date)
-                let scales = AgentUsageMeters.Scales.from(rows)
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(rows, id: \.agent) { row in
-                            usageRow(row, scales: scales)
+                            usageRow(row, at: context.date)
                             Divider().overlay(palette.lineSoft)
                         }
                     }
@@ -37,24 +32,25 @@ struct AgentUsageSheet: View {
             Divider().overlay(palette.line)
             footer
         }
-        .frame(minWidth: Self.sheetMinWidth, minHeight: 420)
+        .frame(minWidth: Self.sheetMinWidth, minHeight: 440)
         .background(palette.canvas)
     }
 
     private var header: some View {
         ConduitSheetHeader(
             title: "Agent usage",
-            subtitle: "Observed by Conduit — meters are relative across agents",
+            subtitle: "Weekly / session limits you set · observed by Conduit",
             systemImage: "chart.bar"
         )
     }
 
-    private func usageRow(
-        _ row: AgentObservedUsage,
-        scales: AgentUsageMeters.Scales
-    ) -> some View {
+    private func usageRow(_ row: AgentObservedUsage, at date: Date) -> some View {
+        let profile = model.settings.agents.first { $0.name == row.agent }
+        let budget = profile?.usageBudget ?? AgentUsageBudget()
+        let week = model.weekUsage(for: row.agent, at: date)
         let unobserved = row.sessions == 0
-        return VStack(alignment: .leading, spacing: 6) {
+
+        return VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 Circle()
                     .fill(row.liveSessions > 0 ? palette.accent : Color.clear)
@@ -69,45 +65,50 @@ struct AgentUsageSheet: View {
                         .foregroundStyle(palette.accent)
                 }
             }
-            if unobserved {
-                Text("no sessions observed")
+
+            if unobserved && !budget.hasAnyLimit {
+                Text("no sessions observed · set limits in Settings → Agents")
                     .font(.system(size: 11))
                     .foregroundStyle(palette.faint)
             } else {
-                meter(
-                    label: "Attached",
-                    value: AgentUsageSheet.duration(row.attachedSeconds),
-                    fraction: AgentUsageMeters.fraction(
-                        row.attachedSeconds,
-                        of: scales.maxAttachedSeconds
-                    ),
-                    tint: palette.ink
-                )
-                meter(
-                    label: "Output",
-                    value: AgentUsageSheet.bytes(row.outputBytes),
-                    fraction: AgentUsageMeters.fraction(
-                        Double(row.outputBytes),
-                        of: Double(scales.maxOutputBytes)
-                    ),
-                    tint: palette.dim
-                )
-                meter(
-                    label: "Prompts",
-                    value: {
-                        var s = "\(row.promptsDelivered)"
-                        if row.promptsFailed > 0 {
-                            s += " · \(row.promptsFailed) failed"
-                        }
-                        return s
-                    }(),
-                    fraction: AgentUsageMeters.fraction(
-                        Double(row.promptsDelivered + row.promptsFailed),
-                        of: Double(scales.maxPrompts)
-                    ),
-                    tint: palette.accent.opacity(0.75)
-                )
-                Text(Self.metricsLine(row))
+                if budget.weeklyPromptLimit > 0 {
+                    limitMeter(
+                        label: "Week prompts",
+                        usedLabel: "\(week.totalPrompts) / \(budget.weeklyPromptLimit)",
+                        fraction: AgentUsageMeters.fraction(
+                            Double(week.totalPrompts),
+                            of: Double(budget.weeklyPromptLimit)
+                        )
+                    )
+                }
+                if budget.weeklyAttachedMinutesLimit > 0 {
+                    let usedMin = Int(week.attachedSeconds / 60)
+                    limitMeter(
+                        label: "Week attached",
+                        usedLabel: "\(usedMin) / \(budget.weeklyAttachedMinutesLimit) min",
+                        fraction: AgentUsageMeters.fraction(
+                            Double(usedMin),
+                            of: Double(budget.weeklyAttachedMinutesLimit)
+                        )
+                    )
+                }
+                if budget.sessionPromptLimit > 0 {
+                    limitMeter(
+                        label: "This session",
+                        usedLabel: "\(week.liveSessionPrompts) / \(budget.sessionPromptLimit) prompts",
+                        fraction: AgentUsageMeters.fraction(
+                            Double(week.liveSessionPrompts),
+                            of: Double(budget.sessionPromptLimit)
+                        )
+                    )
+                }
+                if !budget.hasAnyLimit {
+                    Text("No weekly/session limits set — relative activity only")
+                        .font(.system(size: 10))
+                        .foregroundStyle(palette.faint)
+                    relativeFallback(row)
+                }
+                Text(Self.metricsLine(row, week: week))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(palette.faint)
                     .fixedSize(horizontal: false, vertical: true)
@@ -117,43 +118,77 @@ struct AgentUsageSheet: View {
         .padding(.horizontal, 16)
     }
 
-    private func meter(
+    private func relativeFallback(_ row: AgentObservedUsage) -> some View {
+        let scales = AgentUsageMeters.Scales.from(
+            model.observedUsageRows(at: Date())
+        )
+        return VStack(alignment: .leading, spacing: 4) {
+            limitMeter(
+                label: "Attached (vs peers)",
+                usedLabel: Self.duration(row.attachedSeconds),
+                fraction: AgentUsageMeters.fraction(
+                    row.attachedSeconds,
+                    of: scales.maxAttachedSeconds
+                ),
+                muted: true
+            )
+            limitMeter(
+                label: "Output (vs peers)",
+                usedLabel: Self.bytes(row.outputBytes),
+                fraction: AgentUsageMeters.fraction(
+                    Double(row.outputBytes),
+                    of: Double(scales.maxOutputBytes)
+                ),
+                muted: true
+            )
+        }
+    }
+
+    private func limitMeter(
         label: String,
-        value: String,
+        usedLabel: String,
         fraction: Double,
-        tint: Color
+        muted: Bool = false
     ) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let tint: Color = {
+            if muted { return palette.dim.opacity(0.7) }
+            if fraction >= 1 { return Color.red.opacity(0.75) }
+            if fraction >= 0.85 { return Color.orange.opacity(0.85) }
+            return palette.accent.opacity(0.85)
+        }()
+        return VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(label)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(palette.faint)
-                    .frame(width: 56, alignment: .leading)
-                Text(value)
+                    .frame(minWidth: 100, alignment: .leading)
+                Text(usedLabel)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(palette.dim)
                 Spacer(minLength: 0)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(palette.lineSoft)
+                    Capsule().fill(palette.lineSoft)
                     Capsule()
                         .fill(tint)
-                        .frame(
-                            width: max(0, geo.size.width * CGFloat(fraction))
-                        )
+                        .frame(width: max(0, geo.size.width * CGFloat(fraction)))
                 }
             }
-            .frame(height: 5)
-            .accessibilityLabel("\(label) \(value)")
-            .accessibilityValue("\(Int((fraction * 100).rounded())) percent of max among agents")
+            .frame(height: 6)
+            .accessibilityLabel("\(label) \(usedLabel)")
+            .accessibilityValue("\(Int((fraction * 100).rounded())) percent of limit")
         }
     }
 
-    static func metricsLine(_ row: AgentObservedUsage) -> String {
+    static func metricsLine(
+        _ row: AgentObservedUsage,
+        week: AgentUsageMeters.WeekWindowUsage
+    ) -> String {
         var parts = [
-            row.sessions == 1 ? "1 session" : "\(row.sessions) sessions",
+            row.sessions == 1 ? "1 session all-time" : "\(row.sessions) sessions all-time",
+            "\(week.sessions) this week",
+            "\(Self.bytes(row.outputBytes)) out",
         ]
         let outcome = outcomes(row)
         if outcome != "—" { parts.append(outcome) }
@@ -162,11 +197,11 @@ struct AgentUsageSheet: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("Meters scale relative to the busiest agent Conduit observed — not a vendor quota.")
+            Text("Limits are operator budgets on Conduit-observed prompts and attach time — not Claude/OpenAI weekly token quotas.")
                 .foregroundStyle(palette.dim)
-            Text("Tokens, cost, and remaining quota are not shown: each tool counts them differently.")
+            Text("Set caps under Settings → Agents. Week resets at the local calendar week start.")
                 .foregroundStyle(palette.faint)
-            Text("Attached time for a detached session is time Conduit was attached, not time the agent worked.")
+            Text("Vendor remaining-quota APIs are not read; this is local self-tracking.")
                 .foregroundStyle(palette.faint)
         }
         .font(.caption2)
@@ -176,7 +211,7 @@ struct AgentUsageSheet: View {
         .background(palette.rail)
     }
 
-    static let sheetMinWidth: CGFloat = 520
+    static let sheetMinWidth: CGFloat = 540
 
     static func duration(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
@@ -204,7 +239,7 @@ struct AgentUsageSheet: View {
     }
 }
 
-/// Compact always-on usage meters for the inspector.
+/// Compact always-on usage + budget meters for the inspector.
 struct AgentUsageMeterPanel: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
@@ -217,11 +252,15 @@ struct AgentUsageMeterPanel: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let rows = model.observedUsageRows(at: context.date)
-            let scales = AgentUsageMeters.Scales.from(rows)
-            let active = rows.filter { $0.sessions > 0 }
+            let interesting = rows.filter { row in
+                row.sessions > 0
+                    || (model.settings.agents.first { $0.name == row.agent }?
+                        .usageBudget.hasAnyLimit ?? false)
+            }
+
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Observed usage")
+                    Text("Limits & usage")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(palette.dim)
                     Spacer()
@@ -232,27 +271,27 @@ struct AgentUsageMeterPanel: View {
                     .font(.caption2)
                     .foregroundStyle(palette.accent)
                 }
-                if active.isEmpty {
-                    Text("No agent sessions observed yet.")
+                if interesting.isEmpty {
+                    Text("No observed sessions and no limits set.")
                         .font(.caption)
                         .foregroundStyle(palette.faint)
+                    Text("Add weekly caps in Settings → Agents.")
+                        .font(.caption2)
+                        .foregroundStyle(palette.faint)
                 } else {
-                    ForEach(active, id: \.agent) { row in
-                        compactRow(row, scales: scales)
+                    ForEach(interesting, id: \.agent) { row in
+                        compactRow(row, at: context.date)
                     }
                 }
-                Text("Relative meters · not tokens or cost")
-                    .font(.caption2)
-                    .foregroundStyle(palette.faint)
             }
         }
     }
 
-    private func compactRow(
-        _ row: AgentObservedUsage,
-        scales: AgentUsageMeters.Scales
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func compactRow(_ row: AgentObservedUsage, at date: Date) -> some View {
+        let budget = model.settings.agents.first { $0.name == row.agent }?
+            .usageBudget ?? AgentUsageBudget()
+        let week = model.weekUsage(for: row.agent, at: date)
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Circle()
                     .fill(row.liveSessions > 0 ? palette.accent : palette.faint.opacity(0.4))
@@ -261,34 +300,59 @@ struct AgentUsageMeterPanel: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(palette.text)
                 Spacer()
-                Text(AgentUsageSheet.duration(row.attachedSeconds))
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(palette.dim)
+                if budget.weeklyPromptLimit > 0 {
+                    Text("\(week.totalPrompts)/\(budget.weeklyPromptLimit)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(palette.dim)
+                } else {
+                    Text(AgentUsageSheet.duration(row.attachedSeconds))
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(palette.dim)
+                }
             }
-            compactBar(
-                fraction: AgentUsageMeters.fraction(
-                    row.attachedSeconds,
-                    of: scales.maxAttachedSeconds
-                ),
-                tint: palette.ink
-            )
-            compactBar(
-                fraction: AgentUsageMeters.fraction(
-                    Double(row.outputBytes),
-                    of: Double(scales.maxOutputBytes)
-                ),
-                tint: palette.dim
-            )
+            if budget.weeklyPromptLimit > 0 {
+                compactBar(
+                    fraction: AgentUsageMeters.fraction(
+                        Double(week.totalPrompts),
+                        of: Double(budget.weeklyPromptLimit)
+                    ),
+                    hot: week.totalPrompts >= budget.weeklyPromptLimit
+                )
+            }
+            if budget.weeklyAttachedMinutesLimit > 0 {
+                let usedMin = Int(week.attachedSeconds / 60)
+                compactBar(
+                    fraction: AgentUsageMeters.fraction(
+                        Double(usedMin),
+                        of: Double(budget.weeklyAttachedMinutesLimit)
+                    ),
+                    hot: usedMin >= budget.weeklyAttachedMinutesLimit
+                )
+            }
+            if budget.sessionPromptLimit > 0 {
+                compactBar(
+                    fraction: AgentUsageMeters.fraction(
+                        Double(week.liveSessionPrompts),
+                        of: Double(budget.sessionPromptLimit)
+                    ),
+                    hot: week.liveSessionPrompts >= budget.sessionPromptLimit
+                )
+            }
+            if !budget.hasAnyLimit, row.sessions > 0 {
+                Text("No limit · \(week.totalPrompts) prompts this week")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            }
         }
         .padding(.vertical, 2)
     }
 
-    private func compactBar(fraction: Double, tint: Color) -> some View {
+    private func compactBar(fraction: Double, hot: Bool) -> some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(palette.lineSoft)
                 Capsule()
-                    .fill(tint.opacity(0.85))
+                    .fill(hot ? Color.red.opacity(0.75) : palette.accent.opacity(0.85))
                     .frame(width: max(0, geo.size.width * CGFloat(fraction)))
             }
         }

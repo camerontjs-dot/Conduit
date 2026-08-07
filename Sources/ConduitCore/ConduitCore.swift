@@ -59,6 +59,36 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
     case cli
 }
 
+/// Operator-set budgets for Conduit-observed usage (not vendor token quotas).
+///
+/// Zero means "no limit configured". Meters compare Conduit's own prompt and
+/// attach observations against these caps so you can track weekly/session
+/// budgets without inventing CLI cost claims.
+public struct AgentUsageBudget: Codable, Hashable, Sendable, Equatable {
+    /// Soft weekly cap on prompts Conduit delivered (0 = unset).
+    public var weeklyPromptLimit: Int
+    /// Soft weekly cap on minutes Conduit was attached (0 = unset).
+    public var weeklyAttachedMinutesLimit: Int
+    /// Soft cap on prompts within the current live attach (0 = unset).
+    public var sessionPromptLimit: Int
+
+    public init(
+        weeklyPromptLimit: Int = 0,
+        weeklyAttachedMinutesLimit: Int = 0,
+        sessionPromptLimit: Int = 0
+    ) {
+        self.weeklyPromptLimit = max(0, weeklyPromptLimit)
+        self.weeklyAttachedMinutesLimit = max(0, weeklyAttachedMinutesLimit)
+        self.sessionPromptLimit = max(0, sessionPromptLimit)
+    }
+
+    public var hasAnyLimit: Bool {
+        weeklyPromptLimit > 0
+            || weeklyAttachedMinutesLimit > 0
+            || sessionPromptLimit > 0
+    }
+}
+
 public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var name: String
@@ -68,6 +98,8 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
     public var enabled: Bool
     /// Conduit-injected permission posture for new launches of this profile.
     public var permissionMode: AgentPermissionMode
+    /// Optional weekly / session budgets for observed usage meters.
+    public var usageBudget: AgentUsageBudget
 
     public init(
         id: UUID = UUID(),
@@ -76,7 +108,8 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         arguments: [String] = [],
         kind: AgentKind = .cli,
         enabled: Bool = true,
-        permissionMode: AgentPermissionMode = .agentDefault
+        permissionMode: AgentPermissionMode = .agentDefault,
+        usageBudget: AgentUsageBudget = AgentUsageBudget()
     ) {
         self.id = id
         self.name = name
@@ -85,10 +118,11 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         self.kind = kind
         self.enabled = enabled
         self.permissionMode = permissionMode
+        self.usageBudget = usageBudget
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, command, arguments, kind, enabled, permissionMode
+        case id, name, command, arguments, kind, enabled, permissionMode, usageBudget
     }
 
     public init(from decoder: Decoder) throws {
@@ -103,6 +137,10 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
             AgentPermissionMode.self,
             forKey: .permissionMode
         ) ?? .agentDefault
+        usageBudget = try container.decodeIfPresent(
+            AgentUsageBudget.self,
+            forKey: .usageBudget
+        ) ?? AgentUsageBudget()
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -114,6 +152,7 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         try container.encode(kind, forKey: .kind)
         try container.encode(enabled, forKey: .enabled)
         try container.encode(permissionMode, forKey: .permissionMode)
+        try container.encode(usageBudget, forKey: .usageBudget)
     }
 
     public static let defaults: [AgentProfile] = [
