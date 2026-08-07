@@ -625,6 +625,34 @@ TUI interaction and still ends capture when used for direct typing.
 
 ---
 
+## D-030: Stream Conversation, left app chrome, right inspector
+
+**Status:** Accepted (workstation layout)
+
+**Context:** Chat bubbles and flat task lists felt unlike peer agent apps.
+Operators wanted continuous transcript, agent-grouped history, bottom-left app
+chrome, and a right utility inspector (files, git review, session).
+
+**Decision:**
+
+1. Conversation is a **continuous stream** of presentation events with inline
+   provenance (You / delivery / Derived from Raw footers), not chat bubbles.
+2. Composer uses **Return to send** and **Shift-Return** for newlines (⌘Return
+   remains send).
+3. Left rail groups open history **by agent**, with a footer for Settings,
+   Doctor, Resources, Root, Refresh.
+4. Trailing **Inspector** tabs: Session, Files, Review (git status), Context.
+   Focused density keeps the inspector as a dismissible overlay; Balanced /
+   Operator pin it as the third column.
+
+**Rejected alternatives:** Full IDE browser/side-chat; auto-approving agent tools
+inside Conduit; replacing Raw with the stream.
+
+**Consequences:** Conduit reads as a three-region workstation. Honesty labels
+remain on every projected event. Git and path lists are observational only.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

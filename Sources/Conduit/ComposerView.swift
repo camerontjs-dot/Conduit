@@ -325,13 +325,19 @@ struct ComposerView: View {
                 .fixedSize()
                 .accessibilityLabel("Add an image")
 
-                TextEditor(text: $model.composerText)
-                    .font(.body)
-                    .foregroundStyle(palette.text)
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 64)
-                    .padding(7)
-                    .background(palette.surface)
+                ZStack(alignment: .topLeading) {
+                    ComposerTextView(
+                        text: $model.composerText,
+                        onSubmit: {
+                            guard !isStaging else { return }
+                            model.sendComposer()
+                        },
+                        placeholder: "",
+                        textColor: .labelColor,
+                        backgroundColor: .textBackgroundColor,
+                        insertionPointColor: .controlAccentColor
+                    )
+                    .frame(minHeight: 64, maxHeight: 120)
                     .clipShape(RoundedRectangle(cornerRadius: 9))
                     .overlay {
                         RoundedRectangle(cornerRadius: 9)
@@ -340,23 +346,24 @@ struct ComposerView: View {
                                 lineWidth: model.isDropTargeted ? 2 : 1
                             )
                     }
-                    .overlay(alignment: .topLeading) {
-                        if model.composerText.isEmpty && !model.speech.isRecording {
-                            Text("Ask the active agent, dictate, paste an image, or drop files…")
-                                .foregroundStyle(palette.faint)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 15)
-                                .allowsHitTesting(false)
-                        } else if model.speech.isRecording {
-                            Text(model.speech.transcript.isEmpty ? "Listening…" : model.speech.transcript)
-                                .foregroundStyle(palette.dim)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 15)
-                                .allowsHitTesting(false)
-                        }
+
+                    if model.composerText.isEmpty && !model.speech.isRecording {
+                        Text("Ask the active agent… Return sends, Shift-Return newline")
+                            .foregroundStyle(palette.faint)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 14)
+                            .allowsHitTesting(false)
+                    } else if model.speech.isRecording {
+                        Text(model.speech.transcript.isEmpty ? "Listening…" : model.speech.transcript)
+                            .foregroundStyle(palette.dim)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 14)
+                            .allowsHitTesting(false)
                     }
-                    .accessibilityLabel("Prompt composer")
-                    .accessibilityHint("Command Return sends to the named target below")
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Prompt composer")
+                .accessibilityHint("Return sends to the named target. Shift Return inserts a newline.")
 
                 Button("Send", action: model.sendComposer)
                     .buttonStyle(.borderedProminent)

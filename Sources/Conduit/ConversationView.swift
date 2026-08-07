@@ -66,9 +66,9 @@ struct ConversationView: View {
                             .frame(height: 1)
                             .id("conversation-bottom")
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: 860, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: 900, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: runtime.presentationEvents.count) { _ in
@@ -167,16 +167,6 @@ struct ConversationView: View {
                     "These keys go to the live agent PTY without treating the action as Raw typing, so Derived-from-Raw capture can continue."
                 )
 
-            Button {
-                model.showDiagnostics = false
-                // Open macOS Settings scene if available; fall back to doctor.
-                openAppSettings()
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(.borderless)
-            .help("Open Conduit Settings")
-            .accessibilityLabel("Open Conduit Settings")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -212,13 +202,6 @@ struct ConversationView: View {
         .help(current.help)
         .disabled(agent.kind == .shell)
         .accessibilityLabel("Permission mode \(current.displayName)")
-    }
-
-    private func openAppSettings() {
-        #if os(macOS)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        #endif
     }
 
     private var jumpToLatestBar: some View {
@@ -297,22 +280,16 @@ struct ConversationView: View {
     }
 
     private var boundaryCard: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "terminal")
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.caption)
+                .foregroundStyle(palette.faint)
+            Text("Stream of Conduit records and Derived-from-Raw projections. Raw remains the live terminal authority.")
+                .font(.caption)
                 .foregroundStyle(palette.dim)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Raw terminal remains authoritative")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(palette.text)
-                Text("Prompts are exact Conduit records. Rendered Raw output is a best-effort view labelled Derived from Raw; it may include tool logs, prompt echo, or terminal chrome. Approvals and exact terminal state remain in Raw.")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .background(palette.lineSoft)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
     }
 
@@ -353,36 +330,26 @@ struct ConversationView: View {
     }
 
     private var waitingForVisibleOutputCard: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(spacing: 8) {
             ProgressView()
-                .controlSize(.small)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Agent activity")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(palette.text)
-                Text("Waiting for visible terminal output. This does not expose or infer private chain-of-thought.")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
-            }
+                .controlSize(.mini)
+            Text("Waiting for visible terminal output · not private chain-of-thought")
+                .font(.caption)
+                .foregroundStyle(palette.dim)
         }
-        .padding(12)
-        .background(palette.surface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(palette.line, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .frame(maxWidth: 680, alignment: .leading)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
     private func captureNoticeCard(_ notice: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "terminal.fill")
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.caption)
                 .foregroundStyle(palette.dim)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Conversation capture stopped")
-                    .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Capture stopped")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(palette.text)
                 Text(notice)
                     .font(.caption)
@@ -394,12 +361,11 @@ struct ConversationView: View {
                 runtime.selectedSurface = .raw
             }
             .buttonStyle(.borderless)
+            .font(.caption)
             .foregroundStyle(palette.accent)
         }
-        .padding(12)
-        .background(palette.lineSoft)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .frame(maxWidth: 720, alignment: .leading)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
 
@@ -417,18 +383,16 @@ struct ConversationView: View {
             separator: "\n",
             omittingEmptySubsequences: false
         ).count
-        let shouldClamp = !isExpanded && lineCount > 12
+        let shouldClamp = !isExpanded && lineCount > 18
 
         return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 7) {
-                Image(systemName: "terminal")
+            HStack(spacing: 6) {
+                Text("Derived from Raw")
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.dim)
-                Text("Rendered Raw output")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(palette.text)
                 Text("· \(stateLabel)")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
                 if isCurrentCapture && output.state == .live {
                     ProgressView()
                         .controlSize(.mini)
@@ -438,6 +402,7 @@ struct ConversationView: View {
                     runtime.selectedSurface = .raw
                 }
                 .buttonStyle(.borderless)
+                .font(.caption2)
                 .foregroundStyle(palette.accent)
             }
             derivedOutputBody(
@@ -448,20 +413,14 @@ struct ConversationView: View {
             )
             HStack(spacing: 6) {
                 Text(output.extraction.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(palette.faint)
                 if output.truncated {
-                    Text("· older projected text omitted")
-                        .font(.caption2)
-                        .foregroundStyle(palette.faint)
+                    Text("· truncated revision")
                 }
                 if displayText != output.text {
-                    Text("· blanks compacted for display")
-                        .font(.caption2)
-                        .foregroundStyle(palette.faint)
+                    Text("· blanks compacted")
                 }
                 Spacer(minLength: 4)
-                if lineCount > 12 {
+                if lineCount > 18 {
                     Button(isExpanded ? "Collapse" : "Expand") {
                         if isExpanded {
                             expandedOutputIDs.remove(event.id)
@@ -475,15 +434,10 @@ struct ConversationView: View {
                 }
                 authorityLine(event)
             }
+            .font(.caption2)
+            .foregroundStyle(palette.faint)
         }
-        .padding(10)
-        .background(palette.surface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(palette.line, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .frame(maxWidth: 780, alignment: .leading)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
@@ -530,33 +484,25 @@ struct ConversationView: View {
         switch entry {
         case .started(let agentName, let requestedBackend):
             title = "Launch requested for \(agentName)"
-            detail = "Requested backend: \(requestedBackend). This record does not prove that process attach succeeded; actual runtime state is shown above."
+            detail = "Backend \(requestedBackend) · attach not proven by this record"
         case .resumed(let agentName, let tmuxName, let attachedElsewhere):
             title = "Reattach requested for \(agentName)"
-            detail = "Requested tmux \(tmuxName)\(attachedElsewhere ? "; another client was already attached" : ""). This record does not prove that attach succeeded. Earlier raw activity was not replayed into this thread."
+            detail = "tmux \(tmuxName)"
+                + (attachedElsewhere ? " · another client was attached" : "")
+                + " · prior Raw not replayed"
         }
 
-        return HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "bolt.horizontal.circle")
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(palette.dim)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(palette.text)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
-                    .fixedSize(horizontal: false, vertical: true)
-                authorityLine(event)
-            }
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
+            authorityLine(event)
         }
-        .padding(12)
-        .background(palette.surface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(palette.line, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
@@ -564,14 +510,18 @@ struct ConversationView: View {
         _ prompt: SubmittedPrompt,
         event: SessionPresentationEvent
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if case .forwardedTerminalOutput(let sourceAgentName) = prompt.origin {
-                Label(
-                    "Forwarded unverified terminal output from \(sourceAgentName)",
-                    systemImage: "arrowshape.turn.up.right"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.dim)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("You")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                if case .forwardedTerminalOutput(let sourceAgentName) = prompt.origin {
+                    Text("· forwarded from \(sourceAgentName)")
+                        .font(.caption2)
+                        .foregroundStyle(palette.dim)
+                }
+                Spacer(minLength: 4)
+                authorityLine(event)
             }
             if !prompt.text.isEmpty {
                 Text(prompt.text)
@@ -579,12 +529,13 @@ struct ConversationView: View {
                     .foregroundStyle(palette.text)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             if !prompt.attachmentPaths.isEmpty {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 3) {
                     ForEach(prompt.attachmentPaths, id: \.self) { path in
                         Label(path, systemImage: "paperclip")
-                            .font(.caption.monospaced())
+                            .font(.caption2.monospaced())
                             .foregroundStyle(palette.dim)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -592,26 +543,16 @@ struct ConversationView: View {
                     }
                 }
             }
-            HStack(spacing: 6) {
-                deliveryMark(prompt.delivery)
-                Spacer(minLength: 4)
-                authorityLine(event)
-            }
+            deliveryMark(prompt.delivery)
         }
-        .padding(12)
-        .background(palette.accentSoft)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(
-                    palette.accent.opacity(0.35),
-                    style: prompt.origin.isForwarded
-                        ? StrokeStyle(lineWidth: 1, dash: [4, 3])
-                        : StrokeStyle(lineWidth: 1)
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .frame(maxWidth: 680, alignment: .trailing)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.vertical, 8)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(palette.accent.opacity(0.55))
+                .frame(width: 2)
+        }
+        .padding(.leading, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
@@ -716,31 +657,11 @@ struct ConversationHistoryView: View {
         _ prompt: SubmittedPrompt,
         event: SessionPresentationEvent
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            if case .forwardedTerminalOutput(let sourceAgentName) = prompt.origin {
-                Label(
-                    "Forwarded unverified terminal output from \(sourceAgentName)",
-                    systemImage: "arrowshape.turn.up.right"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.dim)
-            }
-            if !prompt.text.isEmpty {
-                Text(prompt.text)
-                    .foregroundStyle(palette.text)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            ForEach(prompt.attachmentPaths, id: \.self) { path in
-                Label(path, systemImage: "paperclip")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(palette.dim)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(path)
-            }
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                historicalDeliveryMark(prompt.delivery)
+                Text("You")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(palette.accent)
                 Spacer(minLength: 4)
                 Text(
                     "\(event.authority.displayName) · "
@@ -752,21 +673,29 @@ struct ConversationHistoryView: View {
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
             }
+            if !prompt.text.isEmpty {
+                Text(prompt.text)
+                    .foregroundStyle(palette.text)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(prompt.attachmentPaths, id: \.self) { path in
+                Label(path, systemImage: "paperclip")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(palette.dim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            historicalDeliveryMark(prompt.delivery)
         }
-        .padding(12)
-        .background(palette.accentSoft)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(
-                    palette.accent.opacity(0.35),
-                    style: prompt.origin.isForwarded
-                        ? StrokeStyle(lineWidth: 1, dash: [4, 3])
-                        : StrokeStyle(lineWidth: 1)
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .frame(maxWidth: 680, alignment: .trailing)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.vertical, 8)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(palette.accent.opacity(0.55))
+                .frame(width: 2)
+        }
+        .padding(.leading, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func historyOutput(
@@ -779,34 +708,17 @@ struct ConversationHistoryView: View {
         let displayText = ConversationDisplayText.compactDerived(output.text)
 
         return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Label("Rendered Raw output", systemImage: "terminal")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(palette.dim)
-                Text("· \(stateLabel)")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
-            }
-            ScrollView {
-                Text(displayText)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(palette.text)
-                    .textSelection(.enabled)
-                    .lineSpacing(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 280, alignment: .top)
-            Text("Projection may include prompt echo, tool output, or terminal chrome.")
-                .font(.caption2)
-                .foregroundStyle(palette.faint)
+            Text("Derived from Raw · \(stateLabel)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(palette.dim)
+            Text(displayText)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(palette.text)
+                .textSelection(.enabled)
+                .lineSpacing(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 6) {
                 Text(output.extraction.displayName)
-                if output.truncated {
-                    Text("· older projected text omitted")
-                }
-                if displayText != output.text {
-                    Text("· blanks compacted for display")
-                }
                 Spacer(minLength: 4)
                 Text(
                     "\(event.authority.displayName) · "
@@ -819,14 +731,7 @@ struct ConversationHistoryView: View {
             .font(.caption2)
             .foregroundStyle(palette.faint)
         }
-        .padding(10)
-        .background(palette.surface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(palette.line, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .frame(maxWidth: 780, alignment: .leading)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

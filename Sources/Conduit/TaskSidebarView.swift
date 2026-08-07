@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import ConduitCore
 import Foundation
 import SwiftUI
@@ -92,10 +93,13 @@ struct TaskSidebarView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    taskSection("Pinned", rows: pinnedRows)
-                    taskSection("Active", rows: activeRows)
-                    taskSection("Recent", rows: recentRows)
-                    taskSection("Archived", rows: archivedRows)
+                    if !pinnedRows.isEmpty {
+                        taskSection("Pinned", rows: pinnedRows)
+                    }
+                    agentGroupedSections
+                    if model.showArchivedTasks {
+                        taskSection("Archived", rows: archivedRows)
+                    }
 
                     if !discoveredRows.isEmpty {
                         discoveredSection
@@ -507,35 +511,89 @@ struct TaskSidebarView: View {
         .accessibilityElement(children: .contain)
     }
 
+    @ViewBuilder
+    private var agentGroupedSections: some View {
+        let openRows = activeRows + recentRows
+        let grouped = Dictionary(grouping: openRows) { row -> String in
+            let name = row.session.metadata.agentName?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? "Unknown" : name
+        }
+        let agentNames = grouped.keys.sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+        if agentNames.isEmpty {
+            EmptyView()
+        } else {
+            ForEach(agentNames, id: \.self) { agent in
+                let rows = (grouped[agent] ?? []).sorted { lhs, rhs in
+                    let leftActive = lhs.availability.kind == .running
+                        || lhs.availability.kind == .reconnectable
+                    let rightActive = rhs.availability.kind == .running
+                        || rhs.availability.kind == .reconnectable
+                    if leftActive != rightActive { return leftActive && !rightActive }
+                    return lhs.session.lastActivityAt > rhs.session.lastActivityAt
+                }
+                taskSection(agent, rows: rows)
+            }
+        }
+    }
+
+    private func openAppSettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+    }
+
     private var footer: some View {
-        HStack(spacing: 10) {
-            Button(action: model.chooseMainframeRoot) {
-                footerLabel("Root", systemImage: "folder")
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Button {
+                    openAppSettings()
+                } label: {
+                    footerLabel("Settings", systemImage: "gearshape")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Conduit Settings")
+                .help("Open Conduit Settings")
+
+                Button {
+                    model.showDiagnostics = true
+                } label: {
+                    footerLabel("Doctor", systemImage: "stethoscope")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Conduit Doctor")
+                .help("Open Conduit Doctor")
+
+                Button {
+                    model.showResources = true
+                } label: {
+                    footerLabel("Resources", systemImage: "gauge.with.dots.needle.33percent")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Resource Deck")
+                .help("Open Resource Deck")
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Choose MainFrame Root")
-            .help(model.settings.mainframeRoot?.path ?? "Choose MainFrame Root")
 
-            Spacer(minLength: 4)
+            HStack(spacing: 8) {
+                Button(action: model.chooseMainframeRoot) {
+                    footerLabel("Root", systemImage: "folder")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Choose MainFrame Root")
+                .help(model.settings.mainframeRoot?.path ?? "Choose MainFrame Root")
 
-            Button {
-                model.showDiagnostics = true
-            } label: {
-                footerLabel("Doctor", systemImage: "stethoscope")
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Conduit Doctor")
-            .help("Open Conduit Doctor")
+                Button(action: refreshSources) {
+                    footerLabel("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
+                .accessibilityLabel("Refresh MainFrame projects and durable sessions")
+                .help("Refresh MainFrame projects and discovered tmux sessions")
 
-            Button(action: refreshSources) {
-                footerLabel("Refresh", systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
-            .accessibilityLabel("Refresh MainFrame projects and durable sessions")
-            .help("Refresh MainFrame projects and discovered tmux sessions")
+                Spacer(minLength: 4)
 
-            Menu {
+                Menu {
                 Button(model.showArchivedTasks ? "Hide Archived" : "Show Archived") {
                     model.showArchivedTasks.toggle()
                 }
@@ -559,6 +617,7 @@ struct TaskSidebarView: View {
                     ? "Task history options"
                     : "\(model.taskSessionDiagnostics.count) task history issues"
             )
+            }
         }
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(palette.dim)

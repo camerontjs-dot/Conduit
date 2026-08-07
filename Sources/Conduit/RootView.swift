@@ -107,9 +107,10 @@ struct RootView: View {
                 workspaceColumn
             }
 
-            if model.isContextInspectorPresented,
-               let project = model.selectedTaskProject ?? model.selectedProject {
-                focusedContextOverlay(project: project)
+            if model.isContextInspectorPresented {
+                focusedInspectorOverlay(
+                    project: model.selectedTaskProject ?? model.selectedProject
+                )
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     .zIndex(1)
             }
@@ -156,23 +157,13 @@ struct RootView: View {
     }
 
     private var contextDetailColumn: some View {
-        Group {
-            if let project = model.selectedTaskProject ?? model.selectedProject {
-                projectContextColumn(project: project)
-            } else {
-                EmptyStateView(
-                    title: "No project selected",
-                    systemImage: "doc.text",
-                    description: "Select a MainFrame project to inspect its context."
-                )
-            }
-        }
-        .navigationSplitViewColumnWidth(min: 260, ideal: 310, max: 400)
-        .background(palette.surface)
+        InspectorView(project: model.selectedTaskProject ?? model.selectedProject)
+            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
+            .background(palette.surface)
     }
 
     /// Custom macOS 13-compatible trailing overlay (not SwiftUI `.inspector`).
-    private func focusedContextOverlay(project: MainframeProject) -> some View {
+    private func focusedInspectorOverlay(project: MainframeProject?) -> some View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
                 .allowsHitTesting(false)
@@ -183,48 +174,19 @@ struct RootView: View {
                     .frame(width: 1)
                     .accessibilityHidden(true)
 
-                VStack(spacing: 0) {
-                    HStack {
-                        Text("Inspector")
-                            .font(.caption.bold())
-                            .foregroundStyle(palette.dim)
-                        Spacer()
-                        Button {
-                            model.dismissContextInspector()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.caption.bold())
-                                .foregroundStyle(palette.dim)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Close project context inspector")
-                        .help("Close inspector")
-                        .keyboardShortcut(.cancelAction)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(palette.surface)
-
-                    Divider()
-
-                    projectContextColumn(project: project)
-                }
-                .frame(width: 320)
+                InspectorView(
+                    project: project,
+                    showsCloseButton: true,
+                    onClose: { model.dismissContextInspector() }
+                )
+                .frame(width: 340)
                 .frame(maxHeight: .infinity)
                 .background(palette.surface)
                 .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.45 : 0.14), radius: 10, x: -2, y: 0)
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Project context inspector")
-    }
-
-    private func projectContextColumn(project: MainframeProject) -> some View {
-        VStack(spacing: 0) {
-            WorkSessionBar(project: project)
-            Divider().overlay(palette.line)
-            ContextPanel(project: project)
-        }
+        .accessibilityLabel("Session inspector")
     }
 
     /// Always-reachable palette picker. Swatches resolve each palette's accent

@@ -135,6 +135,7 @@ final class AppModel: ObservableObject {
     @Published var showContext = true
     /// Focused-density temporary trailing context overlay. Closed by default.
     @Published var isContextInspectorPresented = false
+    @Published var inspectorTab: InspectorTab = .session
     @Published var statusMessage: String?
     @Published var errorMessage: String?
     @Published var isDropTargeted = false

@@ -377,6 +377,27 @@ final class ConversationDisplayTextTests: XCTestCase {
     }
 }
 
+final class GitReviewParserTests: XCTestCase {
+    func testParsesPorcelainRowsAndRenames() {
+        let text = """
+        M  Sources/App.swift
+        ?? new.txt
+        R  old.md -> docs/new.md
+        """
+        let entries = GitReviewParser.parsePorcelain(text)
+        XCTAssertEqual(entries.count, 3)
+        XCTAssertEqual(entries[0].path, "Sources/App.swift")
+        XCTAssertEqual(entries[1].path, "new.txt")
+        XCTAssertEqual(entries[2].path, "docs/new.md")
+    }
+
+    func testDetectsAbsolutePaths() {
+        let text = "Wrote /Users/admin/Desktop/MainFrame/00_inbox/note.md and ignored relative paths."
+        let paths = ProjectedPathDetector.detectAbsolutePaths(in: text)
+        XCTAssertTrue(paths.contains("/Users/admin/Desktop/MainFrame/00_inbox/note.md"))
+    }
+}
+
 final class AgentPermissionModeTests: XCTestCase {
     func testAntigravityFullAutoInjectsSkipFlag() {
         let profile = AgentProfile(
