@@ -346,7 +346,7 @@ struct ComposerView: View {
                         },
                         onTabComplete: {
                             guard let first = slashMatches.first else { return false }
-                            model.composerText = first.command
+                            model.applySlashCommandToComposer(first.command)
                             return true
                         },
                         placeholder: "",
@@ -429,7 +429,7 @@ struct ComposerView: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.faint)
                 Spacer()
-                Text("Tab completes · Return sends as CLI command")
+                Text("Tab/click fills composer · Return sends")
                     .font(.caption2)
                     .foregroundStyle(palette.faint)
             }
@@ -459,7 +459,7 @@ struct ComposerView: View {
 
     private func slashRow(_ item: AgentSlashCommand, isTop: Bool) -> some View {
         Button {
-            model.sendSlashCommand(item.command)
+            model.applySlashCommandToComposer(item.command)
         } label: {
             HStack(spacing: 10) {
                 Text(item.command)
@@ -481,7 +481,8 @@ struct ComposerView: View {
         }
         .buttonStyle(.plain)
         .background(isTop ? palette.accentSoft : Color.clear)
-        .accessibilityLabel("\(item.command), \(item.summary)")
+        .accessibilityLabel("\(item.command), \(item.summary). Fills the composer.")
+        .help("Put \(item.command) in the composer. Press Return to send.")
     }
 
     private var attachmentChipRow: some View {

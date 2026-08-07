@@ -1740,17 +1740,6 @@ final class AppModel: ObservableObject {
         )
         guard !assembled.isEmpty else { return }
 
-        // Slash commands are agent CLI surface commands (skills, /compact, …).
-        // Route them as typed control input so agent autocomplete/menus work.
-        let trimmedComposer = composerText.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        if attachments.isEmpty,
-           AgentSlashCatalog.looksLikeSlashCommand(trimmedComposer) {
-            sendSlashCommand(trimmedComposer)
-            return
-        }
-
         let runtime: TerminalRuntime
         if let activeSessionForSelectedProject {
             runtime = activeSessionForSelectedProject
@@ -1766,11 +1755,21 @@ final class AppModel: ObservableObject {
 
         let savedText = composerText
         let savedAttachments = attachments
-        let deliveryPayload = deliveryPayload(
-            assembled: assembled,
-            runtime: runtime,
-            attachmentCount: savedAttachments.count
+        let trimmedComposer = savedText.trimmingCharacters(
+            in: .whitespacesAndNewlines
         )
+        // Slash/skills stay on the composer→deliver path (same as any prompt).
+        // Never inject into the agent TUI input bar; operators pick from the
+        // dropdown into the composer, then Return sends.
+        let isSlashCommand = savedAttachments.isEmpty
+            && AgentSlashCatalog.looksLikeSlashCommand(trimmedComposer)
+        let deliveryPayload = isSlashCommand
+            ? assembled
+            : deliveryPayload(
+                assembled: assembled,
+                runtime: runtime,
+                attachmentCount: savedAttachments.count
+            )
         let eventID = runtime.recordPrompt(
             text: savedText,
             attachmentPaths: savedAttachments.map(\.url.path),
@@ -1784,6 +1783,8 @@ final class AppModel: ObservableObject {
             statusMessage = attachmentCount == 1
                 ? "Sent with 1 attachment."
                 : "Sent with \(attachmentCount) attachments."
+        } else if isSlashCommand {
+            statusMessage = "Sent \(trimmedComposer) from the composer."
         }
         let agentName = runtime.controller.descriptor.agent.name
         // Capture uses the human-visible assembled prompt for echo stripping,
@@ -1814,40 +1815,13 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Slash / skill commands must hit the agent TUI as typed control input
-    /// (same path as Raw), not as a Conduit host-envelope prompt paste.
-    func sendSlashCommand(_ command: String) {
+    /// Completes a slash/skill into the Conduit composer only. Does not send
+    /// and never writes into the Raw agent input bar.
+    func applySlashCommandToComposer(_ command: String) {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("/"), trimmed.count > 1 else {
-            sendComposer()
-            return
-        }
-        guard let runtime = activeSessionForSelectedProject
-                ?? selectedTaskRuntime,
-              !runtime.controller.lifecycle.isTerminal
-        else {
-            errorMessage = "No live agent session for slash commands. Launch or reconnect a task first."
-            return
-        }
-
-        let eventID = runtime.recordPrompt(
-            text: trimmed,
-            attachmentPaths: [],
-            renderedPayload: trimmed
-        )
-        let baseline = runtime.controller.currentCaptureBaseline()
-        runtime.beginAgentOutputCapture(
-            promptEventID: eventID,
-            promptText: trimmed,
-            baseline: baseline
-        )
-        runtime.controller.armConversationCapture(from: baseline)
-        runtime.controller.injectControlInput(trimmed, submit: true)
-        runtime.updatePromptDelivery(eventID: eventID, to: .delivered)
-        // Keep capture following the TUI response (menus, compact, etc.).
-        runtime.controller.refreshConversationCapture()
-        composerText = ""
-        statusMessage = "Sent \(trimmed) to \(runtime.descriptor.agent.name) as a CLI command."
+        guard !trimmed.isEmpty else { return }
+        composerText = trimmed.hasPrefix("/") ? trimmed : "/\(trimmed)"
+        statusMessage = "Selected \(composerText). Press Return to send from the composer."
     }
 
     /// Builds the terminal delivery string. CLI agents receive a compact
