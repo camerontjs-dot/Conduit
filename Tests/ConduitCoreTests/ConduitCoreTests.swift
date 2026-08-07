@@ -377,6 +377,31 @@ final class ConversationDisplayTextTests: XCTestCase {
     }
 }
 
+final class TerminalMenuParserTests: XCTestCase {
+    func testParsesAntigravityStylePermissionMenu() {
+        let text = """
+        Allow creation of this file?
+        > 1. Yes, allow creation
+          2. No, deny creation
+        ↑/↓ Navigate · tab Amend · f full diff
+        esc to cancel
+        """
+        let options = TerminalMenuParser.options(in: text)
+        XCTAssertEqual(options.count, 2)
+        XCTAssertEqual(options[0].key, "1")
+        XCTAssertTrue(options[0].isSelected)
+        XCTAssertEqual(options[0].label, "Yes, allow creation")
+        XCTAssertEqual(options[1].key, "2")
+        XCTAssertFalse(options[1].isSelected)
+        XCTAssertTrue(TerminalMenuParser.looksLikeInteractiveMenu(text))
+    }
+
+    func testIgnoresSingleNumberedListItemWithoutMenuCues() {
+        let text = "Notes:\n1. First point only"
+        XCTAssertTrue(TerminalMenuParser.options(in: text).isEmpty)
+    }
+}
+
 final class GitReviewParserTests: XCTestCase {
     func testParsesPorcelainRowsAndRenames() {
         let text = """

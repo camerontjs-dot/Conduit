@@ -14,6 +14,9 @@ struct ConversationView: View {
     /// When true, the whole stream pins to the latest content.
     @State private var followLatest = true
     @State private var didApplyFollowDefault = false
+    /// Conversation pane accepts 1–4 / arrows / Enter / Esc for agent menus.
+    @FocusState private var streamFocused: Bool
+    @State private var keyMonitor: Any?
 
     init(runtime: TerminalRuntime) {
         self._runtime = ObservedObject(wrappedValue: runtime)
@@ -98,6 +101,9 @@ struct ConversationView: View {
             }
         }
         .background(palette.canvas)
+        .focusable()
+        .focused($streamFocused)
+        .onTapGesture { streamFocused = true }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(runtime.descriptor.agent.name) conversation")
         .onAppear {
@@ -105,6 +111,11 @@ struct ConversationView: View {
                 followLatest = model.settings.followConversationByDefault
                 didApplyFollowDefault = true
             }
+            streamFocused = true
+            installKeyMonitor()
+        }
+        .onDisappear {
+            removeKeyMonitor()
         }
     }
 
@@ -385,6 +396,10 @@ struct ConversationView: View {
             ? "Capture interrupted"
             : output.state.displayName
         let displayText = ConversationDisplayText.compactDerived(output.text)
+        let menuOptions = TerminalMenuParser.options(in: displayText)
+        let interactiveMenu = TerminalMenuParser.looksLikeInteractiveMenu(displayText)
+            && !menuOptions.isEmpty
+            && !controller.lifecycle.isTerminal
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
@@ -397,6 +412,11 @@ struct ConversationView: View {
                 if isCurrentCapture && output.state == .live {
                     ProgressView()
                         .controlSize(.mini)
+                }
+                if interactiveMenu {
+                    Text("· click or type a choice")
+                        .font(.caption2)
+                        .foregroundStyle(palette.accent)
                 }
                 Spacer(minLength: 4)
                 Button("Open Raw") {
@@ -414,6 +434,11 @@ struct ConversationView: View {
                 .lineSpacing(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if interactiveMenu {
+                interactiveMenuPanel(options: menuOptions)
+            }
+
             HStack(spacing: 6) {
                 Text(output.extraction.displayName)
                 if output.truncated {
@@ -431,6 +456,165 @@ struct ConversationView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    private func interactiveMenuPanel(options: [TerminalMenuOption]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Choose an option (click or press the number)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(palette.dim)
+            ForEach(options) { option in
+                Button {
+                    streamFocused = true
+                    model.injectConversationControl(
+                        text: option.key,
+                        submit: true,
+                        into: runtime
+                    )
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(option.key)
+                            .font(.caption.monospaced().weight(.bold))
+                            .foregroundStyle(palette.onAccent)
+                            .frame(width: 22, height: 22)
+                            .background(palette.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        Text(option.label)
+                            .font(.callout)
+                            .foregroundStyle(palette.text)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if option.isSelected {
+                            Text("selected")
+                                .font(.caption2)
+                                .foregroundStyle(palette.accent)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        option.isSelected ? palette.accentSoft : palette.lineSoft
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(
+                                option.isSelected
+                                    ? palette.accent.opacity(0.55)
+                                    : palette.line,
+                                lineWidth: 1
+                            )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Choose \(option.key): \(option.label)")
+                .help("Sends \(option.key)+Enter to the agent without opening Raw")
+            }
+            HStack(spacing: 8) {
+                Button("Enter") {
+                    model.injectConversationControl(key: .enter, into: runtime)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("Esc") {
+                    model.injectConversationControl(key: .escape, into: runtime)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("↑") {
+                    model.injectConversationControl(key: .up, into: runtime)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("↓") {
+                    model.injectConversationControl(key: .down, into: runtime)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(10)
+        .background(palette.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(palette.accent.opacity(0.35), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func installKeyMonitor() {
+        removeKeyMonitor()
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
+            handleConversationKeyEvent(event)
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
+    }
+
+    /// When Conversation is focused and the composer is not first responder,
+    /// route menu keys into the live agent PTY.
+    private func handleConversationKeyEvent(_ event: NSEvent) -> NSEvent? {
+        guard streamFocused,
+              !controller.lifecycle.isTerminal,
+              runtime.selectedSurface == .conversation
+        else { return event }
+
+        // Don't steal keys from the composer or other text fields.
+        if let first = NSApp.keyWindow?.firstResponder {
+            if first is NSTextView || first is NSTextField {
+                return event
+            }
+        }
+
+        let flags = event.modifierFlags.intersection([
+            .command, .control, .option
+        ])
+        guard flags.isEmpty else { return event }
+
+        if event.keyCode == 36 || event.keyCode == 76 {
+            model.injectConversationControl(key: .enter, into: runtime)
+            return nil
+        }
+        if event.keyCode == 53 {
+            model.injectConversationControl(key: .escape, into: runtime)
+            return nil
+        }
+        if event.keyCode == 126 {
+            model.injectConversationControl(key: .up, into: runtime)
+            return nil
+        }
+        if event.keyCode == 125 {
+            model.injectConversationControl(key: .down, into: runtime)
+            return nil
+        }
+        if event.keyCode == 123 {
+            model.injectConversationControl(key: .left, into: runtime)
+            return nil
+        }
+        if event.keyCode == 124 {
+            model.injectConversationControl(key: .right, into: runtime)
+            return nil
+        }
+
+        if let chars = event.charactersIgnoringModifiers,
+           chars.count == 1,
+           let ch = chars.first,
+           ch >= "1", ch <= "9" {
+            model.injectConversationControl(
+                text: String(ch),
+                submit: true,
+                into: runtime
+            )
+            return nil
+        }
+
+        return event
     }
 
     private func sessionOpenedCard(
