@@ -25,18 +25,18 @@ struct WorkspaceHeader: View {
 
     private var contextButtonSymbol: String {
         if model.isContextDetailPinned {
-            return "sidebar.trailing"
+            return "sidebar.right"
         }
-        return model.isContextInspectorPresented ? "sidebar.trailing" : "sidebar.trailing.hide"
+        return model.isContextInspectorPresented ? "sidebar.right" : "sidebar.right"
     }
 
     private var contextButtonAccessibilityLabel: String {
         if model.isContextDetailPinned {
-            return "Project context inspector pinned"
+            return "Inspector pinned open"
         }
         return model.isContextInspectorPresented
-            ? "Hide project context inspector"
-            : "Show project context inspector"
+            ? "Hide inspector"
+            : "Show inspector"
     }
 
     private var contextButtonAccessibilityValue: String {
@@ -48,11 +48,11 @@ struct WorkspaceHeader: View {
 
     private var contextButtonHelp: String {
         if model.isContextDetailPinned {
-            return "Context inspector is pinned open in \(model.density.displayName) density"
+            return "Right inspector is pinned open in \(model.density.displayName) density (Session, Files, Review, Context)."
         }
         return model.isContextInspectorPresented
-            ? "Hide the temporary project context inspector"
-            : "Show the temporary project context inspector"
+            ? "Hide the right inspector"
+            : "Show the right inspector (Session, Files, Review, Context)"
     }
 
     var body: some View {
@@ -124,13 +124,23 @@ struct WorkspaceHeader: View {
             Button {
                 model.toggleContextPresentation()
             } label: {
-                Image(systemName: contextButtonSymbol)
+                if showsActionLabels {
+                    Label(
+                        model.isContextInspectorPresented || model.isContextDetailPinned
+                            ? "Inspector"
+                            : "Inspector",
+                        systemImage: contextButtonSymbol
+                    )
+                } else {
+                    Image(systemName: contextButtonSymbol)
+                }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.bordered)
             .disabled(model.isContextDetailPinned)
             .accessibilityLabel(contextButtonAccessibilityLabel)
             .accessibilityValue(contextButtonAccessibilityValue)
             .help(contextButtonHelp)
+            .keyboardShortcut("i", modifiers: [.command, .shift])
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

@@ -31,13 +31,9 @@ struct RootView: View {
         // macOS 13 has no NavigationSplitViewVisibility that keeps sidebar+content
         // while hiding only detail, and no .inspector (macOS 14+). Density picks
         // a supported composition over the same three semantic regions.
-        Group {
-            if model.density == .focused {
-                focusedSplitLayout
-            } else {
-                pinnedThreeColumnLayout
-            }
-        }
+        // Always keep the right inspector as a real column so Session/Files/
+        // Review/Context stay discoverable (not only a Focused-mode overlay).
+        pinnedThreeColumnLayout
         .tint(palette.accent)
         .background(palette.app)
         .toolbar {

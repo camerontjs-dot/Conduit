@@ -11,10 +11,8 @@ struct ConversationView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var runtime: TerminalRuntime
     @ObservedObject private var controller: TerminalSessionController
-    /// When true, new timeline events pin the thread to the latest card.
-    /// Live character growth only scrolls *within* the active output card.
+    /// When true, the whole stream pins to the latest content.
     @State private var followLatest = true
-    @State private var expandedOutputIDs: Set<UUID> = []
     @State private var didApplyFollowDefault = false
 
     init(runtime: TerminalRuntime) {
@@ -26,8 +24,19 @@ struct ConversationView: View {
         themeStore.palette(for: colorScheme)
     }
 
-    /// Default max height for Derived-from-Raw cards before internal scroll.
-    private let collapsedOutputMaxHeight: CGFloat = 280
+    /// Live Derived-from-Raw character count — drives whole-stream follow, not
+    /// per-message inner scroll views.
+    private var streamContentSignature: Int {
+        var total = runtime.presentationEvents.count * 1_000_000
+        if let eventID = runtime.activeOutputEventID,
+           let event = runtime.presentationEvents.first(where: { $0.id == eventID }),
+           case .agentOutput(let output) = event.kind {
+            total += output.text.count
+        }
+        if runtime.isAwaitingAgentOutput { total += 1 }
+        if runtime.conversationCaptureNotice != nil { total += 2 }
+        return total
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -71,11 +80,9 @@ struct ConversationView: View {
                     .frame(maxWidth: 900, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
-                .onChange(of: runtime.presentationEvents.count) { _ in
+                .onChange(of: streamContentSignature) { _ in
                     guard followLatest else { return }
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("conversation-bottom", anchor: .bottom)
-                    }
+                    proxy.scrollTo("conversation-bottom", anchor: .bottom)
                 }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8)
@@ -378,12 +385,6 @@ struct ConversationView: View {
             ? "Capture interrupted"
             : output.state.displayName
         let displayText = ConversationDisplayText.compactDerived(output.text)
-        let isExpanded = expandedOutputIDs.contains(event.id)
-        let lineCount = displayText.split(
-            separator: "\n",
-            omittingEmptySubsequences: false
-        ).count
-        let shouldClamp = !isExpanded && lineCount > 18
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
@@ -405,12 +406,14 @@ struct ConversationView: View {
                 .font(.caption2)
                 .foregroundStyle(palette.accent)
             }
-            derivedOutputBody(
-                displayText: displayText,
-                clamped: shouldClamp,
-                eventID: event.id,
-                isLive: isCurrentCapture && output.state == .live
-            )
+            // Full height in the outer stream ScrollView — never a nested scroller.
+            Text(displayText)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(palette.text)
+                .textSelection(.enabled)
+                .lineSpacing(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
                 Text(output.extraction.displayName)
                 if output.truncated {
@@ -420,18 +423,6 @@ struct ConversationView: View {
                     Text("· blanks compacted")
                 }
                 Spacer(minLength: 4)
-                if lineCount > 18 {
-                    Button(isExpanded ? "Collapse" : "Expand") {
-                        if isExpanded {
-                            expandedOutputIDs.remove(event.id)
-                        } else {
-                            expandedOutputIDs.insert(event.id)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(palette.accent)
-                }
                 authorityLine(event)
             }
             .font(.caption2)
@@ -440,39 +431,6 @@ struct ConversationView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
-    }
-
-    @ViewBuilder
-    private func derivedOutputBody(
-        displayText: String,
-        clamped: Bool,
-        eventID: UUID,
-        isLive: Bool
-    ) -> some View {
-        let textView = Text(displayText)
-            .font(.system(.callout, design: .monospaced))
-            .foregroundStyle(palette.text)
-            .textSelection(.enabled)
-            .lineSpacing(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-        if clamped {
-            ScrollViewReader { innerProxy in
-                ScrollView {
-                    textView
-                        .padding(.vertical, 2)
-                        .id("output-body-\(eventID)")
-                }
-                .frame(maxHeight: collapsedOutputMaxHeight, alignment: .top)
-                .onChange(of: displayText.count) { _ in
-                    guard isLive else { return }
-                    innerProxy.scrollTo("output-body-\(eventID)", anchor: .bottom)
-                }
-            }
-        } else {
-            textView
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 
     private func sessionOpenedCard(

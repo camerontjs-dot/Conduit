@@ -134,7 +134,9 @@ final class AppModel: ObservableObject {
     /// Legacy settings-backed default; layout no longer embeds context in the workspace.
     @Published var showContext = true
     /// Focused-density temporary trailing context overlay. Closed by default.
-    @Published var isContextInspectorPresented = false
+    /// Trailing inspector visibility for densities that still use an overlay.
+    /// Three-column layout keeps the inspector column always present.
+    @Published var isContextInspectorPresented = true
     @Published var inspectorTab: InspectorTab = .session
     @Published var statusMessage: String?
     @Published var errorMessage: String?
@@ -172,9 +174,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Balanced and Operator pin project context as the NavigationSplitView detail.
+    /// Right inspector is always the NavigationSplitView detail column.
     var isContextDetailPinned: Bool {
-        density != .focused
+        true
     }
 
     let speech = SpeechTranscriber()
