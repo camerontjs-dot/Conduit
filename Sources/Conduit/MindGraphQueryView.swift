@@ -44,23 +44,11 @@ struct MindGraphQueryView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "point.3.connected.trianglepath.dotted")
-                .foregroundStyle(palette.accent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("MindGraph")
-                    .font(.headline)
-                    .foregroundStyle(palette.text)
-                Text("Local dual-index retrieval · one scope per query")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
-            }
-            Spacer()
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.cancelAction)
-        }
-        .padding(14)
-        .background(palette.surface)
+        ConduitSheetHeader(
+            title: "MindGraph",
+            subtitle: "Local dual-index retrieval · one scope per query",
+            systemImage: "point.3.connected.trianglepath.dotted"
+        )
     }
 
     private var queryBar: some View {

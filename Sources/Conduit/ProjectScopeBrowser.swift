@@ -83,17 +83,12 @@ struct ProjectScopeBrowser: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("Browse Projects")
-                .font(.headline)
-                .foregroundStyle(palette.text)
-            Text("Filter task history by the current MainFrame file scan.")
-                .font(.caption)
-                .foregroundStyle(palette.dim)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(palette.surface)
+        ConduitSheetHeader(
+            title: "Browse Projects",
+            subtitle: "Filter task history by the current MainFrame file scan.",
+            systemImage: "folder",
+            onClose: { model.showProjectBrowser = false }
+        )
     }
 
     private var searchField: some View {

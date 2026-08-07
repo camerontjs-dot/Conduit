@@ -17,14 +17,14 @@ struct DiagnosticsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Label("Conduit Doctor", systemImage: "stethoscope")
-                    .font(.title2.bold())
-                    .foregroundStyle(palette.text)
-                Spacer()
-                Button("Refresh") { Task { await model.refreshHealth() } }
-            }
-            .padding()
+            ConduitSheetHeader(
+                title: "Conduit Doctor",
+                subtitle: "Agent CLI health and install checks",
+                systemImage: "stethoscope",
+                trailing: {
+                    Button("Refresh") { Task { await model.refreshHealth() } }
+                }
+            )
             Divider()
             List(model.healthResults) { result in
                 HStack(alignment: .top, spacing: 10) {
@@ -63,17 +63,21 @@ struct ResourcePanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Label("Resource Deck", systemImage: "gauge.with.dots.needle.67percent")
-                    .font(.title2.bold())
-                    .foregroundStyle(palette.text)
-                Spacer()
-                Button("Activity Monitor") {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app"))
+            ConduitSheetHeader(
+                title: "Resource Deck",
+                subtitle: "Local memory and loaded models",
+                systemImage: "gauge.with.dots.needle.67percent",
+                trailing: {
+                    HStack(spacing: 8) {
+                        Button("Activity Monitor") {
+                            NSWorkspace.shared.open(
+                                URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app")
+                            )
+                        }
+                        Button("Refresh") { Task { await model.refreshResources() } }
+                    }
                 }
-                Button("Refresh") { Task { await model.refreshResources() } }
-            }
-            .padding()
+            )
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -141,67 +145,84 @@ struct ContextBundleView: View {
     }
 
     var body: some View {
-        HSplitView {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Context sources")
-                    .font(.headline)
-                    .foregroundStyle(palette.text)
-                    .padding()
-                Divider()
-                List(model.contextCandidates) { document in
-                    Toggle(isOn: Binding(
-                        get: { model.selectedContextIDs.contains(document.id) },
-                        set: { selected in model.setContextDocument(document, selected: selected) }
-                    )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(document.label)
-                                .foregroundStyle(palette.text)
-                            Text(document.trustLabel)
-                                .font(.caption)
-                                .foregroundStyle(palette.dim)
-                        }
-                    }
-                    .listRowBackground(palette.surface)
-                }
-                .scrollContentBackground(.hidden)
-                .background(palette.app)
-            }
-            .frame(minWidth: 260)
-            .background(palette.app)
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Label("Bundle Preview", systemImage: "doc.on.doc")
-                        .font(.headline)
+        VStack(spacing: 0) {
+            ConduitSheetHeader(
+                title: "Context Bundle",
+                subtitle: "Nominate sources for inspection — not verification",
+                systemImage: "doc.on.doc",
+                onClose: { model.showContextBundle = false }
+            )
+            Divider()
+            HSplitView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Context sources")
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(palette.text)
-                    Spacer()
-                    Text("Context, not verification")
-                        .font(.caption)
-                        .foregroundStyle(palette.dim)
+                        .padding(12)
+                    Divider()
+                    List(model.contextCandidates) { document in
+                        Toggle(isOn: Binding(
+                            get: { model.selectedContextIDs.contains(document.id) },
+                            set: { selected in
+                                model.setContextDocument(document, selected: selected)
+                            }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(document.label)
+                                    .foregroundStyle(palette.text)
+                                Text(document.trustLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(palette.dim)
+                            }
+                        }
+                        .listRowBackground(palette.surface)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .background(palette.app)
                 }
-                .padding()
-                Divider()
-                ScrollView {
-                    Text(model.contextPreview.isEmpty ? "Select context sources." : model.contextPreview)
+                .frame(minWidth: 260)
+                .background(palette.app)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("Preview")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(palette.text)
+                        Spacer()
+                        Text("Context, not verification")
+                            .font(.caption)
+                            .foregroundStyle(palette.dim)
+                    }
+                    .padding(12)
+                    Divider()
+                    ScrollView {
+                        Text(
+                            model.contextPreview.isEmpty
+                                ? "Select context sources."
+                                : model.contextPreview
+                        )
                         .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(model.contextPreview.isEmpty ? palette.faint : palette.text)
+                        .foregroundStyle(
+                            model.contextPreview.isEmpty ? palette.faint : palette.text
+                        )
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
+                    }
+                    .background(palette.sink)
+                    Divider()
+                    HStack {
+                        Spacer()
+                        Button("Attach Bundle") { model.attachContextBundle() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(model.contextPreview.isEmpty)
+                    }
+                    .padding()
+                    .background(palette.surface)
                 }
-                .background(palette.sink)
-                Divider()
-                HStack {
-                    Spacer()
-                    Button("Attach Bundle") { model.attachContextBundle() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.contextPreview.isEmpty)
-                }
-                .padding()
-                .background(palette.surface)
+                .frame(minWidth: 460)
+                .background(palette.app)
             }
-            .frame(minWidth: 460)
-            .background(palette.app)
         }
         .background(palette.app)
         .frame(width: 860, height: 600)

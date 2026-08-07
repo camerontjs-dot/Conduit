@@ -42,20 +42,11 @@ struct AgentUsageSheet: View {
     }
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Agent usage")
-                    .font(.headline)
-                    .foregroundStyle(palette.text)
-                Text("Observed by Conduit — meters are relative across agents")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
-            }
-            Spacer()
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
-        }
-        .padding(14)
+        ConduitSheetHeader(
+            title: "Agent usage",
+            subtitle: "Observed by Conduit — meters are relative across agents",
+            systemImage: "chart.bar"
+        )
     }
 
     private func usageRow(

@@ -92,17 +92,12 @@ struct NewTaskView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("New Task")
-                .font(.headline)
-                .foregroundStyle(palette.text)
-            Text("Start an enabled CLI agent in a project discovered from MainFrame.")
-                .font(.caption)
-                .foregroundStyle(palette.dim)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(palette.surface)
+        ConduitSheetHeader(
+            title: "New Task",
+            subtitle: "Start an enabled CLI agent in a project from MainFrame.",
+            systemImage: "plus.circle",
+            onClose: { model.showNewTask = false }
+        )
     }
 
     private var conversationFirstNote: some View {

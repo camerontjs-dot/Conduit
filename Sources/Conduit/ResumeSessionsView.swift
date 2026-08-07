@@ -39,22 +39,15 @@ struct ResumeSessionsSheet: View {
     }
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Resume a session")
-                    .font(.headline)
-                    .foregroundStyle(palette.text)
-                Text("Durable tmux sessions this Mac is still running")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
+        ConduitSheetHeader(
+            title: "Resume a session",
+            subtitle: "Durable tmux sessions this Mac is still running",
+            systemImage: "arrow.triangle.2.circlepath",
+            trailing: {
+                Button("Refresh") { Task { await refresh() } }
+                    .disabled(isRefreshing)
             }
-            Spacer()
-            Button("Refresh") { Task { await refresh() } }
-                .disabled(isRefreshing)
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
-        }
-        .padding(14)
+        )
     }
 
     @ViewBuilder

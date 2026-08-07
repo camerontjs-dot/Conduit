@@ -545,114 +545,81 @@ struct TaskSidebarView: View {
     }
 
     private var footer: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 8) {
+        Menu {
+            Section("Workspace") {
                 Button {
                     openAppSettings()
                 } label: {
-                    footerLabel("Settings", systemImage: "gearshape")
+                    Label("Settings…", systemImage: "gearshape")
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Conduit Settings")
-                .help("Open Conduit Settings")
+                Button {
+                    model.chooseMainframeRoot()
+                } label: {
+                    Label("Choose MainFrame Root…", systemImage: "folder")
+                }
+                Button {
+                    refreshSources()
+                } label: {
+                    Label("Refresh Projects & Sessions", systemImage: "arrow.clockwise")
+                }
+                .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
+            }
 
+            Section("Tools") {
                 Button {
                     model.showDiagnostics = true
                 } label: {
-                    footerLabel("Doctor", systemImage: "stethoscope")
+                    Label("Conduit Doctor", systemImage: "stethoscope")
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Conduit Doctor")
-                .help("Open Conduit Doctor")
-
                 Button {
                     model.showResources = true
                 } label: {
-                    footerLabel("Resources", systemImage: "gauge.with.dots.needle.33percent")
+                    Label("Resource Deck", systemImage: "gauge.with.dots.needle.33percent")
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Resource Deck")
-                .help("Open Resource Deck")
-            }
-
-            HStack(spacing: 8) {
                 Button {
                     model.showAgentUsage = true
                 } label: {
-                    footerLabel("Usage", systemImage: "chart.bar")
+                    Label("Agent Usage", systemImage: "chart.bar")
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Agent usage meters")
-                .help("Observed per-agent usage meters")
-
                 Button {
                     model.showMindGraph = true
                 } label: {
-                    footerLabel("MindGraph", systemImage: "point.3.connected.trianglepath.dotted")
+                    Label("MindGraph…", systemImage: "point.3.connected.trianglepath.dotted")
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Query MindGraph")
-                .help("Query local MindGraph knowledge or projects indexes")
             }
 
-            HStack(spacing: 8) {
-                Button(action: model.chooseMainframeRoot) {
-                    footerLabel("Root", systemImage: "folder")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Choose MainFrame Root")
-                .help(model.settings.mainframeRoot?.path ?? "Choose MainFrame Root")
-
-                Button(action: refreshSources) {
-                    footerLabel("Refresh", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
-                .accessibilityLabel("Refresh MainFrame projects and durable sessions")
-                .help("Refresh MainFrame projects and discovered tmux sessions")
-
-                Spacer(minLength: 4)
-
-                Menu {
-                Button(model.showArchivedTasks ? "Hide Archived" : "Show Archived") {
+            Section("Task history") {
+                Button(model.showArchivedTasks ? "Hide Archived Tasks" : "Show Archived Tasks") {
                     model.showArchivedTasks.toggle()
                 }
                 if !model.taskSessionDiagnostics.isEmpty {
-                    Divider()
                     Button("Task History Issues (\(model.taskSessionDiagnostics.count))…") {
                         showTaskHistoryDiagnostics = true
                     }
                 }
-            } label: {
-                footerLabel(
-                    model.taskSessionDiagnostics.isEmpty ? "More" : "Issues",
-                    systemImage: model.taskSessionDiagnostics.isEmpty
-                        ? "ellipsis.circle"
-                        : "exclamationmark.circle"
-                )
             }
-            .menuStyle(.borderlessButton)
-            .accessibilityLabel(
-                model.taskSessionDiagnostics.isEmpty
-                    ? "Task history options"
-                    : "\(model.taskSessionDiagnostics.count) task history issues"
-            )
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal")
+                Text("Tools")
+                    .font(.system(size: 12, weight: .semibold))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(palette.faint)
+                Spacer(minLength: 0)
             }
+            .foregroundStyle(palette.text)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .font(.system(size: 10, weight: .medium))
-        .foregroundStyle(palette.dim)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        .menuStyle(.borderlessButton)
+        .help("Settings, Doctor, Resources, Usage, MindGraph, and workspace actions")
+        .accessibilityLabel("Tools menu")
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
         .background(palette.surface)
-    }
-
-    @ViewBuilder
-    private func footerLabel(_ title: String, systemImage: String) -> some View {
-        if usesExpandedLabels {
-            Label(title, systemImage: systemImage)
-        } else {
-            Image(systemName: systemImage)
-        }
     }
 
     private var scopeTitle: String {
