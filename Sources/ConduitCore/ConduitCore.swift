@@ -571,16 +571,17 @@ public enum ConversationDisplayText {
         compactLines(canonicalLines(text)).joined(separator: "\n")
     }
 
-    /// Workstation-facing form: compact blanks, then drop pure TUI chrome lines
-    /// (spinners, box edges, "esc to interrupt", navigate hints) while keeping
-    /// substantive prose, lists, and interactive menu content.
+    /// Workstation-facing form: turn multi-column TUI paint into a clean
+    /// document (main prose only). Presentation only — retained JSONL stays raw.
     public static func workstationDerived(_ text: String) -> String {
         let compacted = compactLines(canonicalLines(text))
+        let columnStripped = compacted.map(stripSideColumn)
         var kept: [String] = []
         var blankRun = 0
         var droppedOnlyChrome = true
-        for line in compacted {
-            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+        for line in columnStripped {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
                 blankRun += 1
                 if blankRun <= 1 {
                     kept.append("")
@@ -588,17 +589,18 @@ public enum ConversationDisplayText {
                 continue
             }
             blankRun = 0
-            if isPresentationChromeLine(line) {
+            if isPresentationChromeLine(line) || isAgentAppChromeLine(trimmed) {
                 continue
             }
             droppedOnlyChrome = false
-            kept.append(line)
+            kept.append(line.trimmingCharacters(in: .whitespaces))
         }
         // If scrubbing would erase the block entirely, fall back to compact form
         // so the operator still sees something rather than a silent hole.
         if droppedOnlyChrome {
             return compacted.joined(separator: "\n")
         }
+        kept = reflowSoftWrappedProse(kept)
         while kept.first?.isEmpty == true {
             kept.removeFirst()
         }
@@ -723,6 +725,127 @@ public enum ConversationDisplayText {
             compacted.removeLast()
         }
         return compacted
+    }
+
+    /// Drop right-hand inspector columns that TUI agents paint beside the
+    /// main message stream (OpenCode Context/LSP, etc.).
+    private static func stripSideColumn(_ line: String) -> String {
+        // Split on a wide gap (2+ spaces) when the right fragment looks like
+        // side-panel chrome rather than sentence continuation.
+        guard let regex = try? NSRegularExpression(
+            pattern: #"^(.*?)  {2,}(\S.*)$"#
+        ) else { return line }
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        guard let match = regex.firstMatch(in: line, range: range),
+              match.numberOfRanges >= 3,
+              let leftRange = Range(match.range(at: 1), in: line),
+              let rightRange = Range(match.range(at: 2), in: line)
+        else { return line }
+        let left = String(line[leftRange])
+        let right = String(line[rightRange]).trimmingCharacters(in: .whitespaces)
+        if isAgentAppChromeLine(right) || isSidePanelFragment(right) {
+            return left
+        }
+        return line
+    }
+
+    private static func isSidePanelFragment(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        if lower == "context" || lower == "lsp" { return true }
+        if lower.hasSuffix(" tokens") { return true }
+        if lower.hasSuffix("% used") { return true }
+        if lower.hasPrefix("$") && lower.contains("spent") { return true }
+        if lower.hasPrefix("writing a ") { return true }
+        if lower.hasPrefix("lsps are") { return true }
+        if text.count <= 24 && !text.contains(" ") { return true }
+        return false
+    }
+
+    /// OpenCode / Claude-style chrome that is not the assistant answer.
+    private static func isAgentAppChromeLine(_ trimmed: String) -> Bool {
+        let lower = trimmed.lowercased()
+
+        // Input caret / echoed slash in the agent input box.
+        if trimmed == "|" || trimmed == "▌" || trimmed == "❚" {
+            return true
+        }
+        if trimmed.hasPrefix("| ") || trimmed.hasPrefix("│ ") {
+            let rest = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("/") || rest.isEmpty { return true }
+        }
+        if lower.range(of: #"^/[a-z][a-z0-9_-]*$"#, options: .regularExpression) != nil {
+            // Lone slash-command echo (already shown as You).
+            return true
+        }
+
+        // Status / activity rows.
+        if lower.hasPrefix("+ thought") || lower.hasPrefix("thought:") {
+            return true
+        }
+        if lower.hasPrefix("compaction") || lower.hasPrefix("build ·")
+            || lower.hasPrefix("build ·") || lower.contains(" · big pickle")
+        {
+            return true
+        }
+        if lower.hasPrefix("build ") && lower.contains("·") { return true }
+        if lower == "context" || lower == "lsp" { return true }
+        if lower == "lsps are disabled" || lower.hasPrefix("lsps are") {
+            return true
+        }
+        if lower.hasSuffix("% used") { return true }
+        if lower.hasSuffix(" tokens") && trimmed.count < 40 { return true }
+        if lower.hasPrefix("$") && lower.contains("spent") { return true }
+        if lower.hasPrefix("writing a ") { return true }
+        if lower.contains("ctrl+p") { return true }
+        if lower.hasPrefix("opencode ") && lower.range(
+            of: #"\d+\.\d+"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+        // Footer path alone.
+        if trimmed.hasPrefix("/") && (
+            lower.contains("/users/")
+                || lower.contains("/home/")
+                || lower.contains("desktop/")
+                || lower.hasSuffix(":main")
+        ) {
+            return true
+        }
+        // Model / agent brand row like "Build · Big Pickle OpenCode Zen"
+        if lower.contains("opencode") && lower.contains("·") && trimmed.count < 80 {
+            return true
+        }
+        return false
+    }
+
+    /// Join soft-wrapped terminal lines into readable paragraphs.
+    private static func reflowSoftWrappedProse(_ lines: [String]) -> [String] {
+        var out: [String] = []
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                out.append("")
+                continue
+            }
+            if let last = out.last, !last.isEmpty {
+                let lastTrimmed = last.trimmingCharacters(in: .whitespaces)
+                let lastEndsSentence = lastTrimmed.last.map {
+                    ".!?:)".contains($0)
+                } ?? true
+                let looksContinuation = trimmed.first?.isLowercase == true
+                    || (!lastEndsSentence && !trimmed.hasPrefix("-")
+                        && !trimmed.hasPrefix("•")
+                        && !trimmed.hasPrefix("#")
+                        && !trimmed.hasPrefix("```"))
+                if looksContinuation && !lastEndsSentence {
+                    out[out.count - 1] = lastTrimmed + " " + trimmed
+                    continue
+                }
+            }
+            out.append(trimmed)
+        }
+        return out
     }
 
     /// Pure presentation chrome — never drops numbered menu options or prose.

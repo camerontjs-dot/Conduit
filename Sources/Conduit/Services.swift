@@ -977,12 +977,29 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         guard lifecycle == .running || lifecycle == .launching else { return }
         var payload = text
         if submit, !payload.hasSuffix("\n"), !payload.hasSuffix("\r") {
-            payload += "\n"
+            // Prefer CR — agent TUIs treat it as Enter, not a pasted newline.
+            payload += "\r"
         }
         let bytes = Array(payload.utf8)
         guard !bytes.isEmpty else { return }
         // Bypass ActivityTerminalView.send so onDirectRawInput is not fired.
         terminalView.process.send(data: bytes[...])
+    }
+
+    /// Runs an agent slash/skill command in the CLI input surface (OpenCode,
+    /// Claude Code, …). Bracketed-paste delivery is treated as chat prose and
+    /// does not invoke builtins like `/cost`.
+    func injectSlashCommand(_ command: String) {
+        guard lifecycle == .running || lifecycle == .launching else { return }
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Clear any half-typed buffer, then type the command and press Enter.
+        injectControlKey(.escape)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+            guard let self else { return }
+            self.injectControlInput(trimmed, submit: false)
+            self.injectControlKey(.enter)
+        }
     }
 
     /// Arms Derived-from-Raw capture using an already-taken baseline without

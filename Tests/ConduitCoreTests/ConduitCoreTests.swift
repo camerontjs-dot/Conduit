@@ -394,6 +394,35 @@ final class ConversationDisplayTextTests: XCTestCase {
         XCTAssertFalse(text.contains("Thinking"))
     }
 
+    func testWorkstationDerivedStripsOpenCodeSidePanelAndKeepsAnswer() {
+        let raw = """
+        | /cost
+        |
+        + Thought: 1.0s
+        /cost is an opencode built-in — it displays this session's token usage and
+        spend. There's no tool-side action needed from me; the command runs in the
+        CLI interface.        Context
+        20,926 tokens
+        10% used
+        $0.00 spent
+        LSP
+        LSPs are disabled
+        Build · Big Pickle · 3.8s
+        /Users/admin/Desktop/MainFrame
+        """
+        let text = ConversationDisplayText.workstationDerived(raw)
+        XCTAssertTrue(text.contains("opencode built-in"))
+        XCTAssertTrue(text.contains("CLI interface"))
+        XCTAssertFalse(text.contains("Thought"))
+        XCTAssertFalse(text.contains("LSPs are disabled"))
+        XCTAssertFalse(text.contains("20,926"))
+        XCTAssertFalse(text.contains("Build ·"))
+        // Lone command echo dropped; answer prose kept.
+        XCTAssertFalse(text.split(separator: "\n").contains(where: {
+            $0.trimmingCharacters(in: .whitespaces) == "/cost"
+        }))
+    }
+
     func testWorkstationDerivedFallsBackWhenOnlyChrome() {
         let raw = "esc to interrupt\n⠋ Working…"
         let text = ConversationDisplayText.workstationDerived(raw)

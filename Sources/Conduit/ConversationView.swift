@@ -542,24 +542,26 @@ struct ConversationView: View {
             }
 
             if displayText.isEmpty {
-                Text("…")
-                    .font(.body)
-                    .foregroundStyle(palette.faint)
+                if showLive {
+                    Text("…")
+                        .font(.body)
+                        .foregroundStyle(palette.faint)
+                }
             } else if interactiveMenu {
-                // Keep menu text readable as plain lines plus clickable panel.
-                Text(displayText)
-                    .font(.body)
-                    .foregroundStyle(palette.text)
-                    .textSelection(.enabled)
-                    .lineSpacing(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Menus stay explicit; prose above options when present.
+                let menuStripped = displayText
+                ConversationProseView(
+                    blocks: ConversationDisplayText.proseBlocks(in: menuStripped),
+                    palette: palette
+                )
                 interactiveMenuPanel(options: menuOptions)
             } else {
                 ConversationProseView(blocks: blocks, palette: palette)
             }
 
-            sourceDisclosure(output: output, event: event)
+            if !displayText.isEmpty || showLive {
+                sourceDisclosure(output: output, event: event)
+            }
         }
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)

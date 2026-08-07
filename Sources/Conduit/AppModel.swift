@@ -1758,18 +1758,23 @@ final class AppModel: ObservableObject {
         let trimmedComposer = savedText.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-        // Slash/skills stay on the composer→deliver path (same as any prompt).
-        // Never inject into the agent TUI input bar; operators pick from the
-        // dropdown into the composer, then Return sends.
-        let isSlashCommand = savedAttachments.isEmpty
-            && AgentSlashCatalog.looksLikeSlashCommand(trimmedComposer)
-        let deliveryPayload = isSlashCommand
-            ? assembled
-            : deliveryPayload(
-                assembled: assembled,
-                runtime: runtime,
-                attachmentCount: savedAttachments.count
+        // Slash/skills: complete in the Conduit composer, then on Return run as
+        // a real CLI command (TUI inject). Paste delivery is treated as chat by
+        // OpenCode/Claude and does not invoke builtins like `/cost`.
+        if savedAttachments.isEmpty,
+           AgentSlashCatalog.looksLikeSlashCommand(trimmedComposer) {
+            sendSlashCommand(
+                trimmedComposer,
+                via: runtime
             )
+            return
+        }
+
+        let deliveryPayload = deliveryPayload(
+            assembled: assembled,
+            runtime: runtime,
+            attachmentCount: savedAttachments.count
+        )
         let eventID = runtime.recordPrompt(
             text: savedText,
             attachmentPaths: savedAttachments.map(\.url.path),
@@ -1783,8 +1788,6 @@ final class AppModel: ObservableObject {
             statusMessage = attachmentCount == 1
                 ? "Sent with 1 attachment."
                 : "Sent with \(attachmentCount) attachments."
-        } else if isSlashCommand {
-            statusMessage = "Sent \(trimmedComposer) from the composer."
         }
         let agentName = runtime.controller.descriptor.agent.name
         // Capture uses the human-visible assembled prompt for echo stripping,
@@ -1815,13 +1818,48 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Completes a slash/skill into the Conduit composer only. Does not send
-    /// and never writes into the Raw agent input bar.
+    /// Completes a slash/skill into the Conduit composer only. Return then
+    /// sends it as a CLI command (see `sendSlashCommand`).
     func applySlashCommandToComposer(_ command: String) {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         composerText = trimmed.hasPrefix("/") ? trimmed : "/\(trimmed)"
-        statusMessage = "Selected \(composerText). Press Return to send from the composer."
+        statusMessage = "Selected \(composerText). Press Return to run it."
+    }
+
+    /// Records the slash in Conversation, then injects it into the live agent
+    /// input with Enter so builtins/skills actually run (not chat-pasted).
+    private func sendSlashCommand(
+        _ command: String,
+        via runtime: TerminalRuntime
+    ) {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !runtime.controller.lifecycle.isTerminal else {
+            errorMessage = "No live agent session for slash commands."
+            return
+        }
+        let eventID = runtime.recordPrompt(
+            text: trimmed,
+            attachmentPaths: [],
+            renderedPayload: trimmed
+        )
+        let baseline = runtime.controller.currentCaptureBaseline()
+        runtime.beginAgentOutputCapture(
+            promptEventID: eventID,
+            promptText: trimmed,
+            baseline: baseline
+        )
+        runtime.controller.armConversationCapture(from: baseline)
+        runtime.controller.injectSlashCommand(trimmed)
+        runtime.updatePromptDelivery(eventID: eventID, to: .delivered)
+        // Catch the command result without waiting on the paste queue.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak runtime] in
+            runtime?.controller.refreshConversationCapture()
+        }
+        runtime.selectedSurface = .conversation
+        composerText = ""
+        attachments = []
+        statusMessage = "Ran \(trimmed) as a CLI command."
     }
 
     /// Builds the terminal delivery string. CLI agents receive a compact

@@ -1302,6 +1302,23 @@ withTempDir { root in
             "Hello world\nesc to interrupt\n"
         ).contains("Hello world")
     )
+    let openCodePaint = """
+        | /cost
+        + Thought: 1.0s
+        /cost is an opencode built-in — token usage.
+        Context
+        10% used
+        Build · Big Pickle · 3.8s
+        """
+    let openCodeDoc = ConversationDisplayText.workstationDerived(openCodePaint)
+    check(
+        "workstation derived keeps opencode answer",
+        openCodeDoc.contains("opencode built-in")
+    )
+    check(
+        "workstation derived drops opencode side panel",
+        !openCodeDoc.contains("10% used") && !openCodeDoc.contains("Thought")
+    )
     let proseBlocks = ConversationDisplayText.proseBlocks(
         in: "## Title\n\nBody line.\n"
     )

@@ -429,7 +429,7 @@ struct ComposerView: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.faint)
                 Spacer()
-                Text("Tab/click fills composer · Return sends")
+                Text("Tab/click fills composer · Return runs CLI command")
                     .font(.caption2)
                     .foregroundStyle(palette.faint)
             }
