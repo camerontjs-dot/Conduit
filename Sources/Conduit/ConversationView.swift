@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import ConduitCore
 import SwiftUI
 
@@ -14,6 +15,7 @@ struct ConversationView: View {
     /// Live character growth only scrolls *within* the active output card.
     @State private var followLatest = true
     @State private var expandedOutputIDs: Set<UUID> = []
+    @State private var didApplyFollowDefault = false
 
     init(runtime: TerminalRuntime) {
         self._runtime = ObservedObject(wrappedValue: runtime)
@@ -33,6 +35,11 @@ struct ConversationView: View {
                 activityHeader(at: timeline.date)
             }
             Divider().overlay(palette.line)
+            if model.settings.showConversationControls,
+               !controller.lifecycle.isTerminal {
+                conversationControlStrip
+                Divider().overlay(palette.line)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
@@ -86,6 +93,132 @@ struct ConversationView: View {
         .background(palette.canvas)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(runtime.descriptor.agent.name) conversation")
+        .onAppear {
+            if !didApplyFollowDefault {
+                followLatest = model.settings.followConversationByDefault
+                didApplyFollowDefault = true
+            }
+        }
+    }
+
+    private var conversationControlStrip: some View {
+        HStack(spacing: 8) {
+            permissionModeMenu
+
+            Divider()
+                .frame(height: 18)
+
+            Text("Reply")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(palette.faint)
+
+            ForEach(["1", "2", "3", "4"], id: \.self) { choice in
+                Button(choice) {
+                    model.injectConversationControl(
+                        text: choice,
+                        submit: true,
+                        into: runtime
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Send \(choice)+Enter to the agent menu without opening Raw")
+                .accessibilityLabel("Send menu choice \(choice)")
+            }
+
+            Button("Enter") {
+                model.injectConversationControl(
+                    key: .enter,
+                    into: runtime
+                )
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            Button("Esc") {
+                model.injectConversationControl(
+                    key: .escape,
+                    into: runtime
+                )
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            Button("↑") {
+                model.injectConversationControl(key: .up, into: runtime)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Send up arrow")
+
+            Button("↓") {
+                model.injectConversationControl(key: .down, into: runtime)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Send down arrow")
+
+            Spacer(minLength: 4)
+
+            Text("Does not end capture")
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
+                .help(
+                    "These keys go to the live agent PTY without treating the action as Raw typing, so Derived-from-Raw capture can continue."
+                )
+
+            Button {
+                model.showDiagnostics = false
+                // Open macOS Settings scene if available; fall back to doctor.
+                openAppSettings()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help("Open Conduit Settings")
+            .accessibilityLabel("Open Conduit Settings")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(palette.rail)
+    }
+
+    private var permissionModeMenu: some View {
+        let agent = runtime.descriptor.agent
+        let current = model.settings.agents.first(where: {
+            $0.id == agent.id || $0.name == agent.name
+        })?.permissionMode ?? agent.permissionMode
+
+        return Menu {
+            ForEach(AgentPermissionMode.allCases, id: \.self) { mode in
+                Button {
+                    model.setPermissionModeForActiveAgent(mode)
+                } label: {
+                    if mode == current {
+                        Label(mode.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(mode.displayName)
+                    }
+                }
+            }
+            Divider()
+            Text("Applies to next launch of \(agent.name)")
+                .font(.caption)
+        } label: {
+            Label(current.shortLabel, systemImage: "shield.lefthalf.filled")
+                .font(.caption.weight(.semibold))
+        }
+        .menuStyle(.borderlessButton)
+        .help(current.help)
+        .disabled(agent.kind == .shell)
+        .accessibilityLabel("Permission mode \(current.displayName)")
+    }
+
+    private func openAppSettings() {
+        #if os(macOS)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        #endif
     }
 
     private var jumpToLatestBar: some View {

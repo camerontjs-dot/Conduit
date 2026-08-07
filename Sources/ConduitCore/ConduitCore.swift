@@ -66,6 +66,8 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
     public var arguments: [String]
     public var kind: AgentKind
     public var enabled: Bool
+    /// Conduit-injected permission posture for new launches of this profile.
+    public var permissionMode: AgentPermissionMode
 
     public init(
         id: UUID = UUID(),
@@ -73,7 +75,8 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         command: String,
         arguments: [String] = [],
         kind: AgentKind = .cli,
-        enabled: Bool = true
+        enabled: Bool = true,
+        permissionMode: AgentPermissionMode = .agentDefault
     ) {
         self.id = id
         self.name = name
@@ -81,6 +84,36 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         self.arguments = arguments
         self.kind = kind
         self.enabled = enabled
+        self.permissionMode = permissionMode
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, command, arguments, kind, enabled, permissionMode
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        command = try container.decode(String.self, forKey: .command)
+        arguments = try container.decodeIfPresent([String].self, forKey: .arguments) ?? []
+        kind = try container.decodeIfPresent(AgentKind.self, forKey: .kind) ?? .cli
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        permissionMode = try container.decodeIfPresent(
+            AgentPermissionMode.self,
+            forKey: .permissionMode
+        ) ?? .agentDefault
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(command, forKey: .command)
+        try container.encode(arguments, forKey: .arguments)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(enabled, forKey: .enabled)
+        try container.encode(permissionMode, forKey: .permissionMode)
     }
 
     public static let defaults: [AgentProfile] = [
@@ -206,19 +239,68 @@ public struct ConduitSettings: Codable, Sendable {
     public var agents: [AgentProfile]
     public var showContextByDefault: Bool
     public var restoreSessions: Bool
+    /// When true, CLI prompt delivery prepends a compact host envelope.
+    public var injectHostEnvelope: Bool
+    /// When true, Conversation follows new events by default.
+    public var followConversationByDefault: Bool
+    /// When true, show the in-Conversation terminal control strip for menu replies.
+    public var showConversationControls: Bool
 
     public init(
         mainframeRoot: URL? = nil,
         mainframeRootBookmark: Data? = nil,
         agents: [AgentProfile] = AgentProfile.defaults,
         showContextByDefault: Bool = true,
-        restoreSessions: Bool = true
+        restoreSessions: Bool = true,
+        injectHostEnvelope: Bool = true,
+        followConversationByDefault: Bool = true,
+        showConversationControls: Bool = true
     ) {
         self.mainframeRoot = mainframeRoot
         self.mainframeRootBookmark = mainframeRootBookmark
         self.agents = agents
         self.showContextByDefault = showContextByDefault
         self.restoreSessions = restoreSessions
+        self.injectHostEnvelope = injectHostEnvelope
+        self.followConversationByDefault = followConversationByDefault
+        self.showConversationControls = showConversationControls
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mainframeRoot, mainframeRootBookmark, agents
+        case showContextByDefault, restoreSessions
+        case injectHostEnvelope, followConversationByDefault, showConversationControls
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        mainframeRoot = try container.decodeIfPresent(URL.self, forKey: .mainframeRoot)
+        mainframeRootBookmark = try container.decodeIfPresent(
+            Data.self,
+            forKey: .mainframeRootBookmark
+        )
+        agents = try container.decodeIfPresent([AgentProfile].self, forKey: .agents)
+            ?? AgentProfile.defaults
+        showContextByDefault = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showContextByDefault
+        ) ?? true
+        restoreSessions = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .restoreSessions
+        ) ?? true
+        injectHostEnvelope = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .injectHostEnvelope
+        ) ?? true
+        followConversationByDefault = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .followConversationByDefault
+        ) ?? true
+        showConversationControls = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showConversationControls
+        ) ?? true
     }
 }
 

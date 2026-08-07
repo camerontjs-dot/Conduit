@@ -1290,6 +1290,25 @@ withTempDir { root in
           ) == false)
     check("display text compacts blank runs",
           ConversationDisplayText.compactDerived("a\n\n\n\nb\n") == "a\n\nb")
+
+    let agyAuto = AgentProfile(
+        name: "Antigravity",
+        command: "agy",
+        permissionMode: .fullAuto
+    )
+    check("permission mode injects agy full-auto flag",
+          AgentLaunchArguments.resolved(for: agyAuto)
+            .contains("--dangerously-skip-permissions"))
+    check("shell ignores permission mode flags",
+          AgentLaunchArguments.resolved(
+              for: AgentProfile(
+                  name: "Shell",
+                  command: "/bin/zsh",
+                  arguments: ["-l"],
+                  kind: .shell,
+                  permissionMode: .fullAuto
+              )
+          ) == ["-l"])
 }
 
 // MARK: - Context bundle + forwarder

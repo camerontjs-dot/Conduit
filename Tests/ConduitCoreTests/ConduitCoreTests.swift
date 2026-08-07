@@ -377,6 +377,51 @@ final class ConversationDisplayTextTests: XCTestCase {
     }
 }
 
+final class AgentPermissionModeTests: XCTestCase {
+    func testAntigravityFullAutoInjectsSkipFlag() {
+        let profile = AgentProfile(
+            name: "Antigravity",
+            command: "agy",
+            permissionMode: .fullAuto
+        )
+        let args = AgentLaunchArguments.resolved(for: profile)
+        XCTAssertTrue(args.contains("--dangerously-skip-permissions"))
+    }
+
+    func testAcceptEditsMergesModePairWithoutDuplicating() {
+        let profile = AgentProfile(
+            name: "Antigravity",
+            command: "agy",
+            arguments: ["--mode", "accept-edits"],
+            permissionMode: .acceptEdits
+        )
+        let args = AgentLaunchArguments.resolved(for: profile)
+        XCTAssertEqual(args.filter { $0 == "--mode" }.count, 1)
+        XCTAssertEqual(args, ["--mode", "accept-edits"])
+    }
+
+    func testShellIgnoresPermissionModes() {
+        let profile = AgentProfile(
+            name: "Shell",
+            command: "/bin/zsh",
+            arguments: ["-l"],
+            kind: .shell,
+            permissionMode: .fullAuto
+        )
+        XCTAssertEqual(AgentLaunchArguments.resolved(for: profile), ["-l"])
+        XCTAssertFalse(AgentLaunchArguments.supportsPermissionModes(profile))
+    }
+
+    func testLegacyAgentProfileJSONDecodesWithoutPermissionMode() throws {
+        let json = """
+        {"id":"1AF1D4E0-0000-4000-8000-0000000000A6","name":"Antigravity","command":"agy","arguments":[],"kind":"cli","enabled":true}
+        """.data(using: .utf8)!
+        let profile = try JSONDecoder().decode(AgentProfile.self, from: json)
+        XCTAssertEqual(profile.permissionMode, .agentDefault)
+        XCTAssertEqual(profile.name, "Antigravity")
+    }
+}
+
 final class PaletteSpecTests: XCTestCase {
     func testCaseOrderAndProductDefault() {
         XCTAssertEqual(

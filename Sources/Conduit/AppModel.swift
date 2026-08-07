@@ -1789,7 +1789,8 @@ final class AppModel: ObservableObject {
         attachmentCount: Int
     ) -> String {
         let agent = runtime.descriptor.agent
-        guard HostEnvelope.shouldInject(for: agent) else { return assembled }
+        guard settings.injectHostEnvelope,
+              HostEnvelope.shouldInject(for: agent) else { return assembled }
         let projectPath = runtime.descriptor.projectPath.path
         let taskID = selectedTaskSnapshot?.id.rawValue.uuidString
             ?? runtime.descriptor.taskSessionID?.rawValue.uuidString
@@ -1841,6 +1842,63 @@ final class AppModel: ObservableObject {
             statusMessage = "Attachment removed."
         } else {
             statusMessage = "Attachment removed · \(attachments.count) remaining."
+        }
+    }
+
+    /// Updates the stored agent profile permission mode. Applies on the next
+    /// process launch for that agent, not mid-flight inside an open runtime.
+    func setPermissionMode(
+        _ mode: AgentPermissionMode,
+        forAgentID id: UUID
+    ) {
+        guard let index = settings.agents.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        settings.agents[index].permissionMode = mode
+        saveSettings()
+        let name = settings.agents[index].name
+        statusMessage =
+            "\(name) permission mode → \(mode.displayName). Applies to the next launch of this agent."
+    }
+
+    /// Sets permission mode for the agent matching the selected runtime profile.
+    func setPermissionModeForActiveAgent(_ mode: AgentPermissionMode) {
+        guard let runtime = selectedTaskRuntime ?? activeSessionForSelectedProject
+        else {
+            errorMessage = "No active agent task to configure."
+            return
+        }
+        let agent = runtime.descriptor.agent
+        if let index = settings.agents.firstIndex(where: {
+            $0.id == agent.id || $0.name == agent.name
+        }) {
+            setPermissionMode(mode, forAgentID: settings.agents[index].id)
+        } else {
+            errorMessage = "Could not find a saved profile for \(agent.name)."
+        }
+    }
+
+    /// Sends a menu choice or control key into the live PTY without treating it
+    /// as Raw direct input, so Conversation capture can continue.
+    func injectConversationControl(
+        text: String? = nil,
+        key: TerminalControlKey? = nil,
+        submit: Bool = false,
+        into runtime: TerminalRuntime
+    ) {
+        if let key {
+            runtime.controller.injectControlKey(key)
+            statusMessage = "Sent \(key.label) to \(runtime.descriptor.agent.name)."
+            return
+        }
+        if let text {
+            runtime.controller.injectControlInput(text, submit: submit)
+            let shown = text
+                .replacingOccurrences(of: "\n", with: "↵")
+                .replacingOccurrences(of: "\r", with: "↵")
+            statusMessage = submit
+                ? "Sent “\(shown)” + Enter to \(runtime.descriptor.agent.name)."
+                : "Sent “\(shown)” to \(runtime.descriptor.agent.name)."
         }
     }
 

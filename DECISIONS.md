@@ -594,6 +594,37 @@ Projection remains best-effort and source-labelled; Raw stays authoritative.
 
 ---
 
+## D-029: Settings surface, permission modes, Conversation menu controls
+
+**Status:** Accepted (daily-driver settings and HITL continuity)
+
+**Context:** Agent CLIs such as Antigravity stop for per-file and per-command
+approvals. Operators had to open Raw to answer menus, which ended Conversation
+capture. Settings existed only as a flat form.
+
+**Decision:**
+
+1. Expand Settings into a sidebared surface: General, Appearance, Agents,
+   Conversation, Privacy, Utilities — not a Codex-scale product console.
+2. Each agent profile stores an ``AgentPermissionMode`` (default / accept edits /
+   full auto / plan). Conduit injects well-known launch flags per CLI on the
+   **next** process start; it does not rewrite a live process mid-session.
+3. Conversation shows a control strip: permission-mode menu, number keys 1–4
+   (+ Enter), Esc, and arrows. These inject into the live PTY **without** firing
+   the Raw direct-input boundary, so capture can continue.
+4. Host-envelope injection, follow-latest default, and the control strip itself
+   are Conduit settings toggles.
+
+**Rejected alternatives:** Auto-pressing “Yes” for every agent approval would
+bypass the agent’s policy model. Requiring Raw for every menu choice forces
+capture interruption.
+
+**Consequences:** Daily-driver permission posture is configurable per agent.
+Approval menus can be answered from Conversation. Raw remains available for full
+TUI interaction and still ends capture when used for direct typing.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

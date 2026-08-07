@@ -934,14 +934,15 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
 
     private func startDirectSession() {
         let agent = descriptor.agent
+        let launchArgs = AgentLaunchArguments.resolved(for: agent)
         if agent.kind == .shell && agent.command.hasPrefix("/") {
             terminalView.startProcess(
                 executable: agent.command,
-                args: agent.arguments,
+                args: launchArgs,
                 currentDirectory: descriptor.projectPath.path
             )
         } else {
-            let command = ShellQuoting.commandLine(agent.command, agent.arguments)
+            let command = ShellQuoting.commandLine(agent.command, launchArgs)
             terminalView.startProcess(
                 executable: "/bin/zsh",
                 args: ["-l", "-c", "exec \(command)"],
@@ -955,11 +956,66 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     /// normal terminals.
     private func paneCommand() -> String {
         let agent = descriptor.agent
-        let line = ShellQuoting.commandLine(agent.command, agent.arguments)
+        let launchArgs = AgentLaunchArguments.resolved(for: agent)
+        let line = ShellQuoting.commandLine(agent.command, launchArgs)
         if agent.kind == .shell && agent.command.hasPrefix("/") {
             return line
         }
         return "/bin/zsh -l -c " + ShellQuoting.quote("exec \(line)")
+    }
+
+    /// Injects keyboard-like control text into the live PTY/tmux client without
+    /// treating it as a Raw direct-input boundary. Used from Conversation for
+    /// agent permission menus so capture can continue.
+    func injectControlInput(
+        _ text: String,
+        submit: Bool = false
+    ) {
+        guard lifecycle == .running || lifecycle == .launching else { return }
+        var payload = text
+        if submit, !payload.hasSuffix("\n"), !payload.hasSuffix("\r") {
+            payload += "\n"
+        }
+        let bytes = Array(payload.utf8)
+        guard !bytes.isEmpty else { return }
+        // Bypass ActivityTerminalView.send so onDirectRawInput is not fired.
+        terminalView.process.send(data: bytes[...])
+    }
+
+    /// Common menu navigation keys for agent permission TUIs.
+    func injectControlKey(_ key: TerminalControlKey) {
+        injectControlInput(key.bytes, submit: false)
+    }
+}
+
+enum TerminalControlKey {
+    case escape
+    case enter
+    case up
+    case down
+    case left
+    case right
+
+    var bytes: String {
+        switch self {
+        case .escape: return "\u{1b}"
+        case .enter: return "\r"
+        case .up: return "\u{1b}[A"
+        case .down: return "\u{1b}[B"
+        case .left: return "\u{1b}[D"
+        case .right: return "\u{1b}[C"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .escape: return "Esc"
+        case .enter: return "Enter"
+        case .up: return "↑"
+        case .down: return "↓"
+        case .left: return "←"
+        case .right: return "→"
+        }
     }
 }
 
