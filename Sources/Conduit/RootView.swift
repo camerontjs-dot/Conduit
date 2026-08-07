@@ -28,14 +28,13 @@ struct RootView: View {
     }
 
     var body: some View {
-        // macOS 13 has no NavigationSplitViewVisibility that keeps sidebar+content
-        // while hiding only detail, and no .inspector (macOS 14+). Density picks
-        // a supported composition over the same three semantic regions.
-        // Always keep the right inspector as a real column so Session/Files/
-        // Review/Context stay discoverable (not only a Focused-mode overlay).
-        pinnedThreeColumnLayout
+        // Left rail collapses via NavigationSplitView. Right inspector is our
+        // own trailing panel so it can hide independently without remounting
+        // the workspace (terminals stay attached).
+        collapsibleWorkspaceLayout
         .tint(palette.accent)
         .background(palette.app)
+        .conduitSurfaceChrome(finish: themeStore.surfaceFinish, colorScheme: colorScheme)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 paletteMenu
@@ -94,41 +93,45 @@ struct RootView: View {
         }
     }
 
-    /// Focused: two-column rail + workspace, with a temporary trailing overlay for context.
-    private var focusedSplitLayout: some View {
-        ZStack(alignment: .trailing) {
-            NavigationSplitView(columnVisibility: $columnVisibility) {
-                sidebarColumn
-            } detail: {
-                workspaceColumn
-            }
-
-            if model.isContextInspectorPresented {
-                focusedInspectorOverlay(
-                    project: model.selectedTaskProject ?? model.selectedProject
-                )
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                    .zIndex(1)
-            }
-        }
-        .animation(.easeInOut(duration: 0.18), value: model.isContextInspectorPresented)
-    }
-
-    /// Balanced / Operator: three-column NavigationSplitView with context pinned as detail.
-    private var pinnedThreeColumnLayout: some View {
+    /// Sidebar + workspace, with an independently collapsible trailing inspector.
+    private var collapsibleWorkspaceLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebarColumn
-        } content: {
-            workspaceColumn
         } detail: {
-            contextDetailColumn
+            HStack(spacing: 0) {
+                workspaceColumn
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if model.isContextInspectorPresented {
+                    Rectangle()
+                        .fill(palette.line)
+                        .frame(width: 1)
+                        .accessibilityHidden(true)
+
+                    InspectorView(
+                        project: model.selectedTaskProject ?? model.selectedProject,
+                        showsCloseButton: true,
+                        onClose: { model.dismissContextInspector() }
+                    )
+                    .frame(width: 320)
+                    .frame(maxHeight: .infinity)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: model.isContextInspectorPresented)
         }
     }
 
     private var sidebarColumn: some View {
         sidebar
             .navigationSplitViewColumnWidth(min: 225, ideal: 275, max: 340)
-            .background(palette.rail)
+            .background(
+                ConduitFinishedFill(
+                    base: palette.rail,
+                    finish: themeStore.surfaceFinish,
+                    colorScheme: colorScheme
+                )
+            )
     }
 
     private var workspaceColumn: some View {
@@ -149,44 +152,16 @@ struct RootView: View {
                 )
             }
         }
-        .background(palette.app)
+        .background(
+            ConduitFinishedFill(
+                base: palette.app,
+                finish: themeStore.surfaceFinish,
+                colorScheme: colorScheme
+            )
+        )
     }
 
-    private var contextDetailColumn: some View {
-        InspectorView(project: model.selectedTaskProject ?? model.selectedProject)
-            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
-            .background(palette.surface)
-    }
-
-    /// Custom macOS 13-compatible trailing overlay (not SwiftUI `.inspector`).
-    private func focusedInspectorOverlay(project: MainframeProject?) -> some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-                .allowsHitTesting(false)
-
-            HStack(spacing: 0) {
-                Rectangle()
-                    .fill(palette.line)
-                    .frame(width: 1)
-                    .accessibilityHidden(true)
-
-                InspectorView(
-                    project: project,
-                    showsCloseButton: true,
-                    onClose: { model.dismissContextInspector() }
-                )
-                .frame(width: 340)
-                .frame(maxHeight: .infinity)
-                .background(palette.surface)
-                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.45 : 0.14), radius: 10, x: -2, y: 0)
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Session inspector")
-    }
-
-    /// Always-reachable palette picker. Swatches resolve each palette's accent
-    /// for the live system light/dark scheme.
+    /// Always-reachable palette + surface-finish picker.
     private var paletteMenu: some View {
         Menu {
             ForEach(PaletteID.allCases, id: \.self) { id in
@@ -205,12 +180,23 @@ struct RootView: View {
                     }
                 }
             }
+            Divider()
+            Button {
+                themeStore.surfaceFinish = themeStore.surfaceFinish == .matte ? .sheen : .matte
+            } label: {
+                Label(
+                    themeStore.surfaceFinish == .sheen ? "Sheen finish on" : "Sheen finish off",
+                    systemImage: themeStore.surfaceFinish == .sheen ? "sparkles" : "circle.dashed"
+                )
+            }
         } label: {
             Label("Palette", systemImage: "paintpalette")
         }
-        .help("Choose color palette")
+        .help("Choose color palette and surface finish")
         .accessibilityLabel("Palette")
-        .accessibilityValue(themeStore.selectedPalette.displayName)
+        .accessibilityValue(
+            "\(themeStore.selectedPalette.displayName), \(themeStore.surfaceFinish.displayName)"
+        )
     }
 
     private var sidebar: some View {

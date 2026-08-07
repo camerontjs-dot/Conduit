@@ -165,6 +165,19 @@ struct SettingsView: View {
                     paletteRow(id)
                 }
             }
+            Section("Surface finish") {
+                Toggle(
+                    "Sheen (shiny matte)",
+                    isOn: Binding(
+                        get: { themeStore.surfaceFinish == .sheen },
+                        set: { themeStore.surfaceFinish = $0 ? .sheen : .matte }
+                    )
+                )
+                .help("Soft satin highlight layered on top of the selected palette. Try it with every colour.")
+                Text(themeStore.surfaceFinish.help)
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
+            }
             Section("Density") {
                 Picker("Density", selection: $model.density) {
                     ForEach(Density.allCases, id: \.self) { mode in

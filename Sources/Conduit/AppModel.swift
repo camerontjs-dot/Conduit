@@ -90,6 +90,8 @@ private enum ProjectScanResult: Sendable {
 final class AppModel: ObservableObject {
     /// UserDefaults key for Focused Flow density. Independent of SettingsStore JSON.
     static let densityStorageKey = "conduit.density"
+    /// UserDefaults key for trailing inspector visibility.
+    static let inspectorPresentedStorageKey = "conduit.inspectorPresented"
     static let newTaskScopeStorageKey = "conduit.newTask.scope"
 
     @Published var settings = ConduitSettings()
@@ -133,10 +135,16 @@ final class AppModel: ObservableObject {
     @Published var forwardingDraft: ForwardingDraft?
     /// Legacy settings-backed default; layout no longer embeds context in the workspace.
     @Published var showContext = true
-    /// Focused-density temporary trailing context overlay. Closed by default.
-    /// Trailing inspector visibility for densities that still use an overlay.
-    /// Three-column layout keeps the inspector column always present.
-    @Published var isContextInspectorPresented = true
+    /// Trailing inspector visibility. Collapsible like the left rail; default open.
+    /// Persists under `conduit.inspectorPresented`.
+    @Published var isContextInspectorPresented: Bool = AppModel.loadPersistedInspectorPresented() {
+        didSet {
+            UserDefaults.standard.set(
+                isContextInspectorPresented,
+                forKey: Self.inspectorPresentedStorageKey
+            )
+        }
+    }
     @Published var inspectorTab: InspectorTab = .session
     @Published var statusMessage: String?
     @Published var errorMessage: String?
@@ -169,14 +177,12 @@ final class AppModel: ObservableObject {
     @Published var density: Density = AppModel.loadPersistedDensity() {
         didSet {
             UserDefaults.standard.set(density.rawValue, forKey: Self.densityStorageKey)
-            // Temporary Focused overlay never carries across density changes.
-            isContextInspectorPresented = false
         }
     }
 
-    /// Right inspector is always the NavigationSplitView detail column.
+    /// Right inspector is operator-collapsible in every density (not pinned).
     var isContextDetailPinned: Bool {
-        true
+        false
     }
 
     let speech = SpeechTranscriber()
@@ -218,6 +224,15 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.set(resolved.rawValue, forKey: densityStorageKey)
         }
         return resolved
+    }
+
+    /// Default open when the key has never been written.
+    private static func loadPersistedInspectorPresented() -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: inspectorPresentedStorageKey) != nil else {
+            return true
+        }
+        return defaults.bool(forKey: inspectorPresentedStorageKey)
     }
 
     var selectedProject: MainframeProject? {
@@ -1053,13 +1068,8 @@ final class AppModel: ObservableObject {
         taskSearchFocusRequest += 1
     }
 
-    /// Shared by WorkspaceHeader and ⌘\ . Focused toggles the temporary overlay;
-    /// Balanced/Operator keep context pinned and never hide it from this control.
+    /// Shared by WorkspaceHeader and ⌘\ . Toggles the trailing inspector.
     func toggleContextPresentation() {
-        guard !isContextDetailPinned else {
-            isContextInspectorPresented = false
-            return
-        }
         isContextInspectorPresented.toggle()
     }
 

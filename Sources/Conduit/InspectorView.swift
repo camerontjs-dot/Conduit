@@ -68,7 +68,13 @@ struct InspectorView: View {
                 .padding(.bottom, 16)
             }
         }
-        .background(palette.surface)
+        .background(
+            ConduitFinishedFill(
+                base: palette.surface,
+                finish: themeStore.surfaceFinish,
+                colorScheme: colorScheme
+            )
+        )
         .onChange(of: model.inspectorTab) { tab in
             if tab == .review {
                 refreshGit()
@@ -106,7 +112,13 @@ struct InspectorView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(palette.surface)
+        .background(
+            ConduitFinishedFill(
+                base: palette.surface,
+                finish: themeStore.surfaceFinish,
+                colorScheme: colorScheme
+            )
+        )
     }
 
     // MARK: - Session

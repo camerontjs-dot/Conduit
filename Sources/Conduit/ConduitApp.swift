@@ -7,10 +7,7 @@ struct ConduitApp: App {
     @StateObject private var themeStore = ThemeStore()
 
     private var contextCommandTitle: String {
-        if model.isContextDetailPinned {
-            return "Context Inspector Pinned"
-        }
-        return model.isContextInspectorPresented ? "Hide Context Inspector" : "Show Context Inspector"
+        model.isContextInspectorPresented ? "Hide Context Inspector" : "Show Context Inspector"
     }
 
     var body: some Scene {
@@ -86,7 +83,6 @@ struct ConduitApp: App {
                     .keyboardShortcut("w", modifiers: [.command, .shift])
                 Button(contextCommandTitle) { model.toggleContextPresentation() }
                     .keyboardShortcut("\\", modifiers: [.command])
-                    .disabled(model.isContextDetailPinned)
                 Button("Refresh MainFrame") { model.refreshProjects() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
             }

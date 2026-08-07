@@ -390,16 +390,136 @@ extension PaletteID {
     }
 }
 
+// MARK: - Surface finish
+
+/// Optional chrome finish layered on top of any palette.
+/// Matte is the product default (flat signed-off tokens). Sheen adds a soft
+/// satin highlight so operators can try a shinier matte look with every colour.
+enum SurfaceFinish: String, CaseIterable, Identifiable, Sendable {
+    case matte
+    case sheen
+
+    var id: String { rawValue }
+
+    static let productDefault: SurfaceFinish = .matte
+
+    var displayName: String {
+        switch self {
+        case .matte: return "Matte"
+        case .sheen: return "Sheen"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .matte:
+            return "Flat signed-off palette surfaces."
+        case .sheen:
+            return "Soft satin highlight over the same palette colours."
+        }
+    }
+
+    static func resolved(fromStored raw: String?) -> SurfaceFinish {
+        guard let raw, let value = SurfaceFinish(rawValue: raw) else {
+            return .productDefault
+        }
+        return value
+    }
+}
+
+/// Solid base fill with optional sheen gradient. Used for rail / app / surface chrome.
+struct ConduitFinishedFill: View {
+    let base: Color
+    let finish: SurfaceFinish
+    let colorScheme: ColorScheme
+
+    var body: some View {
+        ZStack {
+            base
+            if finish == .sheen {
+                LinearGradient(
+                    colors: sheenColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .blendMode(colorScheme == .dark ? .plusLighter : .softLight)
+                .opacity(colorScheme == .dark ? 0.55 : 0.70)
+
+                // Soft specular ridge along the upper edge.
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(colorScheme == .dark ? 0.10 : 0.22),
+                        Color.white.opacity(0.0),
+                    ],
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: 0.28)
+                )
+                .blendMode(.plusLighter)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var sheenColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color.white.opacity(0.10),
+                Color.white.opacity(0.03),
+                Color.clear,
+                Color.black.opacity(0.18),
+            ]
+        }
+        return [
+            Color.white.opacity(0.55),
+            Color.white.opacity(0.18),
+            Color.clear,
+            Color.black.opacity(0.05),
+        ]
+    }
+}
+
+/// Applies a very light window-level sheen wash without replacing content fills.
+struct ConduitSurfaceChromeModifier: ViewModifier {
+    let finish: SurfaceFinish
+    let colorScheme: ColorScheme
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if finish == .sheen {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(colorScheme == .dark ? 0.045 : 0.08),
+                        Color.clear,
+                        Color.black.opacity(colorScheme == .dark ? 0.08 : 0.03),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+extension View {
+    func conduitSurfaceChrome(finish: SurfaceFinish, colorScheme: ColorScheme) -> some View {
+        modifier(ConduitSurfaceChromeModifier(finish: finish, colorScheme: colorScheme))
+    }
+}
+
 // MARK: - Theme store
 
-/// Persisted palette selection and live resolution against the system color scheme.
-/// Uses `@AppStorage("conduit.palette")` and falls back to Harbor for missing/invalid values.
-/// Compatible with macOS 13 (`ObservableObject`, no Observation macros).
+/// Persisted palette selection, surface finish, and live resolution against the
+/// system color scheme. Compatible with macOS 13 (`ObservableObject`).
 @MainActor
 final class ThemeStore: ObservableObject {
     static let storageKey = "conduit.palette"
+    static let surfaceFinishStorageKey = "conduit.surfaceFinish"
 
     @AppStorage(ThemeStore.storageKey) private var storedRaw: String = PaletteID.productDefault.rawValue
+    @AppStorage(ThemeStore.surfaceFinishStorageKey) private var storedFinishRaw: String =
+        SurfaceFinish.productDefault.rawValue
 
     /// Currently selected palette. Invalid stored strings resolve as Harbor.
     var selectedPalette: PaletteID {
@@ -407,6 +527,15 @@ final class ThemeStore: ObservableObject {
         set {
             objectWillChange.send()
             storedRaw = newValue.rawValue
+        }
+    }
+
+    /// Matte (default) or sheen chrome finish. Invalid stored values become matte.
+    var surfaceFinish: SurfaceFinish {
+        get { SurfaceFinish.resolved(fromStored: storedFinishRaw) }
+        set {
+            objectWillChange.send()
+            storedFinishRaw = newValue.rawValue
         }
     }
 
