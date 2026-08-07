@@ -1760,6 +1760,22 @@ check(
     AgentUsageBudget(weeklyPromptLimit: 50).hasAnyLimit
 )
 
+let claudeUsageJSON = """
+{"five_hour":{"utilization":20.0,"resets_at":"2026-08-08T01:00:00Z"},"seven_day":{"utilization":83.0,"resets_at":"2026-08-09T18:00:00Z"}}
+""".data(using: .utf8)!
+let claudeSnap = try! AccountUsageParsing.parseClaudeOAuthUsage(claudeUsageJSON)
+check("claude usage parses two windows", claudeSnap.windows.count == 2)
+check(
+    "claude usage five hour percent",
+    abs((claudeSnap.windows.first?.usedPercent ?? 0) - 20) < 0.01
+)
+let codexUsageJSON = """
+{"result":{"rateLimits":{"primary":{"usedPercent":85,"windowDurationMins":10080,"resetsAt":1786296107},"secondary":null,"planType":"plus"}}}
+""".data(using: .utf8)!
+let codexSnap = try! AccountUsageParsing.parseCodexRateLimits(codexUsageJSON)
+check("codex usage parses primary", codexSnap.windows.first?.usedPercent == 85)
+check("codex usage agent name", codexSnap.agentName == "Codex")
+
 let mgJSON = """
 [{"doc_id":"d1","chunk_index":0,"display_path":"10_knowledge/x.md","title":"X","chunk_text":"hello","trust_profile":"durable_knowledge","rrf_score":0.03,"signal":"fused"}]
 """.data(using: .utf8)!

@@ -155,6 +155,10 @@ final class AppModel: ObservableObject {
     @Published var showAgentUsage = false
     @Published var showMindGraph = false
     @Published var showContextBundle = false
+    /// Account-reported usage (Claude / Codex / OpenCode). Separate from Tier A.
+    @Published private(set) var accountUsage: [AccountUsageSnapshot] = []
+    @Published private(set) var accountUsageRefreshing = false
+    @Published private(set) var accountUsageError: String?
     @Published var taskSearchFocusRequest = 0
     @Published var healthResults: [AgentHealthResult] = []
     @Published var resourceSnapshot = ResourceSnapshot.empty
@@ -469,6 +473,22 @@ final class AppModel: ObservableObject {
             live: liveUsageSnapshots(),
             now: date
         )
+    }
+
+    /// Pull Claude OAuth, Codex app-server, and OpenCode DB account usage.
+    func refreshAccountUsage() {
+        guard !accountUsageRefreshing else { return }
+        accountUsageRefreshing = true
+        accountUsageError = nil
+        Task { @MainActor in
+            let snaps = await AccountUsageService.refreshAll()
+            self.accountUsage = snaps
+            self.accountUsageRefreshing = false
+            let failed = snaps.compactMap(\.error)
+            if failed.count == snaps.count, !failed.isEmpty {
+                self.accountUsageError = "Could not load account usage for any agent."
+            }
+        }
     }
 
     // MARK: - MindGraph (operator query station)

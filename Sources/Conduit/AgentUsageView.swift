@@ -2,13 +2,11 @@
 import ConduitCore
 import SwiftUI
 
-/// Tier A usage surface: Conduit-observed activity plus **operator-set**
-/// weekly/session budgets (not vendor token quotas).
+/// Account-reported limits (Claude/Codex/OpenCode) plus optional operator budgets.
 struct AgentUsageSheet: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dismiss) private var dismiss
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -18,228 +16,270 @@ struct AgentUsageSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(palette.line)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                let rows = model.observedUsageRows(at: context.date)
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(rows, id: \.agent) { row in
-                            usageRow(row, at: context.date)
-                            Divider().overlay(palette.lineSoft)
-                        }
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    accountSection
+                    Divider().overlay(palette.lineSoft)
+                    observedSection
                 }
+                .padding(14)
             }
             Divider().overlay(palette.line)
             footer
         }
-        .frame(minWidth: Self.sheetMinWidth, minHeight: 440)
+        .frame(minWidth: 560, minHeight: 480)
         .background(palette.canvas)
+        .onAppear {
+            if model.accountUsage.isEmpty {
+                model.refreshAccountUsage()
+            }
+        }
     }
 
     private var header: some View {
         ConduitSheetHeader(
-            title: "Agent usage",
-            subtitle: "Weekly / session limits you set · observed by Conduit",
-            systemImage: "chart.bar"
+            title: "Account usage",
+            subtitle: "Live limits from Claude / Codex / OpenCode accounts",
+            systemImage: "chart.bar.fill",
+            trailing: {
+                Button {
+                    model.refreshAccountUsage()
+                } label: {
+                    if model.accountUsageRefreshing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(model.accountUsageRefreshing)
+            }
         )
     }
 
-    private func usageRow(_ row: AgentObservedUsage, at date: Date) -> some View {
-        let profile = model.settings.agents.first { $0.name == row.agent }
-        let budget = profile?.usageBudget ?? AgentUsageBudget()
-        let week = model.weekUsage(for: row.agent, at: date)
-        let unobserved = row.sessions == 0
+    // MARK: - Account (vendor)
 
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(row.liveSessions > 0 ? palette.accent : Color.clear)
-                    .frame(width: 6, height: 6)
-                Text(row.agent)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(unobserved ? palette.dim : palette.text)
-                Spacer(minLength: 8)
-                if row.liveSessions > 0 {
-                    Text("\(row.liveSessions) live")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(palette.accent)
+    private var accountSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("FROM YOUR ACCOUNTS")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .tracking(0.6)
+                .foregroundStyle(palette.dim)
+
+            if model.accountUsageRefreshing && model.accountUsage.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading account usage…")
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
                 }
             }
 
-            if unobserved && !budget.hasAnyLimit {
-                Text("no sessions observed · set limits in Settings → Agents")
-                    .font(.system(size: 11))
+            ForEach(model.accountUsage) { snap in
+                accountCard(snap)
+            }
+
+            if model.accountUsage.isEmpty, !model.accountUsageRefreshing {
+                Text("No account data yet. Tap Refresh (requires Claude Keychain login, codex login, or local OpenCode DB).")
+                    .font(.caption)
                     .foregroundStyle(palette.faint)
-            } else {
-                if budget.weeklyPromptLimit > 0 {
-                    limitMeter(
-                        label: "Week prompts",
-                        usedLabel: "\(week.totalPrompts) / \(budget.weeklyPromptLimit)",
-                        fraction: AgentUsageMeters.fraction(
-                            Double(week.totalPrompts),
-                            of: Double(budget.weeklyPromptLimit)
-                        )
-                    )
-                }
-                if budget.weeklyAttachedMinutesLimit > 0 {
-                    let usedMin = Int(week.attachedSeconds / 60)
-                    limitMeter(
-                        label: "Week attached",
-                        usedLabel: "\(usedMin) / \(budget.weeklyAttachedMinutesLimit) min",
-                        fraction: AgentUsageMeters.fraction(
-                            Double(usedMin),
-                            of: Double(budget.weeklyAttachedMinutesLimit)
-                        )
-                    )
-                }
-                if budget.sessionPromptLimit > 0 {
-                    limitMeter(
-                        label: "This session",
-                        usedLabel: "\(week.liveSessionPrompts) / \(budget.sessionPromptLimit) prompts",
-                        fraction: AgentUsageMeters.fraction(
-                            Double(week.liveSessionPrompts),
-                            of: Double(budget.sessionPromptLimit)
-                        )
-                    )
-                }
-                if !budget.hasAnyLimit {
-                    Text("No weekly/session limits set — relative activity only")
-                        .font(.system(size: 10))
-                        .foregroundStyle(palette.faint)
-                    relativeFallback(row)
-                }
-                Text(Self.metricsLine(row, week: week))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(palette.faint)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 16)
     }
 
-    private func relativeFallback(_ row: AgentObservedUsage) -> some View {
-        let scales = AgentUsageMeters.Scales.from(
-            model.observedUsageRows(at: Date())
-        )
-        return VStack(alignment: .leading, spacing: 4) {
-            limitMeter(
-                label: "Attached (vs peers)",
-                usedLabel: Self.duration(row.attachedSeconds),
-                fraction: AgentUsageMeters.fraction(
-                    row.attachedSeconds,
-                    of: scales.maxAttachedSeconds
-                ),
-                muted: true
-            )
-            limitMeter(
-                label: "Output (vs peers)",
-                usedLabel: Self.bytes(row.outputBytes),
-                fraction: AgentUsageMeters.fraction(
-                    Double(row.outputBytes),
-                    of: Double(scales.maxOutputBytes)
-                ),
-                muted: true
-            )
-        }
-    }
-
-    private func limitMeter(
-        label: String,
-        usedLabel: String,
-        fraction: Double,
-        muted: Bool = false
-    ) -> some View {
-        let tint: Color = {
-            if muted { return palette.dim.opacity(0.7) }
-            if fraction >= 1 { return Color.red.opacity(0.75) }
-            if fraction >= 0.85 { return Color.orange.opacity(0.85) }
-            return palette.accent.opacity(0.85)
-        }()
-        return VStack(alignment: .leading, spacing: 2) {
+    private func accountCard(_ snap: AccountUsageSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(label)
-                    .font(.system(size: 10, weight: .medium))
+                Text(snap.agentName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(palette.text)
+                Spacer()
+                Text(snap.sourceLabel)
+                    .font(.caption2)
                     .foregroundStyle(palette.faint)
-                    .frame(minWidth: 100, alignment: .leading)
-                Text(usedLabel)
+                    .lineLimit(1)
+            }
+            if let error = snap.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(Color.orange.opacity(0.9))
+            } else {
+                ForEach(snap.windows) { window in
+                    accountWindowMeter(window)
+                }
+                ForEach(snap.notes, id: \.self) { note in
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(palette.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Fetched \(snap.fetchedAt.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(palette.line, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func accountWindowMeter(_ window: AccountUsageWindow) -> some View {
+        let fraction = min(1, max(0, window.usedPercent / 100))
+        let tint: Color = {
+            if fraction >= 0.95 { return Color.red.opacity(0.8) }
+            if fraction >= 0.80 { return Color.orange.opacity(0.85) }
+            return palette.accent.opacity(0.9)
+        }()
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(window.label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(palette.text)
+                Spacer()
+                Text(String(format: "%.0f%% used · %.0f%% left", window.usedPercent, window.remainingPercent))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(palette.dim)
-                Spacer(minLength: 0)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(palette.lineSoft)
                     Capsule()
                         .fill(tint)
-                        .frame(width: max(0, geo.size.width * CGFloat(fraction)))
+                        .frame(width: max(4, geo.size.width * CGFloat(fraction)))
                 }
             }
-            .frame(height: 6)
-            .accessibilityLabel("\(label) \(usedLabel)")
-            .accessibilityValue("\(Int((fraction * 100).rounded())) percent of limit")
+            .frame(height: 7)
+            if let detail = window.detail {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            }
+            if let resets = window.resetsAt {
+                Text("Resets \(resets.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(window.label), \(Int(window.usedPercent)) percent used")
+    }
+
+    // MARK: - Observed (local)
+
+    private var observedSection: some View {
+        TimelineView(.periodic(from: .now, by: 2)) { context in
+            let rows = model.observedUsageRows(at: context.date)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("CONDUIT-OBSERVED (local)")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .tracking(0.6)
+                    .foregroundStyle(palette.dim)
+                Text("Attach time and prompts Conduit delivered — not account pool.")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+
+                ForEach(rows.filter { $0.sessions > 0 || hasBudget($0.agent) }, id: \.agent) { row in
+                    observedRow(row, at: context.date)
+                }
+            }
         }
     }
 
-    static func metricsLine(
-        _ row: AgentObservedUsage,
-        week: AgentUsageMeters.WeekWindowUsage
-    ) -> String {
-        var parts = [
-            row.sessions == 1 ? "1 session all-time" : "\(row.sessions) sessions all-time",
-            "\(week.sessions) this week",
-            "\(Self.bytes(row.outputBytes)) out",
-        ]
-        let outcome = outcomes(row)
-        if outcome != "—" { parts.append(outcome) }
-        return parts.joined(separator: " · ")
+    private func hasBudget(_ agent: String) -> Bool {
+        model.settings.agents.first { $0.name == agent }?.usageBudget.hasAnyLimit ?? false
+    }
+
+    private func observedRow(_ row: AgentObservedUsage, at date: Date) -> some View {
+        let budget = model.settings.agents.first { $0.name == row.agent }?.usageBudget
+            ?? AgentUsageBudget()
+        let week = model.weekUsage(for: row.agent, at: date)
+        return VStack(alignment: .leading, spacing: 5) {
+            Text(row.agent)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(palette.text)
+            if budget.weeklyPromptLimit > 0 {
+                limitLine(
+                    "Week prompts",
+                    "\(week.totalPrompts) / \(budget.weeklyPromptLimit)",
+                    AgentUsageMeters.fraction(
+                        Double(week.totalPrompts),
+                        of: Double(budget.weeklyPromptLimit)
+                    )
+                )
+            }
+            if budget.weeklyAttachedMinutesLimit > 0 {
+                let used = Int(week.attachedSeconds / 60)
+                limitLine(
+                    "Week attached",
+                    "\(used) / \(budget.weeklyAttachedMinutesLimit) min",
+                    AgentUsageMeters.fraction(
+                        Double(used),
+                        of: Double(budget.weeklyAttachedMinutesLimit)
+                    )
+                )
+            }
+            Text(
+                "\(row.sessions) sessions · \(AgentUsageSheet.duration(row.attachedSeconds)) attached · \(AgentUsageSheet.bytes(row.outputBytes)) out"
+            )
+            .font(.caption2.monospaced())
+            .foregroundStyle(palette.faint)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func limitLine(_ label: String, _ value: String, _ fraction: Double) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(label).font(.caption2).foregroundStyle(palette.faint)
+                Spacer()
+                Text(value).font(.caption2.monospaced()).foregroundStyle(palette.dim)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.lineSoft)
+                    Capsule()
+                        .fill(fraction >= 1 ? Color.red.opacity(0.75) : palette.dim.opacity(0.7))
+                        .frame(width: max(0, geo.size.width * CGFloat(min(1, fraction))))
+                }
+            }
+            .frame(height: 4)
+        }
     }
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("Limits are operator budgets on Conduit-observed prompts and attach time — not Claude/OpenAI weekly token quotas.")
+            Text("Account meters use each tool’s own auth (Keychain / codex login / local DB). Tokens are never stored by Conduit.")
                 .foregroundStyle(palette.dim)
-            Text("Set caps under Settings → Agents. Week resets at the local calendar week start.")
-                .foregroundStyle(palette.faint)
-            Text("Vendor remaining-quota APIs are not read; this is local self-tracking.")
+            Text("Claude: 5h + weekly utilization. Codex: ChatGPT plan windows. OpenCode: local session tokens (not Zen pool %).")
                 .foregroundStyle(palette.faint)
         }
         .font(.caption2)
-        .fixedSize(horizontal: false, vertical: true)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
         .background(palette.rail)
     }
-
-    static let sheetMinWidth: CGFloat = 540
 
     static func duration(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         let h = total / 3600
         let m = (total % 3600) / 60
         if h > 0 { return "\(h)h \(m)m" }
-        if m > 0 { return "\(m)m \(total % 60)s" }
+        if m > 0 { return "\(m)m" }
         return "\(total)s"
     }
 
     static func bytes(_ count: Int) -> String {
         if count < 1024 { return "\(count) B" }
-        if count < 1024 * 1024 {
-            return String(format: "%.0f KB", Double(count) / 1024)
-        }
-        return String(format: "%.1f MB", Double(count) / (1024 * 1024))
-    }
-
-    static func outcomes(_ row: AgentObservedUsage) -> String {
-        var parts: [String] = []
-        if row.cleanExits > 0 { parts.append("\(row.cleanExits) clean") }
-        if row.failedExits > 0 { parts.append("\(row.failedExits) failed") }
-        if row.detaches > 0 { parts.append("\(row.detaches) detached") }
-        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
+        if count < 1_048_576 { return String(format: "%.0f KB", Double(count) / 1024) }
+        return String(format: "%.1f MB", Double(count) / 1_048_576)
     }
 }
 
-/// Compact always-on usage + budget meters for the inspector.
+/// Compact inspector panel focused on account windows.
 struct AgentUsageMeterPanel: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
@@ -250,113 +290,83 @@ struct AgentUsageMeterPanel: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let rows = model.observedUsageRows(at: context.date)
-            let interesting = rows.filter { row in
-                row.sessions > 0
-                    || (model.settings.agents.first { $0.name == row.agent }?
-                        .usageBudget.hasAnyLimit ?? false)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Limits & usage")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(palette.dim)
-                    Spacer()
-                    Button("Full sheet") {
-                        model.showAgentUsage = true
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Account limits")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.dim)
+                Spacer()
+                Button("Refresh") { model.refreshAccountUsage() }
                     .buttonStyle(.borderless)
                     .font(.caption2)
                     .foregroundStyle(palette.accent)
+                    .disabled(model.accountUsageRefreshing)
+                Button("Details") { model.showAgentUsage = true }
+                    .buttonStyle(.borderless)
+                    .font(.caption2)
+                    .foregroundStyle(palette.accent)
+            }
+
+            if model.accountUsage.isEmpty {
+                Text(model.accountUsageRefreshing ? "Loading…" : "Tap Refresh for Claude / Codex / OpenCode.")
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            } else {
+                ForEach(model.accountUsage) { snap in
+                    compactAccount(snap)
                 }
-                if interesting.isEmpty {
-                    Text("No observed sessions and no limits set.")
-                        .font(.caption)
-                        .foregroundStyle(palette.faint)
-                    Text("Add weekly caps in Settings → Agents.")
-                        .font(.caption2)
-                        .foregroundStyle(palette.faint)
-                } else {
-                    ForEach(interesting, id: \.agent) { row in
-                        compactRow(row, at: context.date)
-                    }
-                }
+            }
+        }
+        .onAppear {
+            if model.accountUsage.isEmpty {
+                model.refreshAccountUsage()
             }
         }
     }
 
-    private func compactRow(_ row: AgentObservedUsage, at date: Date) -> some View {
-        let budget = model.settings.agents.first { $0.name == row.agent }?
-            .usageBudget ?? AgentUsageBudget()
-        let week = model.weekUsage(for: row.agent, at: date)
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(row.liveSessions > 0 ? palette.accent : palette.faint.opacity(0.4))
-                    .frame(width: 5, height: 5)
-                Text(row.agent)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(palette.text)
-                Spacer()
-                if budget.weeklyPromptLimit > 0 {
-                    Text("\(week.totalPrompts)/\(budget.weeklyPromptLimit)")
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(palette.dim)
-                } else {
-                    Text(AgentUsageSheet.duration(row.attachedSeconds))
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(palette.dim)
-                }
-            }
-            if budget.weeklyPromptLimit > 0 {
-                compactBar(
-                    fraction: AgentUsageMeters.fraction(
-                        Double(week.totalPrompts),
-                        of: Double(budget.weeklyPromptLimit)
-                    ),
-                    hot: week.totalPrompts >= budget.weeklyPromptLimit
-                )
-            }
-            if budget.weeklyAttachedMinutesLimit > 0 {
-                let usedMin = Int(week.attachedSeconds / 60)
-                compactBar(
-                    fraction: AgentUsageMeters.fraction(
-                        Double(usedMin),
-                        of: Double(budget.weeklyAttachedMinutesLimit)
-                    ),
-                    hot: usedMin >= budget.weeklyAttachedMinutesLimit
-                )
-            }
-            if budget.sessionPromptLimit > 0 {
-                compactBar(
-                    fraction: AgentUsageMeters.fraction(
-                        Double(week.liveSessionPrompts),
-                        of: Double(budget.sessionPromptLimit)
-                    ),
-                    hot: week.liveSessionPrompts >= budget.sessionPromptLimit
-                )
-            }
-            if !budget.hasAnyLimit, row.sessions > 0 {
-                Text("No limit · \(week.totalPrompts) prompts this week")
+    private func compactAccount(_ snap: AccountUsageSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(snap.agentName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.text)
+            if let error = snap.error {
+                Text(error)
                     .font(.caption2)
-                    .foregroundStyle(palette.faint)
+                    .foregroundStyle(Color.orange.opacity(0.85))
+                    .lineLimit(2)
+            } else {
+                ForEach(snap.windows.prefix(2)) { w in
+                    HStack {
+                        Text(w.label)
+                            .font(.caption2)
+                            .foregroundStyle(palette.faint)
+                        Spacer()
+                        Text(String(format: "%.0f%%", w.usedPercent))
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(palette.dim)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(palette.lineSoft)
+                            Capsule()
+                                .fill(
+                                    w.usedPercent >= 90
+                                        ? Color.red.opacity(0.75)
+                                        : palette.accent.opacity(0.85)
+                                )
+                                .frame(
+                                    width: max(
+                                        0,
+                                        geo.size.width * CGFloat(min(1, w.usedPercent / 100))
+                                    )
+                                )
+                        }
+                    }
+                    .frame(height: 4)
+                }
             }
         }
         .padding(.vertical, 2)
-    }
-
-    private func compactBar(fraction: Double, hot: Bool) -> some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(palette.lineSoft)
-                Capsule()
-                    .fill(hot ? Color.red.opacity(0.75) : palette.accent.opacity(0.85))
-                    .frame(width: max(0, geo.size.width * CGFloat(fraction)))
-            }
-        }
-        .frame(height: 4)
     }
 }
 #endif
