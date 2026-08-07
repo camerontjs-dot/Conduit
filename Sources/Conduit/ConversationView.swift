@@ -14,8 +14,7 @@ struct ConversationView: View {
     /// When true, the whole stream pins to the latest content.
     @State private var followLatest = true
     @State private var didApplyFollowDefault = false
-    /// Conversation pane accepts 1–4 / arrows / Enter / Esc for agent menus.
-    @FocusState private var streamFocused: Bool
+    /// Local key monitor for agent menu shortcuts (no focus ring on the stream).
     @State private var keyMonitor: Any?
 
     init(runtime: TerminalRuntime) {
@@ -101,9 +100,6 @@ struct ConversationView: View {
             }
         }
         .background(palette.canvas)
-        .focusable()
-        .focused($streamFocused)
-        .onTapGesture { streamFocused = true }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(runtime.descriptor.agent.name) conversation")
         .onAppear {
@@ -111,7 +107,6 @@ struct ConversationView: View {
                 followLatest = model.settings.followConversationByDefault
                 didApplyFollowDefault = true
             }
-            streamFocused = true
             installKeyMonitor()
         }
         .onDisappear {
@@ -465,7 +460,6 @@ struct ConversationView: View {
                 .foregroundStyle(palette.dim)
             ForEach(options) { option in
                 Button {
-                    streamFocused = true
                     model.injectConversationControl(
                         text: option.key,
                         submit: true,
@@ -557,17 +551,22 @@ struct ConversationView: View {
         }
     }
 
-    /// When Conversation is focused and the composer is not first responder,
-    /// route menu keys into the live agent PTY.
+    /// When Conversation is the active surface and the composer is not first
+    /// responder, route menu keys into the live agent PTY. Avoids a focusable
+    /// stream container (which drew a large system focus ring on click).
     private func handleConversationKeyEvent(_ event: NSEvent) -> NSEvent? {
-        guard streamFocused,
-              !controller.lifecycle.isTerminal,
+        guard !controller.lifecycle.isTerminal,
               runtime.selectedSurface == .conversation
         else { return event }
 
         // Don't steal keys from the composer or other text fields.
         if let first = NSApp.keyWindow?.firstResponder {
             if first is NSTextView || first is NSTextField {
+                return event
+            }
+            // Also skip when an editable field is nested (e.g. field editor).
+            if let view = first as? NSView,
+               view is NSText || view.enclosingScrollView?.documentView is NSTextView {
                 return event
             }
         }
