@@ -8,6 +8,7 @@ enum InspectorTab: String, CaseIterable, Identifiable {
     case files
     case review
     case context
+    case usage
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum InspectorTab: String, CaseIterable, Identifiable {
         case .files: return "Files"
         case .review: return "Review"
         case .context: return "Context"
+        case .usage: return "Usage"
         }
     }
 }
@@ -62,6 +64,8 @@ struct InspectorView: View {
                         reviewPane
                     case .context:
                         contextPane
+                    case .usage:
+                        usagePane
                     }
                 }
                 .padding(.horizontal, 12)
@@ -171,6 +175,29 @@ struct InspectorView: View {
                     .font(.caption)
                     .foregroundStyle(palette.dim)
             }
+
+            Divider().overlay(palette.line)
+            AgentUsageMeterPanel()
+            Button {
+                model.showMindGraph = true
+            } label: {
+                Label("Query MindGraph…", systemImage: "point.3.connected.trianglepath.dotted")
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var usagePane: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            AgentUsageMeterPanel()
+            Button("Open full usage sheet") {
+                model.showAgentUsage = true
+            }
+            .buttonStyle(.borderedProminent)
+            Text("Meters compare agents Conduit observed (attached time, output bytes). Not vendor tokens or cost.")
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

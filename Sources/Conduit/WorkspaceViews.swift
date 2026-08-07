@@ -676,7 +676,7 @@ struct OperatorOpsDeck: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     let project: MainframeProject
-    @State private var isUsagePresented = false
+
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -741,7 +741,7 @@ struct OperatorOpsDeck: View {
             let active = rows.filter { $0.sessions > 0 }
             let live = rows.reduce(0) { $0 + $1.liveSessions }
             Button {
-                isUsagePresented = true
+                model.showAgentUsage = true
             } label: {
                 opsCard(
                     key: "Agent usage",
@@ -753,11 +753,6 @@ struct OperatorOpsDeck: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens the observed per-agent usage breakdown")
-        }
-        .sheet(isPresented: $isUsagePresented) {
-            AgentUsageSheet()
-                .environmentObject(model)
-                .environmentObject(themeStore)
         }
     }
 

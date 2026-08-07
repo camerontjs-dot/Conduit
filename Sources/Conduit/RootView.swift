@@ -58,6 +58,16 @@ struct RootView: View {
                 .environmentObject(model)
                 .environmentObject(themeStore)
         }
+        .sheet(isPresented: $model.showAgentUsage) {
+            AgentUsageSheet()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
+        .sheet(isPresented: $model.showMindGraph) {
+            MindGraphQueryView()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
         .sheet(isPresented: $model.showContextBundle) {
             ContextBundleView()
                 .environmentObject(model)

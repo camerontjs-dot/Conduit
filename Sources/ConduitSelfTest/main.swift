@@ -1710,6 +1710,35 @@ try? FileManager.default.createDirectory(
 check("usage log accepts a live root", AgentUsageLog(mainframeRoot: strayRoot) != nil)
 try? FileManager.default.removeItem(at: strayRoot)
 
+let meterScales = AgentUsageMeters.Scales.from([
+    AgentObservedUsage(agent: "A", attachedSeconds: 100, outputBytes: 50, promptsDelivered: 2),
+    AgentObservedUsage(agent: "B", attachedSeconds: 50, outputBytes: 200, promptsDelivered: 8),
+])
+check("usage meters take max attached", meterScales.maxAttachedSeconds == 100)
+check("usage meters take max bytes", meterScales.maxOutputBytes == 200)
+check(
+    "usage meters fraction caps at 1",
+    AgentUsageMeters.fraction(150, of: 100) == 1
+)
+check(
+    "usage meters fraction zero when max zero",
+    AgentUsageMeters.fraction(10, of: 0) == 0
+)
+
+let mgJSON = """
+[{"doc_id":"d1","chunk_index":0,"display_path":"10_knowledge/x.md","title":"X","chunk_text":"hello","trust_profile":"durable_knowledge","rrf_score":0.03,"signal":"fused"}]
+""".data(using: .utf8)!
+let mgHits = (try? MindGraphQuerySupport.decodeHits(from: mgJSON, scope: .knowledge)) ?? []
+check("mindgraph decodes one hit", mgHits.count == 1 && mgHits.first?.title == "X")
+check(
+    "mindgraph scope knowledge trust",
+    MindGraphScope.knowledge.trustProfile == "durable_knowledge"
+)
+check(
+    "mindgraph scope projects trust",
+    MindGraphScope.projects.trustProfile == "project_status"
+)
+
 // MARK: - Optional real-tree smoke (set CONDUIT_SMOKE_ROOT=/path/to/MainFrame)
 
 if let smokeRoot = ProcessInfo.processInfo.environment["CONDUIT_SMOKE_ROOT"] {

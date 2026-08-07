@@ -152,6 +152,8 @@ final class AppModel: ObservableObject {
 
     @Published var showDiagnostics = false
     @Published var showResources = false
+    @Published var showAgentUsage = false
+    @Published var showMindGraph = false
     @Published var showContextBundle = false
     @Published var taskSearchFocusRequest = 0
     @Published var healthResults: [AgentHealthResult] = []
@@ -440,6 +442,73 @@ final class AppModel: ObservableObject {
             roster: settings.agents.map(\.name),
             now: date
         )
+    }
+
+    // MARK: - MindGraph (operator query station)
+
+    /// Runs one scoped MindGraph query via MainFrame `bin/mindgraph`.
+    /// Knowledge and projects are never blended in a single call.
+    func queryMindGraph(
+        question: String,
+        scope: MindGraphScope,
+        topK: Int = 8
+    ) async -> Result<[MindGraphHit], MindGraphQueryError> {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .failure(.emptyQuestion) }
+
+        guard let binary = MindGraphQuerySupport.resolveBinary(
+            mainframeRoot: settings.mainframeRoot
+        ) else {
+            return .failure(.binaryNotFound)
+        }
+        let db = MindGraphQuerySupport.databaseURL(for: scope)
+        guard FileManager.default.fileExists(atPath: db.path) else {
+            return .failure(.databaseMissing(db.path))
+        }
+
+        let cappedTopK = max(1, min(30, topK))
+        let result = await BlockingWork.run(qos: .userInitiated) {
+            SubprocessRunner.run(
+                binary.path,
+                [
+                    "query",
+                    trimmed,
+                    "--db", db.path,
+                    "--top-k", "\(cappedTopK)",
+                    "--json",
+                    "--no-intent",
+                ],
+                timeout: 90
+            )
+        }
+
+        if result.timedOut {
+            return .failure(.timedOut)
+        }
+        // mindgraph may print log lines on stderr merged into output; still try
+        // to decode when exit is non-zero if JSON is present.
+        let data = Data(result.output.utf8)
+        do {
+            let hits = try MindGraphQuerySupport.decodeHits(
+                from: data,
+                scope: scope
+            )
+            if result.status != 0 && hits.isEmpty {
+                return .failure(
+                    .processFailed(status: result.status, message: result.output)
+                )
+            }
+            return .success(hits)
+        } catch let error as MindGraphQueryError {
+            if result.status != 0 {
+                return .failure(
+                    .processFailed(status: result.status, message: result.output)
+                )
+            }
+            return .failure(error)
+        } catch {
+            return .failure(.invalidJSON(error.localizedDescription))
+        }
     }
 
     /// Agents eligible as staging forward targets (enabled, non-shell).

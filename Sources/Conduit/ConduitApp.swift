@@ -78,6 +78,10 @@ struct ConduitApp: App {
                     .keyboardShortcut("d", modifiers: [.command, .shift])
                 Button("Resource Deck") { model.showResources = true }
                     .keyboardShortcut("m", modifiers: [.command, .shift])
+                Button("Agent Usage") { model.showAgentUsage = true }
+                    .keyboardShortcut("u", modifiers: [.command, .shift])
+                Button("MindGraph…") { model.showMindGraph = true }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
                 Divider()
                 Button("Close Work Session & Write Receipt") { model.closeWorkSession(for: model.selectedProject) }
                     .keyboardShortcut("w", modifiers: [.command, .shift])

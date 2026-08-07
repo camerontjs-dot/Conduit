@@ -576,6 +576,26 @@ struct TaskSidebarView: View {
             }
 
             HStack(spacing: 8) {
+                Button {
+                    model.showAgentUsage = true
+                } label: {
+                    footerLabel("Usage", systemImage: "chart.bar")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Agent usage meters")
+                .help("Observed per-agent usage meters")
+
+                Button {
+                    model.showMindGraph = true
+                } label: {
+                    footerLabel("MindGraph", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Query MindGraph")
+                .help("Query local MindGraph knowledge or projects indexes")
+            }
+
+            HStack(spacing: 8) {
                 Button(action: model.chooseMainframeRoot) {
                     footerLabel("Root", systemImage: "folder")
                 }
