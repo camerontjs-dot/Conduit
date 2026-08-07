@@ -561,18 +561,147 @@ public enum HostEnvelope {
 /// Presentation-only compaction for Derived-from-Raw blocks.
 ///
 /// Does not mutate retained JSONL; Conversation may show this form while the
-/// source event keeps the full projected text.
+/// source event keeps the full projected text. Scrubbing never invents prose —
+/// it only drops blank runs and common TUI chrome so Conversation can read as
+/// a turn stream instead of a terminal viewport.
 public enum ConversationDisplayText {
     /// Collapses long blank runs and trailing per-line whitespace so TUI chrome
     /// is less sparse without inventing content.
     public static func compactDerived(_ text: String) -> String {
-        let normalized = text
+        compactLines(canonicalLines(text)).joined(separator: "\n")
+    }
+
+    /// Workstation-facing form: compact blanks, then drop pure TUI chrome lines
+    /// (spinners, box edges, "esc to interrupt", navigate hints) while keeping
+    /// substantive prose, lists, and interactive menu content.
+    public static func workstationDerived(_ text: String) -> String {
+        let compacted = compactLines(canonicalLines(text))
+        var kept: [String] = []
+        var blankRun = 0
+        var droppedOnlyChrome = true
+        for line in compacted {
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                blankRun += 1
+                if blankRun <= 1 {
+                    kept.append("")
+                }
+                continue
+            }
+            blankRun = 0
+            if isPresentationChromeLine(line) {
+                continue
+            }
+            droppedOnlyChrome = false
+            kept.append(line)
+        }
+        // If scrubbing would erase the block entirely, fall back to compact form
+        // so the operator still sees something rather than a silent hole.
+        if droppedOnlyChrome {
+            return compacted.joined(separator: "\n")
+        }
+        while kept.first?.isEmpty == true {
+            kept.removeFirst()
+        }
+        while kept.last?.isEmpty == true {
+            kept.removeLast()
+        }
+        return kept.joined(separator: "\n")
+    }
+
+    /// Lightweight block parse for document-style Conversation rendering.
+    /// Not a full Markdown engine — headings, fences, bullets, and paragraphs only.
+    public static func proseBlocks(in text: String) -> [ConversationProseBlock] {
+        let lines = canonicalLines(text)
+        var blocks: [ConversationProseBlock] = []
+        var index = 0
+        var paragraph: [String] = []
+
+        func flushParagraph() {
+            let body = paragraph.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !body.isEmpty else {
+                paragraph = []
+                return
+            }
+            blocks.append(.paragraph(body))
+            paragraph = []
+        }
+
+        while index < lines.count {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("```") {
+                flushParagraph()
+                let language = String(trimmed.dropFirst(3))
+                    .trimmingCharacters(in: .whitespaces)
+                index += 1
+                var code: [String] = []
+                while index < lines.count {
+                    let codeLine = lines[index]
+                    if codeLine.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                        index += 1
+                        break
+                    }
+                    code.append(codeLine)
+                    index += 1
+                }
+                blocks.append(
+                    .code(
+                        language: language.isEmpty ? nil : language,
+                        body: code.joined(separator: "\n")
+                    )
+                )
+                continue
+            }
+
+            if let heading = headingMatch(trimmed) {
+                flushParagraph()
+                blocks.append(.heading(level: heading.level, text: heading.text))
+                index += 1
+                continue
+            }
+
+            if let bullet = bulletMatch(line) {
+                flushParagraph()
+                var items = [bullet]
+                index += 1
+                while index < lines.count, let next = bulletMatch(lines[index]) {
+                    items.append(next)
+                    index += 1
+                }
+                blocks.append(.bullets(items))
+                continue
+            }
+
+            if trimmed.isEmpty {
+                flushParagraph()
+                index += 1
+                continue
+            }
+
+            paragraph.append(line)
+            index += 1
+        }
+        flushParagraph()
+        return blocks
+    }
+
+    // MARK: - Private helpers
+
+    private static func canonicalLines(_ text: String) -> [String] {
+        text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { String($0) }
+    }
+
+    private static func compactLines(_ lines: [String]) -> [String] {
         var compacted: [String] = []
         var blankRun = 0
-        for raw in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = String(raw).replacingOccurrences(
+        for raw in lines {
+            let line = raw.replacingOccurrences(
                 of: "\\s+$",
                 with: "",
                 options: .regularExpression
@@ -593,8 +722,138 @@ public enum ConversationDisplayText {
         while compacted.last?.isEmpty == true {
             compacted.removeLast()
         }
-        return compacted.joined(separator: "\n")
+        return compacted
     }
+
+    /// Pure presentation chrome — never drops numbered menu options or prose.
+    private static func isPresentationChromeLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+
+        // Box / rule / spinner-only lines.
+        let decorative = CharacterSet.whitespaces
+            .union(CharacterSet(charactersIn: "─━═╌╍┄┅┐└┴┬├─┤┼╭╮╯╰│┃┏┓┗┛╔╗╚╝║═╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬░▒▓█▀▄▌▐■□▪▫●○◦•·▸▹►▻╱╳╲+*|`~_"))
+        if trimmed.unicodeScalars.allSatisfy({ decorative.contains($0) }) {
+            return true
+        }
+
+        // Braille / classic spinner glyphs (optionally with trailing status).
+        let spinnerPrefix = CharacterSet(charactersIn: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◐◓◑◒⣾⣽⣻⢿⡿⣟⣯⣷⠁⠂⠄⡀⢀⠠⠐⠈")
+        if let first = trimmed.unicodeScalars.first, spinnerPrefix.contains(first) {
+            let rest = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+            if rest.isEmpty
+                || rest.lowercased().hasPrefix("thinking")
+                || rest.lowercased().hasPrefix("working")
+                || rest.lowercased().hasPrefix("waiting")
+            {
+                return true
+            }
+        }
+
+        let lower = trimmed.lowercased()
+        let chromeExact: Set<String> = [
+            "esc to interrupt",
+            "esc to cancel",
+            "press esc to cancel",
+            "ctrl+c to interrupt",
+            "ctrl-c to interrupt",
+            "working…",
+            "working...",
+            "thinking…",
+            "thinking...",
+            "awaiting input",
+        ]
+        if chromeExact.contains(lower) {
+            return true
+        }
+
+        // Navigation chrome that is not a numbered choice line.
+        if lower.contains("↑/↓") || lower.contains("up/down") {
+            if lower.contains("navigate") || lower.contains("arrow") {
+                return true
+            }
+        }
+        if lower.hasPrefix("tab ") && lower.contains("amend") {
+            return true
+        }
+        if lower == "esc to cancel" || lower.hasPrefix("esc ·") {
+            return true
+        }
+
+        // Pure status footers like "claude-opus · 2.1k tokens" without prose body.
+        if trimmed.contains("·") {
+            let parts = trimmed.split(separator: "·").map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
+            if parts.count >= 2,
+               parts.allSatisfy({ part in
+                   part.count <= 28
+                       || part.lowercased().contains("token")
+                       || part.lowercased().contains("context")
+                       || part.range(of: #"^\d+(\.\d+)?[kKmM]?$"#, options: .regularExpression) != nil
+               }),
+               !trimmed.contains("http"),
+               trimmed.count < 80
+            {
+                // Only drop when there is no sentence punctuation (likely chrome).
+                if !trimmed.contains(where: { ".!?:".contains($0) }) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    private static func headingMatch(_ trimmed: String) -> (level: Int, text: String)? {
+        guard trimmed.hasPrefix("#") else { return nil }
+        var level = 0
+        for ch in trimmed {
+            if ch == "#" {
+                level += 1
+                if level > 3 { return nil }
+            } else {
+                break
+            }
+        }
+        guard level >= 1, level <= 3 else { return nil }
+        let rest = trimmed.dropFirst(level)
+        guard rest.first == " " || rest.first == "\t" else { return nil }
+        let text = rest.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
+        return (level, text)
+    }
+
+    private static func bulletMatch(_ line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        for prefix in ["- ", "* ", "• "] {
+            if trimmed.hasPrefix(prefix) {
+                let body = String(trimmed.dropFirst(prefix.count))
+                    .trimmingCharacters(in: .whitespaces)
+                return body.isEmpty ? nil : body
+            }
+        }
+        // Numbered list "1. item" used as prose (not interactive "1. Yes").
+        if let range = trimmed.range(
+            of: #"^\d+\.\s+\S"#,
+            options: .regularExpression
+        ), range.lowerBound == trimmed.startIndex {
+            if let dot = trimmed.firstIndex(of: ".") {
+                let body = trimmed[trimmed.index(after: dot)...]
+                    .trimmingCharacters(in: .whitespaces)
+                return body.isEmpty ? nil : body
+            }
+        }
+        return nil
+    }
+}
+
+/// One display block inside a Conversation assistant turn. Presentation only.
+public enum ConversationProseBlock: Equatable, Sendable {
+    case heading(level: Int, text: String)
+    case paragraph(String)
+    case bullets([String])
+    case code(language: String?, body: String)
 }
 
 public enum InboxWriterError: LocalizedError {

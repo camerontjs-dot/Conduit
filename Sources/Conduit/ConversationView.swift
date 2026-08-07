@@ -3,8 +3,11 @@ import AppKit
 import ConduitCore
 import SwiftUI
 
-/// A conservative session thread. Native prompts are exact Conduit records;
-/// generic output blocks are explicitly labelled projections of rendered Raw.
+/// Operator-facing turn stream over one live runtime.
+///
+/// Conversation is a document of Conduit-recorded prompts and best-effort
+/// agent turns (Derived-from-Raw or structured adapter). Raw remains the live
+/// terminal authority; this surface never pretends otherwise.
 struct ConversationView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
@@ -26,6 +29,10 @@ struct ConversationView: View {
         themeStore.palette(for: colorScheme)
     }
 
+    private var turns: [ConversationTurn] {
+        SessionPresentation.conversationTurns(from: runtime.presentationEvents)
+    }
+
     /// Live Derived-from-Raw character count — drives whole-stream follow, not
     /// per-message inner scroll views.
     private var streamContentSignature: Int {
@@ -40,21 +47,34 @@ struct ConversationView: View {
         return total
     }
 
+    private var activeOutputHasInteractiveMenu: Bool {
+        guard let eventID = runtime.activeOutputEventID,
+              let event = runtime.presentationEvents.first(where: { $0.id == eventID }),
+              case .agentOutput(let output) = event.kind
+        else { return false }
+        let display = ConversationDisplayText.workstationDerived(output.text)
+        return TerminalMenuParser.looksLikeInteractiveMenu(display)
+            && !TerminalMenuParser.options(in: display).isEmpty
+    }
+
+    private var showsControlStrip: Bool {
+        guard !controller.lifecycle.isTerminal else { return false }
+        return model.settings.showConversationControls || activeOutputHasInteractiveMenu
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 activityHeader(at: timeline.date)
             }
             Divider().overlay(palette.line)
-            if model.settings.showConversationControls,
-               !controller.lifecycle.isTerminal {
+            if showsControlStrip {
                 conversationControlStrip
                 Divider().overlay(palette.line)
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        boundaryCard
+                    LazyVStack(alignment: .leading, spacing: 22) {
                         if !model.selectedTaskConversationDiagnostics.isEmpty {
                             retainedHistoryDiagnosticCard
                         }
@@ -62,9 +82,9 @@ struct ConversationView: View {
                             model.selectedTaskConversationRetentionState {
                             retentionFailureCard(detail)
                         }
-                        ForEach(runtime.presentationEvents) { event in
-                            eventView(event)
-                                .id(event.id)
+                        ForEach(turns) { turn in
+                            turnView(turn)
+                                .id(turn.id)
                         }
                         if runtime.isAwaitingAgentOutput,
                            runtime.activeOutputEventID == nil {
@@ -77,9 +97,9 @@ struct ConversationView: View {
                             .frame(height: 1)
                             .id("conversation-bottom")
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: 900, alignment: .leading)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: streamContentSignature) { _ in
@@ -114,6 +134,8 @@ struct ConversationView: View {
         }
     }
 
+    // MARK: - Header / controls
+
     private var conversationControlStrip: some View {
         HStack(spacing: 8) {
             permissionModeMenu
@@ -140,19 +162,13 @@ struct ConversationView: View {
             }
 
             Button("Enter") {
-                model.injectConversationControl(
-                    key: .enter,
-                    into: runtime
-                )
+                model.injectConversationControl(key: .enter, into: runtime)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
 
             Button("Esc") {
-                model.injectConversationControl(
-                    key: .escape,
-                    into: runtime
-                )
+                model.injectConversationControl(key: .escape, into: runtime)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -177,9 +193,8 @@ struct ConversationView: View {
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
                 .help(
-                    "These keys go to the live agent PTY without treating the action as Raw typing, so Derived-from-Raw capture can continue."
+                    "These keys go to the live agent PTY without treating the action as Raw typing, so capture can continue."
                 )
-
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -250,17 +265,9 @@ struct ConversationView: View {
             Text(runtime.descriptor.agent.name)
                 .font(.subheadline.bold())
                 .foregroundStyle(palette.text)
-            Text(state.label)
+            Text(conversationStateLabel(state: state, at: date))
                 .font(.caption)
                 .foregroundStyle(palette.dim)
-            Text("· \(controller.backendLabel)")
-                .font(.caption.monospaced())
-                .foregroundStyle(palette.faint)
-            if let output = controller.lastOutputAt {
-                Text("· output \(relativeLabel(from: output, to: date))")
-                    .font(.caption)
-                    .foregroundStyle(palette.faint)
-            }
             Spacer(minLength: 4)
             Button {
                 followLatest.toggle()
@@ -272,14 +279,15 @@ struct ConversationView: View {
             .buttonStyle(.borderless)
             .help(
                 followLatest
-                    ? "Following latest messages. Click to stop auto-scroll."
-                    : "Not following. Click to follow latest messages."
+                    ? "Following latest. Click to stop auto-scroll."
+                    : "Not following. Click to follow latest."
             )
             .accessibilityLabel(followLatest ? "Following latest" : "Not following latest")
-            Button("Open Raw") {
+            Button("Raw") {
                 runtime.selectedSurface = .raw
             }
             .buttonStyle(.borderless)
+            .font(.caption.weight(.semibold))
             .foregroundStyle(palette.accent)
             .accessibilityHint("Opens the live PTY view and direct CLI controls")
         }
@@ -288,23 +296,41 @@ struct ConversationView: View {
         .background(palette.surface)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(runtime.descriptor.agent.name), \(state.label), \(controller.backendLabel)"
+            "\(runtime.descriptor.agent.name), \(conversationStateLabel(state: state, at: date))"
         )
     }
 
-    private var boundaryCard: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "info.circle")
-                .font(.caption)
-                .foregroundStyle(palette.faint)
-            Text("Stream of Conduit records and Derived-from-Raw projections. Raw remains the live terminal authority.")
-                .font(.caption)
-                .foregroundStyle(palette.dim)
-                .fixedSize(horizontal: false, vertical: true)
+    private func conversationStateLabel(
+        state: TerminalVisualState,
+        at date: Date
+    ) -> String {
+        if runtime.isAwaitingAgentOutput || runtime.activeOutputEventID != nil {
+            if case .some(.agentOutput(let output)) =
+                runtime.presentationEvents.first(where: {
+                    $0.id == runtime.activeOutputEventID
+                })?.kind,
+               output.state == .live {
+                return "Writing"
+            }
+            return "Working"
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
+        switch state {
+        case .working:
+            return "Working"
+        case .running:
+            return "Ready"
+        case .launching:
+            return "Starting"
+        case .detached:
+            return "Detached"
+        case .exited:
+            return "Ended"
+        case .failed:
+            return "Failed"
+        }
     }
+
+    // MARK: - Diagnostics
 
     private var retainedHistoryDiagnosticCard: some View {
         Label(
@@ -330,27 +356,15 @@ struct ConversationView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    @ViewBuilder
-    private func eventView(_ event: SessionPresentationEvent) -> some View {
-        switch event.kind {
-        case .sessionOpened(let entry):
-            sessionOpenedCard(entry, event: event)
-        case .userPrompt(let prompt):
-            promptCard(prompt, event: event)
-        case .agentOutput(let output):
-            agentOutputCard(output, event: event)
-        }
-    }
-
     private var waitingForVisibleOutputCard: some View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.mini)
-            Text("Waiting for visible terminal output · not private chain-of-thought")
-                .font(.caption)
+            Text("Waiting for the next turn…")
+                .font(.callout)
                 .foregroundStyle(palette.dim)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
@@ -361,7 +375,7 @@ struct ConversationView: View {
                 .font(.caption)
                 .foregroundStyle(palette.dim)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Capture stopped")
+                Text("Capture paused")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(palette.text)
                 Text(notice)
@@ -382,80 +396,210 @@ struct ConversationView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func agentOutputCard(
+    // MARK: - Turns
+
+    @ViewBuilder
+    private func turnView(_ turn: ConversationTurn) -> some View {
+        switch turn.kind {
+        case .boundary(let event):
+            if case .sessionOpened(let entry) = event.kind {
+                sessionBoundary(entry, event: event)
+            }
+        case .exchange(let user, let outputs):
+            VStack(alignment: .leading, spacing: 14) {
+                if let user, case .userPrompt(let prompt) = user.kind {
+                    promptBlock(prompt, event: user)
+                }
+                ForEach(outputs) { outputEvent in
+                    if case .agentOutput(let output) = outputEvent.kind {
+                        assistantBlock(output, event: outputEvent)
+                    }
+                }
+            }
+        }
+    }
+
+    private func sessionBoundary(
+        _ entry: SessionEntry,
+        event: SessionPresentationEvent
+    ) -> some View {
+        let title: String
+        switch entry {
+        case .started(let agentName, _):
+            title = "Started \(agentName)"
+        case .resumed(let agentName, let tmuxName, let attachedElsewhere):
+            title = "Reattached \(agentName) · \(tmuxName)"
+                + (attachedElsewhere ? " · shared attach" : "")
+        }
+        return HStack(spacing: 8) {
+            Rectangle()
+                .fill(palette.line)
+                .frame(height: 1)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(palette.faint)
+                .fixedSize()
+            Text(event.occurredAt.formatted(date: .omitted, time: .shortened))
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
+                .fixedSize()
+            Rectangle()
+                .fill(palette.line)
+                .frame(height: 1)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+    }
+
+    private func promptBlock(
+        _ prompt: SubmittedPrompt,
+        event: SessionPresentationEvent
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("You")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                if case .forwardedTerminalOutput(let sourceAgentName) = prompt.origin {
+                    Text("· forwarded from \(sourceAgentName)")
+                        .font(.caption2)
+                        .foregroundStyle(palette.dim)
+                }
+                Spacer(minLength: 4)
+                Text(relativeOrClock(event.occurredAt))
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+            }
+            if !prompt.text.isEmpty {
+                Text(prompt.text)
+                    .font(.body)
+                    .foregroundStyle(palette.text)
+                    .textSelection(.enabled)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if !prompt.attachmentPaths.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(prompt.attachmentPaths, id: \.self) { path in
+                        Label(path, systemImage: "paperclip")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(palette.dim)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(path)
+                    }
+                }
+            }
+            deliveryMark(prompt.delivery)
+        }
+        .padding(.vertical, 4)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(palette.accent.opacity(0.45))
+                .frame(width: 2)
+                .padding(.vertical, 2)
+        }
+        .padding(.leading, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func assistantBlock(
         _ output: AgentVisibleOutput,
         event: SessionPresentationEvent
     ) -> some View {
         let isCurrentCapture = runtime.activeOutputEventID == event.id
-        let stateLabel = output.state == .live && !isCurrentCapture
-            ? "Capture interrupted"
-            : output.state.displayName
-        let displayText = ConversationDisplayText.compactDerived(output.text)
+        let displayText = ConversationDisplayText.workstationDerived(output.text)
         let menuOptions = TerminalMenuParser.options(in: displayText)
         let interactiveMenu = TerminalMenuParser.looksLikeInteractiveMenu(displayText)
             && !menuOptions.isEmpty
             && !controller.lifecycle.isTerminal
+        let blocks = ConversationDisplayText.proseBlocks(in: displayText)
+        let showLive = isCurrentCapture && output.state == .live
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text("Derived from Raw")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(palette.dim)
-                Text("· \(stateLabel)")
-                    .font(.caption2)
-                    .foregroundStyle(palette.faint)
-                if isCurrentCapture && output.state == .live {
+                Text(runtime.descriptor.agent.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.ink)
+                if showLive {
                     ProgressView()
                         .controlSize(.mini)
-                }
-                if interactiveMenu {
-                    Text("· click or type a choice")
+                    Text("writing")
                         .font(.caption2)
-                        .foregroundStyle(palette.accent)
+                        .foregroundStyle(palette.faint)
+                } else if output.state == .live && !isCurrentCapture {
+                    Text("interrupted")
+                        .font(.caption2)
+                        .foregroundStyle(palette.faint)
                 }
                 Spacer(minLength: 4)
-                Button("Open Raw") {
-                    runtime.selectedSurface = .raw
-                }
-                .buttonStyle(.borderless)
-                .font(.caption2)
-                .foregroundStyle(palette.accent)
+                Text(relativeOrClock(event.occurredAt))
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
             }
-            // Full height in the outer stream ScrollView — never a nested scroller.
-            Text(displayText)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(palette.text)
-                .textSelection(.enabled)
-                .lineSpacing(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
 
-            if interactiveMenu {
+            if displayText.isEmpty {
+                Text("…")
+                    .font(.body)
+                    .foregroundStyle(palette.faint)
+            } else if interactiveMenu {
+                // Keep menu text readable as plain lines plus clickable panel.
+                Text(displayText)
+                    .font(.body)
+                    .foregroundStyle(palette.text)
+                    .textSelection(.enabled)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 interactiveMenuPanel(options: menuOptions)
+            } else {
+                ConversationProseView(blocks: blocks, palette: palette)
             }
 
-            HStack(spacing: 6) {
-                Text(output.extraction.displayName)
-                if output.truncated {
-                    Text("· truncated revision")
-                }
-                if displayText != output.text {
-                    Text("· blanks compacted")
-                }
-                Spacer(minLength: 4)
-                authorityLine(event)
-            }
-            .font(.caption2)
-            .foregroundStyle(palette.faint)
+            sourceDisclosure(output: output, event: event)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
 
+    private func sourceDisclosure(
+        output: AgentVisibleOutput,
+        event: SessionPresentationEvent
+    ) -> some View {
+        let sourceLabel: String = {
+            switch event.authority {
+            case .derivedFromRaw:
+                return "Projected from Raw"
+            case .toolReported:
+                return "Structured adapter"
+            default:
+                return event.authority.displayName
+            }
+        }()
+        var bits = [sourceLabel]
+        if output.truncated {
+            bits.append("truncated")
+        }
+        let display = ConversationDisplayText.workstationDerived(output.text)
+        if display != output.text {
+            bits.append("chrome filtered")
+        }
+        return Text(bits.joined(separator: " · "))
+            .font(.caption2)
+            .foregroundStyle(palette.faint)
+            .help(
+                "\(output.extraction.displayName). Raw remains the live terminal authority."
+            )
+            .accessibilityLabel(bits.joined(separator: ", "))
+    }
+
     private func interactiveMenuPanel(options: [TerminalMenuOption]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Choose an option (click or press the number)")
+            Text("Choose an option")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(palette.dim)
             ForEach(options) { option in
@@ -502,7 +646,7 @@ struct ConversationView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Choose \(option.key): \(option.label)")
-                .help("Sends \(option.key)+Enter to the agent without opening Raw")
+                .help("Sends \(option.key)+Enter without opening Raw")
             }
             HStack(spacing: 8) {
                 Button("Enter") {
@@ -537,6 +681,8 @@ struct ConversationView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
+    // MARK: - Key routing
+
     private func installKeyMonitor() {
         removeKeyMonitor()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
@@ -559,12 +705,10 @@ struct ConversationView: View {
               runtime.selectedSurface == .conversation
         else { return event }
 
-        // Don't steal keys from the composer or other text fields.
         if let first = NSApp.keyWindow?.firstResponder {
             if first is NSTextView || first is NSTextField {
                 return event
             }
-            // Also skip when an editable field is nested (e.g. field editor).
             if let view = first as? NSView,
                view is NSText || view.enclosingScrollView?.documentView is NSTextView {
                 return event
@@ -616,86 +760,7 @@ struct ConversationView: View {
         return event
     }
 
-    private func sessionOpenedCard(
-        _ entry: SessionEntry,
-        event: SessionPresentationEvent
-    ) -> some View {
-        let title: String
-        let detail: String
-        switch entry {
-        case .started(let agentName, let requestedBackend):
-            title = "Launch requested for \(agentName)"
-            detail = "Backend \(requestedBackend) · attach not proven by this record"
-        case .resumed(let agentName, let tmuxName, let attachedElsewhere):
-            title = "Reattach requested for \(agentName)"
-            detail = "tmux \(tmuxName)"
-                + (attachedElsewhere ? " · another client was attached" : "")
-                + " · prior Raw not replayed"
-        }
-
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.dim)
-            Text(detail)
-                .font(.caption2)
-                .foregroundStyle(palette.faint)
-            authorityLine(event)
-        }
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func promptCard(
-        _ prompt: SubmittedPrompt,
-        event: SessionPresentationEvent
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("You")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(palette.accent)
-                if case .forwardedTerminalOutput(let sourceAgentName) = prompt.origin {
-                    Text("· forwarded from \(sourceAgentName)")
-                        .font(.caption2)
-                        .foregroundStyle(palette.dim)
-                }
-                Spacer(minLength: 4)
-                authorityLine(event)
-            }
-            if !prompt.text.isEmpty {
-                Text(prompt.text)
-                    .font(.body)
-                    .foregroundStyle(palette.text)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if !prompt.attachmentPaths.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    ForEach(prompt.attachmentPaths, id: \.self) { path in
-                        Label(path, systemImage: "paperclip")
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(palette.dim)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(path)
-                    }
-                }
-            }
-            deliveryMark(prompt.delivery)
-        }
-        .padding(.vertical, 8)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(palette.accent.opacity(0.55))
-                .frame(width: 2)
-        }
-        .padding(.leading, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
+    // MARK: - Shared marks
 
     private func deliveryMark(_ delivery: PromptDeliveryState) -> some View {
         let symbol: String
@@ -712,31 +777,87 @@ struct ConversationView: View {
             color = .red
         }
         return Label(delivery.displayName, systemImage: symbol)
-            .font(.caption2.weight(.semibold))
+            .font(.caption2)
             .foregroundStyle(color)
     }
 
-    private func authorityLine(_ event: SessionPresentationEvent) -> some View {
-        Text("\(event.authority.displayName) · \(event.occurredAt.formatted(date: .omitted, time: .shortened))")
-            .font(.caption2)
-            .foregroundStyle(palette.faint)
-    }
-
-    private func relativeLabel(from date: Date, to now: Date) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
+    private func relativeOrClock(_ date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
         if seconds < 2 { return "now" }
         if seconds < 60 { return "\(seconds)s ago" }
-        return "\(seconds / 60)m ago"
-    }
-
-}
-
-private extension PromptOrigin {
-    var isForwarded: Bool {
-        if case .forwardedTerminalOutput = self { return true }
-        return false
+        if seconds < 3600 { return "\(seconds / 60)m ago" }
+        return date.formatted(date: .omitted, time: .shortened)
     }
 }
+
+// MARK: - Document prose
+
+private struct ConversationProseView: View {
+    let blocks: [ConversationProseBlock]
+    let palette: ConduitPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .heading(let level, let text):
+                    Text(text)
+                        .font(headingFont(level))
+                        .foregroundStyle(palette.text)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .paragraph(let text):
+                    Text(text)
+                        .font(.body)
+                        .foregroundStyle(palette.text)
+                        .textSelection(.enabled)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .bullets(let items):
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text("•")
+                                    .foregroundStyle(palette.dim)
+                                Text(item)
+                                    .font(.body)
+                                    .foregroundStyle(palette.text)
+                                    .textSelection(.enabled)
+                                    .lineSpacing(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                case .code(_, let body):
+                    Text(body)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(palette.text)
+                        .textSelection(.enabled)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(palette.sink.opacity(0.65))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(palette.line, lineWidth: 1)
+                        )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func headingFont(_ level: Int) -> Font {
+        switch level {
+        case 1: return .title3.weight(.semibold)
+        case 2: return .headline
+        default: return .subheadline.weight(.semibold)
+        }
+    }
+}
+
+// MARK: - Historical (no live runtime)
 
 /// Read-only projection used when a sidebar task has no open runtime. Selecting
 /// history never launches, attaches, or sends anything.
@@ -749,24 +870,38 @@ struct ConversationHistoryView: View {
         themeStore.palette(for: colorScheme)
     }
 
+    private var turns: [ConversationTurn] {
+        SessionPresentation.conversationTurns(from: events)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(events) { event in
-                historyEvent(event)
+        LazyVStack(alignment: .leading, spacing: 22) {
+            ForEach(turns) { turn in
+                historyTurn(turn)
             }
         }
+        .frame(maxWidth: 760, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func historyEvent(_ event: SessionPresentationEvent) -> some View {
-        switch event.kind {
-        case .sessionOpened(let entry):
-            historyBoundary(entry, event: event)
-        case .userPrompt(let prompt):
-            historyPrompt(prompt, event: event)
-        case .agentOutput(let output):
-            historyOutput(output, event: event)
+    private func historyTurn(_ turn: ConversationTurn) -> some View {
+        switch turn.kind {
+        case .boundary(let event):
+            if case .sessionOpened(let entry) = event.kind {
+                historyBoundary(entry, event: event)
+            }
+        case .exchange(let user, let outputs):
+            VStack(alignment: .leading, spacing: 14) {
+                if let user, case .userPrompt(let prompt) = user.kind {
+                    historyPrompt(prompt, event: user)
+                }
+                ForEach(outputs) { outputEvent in
+                    if case .agentOutput(let output) = outputEvent.kind {
+                        historyOutput(output, event: outputEvent)
+                    }
+                }
+            }
         }
     }
 
@@ -777,47 +912,57 @@ struct ConversationHistoryView: View {
         let title: String
         switch entry {
         case .started(let agentName, _):
-            title = "Launch requested for \(agentName)"
+            title = "Started \(agentName)"
         case .resumed(let agentName, let tmuxName, let attachedElsewhere):
-            title = "Reattach requested for \(agentName) · \(tmuxName)"
-                + (attachedElsewhere ? " · another client was attached" : "")
+            title = "Reattached \(agentName) · \(tmuxName)"
+                + (attachedElsewhere ? " · shared attach" : "")
         }
-        return Label(title, systemImage: "bolt.horizontal.circle")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(palette.dim)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(palette.lineSoft)
-            .clipShape(Capsule())
-            .accessibilityLabel(
-                "\(title), \(event.authority.displayName), \(event.occurredAt.formatted())"
+        return HStack(spacing: 8) {
+            Rectangle()
+                .fill(palette.line)
+                .frame(height: 1)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(palette.faint)
+                .fixedSize()
+            Text(
+                event.occurredAt.formatted(date: .abbreviated, time: .shortened)
             )
+            .font(.caption2)
+            .foregroundStyle(palette.faint)
+            .fixedSize()
+            Rectangle()
+                .fill(palette.line)
+                .frame(height: 1)
+        }
+        .accessibilityLabel(title)
     }
 
     private func historyPrompt(
         _ prompt: SubmittedPrompt,
         event: SessionPresentationEvent
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text("You")
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(palette.accent)
                 Spacer(minLength: 4)
                 Text(
-                    "\(event.authority.displayName) · "
-                        + event.occurredAt.formatted(
-                            date: .abbreviated,
-                            time: .shortened
-                        )
+                    event.occurredAt.formatted(
+                        date: .abbreviated,
+                        time: .shortened
+                    )
                 )
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
             }
             if !prompt.text.isEmpty {
                 Text(prompt.text)
+                    .font(.body)
                     .foregroundStyle(palette.text)
                     .textSelection(.enabled)
+                    .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(prompt.attachmentPaths, id: \.self) { path in
@@ -829,13 +974,12 @@ struct ConversationHistoryView: View {
             }
             historicalDeliveryMark(prompt.delivery)
         }
-        .padding(.vertical, 8)
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(palette.accent.opacity(0.55))
+                .fill(palette.accent.opacity(0.45))
                 .frame(width: 2)
         }
-        .padding(.leading, 8)
+        .padding(.leading, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -843,36 +987,38 @@ struct ConversationHistoryView: View {
         _ output: AgentVisibleOutput,
         event: SessionPresentationEvent
     ) -> some View {
-        let stateLabel = output.state == .live
-            ? "Capture interrupted"
-            : output.state.displayName
-        let displayText = ConversationDisplayText.compactDerived(output.text)
-
-        return VStack(alignment: .leading, spacing: 6) {
-            Text("Derived from Raw · \(stateLabel)")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(palette.dim)
-            Text(displayText)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(palette.text)
-                .textSelection(.enabled)
-                .lineSpacing(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 6) {
-                Text(output.extraction.displayName)
+        let displayText = ConversationDisplayText.workstationDerived(output.text)
+        let blocks = ConversationDisplayText.proseBlocks(in: displayText)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Agent")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.ink)
                 Spacer(minLength: 4)
                 Text(
-                    "\(event.authority.displayName) · "
-                        + event.occurredAt.formatted(
-                            date: .abbreviated,
-                            time: .shortened
-                        )
+                    event.occurredAt.formatted(
+                        date: .abbreviated,
+                        time: .shortened
+                    )
                 )
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
             }
+            if displayText.isEmpty {
+                Text("(empty projection)")
+                    .font(.callout)
+                    .foregroundStyle(palette.faint)
+            } else {
+                ConversationProseView(blocks: blocks, palette: palette)
+            }
+            Text(
+                event.authority == .derivedFromRaw
+                    ? "Projected from Raw"
+                    : event.authority.displayName
+            )
             .font(.caption2)
             .foregroundStyle(palette.faint)
         }
-        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -897,7 +1043,7 @@ struct ConversationHistoryView: View {
             color = .red
         }
         return Label(label, systemImage: symbol)
-            .font(.caption2.weight(.semibold))
+            .font(.caption2)
             .foregroundStyle(color)
             .help(
                 delivery == .queued

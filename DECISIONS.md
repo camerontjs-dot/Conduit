@@ -653,6 +653,56 @@ remain on every projected event. Git and path lists are observational only.
 
 ---
 
+## D-031: Conversation is a turn document; structured adapters may feed it without replacing Raw
+
+**Status:** Accepted (workstation Conversation continuity)
+
+**Context:** Operators asked for streaming *conversation state* (growing turns
+in a document surface), not a live window into the terminal. Derived-from-Raw
+projections remain necessary for agents that only speak TUI. Peer apps feel
+continuous because they receive structured assistant events; Conduit cannot
+honestly invent those from ANSI alone. A wrapper harness around agent CLIs is
+an attractive path to better Conversation data.
+
+**Decision:**
+
+1. **Conversation presents operator turns** — Conduit-recorded user prompts and
+   growing assistant projections, document typography, quiet source disclosure.
+   Presentation may scrub pure TUI chrome (spinners, box edges, esc footers)
+   without mutating retained JSONL. This does not claim the projection is a
+   complete assistant transcript.
+2. **Raw remains the live terminal authority** for attach, TUI interaction,
+   debugging, and any agent state still only visible in the PTY. Conversation
+   never supersedes Raw.
+3. **Structured adapters are additive, source-labelled.** When an agent (or a
+   Conduit-attached harness) can emit capability-declared events — ACP streams,
+   JSONL sidebands, or other explicit protocols — Conversation may show those as
+   `toolReported` / `structuredAdapter` events. Adapter failure or absence must
+   degrade to Derived-from-Raw and ultimately to Raw. Structured events do **not**
+   erase Raw; they are a second labelled channel over the same work.
+4. **A Conduit-attached harness is an adapter host, not a second brain.**
+   Preferred shape: optional per-agent launch wrappers or side-channel listeners
+   that (a) still start the real CLI in a real PTY/tmux session Conduit owns,
+   (b) surface structured events when the agent supports them, (c) never
+   re-interpret terminal prose as verified completion. A harness that *replaces*
+   the PTY with a fake chat transport is rejected for daily-driver agents that
+   still need native TUI approvals and tmux durability.
+5. **Prompt→output linkage for turn grouping** records only that Conduit opened
+   capture after delivering a specific prompt. It is not an ACP turn ID and must
+   not be treated as proof of a structured response boundary.
+
+**Rejected alternatives:** Treating Conversation as a second live terminal;
+silently promoting screen paint into “assistant messages” without authority
+labels; wrapping agents so operators lose Raw access; auto-approving tools
+inside a harness as if that were Conversation UX.
+
+**Consequences:** Chrome and scrubbing can ship immediately on Derived-from-Raw.
+High-quality continuity still depends on agent-specific adapters or a thin
+harness that speaks a real protocol. Epistemic contract holds: authority labels
+stay first-class; Raw stays one click away.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

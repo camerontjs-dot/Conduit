@@ -2611,15 +2611,16 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
         guard !derived.text.isEmpty else { return }
 
+        // Capture-scoped link: output was opened for this Conduit-recorded
+        // prompt delivery. That is timeline association for turn grouping, not
+        // a claim of a structured ACP assistant message (still derivedFromRaw).
+        let linkedPromptID = capture.promptEventID
         let event: SessionPresentationEvent
         if let eventID = activeOutputEventID,
            let previous = presentationEvents.first(where: { $0.id == eventID }),
            case .agentOutput(let previousOutput) = previous.kind {
             event = SessionPresentation.agentOutputEvent(
-                // Generic PTY rendering has no deterministic agent-turn
-                // boundary. Timeline proximity is shown without claiming a
-                // structured response association.
-                promptEventID: nil,
+                promptEventID: previousOutput.promptEventID ?? linkedPromptID,
                 text: derived.text,
                 state: .live,
                 extraction: previousOutput.extraction,
@@ -2629,7 +2630,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             )
         } else {
             event = SessionPresentation.agentOutputEvent(
-                promptEventID: nil,
+                promptEventID: linkedPromptID,
                 text: derived.text,
                 state: .live,
                 extraction: current.extraction,

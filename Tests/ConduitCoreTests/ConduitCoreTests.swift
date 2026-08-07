@@ -375,6 +375,97 @@ final class ConversationDisplayTextTests: XCTestCase {
         // edge blank lines are removed; internal blank runs collapse to one.
         XCTAssertEqual(compact, "  line one\n\nline two")
     }
+
+    func testWorkstationDerivedStripsSpinnerAndEscChrome() {
+        let raw = """
+        The framing that matters most.
+
+        ⠋ Thinking…
+        esc to interrupt
+        ────────────
+        ## Heading
+        - bullet one
+        """
+        let text = ConversationDisplayText.workstationDerived(raw)
+        XCTAssertTrue(text.contains("The framing that matters most."))
+        XCTAssertTrue(text.contains("## Heading"))
+        XCTAssertTrue(text.contains("- bullet one"))
+        XCTAssertFalse(text.lowercased().contains("esc to interrupt"))
+        XCTAssertFalse(text.contains("Thinking"))
+    }
+
+    func testWorkstationDerivedFallsBackWhenOnlyChrome() {
+        let raw = "esc to interrupt\n⠋ Working…"
+        let text = ConversationDisplayText.workstationDerived(raw)
+        // Avoid empty hole — compact form retained when scrub would erase all.
+        XCTAssertFalse(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    func testProseBlocksParseHeadingsBulletsAndCode() {
+        let raw = """
+        ## Title
+        Intro paragraph.
+
+        - one
+        - two
+
+        ```swift
+        let x = 1
+        ```
+        """
+        let blocks = ConversationDisplayText.proseBlocks(in: raw)
+        XCTAssertEqual(blocks.count, 4)
+        guard case .heading(let level, let title) = blocks[0] else {
+            return XCTFail("expected heading")
+        }
+        XCTAssertEqual(level, 2)
+        XCTAssertEqual(title, "Title")
+        guard case .paragraph(let para) = blocks[1] else {
+            return XCTFail("expected paragraph")
+        }
+        XCTAssertEqual(para, "Intro paragraph.")
+        guard case .bullets(let items) = blocks[2] else {
+            return XCTFail("expected bullets")
+        }
+        XCTAssertEqual(items, ["one", "two"])
+        guard case .code(let language, let body) = blocks[3] else {
+            return XCTFail("expected code")
+        }
+        XCTAssertEqual(language, "swift")
+        XCTAssertEqual(body, "let x = 1")
+    }
+}
+
+final class ConversationTurnGroupingTests: XCTestCase {
+    func testGroupsPromptWithFollowingOutputs() {
+        let open = SessionPresentation.openingEvent(
+            .started(agentName: "Claude", requestedBackend: "tmux")
+        )
+        let prompt = SessionPresentation.promptEvent(
+            text: "hello",
+            attachmentPaths: [],
+            renderedPayload: "hello"
+        )
+        let output = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "hi there",
+            extraction: .tmuxPane,
+            truncated: false
+        )
+        let turns = SessionPresentation.conversationTurns(
+            from: [open, prompt, output]
+        )
+        XCTAssertEqual(turns.count, 2)
+        guard case .boundary = turns[0].kind else {
+            return XCTFail("expected boundary")
+        }
+        guard case .exchange(let user, let outputs) = turns[1].kind else {
+            return XCTFail("expected exchange")
+        }
+        XCTAssertEqual(user?.id, prompt.id)
+        XCTAssertEqual(outputs.count, 1)
+        XCTAssertEqual(outputs[0].id, output.id)
+    }
 }
 
 final class TerminalMenuParserTests: XCTestCase {

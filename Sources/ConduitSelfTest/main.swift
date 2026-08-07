@@ -1290,6 +1290,45 @@ withTempDir { root in
           ) == false)
     check("display text compacts blank runs",
           ConversationDisplayText.compactDerived("a\n\n\n\nb\n") == "a\n\nb")
+    check(
+        "workstation derived strips esc chrome",
+        !ConversationDisplayText.workstationDerived(
+            "Hello world\nesc to interrupt\n"
+        ).lowercased().contains("esc to interrupt")
+    )
+    check(
+        "workstation derived keeps prose",
+        ConversationDisplayText.workstationDerived(
+            "Hello world\nesc to interrupt\n"
+        ).contains("Hello world")
+    )
+    let proseBlocks = ConversationDisplayText.proseBlocks(
+        in: "## Title\n\nBody line.\n"
+    )
+    check("prose blocks parse heading", {
+        guard proseBlocks.count >= 2,
+              case .heading(let level, let text) = proseBlocks[0]
+        else { return false }
+        return level == 2 && text == "Title"
+    }())
+    let turnOpen = SessionPresentation.openingEvent(
+        .started(agentName: "A", requestedBackend: "tmux")
+    )
+    let turnPrompt = SessionPresentation.promptEvent(
+        text: "hi",
+        attachmentPaths: [],
+        renderedPayload: "hi"
+    )
+    let turnOutput = SessionPresentation.agentOutputEvent(
+        promptEventID: turnPrompt.id,
+        text: "yo",
+        extraction: .tmuxPane,
+        truncated: false
+    )
+    let turns = SessionPresentation.conversationTurns(
+        from: [turnOpen, turnPrompt, turnOutput]
+    )
+    check("conversation turns group prompt+output", turns.count == 2)
 
     let agyAuto = AgentProfile(
         name: "Antigravity",

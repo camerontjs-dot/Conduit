@@ -303,4 +303,66 @@ public enum SessionPresentation {
         updated[index] = event
         return updated
     }
+
+    /// Groups timeline events into operator-facing turns for document layout.
+    ///
+    /// Session boundaries stand alone. Each user prompt opens a turn; consecutive
+    /// agent-output events attach to that turn (typically one growing projection).
+    /// Orphan agent outputs (no preceding prompt in this window) form assistant-only
+    /// turns. This is presentation structure only — not a claim of structured ACP turns.
+    public static func conversationTurns(
+        from events: [SessionPresentationEvent]
+    ) -> [ConversationTurn] {
+        var turns: [ConversationTurn] = []
+        var openUser: SessionPresentationEvent?
+        var openOutputs: [SessionPresentationEvent] = []
+
+        func flushOpen() {
+            if openUser != nil || !openOutputs.isEmpty {
+                turns.append(
+                    ConversationTurn(
+                        id: openUser?.id ?? openOutputs.first?.id ?? UUID(),
+                        kind: .exchange(user: openUser, outputs: openOutputs)
+                    )
+                )
+            }
+            openUser = nil
+            openOutputs = []
+        }
+
+        for event in events {
+            switch event.kind {
+            case .sessionOpened:
+                flushOpen()
+                turns.append(ConversationTurn(id: event.id, kind: .boundary(event)))
+            case .userPrompt:
+                flushOpen()
+                openUser = event
+            case .agentOutput:
+                openOutputs.append(event)
+            }
+        }
+        flushOpen()
+        return turns
+    }
+}
+
+/// One visual unit in the Conversation document stream.
+public struct ConversationTurn: Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public let kind: Kind
+
+    public enum Kind: Equatable, Sendable {
+        case boundary(SessionPresentationEvent)
+        /// Operator prompt plus zero or more growing Derived/structured outputs.
+        case exchange(
+            user: SessionPresentationEvent?,
+            outputs: [SessionPresentationEvent]
+        )
+    }
+
+    public init(id: UUID, kind: Kind) {
+        self.id = id
+        self.kind = kind
+    }
 }
