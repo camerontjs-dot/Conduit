@@ -2,6 +2,8 @@
 
 Conduit is a native macOS work surface for operating **MainFrame** through the CLI agents already installed on your computer.
 
+**Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — update on every user-visible product change (see `AGENTS.md`).
+
 It is deliberately a personal daily driver before it becomes an orchestration platform. The current app gives MainFrame a focused desktop face without replacing its file tree, its evidence rules, or the native agent CLIs underneath it.
 
 ## Daily loop

@@ -15,6 +15,15 @@ Conduit is a personal native macOS interface for operating MainFrame projects th
 7. Speech output enters the editable composer before submission.
 8. Keep durable logic in `ConduitCore` and test it without AppKit where practical.
 
+## Changelog (required)
+
+Product history lives in **`CHANGELOG.md`** (Keep a Changelog style).
+
+- Update **`CHANGELOG.md` in the same commit** as any user-visible product change (UI, behavior, Settings, packaging).
+- Prefer editing **`## [Unreleased]`** during a session; cut a dated section when shipping a coherent pass.
+- Record architecture boundary changes in **`DECISIONS.md`** as well when the contract changes.
+- Do not put private MainFrame project inventories or host-only smoke paths in the changelog.
+
 ## Verification
 
 Run:
@@ -28,3 +37,11 @@ swift test                   # when full Xcode is available
 Keep `Sources/ConduitSelfTest` and `Tests/ConduitCoreTests` in step when core behavior changes.
 
 macOS CI is required for merges touching terminal, speech, AppKit, or packaging code.
+
+## Session closeout
+
+Before ending a multi-step product session:
+
+1. `CHANGELOG.md` updated (or explicitly N/A for docs-only).  
+2. Outer `../log.md` entry if coordination state moved.  
+3. Handoff under `../plans/YYYY-MM-DD-session-handoff.md` (or update the latest active handoff).
