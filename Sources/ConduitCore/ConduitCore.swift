@@ -100,6 +100,12 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
     public var permissionMode: AgentPermissionMode
     /// Optional weekly / session budgets for observed usage meters.
     public var usageBudget: AgentUsageBudget
+    /// Provider model selected for the next launch. Nil means the CLI default.
+    public var model: String?
+    /// How Conduit passes ``model`` to the executable.
+    public var modelLaunchStyle: AgentModelLaunchStyle
+    /// Provider-reported or operator-configured context limit, when known.
+    public var contextWindowTokens: Int?
 
     public init(
         id: UUID = UUID(),
@@ -109,7 +115,10 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         kind: AgentKind = .cli,
         enabled: Bool = true,
         permissionMode: AgentPermissionMode = .agentDefault,
-        usageBudget: AgentUsageBudget = AgentUsageBudget()
+        usageBudget: AgentUsageBudget = AgentUsageBudget(),
+        model: String? = nil,
+        modelLaunchStyle: AgentModelLaunchStyle = .auto,
+        contextWindowTokens: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -119,10 +128,14 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         self.enabled = enabled
         self.permissionMode = permissionMode
         self.usageBudget = usageBudget
+        self.model = model
+        self.modelLaunchStyle = modelLaunchStyle
+        self.contextWindowTokens = contextWindowTokens.map { max(0, $0) }
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, command, arguments, kind, enabled, permissionMode, usageBudget
+        case model, modelLaunchStyle, contextWindowTokens
     }
 
     public init(from decoder: Decoder) throws {
@@ -141,6 +154,15 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
             AgentUsageBudget.self,
             forKey: .usageBudget
         ) ?? AgentUsageBudget()
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        modelLaunchStyle = try container.decodeIfPresent(
+            AgentModelLaunchStyle.self,
+            forKey: .modelLaunchStyle
+        ) ?? .auto
+        contextWindowTokens = try container.decodeIfPresent(
+            Int.self,
+            forKey: .contextWindowTokens
+        ).map { max(0, $0) }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -153,6 +175,9 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         try container.encode(enabled, forKey: .enabled)
         try container.encode(permissionMode, forKey: .permissionMode)
         try container.encode(usageBudget, forKey: .usageBudget)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encode(modelLaunchStyle, forKey: .modelLaunchStyle)
+        try container.encodeIfPresent(contextWindowTokens, forKey: .contextWindowTokens)
     }
 
     public static let defaults: [AgentProfile] = [
@@ -160,8 +185,30 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
         AgentProfile(name: "Claude", command: "claude"),
         AgentProfile(name: "Codex", command: "codex"),
         AgentProfile(name: "Antigravity", command: "agy"),
+        AgentProfile(name: "Gemini CLI", command: "gemini"),
         AgentProfile(name: "Grok", command: "grok"),
-        AgentProfile(name: "OpenCode", command: "opencode")
+        AgentProfile(name: "OpenCode", command: "opencode"),
+        AgentProfile(
+            name: "Ollama",
+            command: "ollama",
+            modelLaunchStyle: .ollamaRun
+        ),
+        AgentProfile(name: "Cursor Agent", command: "cursor-agent"),
+        AgentProfile(name: "Aider", command: "aider")
+    ]
+
+    /// Research-backed profiles that can be offered as an explicit settings
+    /// migration for existing configs. Existing user profiles are never
+    /// silently rewritten.
+    public static let recommendedCLIProfiles: [AgentProfile] = [
+        AgentProfile(
+            name: "Ollama",
+            command: "ollama",
+            modelLaunchStyle: .ollamaRun
+        ),
+        AgentProfile(name: "Cursor Agent", command: "cursor-agent"),
+        AgentProfile(name: "Gemini CLI", command: "gemini"),
+        AgentProfile(name: "Aider", command: "aider")
     ]
 }
 

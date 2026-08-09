@@ -197,6 +197,9 @@ struct SettingsView: View {
             Text("Permission mode injects launch flags for supported CLIs. It applies on the next launch, not to an already-running process.")
                 .font(.caption)
                 .foregroundStyle(palette.dim)
+            Text("Model catalogs come from the installed CLI. A context value is provider-reported or operator-entered; blank means unknown. OpenCode's free models and Ollama's local/cloud-tagged models appear after refresh. Cursor Agent, Gemini CLI, and Aider accept configured model IDs without a hardcoded catalog.")
+                .font(.caption)
+                .foregroundStyle(palette.dim)
 
             ForEach($model.settings.agents) { $agent in
                 VStack(alignment: .leading, spacing: 8) {
@@ -225,6 +228,52 @@ struct SettingsView: View {
                                 set: { agent.arguments = ArgumentTokenizer.tokenize($0) }
                             )
                         )
+                    }
+                    if agent.kind != .shell {
+                        HStack {
+                            Text("Model")
+                                .font(.caption)
+                                .foregroundStyle(palette.dim)
+                                .frame(width: 70, alignment: .leading)
+                            TextField(
+                                "Blank = CLI default",
+                                text: Binding(
+                                    get: { agent.model ?? "" },
+                                    set: {
+                                        let value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        agent.model = value.isEmpty ? nil : value
+                                    }
+                                )
+                            )
+                            Picker("Launch style", selection: $agent.modelLaunchStyle) {
+                                ForEach(AgentModelLaunchStyle.allCases, id: \.self) { style in
+                                    Text(style.displayName).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 150)
+                        }
+                        HStack {
+                            Text("Context")
+                                .font(.caption)
+                                .foregroundStyle(palette.dim)
+                                .frame(width: 70, alignment: .leading)
+                            TextField(
+                                "0 = unknown",
+                                text: Binding(
+                                    get: {
+                                        agent.contextWindowTokens.map(String.init) ?? ""
+                                    },
+                                    set: {
+                                        agent.contextWindowTokens = Int($0.filter(\.isNumber))
+                                    }
+                                )
+                            )
+                            .frame(width: 120)
+                            Text("tokens · visible composer estimate only")
+                                .font(.caption2)
+                                .foregroundStyle(palette.faint)
+                        }
                     }
                     HStack {
                         Text("Permission")
@@ -307,6 +356,10 @@ struct SettingsView: View {
                     AgentProfile(name: "Agent", command: "")
                 )
             }
+            Button("Add recommended CLI profiles") {
+                model.addRecommendedCLIProfiles()
+            }
+            .help("Adds Ollama, Cursor Agent, Gemini CLI, and Aider without changing existing agents")
         } header: {
             Text("Agent CLIs")
         }

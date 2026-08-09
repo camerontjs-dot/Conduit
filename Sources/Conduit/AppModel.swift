@@ -159,6 +159,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var accountUsage: [AccountUsageSnapshot] = []
     @Published private(set) var accountUsageRefreshing = false
     @Published private(set) var accountUsageError: String?
+    /// Lazy, CLI-owned model catalogs keyed by saved profile identity.
+    @Published private(set) var modelOptionsByAgentID: [UUID: [AgentModelOption]] = [:]
+    @Published private(set) var modelCatalogRefreshingAgentIDs: Set<UUID> = []
     @Published var taskSearchFocusRequest = 0
     @Published var healthResults: [AgentHealthResult] = []
     @Published var resourceSnapshot = ResourceSnapshot.empty
@@ -356,6 +359,114 @@ final class AppModel: ObservableObject {
 
     var enabledAgents: [AgentProfile] {
         settings.agents.filter(\.enabled)
+    }
+
+    /// The profile currently targeted by the ordinary composer, if any.
+    var composerAgent: AgentProfile? {
+        activeSessionForSelectedProject?.descriptor.agent
+    }
+
+    func modelOptions(for agent: AgentProfile) -> [AgentModelOption] {
+        var options = modelOptionsByAgentID[agent.id] ?? []
+        if let model = agent.model,
+           !model.isEmpty,
+           !options.contains(where: { $0.id == model }) {
+            options.insert(
+                AgentModelOption(
+                    id: model,
+                    detail: "Configured model",
+                    contextWindowTokens: agent.contextWindowTokens
+                ),
+                at: 0
+            )
+        }
+        return options
+    }
+
+    func isModelCatalogRefreshing(for agent: AgentProfile) -> Bool {
+        modelCatalogRefreshingAgentIDs.contains(agent.id)
+    }
+
+    /// Refreshes a model menu from the installed CLI. This is intentionally
+    /// lazy so Conduit does not turn startup into a provider/network probe.
+    func refreshModelCatalog(for agent: AgentProfile) {
+        guard !modelCatalogRefreshingAgentIDs.contains(agent.id) else { return }
+        modelCatalogRefreshingAgentIDs.insert(agent.id)
+        let agentID = agent.id
+        Task { @MainActor in
+            let options = await AgentModelCatalogService.discover(for: agent)
+            modelOptionsByAgentID[agentID] = options
+            modelCatalogRefreshingAgentIDs.remove(agentID)
+        }
+    }
+
+    /// Stores a model choice for future launches. An open runtime keeps its
+    /// original descriptor and is never mutated underneath the PTY.
+    func setModelSelection(
+        _ option: AgentModelOption?,
+        forAgentID id: UUID,
+        persist: Bool = true
+    ) {
+        guard let index = settings.agents.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        let model = option?.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.agents[index].model = model?.isEmpty == true ? nil : model
+        settings.agents[index].contextWindowTokens = option?.contextWindowTokens
+        let agent = settings.agents[index]
+        if persist {
+            saveSettings()
+        }
+        statusMessage = "\(agent.name) model → \(agent.model ?? "CLI default"). Applies to the next launch."
+
+        guard let selectedModel = agent.model,
+              option?.contextWindowTokens == nil
+        else { return }
+        Task { @MainActor in
+            let context = await AgentModelCatalogService.contextWindowTokens(
+                for: agent,
+                model: selectedModel
+            )
+            guard let index = settings.agents.firstIndex(where: { $0.id == id }),
+                  settings.agents[index].model == selectedModel
+            else { return }
+            settings.agents[index].contextWindowTokens = context
+            if let context {
+                modelOptionsByAgentID[id] = modelOptionsByAgentID[id, default: []].map {
+                    guard $0.id == selectedModel else { return $0 }
+                    return AgentModelOption(
+                        id: $0.id,
+                        displayName: $0.displayName,
+                        detail: $0.detail,
+                        contextWindowTokens: context
+                    )
+                }
+                if persist { saveSettings() }
+            }
+        }
+    }
+
+    /// Adds research-backed optional CLIs without touching an existing profile
+    /// or rewriting the user's config behind their back.
+    @discardableResult
+    func addRecommendedCLIProfiles() -> Int {
+        let existingCommands = Set(settings.agents.map {
+            URL(fileURLWithPath: $0.command).lastPathComponent.lowercased()
+        })
+        let additions = AgentProfile.recommendedCLIProfiles.filter {
+            !existingCommands.contains(
+                URL(fileURLWithPath: $0.command).lastPathComponent.lowercased()
+            )
+        }
+        guard !additions.isEmpty else {
+            statusMessage = "Recommended CLI profiles are already configured."
+            return 0
+        }
+        settings.agents.append(contentsOf: additions)
+        saveSettings()
+        let names = additions.map(\.name).joined(separator: ", ")
+        statusMessage = "Added \(names) profile\(additions.count == 1 ? "" : "s")."
+        return additions.count
     }
 
     // MARK: - Tier A observed usage

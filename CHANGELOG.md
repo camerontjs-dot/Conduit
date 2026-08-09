@@ -27,7 +27,27 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
-- _(empty — next product change goes here)_
+- **Provider-neutral model selection** for every non-shell agent profile, with
+  lazy catalogs from Ollama, OpenCode, and Cursor Agent plus a CLI-default
+  fallback for other CLIs.
+- Optional **Ollama**, **Cursor Agent**, **Gemini CLI**, and **Aider** profiles
+  can be added from Settings; existing configs are not silently rewritten.
+- Compact circular **Usage** and **Context** meters in the active composer.
+  Usage is account-reported when available; Context is explicitly a visible
+  Conversation/composer estimate.
+
+### Changed
+
+- Agent profiles persist an optional model, launch style, and context-window
+  limit. Choices apply to the next process launch and never mutate a live PTY.
+- The New Task sheet reserves a larger native macOS layout so the model popup
+  and its provider-limit note remain visible instead of being compressed below
+  the footer.
+- Ollama launches use `ollama run MODEL`; common model-flag CLIs use
+  `--model MODEL`.
+- Gemini CLI is treated as a cloud-capable CLI whose free access depends on
+  its configured authentication; Aider is treated as a provider-neutral
+  local/BYOK CLI, not as a free cloud provider.
 
 ---
 

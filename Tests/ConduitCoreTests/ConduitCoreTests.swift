@@ -626,6 +626,86 @@ final class AgentPermissionModeTests: XCTestCase {
     }
 }
 
+final class AgentModelTests: XCTestCase {
+    func testOllamaSelectionUsesRunAndPositionalModel() {
+        let profile = AgentProfile(
+            name: "Ollama",
+            command: "ollama",
+            arguments: ["--verbose"],
+            model: "qwen3.5:9b",
+            modelLaunchStyle: .ollamaRun
+        )
+        XCTAssertEqual(
+            AgentLaunchArguments.resolved(for: profile),
+            ["run", "qwen3.5:9b", "--verbose"]
+        )
+    }
+
+    func testModelFlagReplacesAuthoredModelPair() {
+        let profile = AgentProfile(
+            name: "Cursor Agent",
+            command: "cursor-agent",
+            arguments: ["--model", "old-model", "--sandbox"],
+            model: "new-model"
+        )
+        XCTAssertEqual(
+            AgentLaunchArguments.resolved(for: profile),
+            ["--sandbox", "--model", "new-model"]
+        )
+    }
+
+    func testResearchBackedModelFlagProfilesResolveModel() {
+        for (name, command) in [("Gemini CLI", "gemini"), ("Aider", "aider")] {
+            let profile = AgentProfile(name: name, command: command, model: "model-id")
+            XCTAssertEqual(
+                AgentLaunchArguments.resolved(for: profile),
+                ["--model", "model-id"],
+                "\(name) should use the common model flag contract"
+            )
+        }
+    }
+
+    func testRecommendedProfilesContainResearchBackedCLIs() {
+        XCTAssertEqual(
+            Set(AgentProfile.recommendedCLIProfiles.map(\.command)),
+            Set(["ollama", "cursor-agent", "gemini", "aider"])
+        )
+    }
+
+    func testLegacyProfileRoundTripsWithUnknownModelFields() throws {
+        let json = """
+        {"id":"1AF1D4E0-0000-4000-8000-0000000000A6","name":"OpenCode","command":"opencode","arguments":[],"kind":"cli","enabled":true}
+        """.data(using: .utf8)!
+        let profile = try JSONDecoder().decode(AgentProfile.self, from: json)
+        XCTAssertNil(profile.model)
+        XCTAssertEqual(profile.modelLaunchStyle, .auto)
+        XCTAssertNil(profile.contextWindowTokens)
+    }
+
+    func testVisibleContextEstimatorCountsComposerAndConversation() {
+        let prompt = SessionPresentation.promptEvent(
+            text: "Review the patch",
+            attachmentPaths: ["/tmp/example.swift"],
+            renderedPayload: "Review the patch"
+        )
+        let output = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "The visible response",
+            extraction: .tmuxPane,
+            truncated: false
+        )
+        let tokens = VisibleContextEstimator.visibleTokens(
+            events: [prompt, output],
+            composerText: "Next question"
+        )
+        XCTAssertGreaterThan(tokens, 0)
+        XCTAssertEqual(
+            VisibleContextEstimator.approximateTokens("1234"),
+            1
+        )
+    }
+}
+
 final class PaletteSpecTests: XCTestCase {
     func testCaseOrderAndProductDefault() {
         XCTAssertEqual(

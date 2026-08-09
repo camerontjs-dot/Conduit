@@ -703,6 +703,68 @@ stay first-class; Raw stays one click away.
 
 ---
 
+## D-032: Model choice is provider-neutral, launch-bound, and source-labelled
+
+**Status:** Accepted (model-selection and composer limits)
+
+**Context:** Conduit needs one model chooser across independent agent CLIs,
+including local Ollama and OpenCode models, without pretending that every CLI
+shares the same provider API or exposes the same quota/context metadata.
+
+**Decision:**
+
+1. Store an optional model, launch style, and context-window value on the
+   agent profile. A model choice is applied only when the next process starts;
+   an existing PTY descriptor remains unchanged.
+2. Discover model IDs through the installed CLI when possible. Ollama uses a
+   positional `run MODEL` launch; common model-flag CLIs use `--model MODEL`.
+   Unknown CLIs retain a CLI-default path and may use a configured model ID.
+3. Show account usage only when a vendor/tool reports it. Show the composer
+   context ring as a labelled visible-content estimate, never as provider token
+   accounting. Unknown values stay unknown.
+4. Keep free/cloud/local labels descriptive rather than promises of unlimited
+   access. OpenCode free models and Ollama cloud tags are discoverable, while
+   remaining pool/quota claims require a separate authoritative source.
+
+**Rejected alternatives:** A Conduit-owned provider registry, silently
+rewriting a live session's model, deriving vendor quota from PTY output, or
+turning local token totals into remaining cloud allowance.
+
+**Consequences:** New Task and the active composer share one model-selection
+surface. Provider adapters can be added later without changing the profile or
+honesty boundary; interactive acceptance still needs real local launches.
+
+---
+
+## D-033: Free-tier CLI access is not provider accounting
+
+**Status:** Accepted (free-tier CLI shortlist)
+
+**Context:** MainFrame research separates subscription/free CLI access from
+direct provider APIs and from the permanent coding harness. The live workstation
+has OpenCode, Ollama, Cursor Agent, Gemini CLI, and Aider available, while the
+research also names API-only pools and uninstalled candidates.
+
+**Decision:**
+
+1. Keep OpenCode, Ollama, Cursor Agent, and Gemini CLI as cloud-capable/local
+   CLI profiles, with free access described as authentication-dependent rather
+   than guaranteed. Keep Aider as a provider-neutral local/BYOK profile.
+2. Do not add Gemini/DeepSeek HTTP APIs or a `cloud-llm-router` profile to the
+   PTY launcher. They are a separate adapter boundary and are not verified
+   Conduit agent executables.
+3. Do not hardcode free model SKUs, quota values, or context limits. Discover
+   what the CLI exposes; otherwise leave the model catalog or account allowance
+   unknown and let the operator configure a model ID.
+4. Park Docker Agent, Goose, OpenHands, Open Interpreter, and similar candidates
+   until an installed executable and a bounded launch smoke justify a profile.
+
+**Consequences:** Conduit adds useful access paths without turning a stale free
+tier into a promise. The model menu remains CLI-owned, and the circular meters
+remain honest about what Conduit can observe versus what the vendor controls.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

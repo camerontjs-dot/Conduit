@@ -50,9 +50,79 @@ public enum AgentPermissionMode: String, Codable, CaseIterable, Sendable {
 
 /// Resolves profile arguments plus Conduit permission-mode flags for launch.
 public enum AgentLaunchArguments {
-    /// Effective argv after applying ``AgentProfile/permissionMode``.
+    /// Effective argv after applying the model selection and permission mode.
     public static func resolved(for profile: AgentProfile) -> [String] {
-        merge(base: profile.arguments, extra: flags(for: profile))
+        merge(
+            base: modelArguments(for: profile),
+            extra: flags(for: profile)
+        )
+    }
+
+    /// Whether this profile can receive a selected model at launch.
+    public static func supportsModelSelection(_ profile: AgentProfile) -> Bool {
+        profile.kind != .shell && profile.modelLaunchStyle != .none
+    }
+
+    /// Arguments Conduit injects for the selected model. A missing model keeps
+    /// the profile's authored arguments unchanged.
+    public static func modelArguments(for profile: AgentProfile) -> [String] {
+        guard supportsModelSelection(profile),
+              let model = profile.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !model.isEmpty
+        else { return profile.arguments }
+
+        switch effectiveModelLaunchStyle(for: profile) {
+        case .auto, .modelFlag:
+            return replacingModelFlag(in: profile.arguments, model: model)
+        case .ollamaRun:
+            return replacingOllamaModel(in: profile.arguments, model: model)
+        case .none:
+            return profile.arguments
+        }
+    }
+
+    private static func effectiveModelLaunchStyle(
+        for profile: AgentProfile
+    ) -> AgentModelLaunchStyle {
+        if profile.modelLaunchStyle == .auto,
+           normalizedExecutable(profile.command) == "ollama" {
+            return .ollamaRun
+        }
+        return profile.modelLaunchStyle
+    }
+
+    private static func replacingModelFlag(in base: [String], model: String) -> [String] {
+        var result: [String] = []
+        var index = 0
+        while index < base.count {
+            let token = base[index]
+            if token == "--model" || token == "-m" {
+                index += 2
+                continue
+            }
+            result.append(token)
+            index += 1
+        }
+        return result + ["--model", model]
+    }
+
+    private static func replacingOllamaModel(in base: [String], model: String) -> [String] {
+        var result = base
+        let runIndex: Int
+        if let existing = result.firstIndex(of: "run") {
+            runIndex = existing
+        } else {
+            result.insert("run", at: 0)
+            runIndex = 0
+        }
+
+        let modelIndex = runIndex + 1
+        if modelIndex < result.count, !result[modelIndex].hasPrefix("-") {
+            result[modelIndex] = model
+        } else {
+            result.insert(model, at: modelIndex)
+        }
+        return result
     }
 
     /// Command line tokens Conduit injects for the selected permission mode.

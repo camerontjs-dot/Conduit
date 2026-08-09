@@ -1374,6 +1374,43 @@ withTempDir { root in
                   permissionMode: .fullAuto
               )
           ) == ["-l"])
+    let ollamaModel = AgentProfile(
+        name: "Ollama",
+        command: "ollama",
+        arguments: ["--verbose"],
+        model: "qwen3.5:9b",
+        modelLaunchStyle: .ollamaRun
+    )
+    check("ollama model selection uses run positional model",
+          AgentLaunchArguments.resolved(for: ollamaModel)
+            == ["run", "qwen3.5:9b", "--verbose"])
+    let cursorModel = AgentProfile(
+        name: "Cursor Agent",
+        command: "cursor-agent",
+        arguments: ["--model", "old-model"],
+        model: "new-model"
+    )
+    check("model flag selection replaces authored model",
+          AgentLaunchArguments.resolved(for: cursorModel)
+            == ["--model", "new-model"])
+    let geminiModel = AgentProfile(
+        name: "Gemini CLI",
+        command: "gemini",
+        model: "gemini-model"
+    )
+    check("Gemini CLI model selection uses the common model flag",
+          AgentLaunchArguments.resolved(for: geminiModel)
+            == ["--model", "gemini-model"])
+    let aiderModel = AgentProfile(
+        name: "Aider",
+        command: "aider",
+        model: "ollama/qwen3.5:9b"
+    )
+    check("Aider model selection uses the common model flag",
+          AgentLaunchArguments.resolved(for: aiderModel)
+            == ["--model", "ollama/qwen3.5:9b"])
+    check("visible context estimator has a positive display estimate",
+          VisibleContextEstimator.approximateTokens("visible prompt") > 0)
 }
 
 // MARK: - Context bundle + forwarder

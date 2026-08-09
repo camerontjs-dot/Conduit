@@ -6,6 +6,7 @@ struct ComposerView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
+    @State private var composerModelID: String?
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -20,6 +21,43 @@ struct ComposerView: View {
             return "Send target: \(session.descriptor.agent.name)"
         }
         return "Send target: new shell"
+    }
+
+    private var composerAgent: AgentProfile? {
+        model.composerAgent
+    }
+
+    private var composerAccountUsage: (AccountUsageSnapshot, AccountUsageWindow)? {
+        guard let agent = composerAgent else { return nil }
+        guard let snapshot = model.accountUsage.first(where: {
+            $0.agentName.caseInsensitiveCompare(agent.name) == .orderedSame
+        }), let window = snapshot.windows.first else {
+            return nil
+        }
+        return (snapshot, window)
+    }
+
+    private var visibleContextTokens: Int {
+        VisibleContextEstimator.visibleTokens(
+            events: model.selectedTaskConversationEvents,
+            composerText: model.composerText
+        )
+    }
+
+    private var selectedComposerModelOption: AgentModelOption? {
+        guard let agent = composerAgent,
+              let modelID = composerModelID ?? agent.model
+        else { return nil }
+        return model.modelOptions(for: agent).first { $0.id == modelID }
+    }
+
+    private var contextLimit: Int? {
+        let limit = selectedComposerModelOption?.contextWindowTokens
+            ?? composerAgent?.contextWindowTokens
+        guard let limit, limit > 0 else {
+            return nil
+        }
+        return limit
     }
 
     var body: some View {
@@ -286,6 +324,10 @@ struct ComposerView: View {
                 slashCommandMenu
             }
 
+            if let agent = composerAgent, agent.kind != .shell {
+                composerModelAndMeters(agent)
+            }
+
             HStack(alignment: .center, spacing: 9) {
                 Button(action: model.toggleSpeech) {
                     Image(systemName: model.speech.isRecording ? "stop.circle.fill" : "mic.fill")
@@ -419,6 +461,82 @@ struct ComposerView: View {
                 .help("Append this prompt and attachments to MainFrame 00_inbox")
             }
         }
+    }
+
+    private func composerModelAndMeters(_ agent: AgentProfile) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            AgentModelPicker(
+                agent: agent,
+                selectedModelID: composerModelID ?? agent.model,
+                options: model.modelOptions(for: agent),
+                isRefreshing: model.isModelCatalogRefreshing(for: agent),
+                onSelect: { option in
+                    composerModelID = option?.id
+                    model.setModelSelection(option, forAgentID: agent.id)
+                },
+                onRefresh: { model.refreshModelCatalog(for: agent) }
+            )
+            Spacer(minLength: 4)
+
+            if let (snapshot, window) = composerAccountUsage {
+                CircularLimitMeter(
+                    title: "Usage",
+                    fraction: window.usedPercent / 100,
+                    valueLabel: percentLabel(window.usedPercent),
+                    detail: "\(window.label) · \(snapshot.sourceLabel)"
+                )
+            } else {
+                CircularLimitMeter(
+                    title: "Usage",
+                    fraction: nil,
+                    valueLabel: "—",
+                    detail: "account report unavailable"
+                )
+            }
+
+            CircularLimitMeter(
+                title: "Context",
+                fraction: contextLimit.map { Double(visibleContextTokens) / Double($0) },
+                valueLabel: contextLimit.map {
+                    percentLabel(Double(visibleContextTokens) / Double($0) * 100)
+                } ?? "—",
+                detail: contextLimit.map {
+                    "\(compactTokenCount(visibleContextTokens)) / \(compactTokenCount($0)) visible est."
+                } ?? "visible estimate · limit unknown"
+            )
+        }
+        .padding(.horizontal, 2)
+        .padding(.vertical, 2)
+        .onAppear {
+            composerModelID = agent.model
+            model.refreshModelCatalog(for: agent)
+            if model.accountUsage.isEmpty {
+                model.refreshAccountUsage()
+            }
+        }
+        .onChange(of: model.activeSessionID) { _ in
+            composerModelID = model.composerAgent?.model
+            if let activeAgent = model.composerAgent {
+                model.refreshModelCatalog(for: activeAgent)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Agent model and limits")
+    }
+
+    private func percentLabel(_ percent: Double) -> String {
+        if percent >= 1000 { return ">999%" }
+        return "\(Int(percent.rounded()))%"
+    }
+
+    private func compactTokenCount(_ value: Int) -> String {
+        if value >= 1_000_000 {
+            return String(format: "%.1fM", Double(value) / 1_000_000)
+        }
+        if value >= 1_000 {
+            return String(format: "%.0fK", Double(value) / 1_000)
+        }
+        return "\(value)"
     }
 
     private var slashCommandMenu: some View {
