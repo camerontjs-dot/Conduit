@@ -96,6 +96,15 @@ final class AppModel: ObservableObject {
     static let inspectorCardExpandedKey = "conduit.inspectorCardExpanded"
     static let inspectorCardsCustomizedKey = "conduit.inspectorCardsCustomized"
     static let newTaskScopeStorageKey = "conduit.newTask.scope"
+    static let operatorPeekEnabledKey = "conduit.operatorPeek.enabled"
+    static let operatorPeekCustomizedKey = "conduit.operatorPeek.customized"
+    static let operatorPeekAgentIDsKey = "conduit.operatorPeek.agentIDs"
+    static let companionScaleKey = "conduit.companionScale"
+    static let companionScaleCustomizedKey = "conduit.companionScale.customized"
+    static let companionShelfEnabledKey = "conduit.companionShelf.enabled"
+    static let railSpritesForAllRowsKey = "conduit.railSprites.allRows"
+    static let juicyFeedbackEnabledKey = "conduit.juicyFeedback.enabled"
+    static let outputActivePulseEnabledKey = "conduit.outputActivePulse.enabled"
 
     @Published var settings = ConduitSettings()
     @Published var projects: [MainframeProject] = []
@@ -176,6 +185,103 @@ final class AppModel: ObservableObject {
     /// When false, density changes re-apply card show/expand defaults.
     @Published private(set) var inspectorCardsCustomized: Bool =
         UserDefaults.standard.bool(forKey: AppModel.inspectorCardsCustomizedKey)
+
+    /// Optional multi-agent peek shelf (not a permanent OPERATORS strip).
+    /// Density supplies the default until the operator customizes.
+    @Published private(set) var operatorPeekCustomized: Bool =
+        UserDefaults.standard.bool(forKey: AppModel.operatorPeekCustomizedKey)
+    @Published var operatorPeekEnabledStored: Bool =
+        UserDefaults.standard.object(forKey: AppModel.operatorPeekEnabledKey) as? Bool
+            ?? false
+    {
+        didSet {
+            UserDefaults.standard.set(
+                operatorPeekEnabledStored,
+                forKey: Self.operatorPeekEnabledKey
+            )
+        }
+    }
+    /// Empty means “all enabled agents.” Persisted as UUID strings.
+    @Published var operatorPeekAgentIDs: Set<UUID> =
+        AppModel.loadUUIDSet(key: AppModel.operatorPeekAgentIDsKey)
+    {
+        didSet {
+            Self.persistUUIDSet(operatorPeekAgentIDs, key: Self.operatorPeekAgentIDsKey)
+        }
+    }
+
+    @Published private(set) var companionScaleCustomized: Bool =
+        UserDefaults.standard.bool(forKey: AppModel.companionScaleCustomizedKey)
+    @Published var companionScaleStored: CompanionScale =
+        CompanionScale(
+            rawValue: UserDefaults.standard.string(
+                forKey: AppModel.companionScaleKey
+            ) ?? ""
+        ) ?? .standard
+    {
+        didSet {
+            UserDefaults.standard.set(
+                companionScaleStored.rawValue,
+                forKey: Self.companionScaleKey
+            )
+        }
+    }
+
+    /// Selected-companion shelf under the selected rail row (Balanced/Operator).
+    @Published var companionShelfEnabled: Bool =
+        UserDefaults.standard.object(forKey: AppModel.companionShelfEnabledKey) as? Bool
+            ?? true
+    {
+        didSet {
+            UserDefaults.standard.set(
+                companionShelfEnabled,
+                forKey: Self.companionShelfEnabledKey
+            )
+        }
+    }
+
+    /// When true, known-profile rows (not only selected) show a tiny sprite.
+    @Published var railSpritesForAllRows: Bool =
+        UserDefaults.standard.object(forKey: AppModel.railSpritesForAllRowsKey) as? Bool
+            ?? false
+    {
+        didSet {
+            UserDefaults.standard.set(
+                railSpritesForAllRows,
+                forKey: Self.railSpritesForAllRowsKey
+            )
+        }
+    }
+
+    /// Chrome juiciness for real operator actions (select/send/inspector).
+    @Published var juicyFeedbackEnabled: Bool =
+        UserDefaults.standard.object(forKey: AppModel.juicyFeedbackEnabledKey) as? Bool
+            ?? true
+    {
+        didSet {
+            UserDefaults.standard.set(
+                juicyFeedbackEnabled,
+                forKey: Self.juicyFeedbackEnabledKey
+            )
+        }
+    }
+
+    /// Calm activity cue on companions only while output is observed active.
+    @Published var outputActivePulseEnabled: Bool =
+        UserDefaults.standard.object(forKey: AppModel.outputActivePulseEnabledKey) as? Bool
+            ?? true
+    {
+        didSet {
+            UserDefaults.standard.set(
+                outputActivePulseEnabled,
+                forKey: Self.outputActivePulseEnabledKey
+            )
+        }
+    }
+
+    /// Brief presentation token after Send — UI flash only, not delivery proof.
+    @Published private(set) var composerSendFlashToken: Int = 0
+
     @Published var statusMessage: String?
     @Published var errorMessage: String?
     @Published var isDropTargeted = false
@@ -220,6 +326,74 @@ final class AppModel: ObservableObject {
                 applyInspectorCardDefaults(for: density)
             }
         }
+    }
+
+    /// Effective optional Operator peek visibility (density default unless customized).
+    var showsOperatorPeek: Bool {
+        OperatorPeekPolicy.resolveEnabled(
+            customized: operatorPeekCustomized,
+            storedEnabled: operatorPeekEnabledStored,
+            density: density
+        )
+    }
+
+    /// Effective companion scale (density default unless customized).
+    var companionScale: CompanionScale {
+        companionScaleCustomized
+            ? companionScaleStored
+            : CompanionScale.defaultFor(density: density)
+    }
+
+    /// Enabled agents filtered for the peek shelf. Empty filter = all enabled.
+    var operatorPeekAgents: [AgentProfile] {
+        let enabled = enabledAgents
+        guard !operatorPeekAgentIDs.isEmpty else { return enabled }
+        let filtered = enabled.filter { operatorPeekAgentIDs.contains($0.id) }
+        return filtered.isEmpty ? enabled : filtered
+    }
+
+    func setOperatorPeekEnabled(_ enabled: Bool) {
+        operatorPeekEnabledStored = enabled
+        if !operatorPeekCustomized {
+            operatorPeekCustomized = true
+            UserDefaults.standard.set(true, forKey: Self.operatorPeekCustomizedKey)
+        }
+    }
+
+    func resetOperatorPeekToDensityDefault() {
+        operatorPeekCustomized = false
+        UserDefaults.standard.set(false, forKey: Self.operatorPeekCustomizedKey)
+        operatorPeekEnabledStored = OperatorPeekPolicy.defaultEnabled(for: density)
+    }
+
+    func setCompanionScale(_ scale: CompanionScale) {
+        companionScaleStored = scale
+        if !companionScaleCustomized {
+            companionScaleCustomized = true
+            UserDefaults.standard.set(true, forKey: Self.companionScaleCustomizedKey)
+        }
+    }
+
+    func resetCompanionScaleToDensityDefault() {
+        companionScaleCustomized = false
+        UserDefaults.standard.set(false, forKey: Self.companionScaleCustomizedKey)
+        companionScaleStored = CompanionScale.defaultFor(density: density)
+    }
+
+    func toggleOperatorPeekAgent(_ id: UUID) {
+        if operatorPeekAgentIDs.contains(id) {
+            operatorPeekAgentIDs.remove(id)
+        } else {
+            operatorPeekAgentIDs.insert(id)
+        }
+    }
+
+    func clearOperatorPeekAgentFilter() {
+        operatorPeekAgentIDs = []
+    }
+
+    func noteComposerSendFlash() {
+        composerSendFlashToken &+= 1
     }
 
     let speech = SpeechTranscriber()
@@ -360,6 +534,17 @@ final class AppModel: ObservableObject {
         guard !inspectorCardsCustomized else { return }
         inspectorCardsCustomized = true
         UserDefaults.standard.set(true, forKey: Self.inspectorCardsCustomizedKey)
+    }
+
+    private static func loadUUIDSet(key: String) -> Set<UUID> {
+        guard let raw = UserDefaults.standard.array(forKey: key) as? [String] else {
+            return []
+        }
+        return Set(raw.compactMap(UUID.init(uuidString:)))
+    }
+
+    private static func persistUUIDSet(_ set: Set<UUID>, key: String) {
+        UserDefaults.standard.set(set.map(\.uuidString).sorted(), forKey: key)
     }
 
     private func applyInspectorCardDefaults(for density: Density) {
@@ -2134,6 +2319,7 @@ final class AppModel: ObservableObject {
         composerText = ""
         let attachmentCount = savedAttachments.count
         attachments = []
+        noteComposerSendFlash()
         if attachmentCount > 0 {
             statusMessage = attachmentCount == 1
                 ? "Sent with 1 attachment."
@@ -2209,6 +2395,7 @@ final class AppModel: ObservableObject {
         runtime.selectedSurface = .conversation
         composerText = ""
         attachments = []
+        noteComposerSendFlash()
         statusMessage = "Ran \(trimmed) as a CLI command."
     }
 

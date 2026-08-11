@@ -137,6 +137,48 @@ check("partial sprite set falls back atomically",
       ) == .genericPlaceholder(.incompleteSet))
 check("sprite pose swaps stay immediate under Reduce Motion",
       !AgentSpriteMotionPolicy.shouldAnimatePoseChange(reduceMotion: true))
+check("companion scale denser in Operator than Focused",
+      CompanionScale.defaultFor(density: .operator).spriteSide
+        > CompanionScale.defaultFor(density: .focused).spriteSide)
+check("operator peek off by default in Focused",
+      !OperatorPeekPolicy.defaultEnabled(for: .focused))
+check("operator peek on by default in Operator density",
+      OperatorPeekPolicy.defaultEnabled(for: .operator))
+check("operator peek customized override wins",
+      OperatorPeekPolicy.resolveEnabled(
+        customized: true,
+        storedEnabled: false,
+        density: .operator
+      ) == false)
+check("next safe action open raw when attached runtime",
+      SessionNextSafeAction.resolve(
+        hasSelectedTask: true,
+        hasOpenRuntime: true,
+        isDetached: false,
+        isReconnectableWithoutRuntime: false
+      ) == .openRaw)
+check("next safe action reconnect when detached",
+      SessionNextSafeAction.resolve(
+        hasSelectedTask: true,
+        hasOpenRuntime: true,
+        isDetached: true,
+        isReconnectableWithoutRuntime: false
+      ) == .reconnect)
+check("juicy chrome respects Reduce Motion",
+      !JuicyFeedbackPolicy.shouldPlayChromeMotion(
+        juicyEnabled: true,
+        reduceMotion: true
+      ))
+check("juicy chrome never animates poses",
+      !JuicyFeedbackPolicy.shouldAnimatePoseChange())
+check("empty inbox attention is honest",
+      AgentInboxAttention.from(
+        pinned: [],
+        active: [],
+        recent: [],
+        archived: [],
+        discoveredCount: 0
+      ).summaryLine == "No tasks in this scope")
 check("small-window inspector stays an overlay in Operator density",
       WorkspaceGeometryPolicy.resolve(
         windowWidth: 1_080,

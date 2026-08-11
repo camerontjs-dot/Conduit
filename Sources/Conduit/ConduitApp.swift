@@ -1,4 +1,5 @@
 #if os(macOS)
+import ConduitCore
 import SwiftUI
 
 @main
@@ -102,6 +103,75 @@ struct ConduitApp: App {
                     Divider()
                     Button("Reset Cards to Density Defaults") {
                         model.resetInspectorCardsToDensityDefaults()
+                    }
+                }
+                Menu("Workbench View") {
+                    Button {
+                        model.setOperatorPeekEnabled(!model.showsOperatorPeek)
+                    } label: {
+                        Text(
+                            model.showsOperatorPeek
+                                ? "✓ Operator Peek Shelf"
+                                : "Operator Peek Shelf"
+                        )
+                    }
+                    Button("Reset Peek to Density Default") {
+                        model.resetOperatorPeekToDensityDefault()
+                    }
+                    Divider()
+                    Menu("Companion Size") {
+                        ForEach(CompanionScale.allCases, id: \.self) { scale in
+                            Button {
+                                model.setCompanionScale(scale)
+                            } label: {
+                                if model.companionScale == scale {
+                                    Text("✓ \(scale.displayName)")
+                                } else {
+                                    Text(scale.displayName)
+                                }
+                            }
+                        }
+                        Divider()
+                        Button("Reset Size to Density Default") {
+                            model.resetCompanionScaleToDensityDefault()
+                        }
+                    }
+                    Button {
+                        model.companionShelfEnabled.toggle()
+                    } label: {
+                        Text(
+                            model.companionShelfEnabled
+                                ? "✓ Selected Companion Shelf"
+                                : "Selected Companion Shelf"
+                        )
+                    }
+                    Button {
+                        model.railSpritesForAllRows.toggle()
+                    } label: {
+                        Text(
+                            model.railSpritesForAllRows
+                                ? "✓ Sprites on All Known Rows"
+                                : "Sprites on All Known Rows"
+                        )
+                    }
+                    Divider()
+                    Button {
+                        model.juicyFeedbackEnabled.toggle()
+                    } label: {
+                        Text(
+                            model.juicyFeedbackEnabled
+                                ? "✓ Juicy Operator Feedback"
+                                : "Juicy Operator Feedback"
+                        )
+                    }
+                    Button {
+                        model.outputActivePulseEnabled.toggle()
+                    } label: {
+                        Text(
+                            model.outputActivePulseEnabled
+                                ? "✓ Output-Active Companion Pulse"
+                                : "Output-Active Companion Pulse"
+                        )
                     }
                 }
                 Button("Refresh MainFrame") { model.refreshProjects() }

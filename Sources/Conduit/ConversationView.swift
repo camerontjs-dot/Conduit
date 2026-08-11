@@ -12,6 +12,7 @@ struct ConversationView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var runtime: TerminalRuntime
     @ObservedObject private var controller: TerminalSessionController
     /// When true, the whole stream pins to the latest content.
@@ -263,6 +264,14 @@ struct ConversationView: View {
         let artworkDescription = AgentSpriteResources.accessibilityDescription(
             for: runtime.descriptor.agent
         )
+        let companionSide = CGFloat(model.companionScale.spriteSide)
+        let pulse =
+            model.outputActivePulseEnabled
+            && state == .working
+            && JuicyFeedbackPolicy.shouldPlayChromeMotion(
+                juicyEnabled: model.juicyFeedbackEnabled,
+                reduceMotion: reduceMotion
+            )
         let authorityLine = [
             controller.backendLabel,
             "Raw authoritative",
@@ -275,7 +284,14 @@ struct ConversationView: View {
                 AgentSpriteView(
                     profile: runtime.descriptor.agent,
                     state: state,
-                    frameSize: CGSize(width: 30, height: 34)
+                    frameSize: CGSize(width: companionSide, height: companionSide + 6)
+                )
+                .scaleEffect(pulse ? 1.03 : 1.0)
+                .animation(
+                    pulse
+                        ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+                        : .default,
+                    value: pulse
                 )
                 Circle()
                     .fill(palette.color(forTerminalState: state))

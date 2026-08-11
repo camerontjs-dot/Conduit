@@ -27,6 +27,18 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- **Workbench Game Layer Phases 2–4 chrome:** agent-inbox summary on the rail
+  (true reconnectable/active/pinned counts only), density-scaled companion
+  prominence in the Conversation header and selected-row shelf, Session card
+  **Next safe action** (Open Raw / Reconnect / New Task — never invented
+  quests), optional customizable **Operator peek** shelf (off by default in
+  Focused/Balanced, on in Operator until customized; filterable agent list),
+  and optional juicy operator feedback on select/send (honors Reduce Motion;
+  never animates poses or implies progress/XP).
+- Workbench View menu + Settings toggles for peek, companion size, rail shelf,
+  all-row sprites, juiciness, and output-active pulse.
+- Pure `WorkbenchChrome` policy types in ConduitCore for companion scale, peek
+  defaults, inbox attention, next-safe-action, and juiciness.
 - A centralized **six-pose companion insertion seam** now defines exact
   profile signatures, canonical filenames, lifecycle cues, provenance/hash
   coverage, placeholder accessibility copy, and static Reduce Motion policy.

@@ -185,9 +185,85 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                Text("Focused Flow, Balanced, or Operator Deck layout density.")
+                Text("Focused Flow, Balanced, or Operator Deck layout density. Density sets Inspector card and peek defaults until you customize them.")
                     .font(.caption)
                     .foregroundStyle(palette.dim)
+            }
+            Section("Companions & peek (optional)") {
+                Toggle(
+                    "Operator peek shelf",
+                    isOn: Binding(
+                        get: { model.showsOperatorPeek },
+                        set: { model.setOperatorPeekEnabled($0) }
+                    )
+                )
+                .help("Optional multi-agent shelf. Off by default in Focused/Balanced; on in Operator until customized.")
+                Button("Reset peek to density default") {
+                    model.resetOperatorPeekToDensityDefault()
+                }
+                .buttonStyle(.borderless)
+
+                Picker(
+                    "Companion size",
+                    selection: Binding(
+                        get: { model.companionScale },
+                        set: { model.setCompanionScale($0) }
+                    )
+                ) {
+                    ForEach(CompanionScale.allCases, id: \.self) { scale in
+                        Text(scale.displayName).tag(scale)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Button("Reset companion size to density default") {
+                    model.resetCompanionScaleToDensityDefault()
+                }
+                .buttonStyle(.borderless)
+
+                Toggle("Selected companion shelf in rail", isOn: $model.companionShelfEnabled)
+                Toggle("Sprites on all known-profile rows", isOn: $model.railSpritesForAllRows)
+                Toggle("Juicy operator feedback", isOn: $model.juicyFeedbackEnabled)
+                    .help("Select/send/inspector micro-motion. Never XP or progress. Honors Reduce Motion.")
+                Toggle("Output-active companion pulse", isOn: $model.outputActivePulseEnabled)
+                    .help("Only while observed terminal output is active. Stops when quiet.")
+
+                if !model.enabledAgents.isEmpty {
+                    Text("Peek agents (empty filter = all enabled)")
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                    ForEach(model.enabledAgents) { agent in
+                        Toggle(
+                            agent.name,
+                            isOn: Binding(
+                                get: {
+                                    model.operatorPeekAgentIDs.isEmpty
+                                        || model.operatorPeekAgentIDs.contains(agent.id)
+                                },
+                                set: { on in
+                                    if model.operatorPeekAgentIDs.isEmpty {
+                                        // Start from all enabled, then drop this one if off.
+                                        model.operatorPeekAgentIDs = Set(
+                                            model.enabledAgents.map(\.id)
+                                        )
+                                    }
+                                    if on {
+                                        model.operatorPeekAgentIDs.insert(agent.id)
+                                        if model.operatorPeekAgentIDs.count
+                                            == model.enabledAgents.count {
+                                            model.clearOperatorPeekAgentFilter()
+                                        }
+                                    } else {
+                                        model.operatorPeekAgentIDs.remove(agent.id)
+                                    }
+                                }
+                            )
+                        )
+                    }
+                    Button("Show all enabled agents in peek") {
+                        model.clearOperatorPeekAgentFilter()
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
         }
     }

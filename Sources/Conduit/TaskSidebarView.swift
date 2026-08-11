@@ -13,6 +13,7 @@ struct TaskSidebarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var taskToRename: TaskSessionSnapshot?
     @State private var taskToEnd: TaskSessionSnapshot?
@@ -21,6 +22,23 @@ struct TaskSidebarView: View {
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
+    }
+
+    private var inboxAttention: AgentInboxAttention {
+        AgentInboxAttention.from(
+            pinned: pinnedRows,
+            active: activeRows,
+            recent: recentRows,
+            archived: archivedRows,
+            discoveredCount: discoveredRows.count
+        )
+    }
+
+    private var playJuicyChrome: Bool {
+        JuicyFeedbackPolicy.shouldPlayChromeMotion(
+            juicyEnabled: model.juicyFeedbackEnabled,
+            reduceMotion: reduceMotion
+        )
     }
 
     private var pinnedRows: [TaskSessionCatalogRow] {
@@ -102,13 +120,34 @@ struct TaskSidebarView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
+                    inboxSummary
+
                     if !pinnedRows.isEmpty {
-                        taskSection("Pinned", rows: pinnedRows)
+                        taskSection(
+                            "Pinned",
+                            rows: pinnedRows,
+                            emphasis: .secondary
+                        )
                     }
-                    taskSection("Active", rows: activeRows)
-                    taskSection("Recent", rows: recentRows)
+                    taskSection(
+                        "Active",
+                        rows: activeRows,
+                        emphasis: .primary,
+                        attentionCount: inboxAttention.reconnectable > 0
+                            ? inboxAttention.reconnectable
+                            : nil
+                    )
+                    taskSection(
+                        "Recent",
+                        rows: recentRows,
+                        emphasis: .tertiary
+                    )
                     if model.showArchivedTasks {
-                        taskSection("Archived", rows: archivedRows)
+                        taskSection(
+                            "Archived",
+                            rows: archivedRows,
+                            emphasis: .tertiary
+                        )
                     }
 
                     if !discoveredRows.isEmpty {
@@ -244,35 +283,114 @@ struct TaskSidebarView: View {
         .padding(.bottom, 9)
     }
 
+    private enum SectionEmphasis {
+        case primary
+        case secondary
+        case tertiary
+    }
+
+    private var inboxSummary: some View {
+        let attention = inboxAttention
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("INBOX")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .tracking(1.0)
+                .foregroundStyle(palette.faint)
+            Text(attention.summaryLine)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(
+                    attention.needsAttention > 0 ? palette.accent : palette.dim
+                )
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if attention.needsAttention > 0 {
+                Text("Reconnect is explicit; selection never attaches.")
+                    .font(.system(size: 9))
+                    .foregroundStyle(palette.faint)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface.opacity(0.72))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(palette.lineSoft, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Agent inbox, \(attention.summaryLine)")
+    }
+
     @ViewBuilder
     private func taskSection(
         _ title: String,
-        rows: [TaskSessionCatalogRow]
+        rows: [TaskSessionCatalogRow],
+        emphasis: SectionEmphasis = .secondary,
+        attentionCount: Int? = nil
     ) -> some View {
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 5) {
-                sectionLabel(title, count: rows.count)
+                sectionLabel(
+                    title,
+                    count: rows.count,
+                    emphasis: emphasis,
+                    attentionCount: attentionCount
+                )
                 ForEach(rows) { row in
                     taskRow(row)
+                    if model.companionShelfEnabled,
+                       model.density != .focused,
+                       model.selectedTaskSessionID == row.id {
+                        selectedCompanionShelf(for: row)
+                    }
                 }
             }
         }
     }
 
-    private func sectionLabel(_ title: String, count: Int) -> some View {
-        HStack {
+    private func sectionLabel(
+        _ title: String,
+        count: Int,
+        emphasis: SectionEmphasis,
+        attentionCount: Int?
+    ) -> some View {
+        let color: Color = {
+            switch emphasis {
+            case .primary: return palette.text
+            case .secondary: return palette.dim
+            case .tertiary: return palette.faint
+            }
+        }()
+        return HStack(spacing: 6) {
             Text(title.uppercased())
             if usesExpandedLabels {
                 Text("\(count)")
                     .foregroundStyle(palette.faint)
             }
+            if let attentionCount, attentionCount > 0, usesExpandedLabels {
+                Text("· \(attentionCount) need you")
+                    .foregroundStyle(palette.accent)
+            }
+            Spacer(minLength: 0)
         }
-        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+        .font(
+            .system(
+                size: emphasis == .primary ? 11 : 10,
+                weight: emphasis == .primary ? .bold : .semibold,
+                design: .monospaced
+            )
+        )
         .tracking(0.7)
-        .foregroundStyle(palette.dim)
+        .foregroundStyle(color)
         .padding(.horizontal, 7)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title), \(count) task\(count == 1 ? "" : "s")")
+        .accessibilityLabel(
+            attentionCount.map {
+                "\(title), \(count) tasks, \($0) reconnectable"
+            } ?? "\(title), \(count) task\(count == 1 ? "" : "s")"
+        )
     }
 
     private func taskRow(_ row: TaskSessionCatalogRow) -> some View {
@@ -353,11 +471,18 @@ struct TaskSidebarView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 9)
                 .strokeBorder(
-                    isSelected ? palette.accent.opacity(0.36) : palette.lineSoft,
-                    lineWidth: 1
+                    isSelected ? palette.accent.opacity(0.42) : palette.lineSoft,
+                    lineWidth: isSelected ? 1.5 : 1
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 9))
+        .scaleEffect(isSelected && playJuicyChrome ? 1.01 : 1.0)
+        .animation(
+            playJuicyChrome
+                ? .easeOut(duration: JuicyFeedbackPolicy.selectDuration)
+                : nil,
+            value: isSelected
+        )
         .contextMenu {
             Button("Rename…") {
                 taskToRename = row.session
@@ -404,7 +529,12 @@ struct TaskSidebarView: View {
         VStack(alignment: .leading, spacing: 5) {
             // Not Conduit task history: live durable sessions you can open or
             // continue from here (including work started outside the UI).
-            sectionLabel("Continue outside Conduit", count: discoveredRows.count)
+            sectionLabel(
+                "Continue outside Conduit",
+                count: discoveredRows.count,
+                emphasis: .secondary,
+                attentionCount: nil
+            )
 
             Text("tmux sessions still running on this Mac — open to inspect Raw or keep working. Not the same as app-store chat history.")
                 .font(.system(size: 9))
@@ -510,9 +640,8 @@ struct TaskSidebarView: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// Contextual identity only. The selected row may show an exact known
-    /// profile; lifecycle text and the availability dot remain authoritative.
-    /// This view has no action and never launches or reconnects a runtime.
+    /// Contextual identity only. Lifecycle text and the availability dot remain
+    /// authoritative. This view has no action and never launches or reconnects.
     @ViewBuilder
     private func taskIdentityMark(
         _ row: TaskSessionCatalogRow,
@@ -523,7 +652,8 @@ struct TaskSidebarView: View {
                 companionMark(
                     profile: runtime.descriptor.agent,
                     state: runtime.controller.visualState(at: timeline.date),
-                    availability: row.availability
+                    availability: row.availability,
+                    prominence: .selected
                 )
             }
         } else if isSelected,
@@ -532,7 +662,18 @@ struct TaskSidebarView: View {
             companionMark(
                 profile: profile,
                 state: state,
-                availability: row.availability
+                availability: row.availability,
+                prominence: .selected
+            )
+        } else if model.railSpritesForAllRows,
+                  let profile = recordedGenericProfile(for: row.session),
+                  let state = retainedCompanionState(for: row.availability)
+                    ?? (row.availability.kind == .running ? .running : nil) {
+            companionMark(
+                profile: profile,
+                state: state,
+                availability: row.availability,
+                prominence: .row
             )
         } else {
             Circle()
@@ -544,16 +685,47 @@ struct TaskSidebarView: View {
         }
     }
 
+    private enum CompanionProminence {
+        case row
+        case selected
+        case shelf
+    }
+
     private func companionMark(
         profile: AgentProfile,
         state: TerminalVisualState,
-        availability: TaskSessionAvailability
+        availability: TaskSessionAvailability,
+        prominence: CompanionProminence
     ) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+        let side: CGFloat = {
+            switch prominence {
+            case .row:
+                return CGFloat(model.companionScale.railSpriteSide)
+            case .selected:
+                return CGFloat(max(model.companionScale.railSpriteSide, 26))
+            case .shelf:
+                return CGFloat(model.companionScale.spriteSide)
+            }
+        }()
+        let pulse =
+            model.outputActivePulseEnabled
+            && state == .working
+            && JuicyFeedbackPolicy.shouldPlayChromeMotion(
+                juicyEnabled: model.juicyFeedbackEnabled,
+                reduceMotion: reduceMotion
+            )
+        return ZStack(alignment: .bottomTrailing) {
             AgentSpriteView(
                 profile: profile,
                 state: state,
-                frameSize: CGSize(width: 22, height: 26)
+                frameSize: CGSize(width: side, height: side + 4)
+            )
+            .scaleEffect(pulse ? 1.04 : 1.0)
+            .animation(
+                pulse
+                    ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+                    : .default,
+                value: pulse
             )
             Circle()
                 .fill(availabilityColor(availability))
@@ -563,8 +735,83 @@ struct TaskSidebarView: View {
                         .strokeBorder(palette.rail, lineWidth: 1)
                 )
         }
-        .frame(width: 26, height: 30)
+        .frame(width: side + 4, height: side + 8)
         .accessibilityHidden(true)
+    }
+
+    /// Larger selected companion under the row (Balanced/Operator). Presentation
+    /// only — never launches, reconnects, or sends.
+    @ViewBuilder
+    private func selectedCompanionShelf(
+        for row: TaskSessionCatalogRow
+    ) -> some View {
+        if let runtime = matchingRuntime(for: row) {
+            TimelineView(.periodic(from: .now, by: 0.7)) { timeline in
+                let state = runtime.controller.visualState(at: timeline.date)
+                companionShelfChrome(
+                    profile: runtime.descriptor.agent,
+                    state: state,
+                    availability: row.availability,
+                    lifecycleLine: state.spriteCue.accessibilityPhrase
+                )
+            }
+        } else if let profile = selectedCompanionProfile(for: row),
+                  let state = retainedCompanionState(for: row.availability) {
+            companionShelfChrome(
+                profile: profile,
+                state: state,
+                availability: row.availability,
+                lifecycleLine: availabilityLabel(row.availability)
+            )
+        }
+    }
+
+    private func companionShelfChrome(
+        profile: AgentProfile,
+        state: TerminalVisualState,
+        availability: TaskSessionAvailability,
+        lifecycleLine: String
+    ) -> some View {
+        let artwork = AgentSpriteResources.accessibilityDescription(for: profile)
+        let fallback = AgentSpriteResources.visibleFallbackLabel(for: profile)
+        return HStack(spacing: 10) {
+            companionMark(
+                profile: profile,
+                state: state,
+                availability: availability,
+                prominence: .shelf
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(profile.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.text)
+                    .lineLimit(1)
+                Text(lifecycleLine)
+                    .font(.system(size: 10))
+                    .foregroundStyle(palette.dim)
+                    .lineLimit(2)
+                if let fallback {
+                    Text(fallback)
+                        .font(.system(size: 9))
+                        .foregroundStyle(palette.faint)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(palette.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(palette.accent.opacity(0.28), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(profile.name) companion, \(lifecycleLine), \(artwork)"
+        )
+        .accessibilityHint("Presentation only. Does not launch or reconnect.")
     }
 
     private func matchingRuntime(for row: TaskSessionCatalogRow) -> TerminalRuntime? {

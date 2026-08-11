@@ -301,11 +301,23 @@ struct InspectorView: View {
                 labeled("Lifecycle", runtime.controller.lifecycleLabel)
                 permissionBlock(for: runtime.descriptor.agent)
 
+                nextSafeActionBlock(
+                    SessionNextSafeAction.resolve(
+                        hasSelectedTask: true,
+                        hasOpenRuntime: true,
+                        isDetached: runtime.controller.lifecycle == .detached,
+                        isReconnectableWithoutRuntime: false
+                    ),
+                    runtime: runtime
+                )
+
                 HStack(spacing: 8) {
-                    Button("Open Raw") {
-                        runtime.selectedSurface = .raw
+                    if runtime.controller.lifecycle != .detached {
+                        Button("Open Raw") {
+                            runtime.selectedSurface = .raw
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.borderedProminent)
                     if runtime.controller.lifecycle == .detached,
                        let id = runtime.descriptor.taskSessionID {
                         Button("Reconnect") {
@@ -328,17 +340,33 @@ struct InspectorView: View {
                     "Project",
                     task.metadata.workspace.fallbackTitle
                 )
-                Text("No open runtime. Reconnect or start a new task to send prompts.")
+                let row = model.taskCatalogRows.first { $0.id == task.id }
+                let reconnectable = row?.availability.kind == .reconnectable
+                Text(
+                    reconnectable
+                        ? "No open runtime. Reconnect is available as an explicit action."
+                        : "No open runtime. Start a new task to send prompts."
+                )
                     .font(.caption)
                     .foregroundStyle(palette.dim)
-                Button("New Task") {
-                    model.showNewTask = true
-                }
-                .buttonStyle(.borderedProminent)
+                nextSafeActionBlock(
+                    SessionNextSafeAction.resolve(
+                        hasSelectedTask: true,
+                        hasOpenRuntime: false,
+                        isDetached: false,
+                        isReconnectableWithoutRuntime: reconnectable
+                    ),
+                    runtime: nil,
+                    taskID: task.id
+                )
             } else {
                 Text("Select a task to inspect session details.")
                     .font(.caption)
                     .foregroundStyle(palette.dim)
+                nextSafeActionBlock(
+                    .selectTask,
+                    runtime: nil
+                )
             }
             Button {
                 model.showMindGraph = true
@@ -348,6 +376,63 @@ struct InspectorView: View {
             .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func nextSafeActionBlock(
+        _ action: SessionNextSafeAction,
+        runtime: TerminalRuntime?,
+        taskID: TaskSessionID? = nil
+    ) -> some View {
+        if action != .none {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("NEXT SAFE ACTION")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(palette.faint)
+                Button {
+                    performNextSafeAction(action, runtime: runtime, taskID: taskID)
+                } label: {
+                    Text(action.title)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityLabel(action.title)
+                .help(action.help)
+                Text(action.help)
+                    .font(.caption2)
+                    .foregroundStyle(palette.faint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.accentSoft.opacity(0.55))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func performNextSafeAction(
+        _ action: SessionNextSafeAction,
+        runtime: TerminalRuntime?,
+        taskID: TaskSessionID?
+    ) {
+        switch action {
+        case .openRaw:
+            runtime?.selectedSurface = .raw
+        case .reconnect:
+            if let taskID {
+                model.reconnectTask(taskID)
+            } else if let id = runtime?.descriptor.taskSessionID {
+                model.reconnectTask(id)
+            }
+        case .leave:
+            model.leaveActiveSession()
+        case .newTask:
+            model.showNewTask = true
+        case .selectTask, .none:
+            break
+        }
     }
 
     private var usagePane: some View {

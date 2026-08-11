@@ -581,6 +581,11 @@ private struct ProjectWorkspaceView: View {
                 OperatorOpsDeck(project: project)
                 Divider()
             }
+            // Optional multi-agent peek — density default or operator override.
+            if model.showsOperatorPeek {
+                OperatorPeekBar()
+                Divider()
+            }
             SessionSurfaceView(runtime: selectedTaskRuntime)
                 .frame(minHeight: 240)
         }

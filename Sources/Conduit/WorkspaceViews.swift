@@ -856,7 +856,10 @@ struct OperatorOpsDeck: View {
     }
 }
 
-struct SessionBar: View {
+/// Optional multi-agent peek shelf (WGL Phase 3). Off by default in Focused
+/// and Balanced; on by default in Operator unless the operator customizes.
+/// Not a permanent OPERATORS strip — View menu / Settings can hide it anytime.
+struct OperatorPeekBar: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
@@ -865,35 +868,34 @@ struct SessionBar: View {
         themeStore.palette(for: colorScheme)
     }
 
-    /// Focused seats stay compact; Balanced/Operator show the full state label.
     private var isCompactSeats: Bool {
-        model.density == .focused
+        model.density == .focused || model.companionScale == .compact
     }
 
     var body: some View {
-        // Timeline-driven so seat and pill states stay honest after output goes
-        // quiet (a session must not read "working" forever once it idles).
         TimelineView(.periodic(from: .now, by: 0.7)) { timeline in
-            VStack(spacing: 0) {
-                operatorsRow(date: timeline.date)
-                Divider().overlay(palette.line)
-                sessionsRow(date: timeline.date)
-            }
+            operatorsRow(date: timeline.date)
         }
     }
 
-    /// One seat per enabled agent (including Shell). State is derived only from
-    /// a matching runtime in `sessionsForSelectedProject`, or else "available".
     private func operatorsRow(date: Date) -> some View {
         let sessions = model.sessionsForSelectedProject
+        let agents = model.operatorPeekAgents
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: isCompactSeats ? 2 : 4) {
-                Text("OPERATORS")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .tracking(1.4)
-                    .foregroundStyle(palette.faint)
-                    .padding(.trailing, 4)
-                ForEach(model.enabledAgents) { agent in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("PEEK")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .tracking(1.4)
+                        .foregroundStyle(palette.faint)
+                    if model.density != .focused {
+                        Text("optional")
+                            .font(.system(size: 8))
+                            .foregroundStyle(palette.faint)
+                    }
+                }
+                .padding(.trailing, 4)
+                ForEach(agents) { agent in
                     let runtime = sessions.first { $0.descriptor.agent.id == agent.id }
                     OperatorSeat(
                         agent: agent,
@@ -909,7 +911,27 @@ struct SessionBar: View {
         }
         .background(palette.app)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Operator seats")
+        .accessibilityLabel("Operator peek, \(agents.count) agents")
+        .accessibilityHint(
+            "Optional multi-agent shelf. Selecting a launched seat focuses that session; available seats can launch."
+        )
+    }
+}
+
+/// Session tabs strip. Operator peek is mounted separately and is optional.
+struct SessionBar: View {
+    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: ConduitPalette {
+        themeStore.palette(for: colorScheme)
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.7)) { timeline in
+            sessionsRow(date: timeline.date)
+        }
     }
 
     /// Real session tabs only — detach/end/restart and New shell unchanged.

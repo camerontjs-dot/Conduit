@@ -6,7 +6,9 @@ struct ComposerView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var composerModelID: String?
+    @State private var sendFlashActive = false
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -75,6 +77,18 @@ struct ComposerView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(palette.rail)
+        .onChange(of: model.composerSendFlashToken) { _ in
+            guard JuicyFeedbackPolicy.shouldPlayChromeMotion(
+                juicyEnabled: model.juicyFeedbackEnabled,
+                reduceMotion: reduceMotion
+            ) else { return }
+            sendFlashActive = true
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + JuicyFeedbackPolicy.sendFlashDuration
+            ) {
+                sendFlashActive = false
+            }
+        }
     }
 
     // MARK: - Staging card
@@ -428,6 +442,11 @@ struct ComposerView: View {
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: [.command])
                     .accessibilityHint(sendTargetLabel)
+                    .scaleEffect(sendFlashActive ? 1.06 : 1.0)
+                    .animation(
+                        .spring(response: 0.22, dampingFraction: 0.72),
+                        value: sendFlashActive
+                    )
             }
 
             HStack(spacing: 8) {
