@@ -90,6 +90,103 @@ check("sprite mapping resolves Claude executable exactly",
 check("sprite mapping keeps custom profiles generic",
       AgentSpriteResolver.resolve(AgentProfile(name: "Codexish", command: "custom-agent"))
         == AgentSpriteResolution(skin: nil, isExactMatch: false))
+check("sprite mapping requires name and executable to agree",
+      AgentSpriteResolver.resolve(AgentProfile(name: "Codex", command: "claude"))
+        == AgentSpriteResolution(skin: nil, isExactMatch: false))
+check("sprite filename contract contains the six canonical poses",
+      AgentSpritePose.allCases.map(\.fileName) == [
+        "clipboard.png",
+        "magnifying-glass.png",
+        "pointing-warning.png",
+        "skeptical.png",
+        "shrug.png",
+        "sleeping-coffee.png"
+      ])
+check("terminal visual states bridge to truth-bound sprite cues",
+      TerminalVisualState.allCases.map(\.spriteCue) == [
+        .starting,
+        .outputActive,
+        .runningQuiet,
+        .detached,
+        .exited,
+        .failed
+      ])
+let codexSpritePaths = AgentSpriteCatalog.requiredRelativePaths(for: .codex)
+let completeCodexSprites = AgentSpriteResourceInventory(
+    readableRelativePaths: Set(codexSpritePaths),
+    manifestHashes: Dictionary(
+        uniqueKeysWithValues: codexSpritePaths.map {
+            ($0, String(repeating: "a", count: 64))
+        }
+    ),
+    provenanceText: "`codex/`:"
+)
+check("complete manifested sprite set resolves atomically",
+      AgentSpriteCatalog.artworkResolution(
+        for: AgentProfile(name: "Codex", command: "codex"),
+        inventory: completeCodexSprites
+      ) == .dedicated(.codex))
+check("partial sprite set falls back atomically",
+      AgentSpriteCatalog.artworkResolution(
+        for: AgentProfile(name: "Codex", command: "codex"),
+        inventory: AgentSpriteResourceInventory(
+            readableRelativePaths: Set(codexSpritePaths.dropLast()),
+            manifestHashes: completeCodexSprites.manifestHashes,
+            provenanceText: completeCodexSprites.provenanceText
+        )
+      ) == .genericPlaceholder(.incompleteSet))
+check("sprite pose swaps stay immediate under Reduce Motion",
+      !AgentSpriteMotionPolicy.shouldAnimatePoseChange(reduceMotion: true))
+check("small-window inspector stays an overlay in Operator density",
+      WorkspaceGeometryPolicy.resolve(
+        windowWidth: 1_080,
+        density: .operator,
+        isInspectorPresented: true
+      ).inspectorLayout == .overlay)
+check("large Focused inspector remains temporary overlay",
+      WorkspaceGeometryPolicy.resolve(
+        windowWidth: 1_600,
+        density: .focused,
+        isInspectorPresented: true
+      ).inspectorLayout == .overlay)
+check("large Balanced inspector pins without changing density",
+      WorkspaceGeometryPolicy.resolve(
+        windowWidth: 1_440,
+        density: .balanced,
+        isInspectorPresented: true
+      ).inspectorLayout == .pinned)
+check("hidden inspector consumes no panel layout",
+      WorkspaceGeometryPolicy.resolve(
+        windowWidth: 1_600,
+        density: .operator,
+        isInspectorPresented: false
+      ).inspectorLayout == .hidden)
+check("inspector preferred width clamps to protect Conversation",
+      WorkspaceGeometryPolicy.resolve(
+        windowWidth: 1_080,
+        density: .operator,
+        isInspectorPresented: true,
+        preferredInspectorWidth: 420
+      ).inspectorWidth == 315)
+check("inspector preferred width restores when the window grows",
+      WorkspaceGeometryPolicy.resolve(
+        windowWidth: 1_600,
+        density: .operator,
+        isInspectorPresented: true,
+        preferredInspectorWidth: 420
+      ).inspectorWidth == 420)
+check("invalid inspector width restores the responsive default",
+      WorkspaceGeometryPolicy.resolve(
+        windowWidth: 1_280,
+        density: .focused,
+        isInspectorPresented: true,
+        preferredInspectorWidth: .infinity
+      ).inspectorWidth == 312)
+check("clamped inspector no-op preserves the wider stored preference",
+      !WorkspaceGeometryPolicy.shouldCommitInspectorWidth(
+        currentEffectiveWidth: 315,
+        proposedWidth: 315
+      ))
 
 // MARK: - Conversation-first session presentation
 

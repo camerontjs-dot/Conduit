@@ -23,7 +23,7 @@ enum AccountUsageService {
                     return AccountUsageSnapshot(
                         agentName: "Claude",
                         sourceLabel: "Anthropic account",
-                        error: "Not signed in to Claude Code (no OAuth token in Keychain)."
+                        error: "Claude usage unavailable; no noninteractive OAuth credential was available."
                     )
                 }
                 var request = URLRequest(
@@ -114,6 +114,9 @@ enum AccountUsageService {
             kSecAttrService as String: service,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
+            // Account meters are optional presentation. Never permit this
+            // Claude Keychain query to summon SecurityAgent; fail closed.
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
         ]
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)

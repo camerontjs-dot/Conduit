@@ -26,6 +26,15 @@ struct TaskSidebarView: View {
     private var pinnedRows: [TaskSessionCatalogRow] {
         model.taskCatalogRows.filter {
             $0.session.isPinned && !$0.session.isArchived
+        }.sorted { lhs, rhs in
+            let leftActive = lhs.availability.kind == .running
+                || lhs.availability.kind == .reconnectable
+            let rightActive = rhs.availability.kind == .running
+                || rhs.availability.kind == .reconnectable
+            if leftActive != rightActive {
+                return leftActive && !rightActive
+            }
+            return lhs.session.lastActivityAt > rhs.session.lastActivityAt
         }
     }
 
@@ -96,7 +105,8 @@ struct TaskSidebarView: View {
                     if !pinnedRows.isEmpty {
                         taskSection("Pinned", rows: pinnedRows)
                     }
-                    agentGroupedSections
+                    taskSection("Active", rows: activeRows)
+                    taskSection("Recent", rows: recentRows)
                     if model.showArchivedTasks {
                         taskSection("Archived", rows: archivedRows)
                     }
@@ -272,11 +282,7 @@ struct TaskSidebarView: View {
                 model.selectTask(row.id)
             } label: {
                 HStack(alignment: .top, spacing: 8) {
-                    Circle()
-                        .fill(availabilityColor(row.availability))
-                        .frame(width: 7, height: 7)
-                        .padding(.top, 5)
-                        .accessibilityHidden(true)
+                    taskIdentityMark(row, isSelected: isSelected)
 
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
@@ -316,7 +322,8 @@ struct TaskSidebarView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityLabel(taskAccessibilityLabel(row))
+            .accessibilityLabel(taskAccessibilityLabel(row, isSelected: isSelected))
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityHint(
                 row.availability.kind == .reconnectable
                     ? "Selects recorded history without reconnecting"
@@ -503,6 +510,116 @@ struct TaskSidebarView: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// Contextual identity only. The selected row may show an exact known
+    /// profile; lifecycle text and the availability dot remain authoritative.
+    /// This view has no action and never launches or reconnects a runtime.
+    @ViewBuilder
+    private func taskIdentityMark(
+        _ row: TaskSessionCatalogRow,
+        isSelected: Bool
+    ) -> some View {
+        if isSelected, let runtime = matchingRuntime(for: row) {
+            TimelineView(.periodic(from: .now, by: 0.7)) { timeline in
+                companionMark(
+                    profile: runtime.descriptor.agent,
+                    state: runtime.controller.visualState(at: timeline.date),
+                    availability: row.availability
+                )
+            }
+        } else if isSelected,
+                  let profile = recordedGenericProfile(for: row.session),
+                  let state = retainedCompanionState(for: row.availability) {
+            companionMark(
+                profile: profile,
+                state: state,
+                availability: row.availability
+            )
+        } else {
+            Circle()
+                .fill(availabilityColor(row.availability))
+                .frame(width: 7, height: 7)
+                .frame(width: 26, height: 26, alignment: .top)
+                .padding(.top, 5)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func companionMark(
+        profile: AgentProfile,
+        state: TerminalVisualState,
+        availability: TaskSessionAvailability
+    ) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            AgentSpriteView(
+                profile: profile,
+                state: state,
+                frameSize: CGSize(width: 22, height: 26)
+            )
+            Circle()
+                .fill(availabilityColor(availability))
+                .frame(width: 7, height: 7)
+                .overlay(
+                    Circle()
+                        .strokeBorder(palette.rail, lineWidth: 1)
+                )
+        }
+        .frame(width: 26, height: 30)
+        .accessibilityHidden(true)
+    }
+
+    private func matchingRuntime(for row: TaskSessionCatalogRow) -> TerminalRuntime? {
+        let matches = model.sessions.filter {
+            $0.descriptor.taskSessionID == row.id
+        }
+        return matches.first(where: { !$0.controller.lifecycle.isTerminal })
+            ?? matches.first
+    }
+
+    private func recordedGenericProfile(
+        for task: TaskSessionSnapshot
+    ) -> AgentProfile? {
+        guard let name = task.metadata.agentName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty
+        else {
+            return nil
+        }
+        // Task history records a display name but not the executable signature.
+        // Never join that older name to today's settings and accidentally grant
+        // dedicated identity art. The recorded name can still label an honest
+        // generic placeholder until a live/retained runtime supplies both fields.
+        return AgentProfile(
+            name: name,
+            command: "conduit-history-executable-not-recorded",
+            enabled: false
+        )
+    }
+
+    private func selectedCompanionProfile(
+        for row: TaskSessionCatalogRow
+    ) -> AgentProfile? {
+        if let runtime = matchingRuntime(for: row) {
+            return runtime.descriptor.agent
+        }
+        guard retainedCompanionState(for: row.availability) != nil else {
+            return nil
+        }
+        return recordedGenericProfile(for: row.session)
+    }
+
+    private func retainedCompanionState(
+        for availability: TaskSessionAvailability
+    ) -> TerminalVisualState? {
+        switch availability {
+        case .reconnectable:
+            return .detached
+        case .recentClosed:
+            return .exited
+        case .running, .interrupted, .unavailable, .unknown:
+            return nil
+        }
+    }
+
     private var emptyState: some View {
         VStack(spacing: 7) {
             Image(systemName: model.taskSearchText.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass")
@@ -523,34 +640,6 @@ struct TaskSidebarView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
         .accessibilityElement(children: .contain)
-    }
-
-    @ViewBuilder
-    private var agentGroupedSections: some View {
-        let openRows = activeRows + recentRows
-        let grouped = Dictionary(grouping: openRows) { row -> String in
-            let name = row.session.metadata.agentName?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return name.isEmpty ? "Unknown" : name
-        }
-        let agentNames = grouped.keys.sorted {
-            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
-        }
-        if agentNames.isEmpty {
-            EmptyView()
-        } else {
-            ForEach(agentNames, id: \.self) { agent in
-                let rows = (grouped[agent] ?? []).sorted { lhs, rhs in
-                    let leftActive = lhs.availability.kind == .running
-                        || lhs.availability.kind == .reconnectable
-                    let rightActive = rhs.availability.kind == .running
-                        || rhs.availability.kind == .reconnectable
-                    if leftActive != rightActive { return leftActive && !rightActive }
-                    return lhs.session.lastActivityAt > rhs.session.lastActivityAt
-                }
-                taskSection(agent, rows: rows)
-            }
-        }
     }
 
     private func openAppSettings() {
@@ -711,8 +800,21 @@ struct TaskSidebarView: View {
         }
     }
 
-    private func taskAccessibilityLabel(_ row: TaskSessionCatalogRow) -> String {
-        "\(row.session.displayTitle), \(taskMetadataLine(row.session)), \(availabilityLabel(row.availability))"
+    private func taskAccessibilityLabel(
+        _ row: TaskSessionCatalogRow,
+        isSelected: Bool
+    ) -> String {
+        var parts = [
+            row.session.displayTitle,
+            taskMetadataLine(row.session),
+            availabilityLabel(row.availability)
+        ]
+        if isSelected, let profile = selectedCompanionProfile(for: row) {
+            parts.append(
+                AgentSpriteResources.accessibilityDescription(for: profile)
+            )
+        }
+        return parts.joined(separator: ", ")
     }
 
     private func discoveredRowMatchesScope(_ row: ResumableSession) -> Bool {

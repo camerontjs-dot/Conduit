@@ -30,12 +30,15 @@ struct InspectorView: View {
     @Environment(\.colorScheme) private var colorScheme
     var project: MainframeProject?
     var showsCloseButton: Bool = false
+    var focusRequest: Int = 0
     var onClose: (() -> Void)? = nil
 
     @State private var gitEntries: [GitStatusEntry] = []
     @State private var gitBranch: String = ""
     @State private var gitError: String?
     @State private var gitLoading = false
+    @FocusState private var sectionPickerFocused: Bool
+    @AccessibilityFocusState private var sectionPickerAccessibilityFocused: Bool
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -51,6 +54,11 @@ struct InspectorView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .focused($sectionPickerFocused)
+            .accessibilityFocused($sectionPickerAccessibilityFocused)
+            .accessibilityLabel("Inspector sections")
+            .accessibilityValue(model.inspectorTab.title)
+            .accessibilityHint("Choose Session, Files, Review, Context, or Usage")
             .padding(10)
 
             ScrollView {
@@ -93,6 +101,19 @@ struct InspectorView: View {
             if model.inspectorTab == .review {
                 refreshGit()
             }
+            if focusRequest > 0 {
+                requestInspectorFocus()
+            }
+        }
+        .onChange(of: focusRequest) { request in
+            if request > 0 {
+                requestInspectorFocus()
+            }
+        }
+        .onExitCommand {
+            if showsCloseButton, model.isContextInspectorPresented {
+                onClose?()
+            }
         }
     }
 
@@ -112,6 +133,7 @@ struct InspectorView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Close inspector")
+                .accessibilityHint("Returns focus to the control used before Inspector opened")
             }
         }
         .padding(.horizontal, 12)
@@ -123,6 +145,13 @@ struct InspectorView: View {
                 colorScheme: colorScheme
             )
         )
+    }
+
+    private func requestInspectorFocus() {
+        DispatchQueue.main.async {
+            sectionPickerFocused = true
+            sectionPickerAccessibilityFocused = true
+        }
     }
 
     // MARK: - Session
@@ -175,9 +204,6 @@ struct InspectorView: View {
                     .font(.caption)
                     .foregroundStyle(palette.dim)
             }
-
-            Divider().overlay(palette.line)
-            AgentUsageMeterPanel()
             Button {
                 model.showMindGraph = true
             } label: {
@@ -195,7 +221,7 @@ struct InspectorView: View {
                 model.showAgentUsage = true
             }
             .buttonStyle(.borderedProminent)
-            Text("Meters compare agents Conduit observed (attached time, output bytes). Not vendor tokens or cost.")
+            Text("Account meters are optional provider/tool reports. The full sheet keeps them separate from Conduit-observed attach time and output totals.")
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
         }
@@ -385,7 +411,7 @@ struct InspectorView: View {
                     .font(.caption)
                     .foregroundStyle(palette.dim)
             } else if gitEntries.isEmpty {
-                Text("Working tree clean, or no repository at this scope.")
+                Text("No changed paths were observed in this Git working tree. A clean tree is not task completion evidence.")
                     .font(.caption)
                     .foregroundStyle(palette.dim)
             } else {

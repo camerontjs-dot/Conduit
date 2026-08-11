@@ -260,22 +260,45 @@ struct ConversationView: View {
 
     private func activityHeader(at date: Date) -> some View {
         let state = controller.visualState(at: date)
+        let artworkDescription = AgentSpriteResources.accessibilityDescription(
+            for: runtime.descriptor.agent
+        )
+        let authorityLine = [
+            controller.backendLabel,
+            "Raw authoritative",
+            AgentSpriteResources.visibleFallbackLabel(for: runtime.descriptor.agent)
+        ]
+        .compactMap { $0 }
+        .joined(separator: " · ")
         return HStack(spacing: 8) {
-            AgentSpriteView(
-                profile: runtime.descriptor.agent,
-                state: state,
-                frameSize: CGSize(width: 30, height: 34)
+            HStack(spacing: 8) {
+                AgentSpriteView(
+                    profile: runtime.descriptor.agent,
+                    state: state,
+                    frameSize: CGSize(width: 30, height: 34)
+                )
+                Circle()
+                    .fill(palette.color(forTerminalState: state))
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(runtime.descriptor.agent.name)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(palette.text)
+                    Text(conversationStateLabel(state: state, at: date))
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                        .lineLimit(1)
+                    Text(authorityLine)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(palette.faint)
+                        .lineLimit(1)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                "\(runtime.descriptor.agent.name), \(conversationStateLabel(state: state, at: date)), \(controller.backendLabel), Raw authoritative, \(artworkDescription)"
             )
-            Circle()
-                .fill(palette.color(forTerminalState: state))
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-            Text(runtime.descriptor.agent.name)
-                .font(.subheadline.bold())
-                .foregroundStyle(palette.text)
-            Text(conversationStateLabel(state: state, at: date))
-                .font(.caption)
-                .foregroundStyle(palette.dim)
             Spacer(minLength: 4)
             Button {
                 followLatest.toggle()
@@ -297,15 +320,12 @@ struct ConversationView: View {
             .buttonStyle(.borderless)
             .font(.caption.weight(.semibold))
             .foregroundStyle(palette.accent)
-            .accessibilityHint("Opens the live PTY view and direct CLI controls")
+            .accessibilityHint("Opens the Raw view for this same terminal session")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, layout.headerVerticalPadding)
         .background(palette.surface)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "\(runtime.descriptor.agent.name), \(conversationStateLabel(state: state, at: date))"
-        )
+        .accessibilityElement(children: .contain)
     }
 
     private func conversationStateLabel(
@@ -314,27 +334,27 @@ struct ConversationView: View {
     ) -> String {
         if runtime.isAwaitingAgentOutput || runtime.activeOutputEventID != nil {
             if case .some(.agentOutput(let output)) =
-                runtime.presentationEvents.first(where: {
+               runtime.presentationEvents.first(where: {
                     $0.id == runtime.activeOutputEventID
                 })?.kind,
                output.state == .live {
-                return "Writing"
+                return "Attached · visible output active"
             }
-            return "Working"
+            return "Attached · awaiting visible output"
         }
         switch state {
         case .working:
-            return "Working"
+            return "Attached · output active"
         case .running:
-            return "Ready"
+            return "Attached · output quiet"
         case .launching:
-            return "Starting"
+            return "Starting · attach pending"
         case .detached:
-            return "Detached"
+            return "Detached · reconnect required"
         case .exited:
-            return "Ended"
+            return "Ended · Raw retained"
         case .failed:
-            return "Failed"
+            return "Failed · inspect Raw"
         }
     }
 

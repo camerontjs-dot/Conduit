@@ -45,6 +45,13 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 - Task-history sidebar with Pinned, Active, Recent, optional Archived, and a
   secondary Discovered recovery section. Selecting history never reconnects a
   process; reconnect is always explicit.
+- Reversible trailing Inspector with Session, Files, Review, Context, and Usage
+  tabs. Its divider is draggable like the task rail, persists a 300–420-point
+  preference, supports keyboard/VoiceOver adjustment, and resets to the
+  responsive default without changing density or terminal identity.
+- Optional account meters load only after an explicit Refresh from Inspector ›
+  Usage or the usage sheet. Conduit never asks macOS to unlock Claude credentials
+  automatically; unavailable account data does not affect agents, tasks, or Raw.
 - **All MainFrame** is the default task scope. The project browser filters
   history from the live MainFrame scan, while New Task defaults to the scope
   most recently submitted through that sheet.
@@ -77,11 +84,14 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 - Paste-semantics prompt delivery (bracketed paste aware), queued until observed
   output is quiet for 0.6 seconds or an eight-second cap is reached after its
   first byte
-- Compact Codex and Claude character sprites in the Conversation activity
-  header, with deterministic pose changes driven only by observed terminal
-  state
-- An explicitly generic pixel character for Shell, Gemini, OpenCode, and custom
-  profiles without copied identity art
+- Contextual Codex and Claude companions in the selected task and Conversation
+  header, with static pose changes driven only by observed terminal state.
+  Exact art requires an explicit full-name + executable signature and one
+  complete, provenance-noted, SHA-manifested six-pose set; partial sets fall
+  back atomically.
+- An explicitly labelled generic pixel companion for Shell, Antigravity, Grok,
+  OpenCode, Gemini CLI, Ollama, Cursor Agent, Aider, custom profiles, and any
+  registered identity whose dedicated set is unavailable
 
 ### Rich input
 

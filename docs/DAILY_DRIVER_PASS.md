@@ -157,33 +157,60 @@ Shows approximate used and total memory, the largest resident processes, and cur
 
 ### Agent identity in Conversation
 
-Codex and Claude sessions use copied character art in the Conversation activity
-header beside the agent name, backend, observed state, and Open Raw action. The
-app bundles those resources directly. It has no runtime dependency on the
-separate workstation or pixel-agent tracker. Runtime Leave and End remain
-explicit task actions rather than sprite controls.
+Codex and Claude sessions use copied character art in the selected task and
+Conversation activity header beside the agent name, backend, observed state,
+and Raw action. The app bundles those resources directly. It has no runtime
+dependency on the separate sprite handoff repository. Runtime Reconnect, Leave,
+End, and Restart remain explicit task actions rather than sprite controls.
+
+Dedicated art requires one exact registered full-name + executable signature
+and one complete six-pose set whose files decode and have provenance and hash
+entries. A missing, partial, unreadable, or unmanifested set falls back to the
+generic character for every pose. The UI never alternates dedicated and generic
+identity as state changes.
 
 The pose is projected from observable terminal facts:
 
 - starting: process launch is underway
 - working: output received recently
-- running: process running without recent output
+- running quiet: process running without recent output
 - detached: tmux client detached
 - exited: process ended without a nonzero code
 - failed: nonzero exit code observed
 
-The detached pose communicates uncertainty about background progress. The
-exited pose does not mean the agent completed its task. Shell, Gemini, OpenCode,
-and custom profiles receive a generic pixel character with an accessibility
-hint that no dedicated sprite exists.
+Available uses a neutral generic presentation rather than an exited pose. The
+detached pose communicates uncertainty about background progress. The exited
+pose does not mean the agent completed its task. Shell, Antigravity, Grok,
+OpenCode, Gemini CLI, Ollama, Cursor Agent, Aider, custom profiles, and any
+incomplete registered set receive a generic pixel character. Adjacent visible
+or VoiceOver text labels it as a generic placeholder while lifecycle and Raw
+authority remain separate canonical text. Poses swap immediately; no decorative
+sprite animation bypasses Reduce Motion.
 
 ### Responsive navigation and root recovery
 
 The task navigator is searchable; `⌘F` focuses task search. `⌘N` opens New
 Task, and `⇧⌘P` opens the source-derived project scope browser. Focused density
 uses a two-column task-rail/workspace composition with a temporary context
-overlay. Balanced and Operator keep project context in a third column, while
-Operator also shows the observed-state resource deck.
+overlay. Below 1440 points every density overlays Inspector so Conversation
+keeps its width. At 1440+ Balanced pins a 320-point default Inspector and
+Operator pins 336 points; Focused remains temporary. The leading divider is a
+draggable splitter. Pointer drag, focused arrow keys, and VoiceOver adjustment
+set a persistent 300–420-point preference; double-click or the named accessibility
+action restores the responsive default. A narrow window clamps the effective
+width while retaining at least 520 points for Conversation and does not overwrite
+the wider saved preference. Width never changes density, task selection, or the
+mounted terminal. Opening moves keyboard and VoiceOver focus to the Inspector
+section control; Escape or Close restores the prior workspace responder when
+possible and uses the Inspector toggle as its deterministic fallback. Operator
+also shows the observed-state resource deck.
+
+Account-reported usage is optional and manual. Opening Conversation, Inspector,
+or the usage sheet performs no account refresh. The Session tab contains only
+session/authority context; Inspector › Usage and the full usage sheet expose an
+explicit Refresh. Claude lookup is noninteractive and fails closed if macOS would
+need to show Keychain UI. Account-meter availability never affects provider
+launch, Conversation, Raw, task history, or PTY/tmux authority.
 
 The selected MainFrame root is stored with a security-scoped bookmark. When a
 development rebuild changes the app identity or macOS invalidates folder

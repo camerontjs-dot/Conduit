@@ -33,9 +33,11 @@ private struct ActiveSessionSurface: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var runtime: TerminalRuntime
+    @ObservedObject private var controller: TerminalSessionController
 
     init(runtime: TerminalRuntime) {
         self._runtime = ObservedObject(wrappedValue: runtime)
+        self._controller = ObservedObject(wrappedValue: runtime.controller)
     }
 
     private var palette: ConduitPalette {
@@ -61,7 +63,7 @@ private struct ActiveSessionSurface: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if runtime.selectedSurface == .conversation {
                 Divider().overlay(palette.line)
-                if runtime.controller.lifecycle.isTerminal {
+                if controller.lifecycle.isTerminal {
                     terminalRuntimeFooter
                 } else {
                     ComposerView()
@@ -73,21 +75,27 @@ private struct ActiveSessionSurface: View {
                 runtime.resyncConversationCapture()
             } else {
                 // Pull once while entering Raw so the projection stays warm.
-                runtime.controller.refreshConversationCapture()
+                controller.refreshConversationCapture()
             }
         }
     }
 
     private var terminalRuntimeFooter: some View {
         HStack(spacing: 10) {
-            Image(systemName: "stop.circle")
+            Image(systemName: runtimeFooterCopy.symbol)
                 .foregroundStyle(palette.dim)
                 .accessibilityHidden(true)
-            Text("This runtime is no longer accepting composer messages. Raw remains available for inspection.")
-                .font(.caption)
-                .foregroundStyle(palette.dim)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(runtimeFooterCopy.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.text)
+                Text(runtimeFooterCopy.detail)
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer(minLength: 8)
-            if runtime.controller.lifecycle == .detached,
+            if controller.lifecycle == .detached,
                let taskSessionID = runtime.descriptor.taskSessionID {
                 Button("Reconnect") {
                     model.reconnectTask(taskSessionID)
@@ -110,6 +118,46 @@ private struct ActiveSessionSurface: View {
         .accessibilityElement(children: .contain)
     }
 
+    private var runtimeFooterCopy: (
+        title: String,
+        detail: String,
+        symbol: String
+    ) {
+        if let launchIssue = controller.launchIssue {
+            return (
+                "Failed to launch · Raw retained",
+                "\(launchIssue.localizedDescription) Inspect Raw; a blocked launch does not establish the task outcome.",
+                "exclamationmark.triangle"
+            )
+        }
+        switch controller.lifecycle {
+        case .detached:
+            return (
+                "Detached · reconnect required",
+                "Composer is unavailable. Raw retains the detached terminal buffer; reconnect is always explicit.",
+                "bolt.slash.circle"
+            )
+        case .exited(let code) where (code ?? 0) != 0:
+            return (
+                "Failed · Raw retained",
+                "The process exited with code \(code ?? 0). Inspect Raw; this does not establish the task outcome.",
+                "exclamationmark.triangle"
+            )
+        case .exited:
+            return (
+                "Ended · Raw retained",
+                "The runtime ended and is not accepting composer messages. Ending does not mean the task completed.",
+                "stop.circle"
+            )
+        case .idle, .launching, .running:
+            return (
+                "Runtime state changed",
+                "Raw remains the terminal authority.",
+                "info.circle"
+            )
+        }
+    }
+
     private var surfacePicker: some View {
         HStack(spacing: 10) {
             Picker("Session view", selection: $runtime.selectedSurface) {
@@ -121,15 +169,10 @@ private struct ActiveSessionSurface: View {
             .frame(width: 230)
             .accessibilityLabel("Session view")
 
-            if runtime.selectedSurface == .raw {
-                Text("Live PTY")
-                    .font(.caption2)
-                    .foregroundStyle(palette.faint)
-            } else {
-                Text("Thread · Raw authoritative")
-                    .font(.caption2)
-                    .foregroundStyle(palette.faint)
-            }
+            Text(surfaceAuthorityLabel)
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
+                .lineLimit(1)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
@@ -137,9 +180,32 @@ private struct ActiveSessionSurface: View {
         .background(palette.rail)
     }
 
+    private var surfaceAuthorityLabel: String {
+        guard runtime.selectedSurface == .raw else {
+            return "Conversation · Raw authoritative"
+        }
+
+        if controller.launchIssue != nil {
+            return "Raw · launch blocked buffer"
+        }
+
+        switch controller.visualState(at: Date()) {
+        case .launching:
+            return "Raw · PTY starting"
+        case .working, .running:
+            return "Raw · live PTY authority"
+        case .detached:
+            return "Raw · detached buffer"
+        case .exited:
+            return "Raw · exited buffer"
+        case .failed:
+            return "Raw · failed exit buffer"
+        }
+    }
+
     private var rawTerminal: some View {
         TerminalHostView(
-            controller: runtime.controller,
+            controller: controller,
             theme: TerminalTheme(palette: palette),
             claimsFocus: runtime.selectedSurface == .raw
         )

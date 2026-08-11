@@ -765,6 +765,168 @@ remain honest about what Conduit can observe versus what the vendor controls.
 
 ---
 
+## D-034: Task-first chronology and contextual companions define the default workspace
+
+**Status:** Accepted (rail, state-language, and responsive inspector implemented)
+
+**Context:** D-024 established Pinned / Active / Recent task history and
+side-effect-free selection. D-030 later changed the default rail to agent groups
+and described density-specific inspector composition. Daily-driver review found
+that agent grouping obscures recency, the fixed inspector starves Conversation at
+small widths, and a dormant horizontal operator strip would make decoration
+compete with the selected task. Conduit still needs a restrained RPG identity
+without turning sprites, quiet output, receipts, or diagnostic styling into state
+authority.
+
+**Decision:**
+
+1. The default task rail is `Pinned` → `Active` → `Recent`, chronological within
+   each section and with active/reconnectable pinned tasks first. Agent and
+   project remain row metadata. Search, archive, and discovered-session recovery
+   remain separate existing surfaces.
+2. Selecting a task remains presentation-only. Reconnect, restart, launch, send,
+   leave, end, archive, and receipt actions remain explicit controls.
+3. A companion may appear only for the selected exact known profile in the rail
+   and selected Conversation header. It is presentation-only, accessibility-
+   redundant, and follows observed terminal state. The unmounted launchable
+   `OPERATORS` strip is not part of Focused, Balanced, or the default workspace.
+4. State copy composes observed lifecycle, activity, availability, and authority.
+   Quiet running is `Attached · output quiet`; Raw distinguishes live PTY,
+   detached buffer, exited buffer, and failed/blocked states. None is completion
+   or verification evidence.
+5. Focused keeps the inspector as a temporary trailing overlay at every width.
+   All modes overlay below 1440 points; at 1440+ Balanced pins 320 points and
+   Operator pins 336 points. Responsive rail ranges are 232–244, 244–260, and
+   260–280 points. Width changes geometry, never the saved density preference or
+   terminal/runtime identity. Fresh installs start with Inspector closed.
+6. Conversation remains default and Raw remains the same mounted PTY. The design
+   adds no second terminal, inferred completion state, provider behavior, asset
+   pipeline, or dependency.
+
+**Supersedes:** D-030 decision point 3 (agent-grouped default rail) and the part
+of decision point 4 that treats inspector pinning as density-only. The remaining
+D-030 stream, Conversation, and contextual-inspector boundaries still stand.
+D-021’s sprite truth contract and D-024’s selection contract remain in force.
+
+**Rejected alternatives:** Agent-first default grouping; a permanent horizontal
+roster/operator launcher; sprites as launch/reconnect controls; automatic density
+switching; `Ready`, XP, streaks, levels, progress bars, confetti, or receipt colour
+as completion/health semantics.
+
+**Consequences:** The workspace protects Conversation at the 1080-point minimum
+without requiring a manual panel collapse. Inspector focus enters its section
+control, returns to the prior responder when possible, and falls back to the
+workspace toggle; Escape and Reduce Motion are explicit. Future Cameron-supplied sprite art remains a
+separate provenance-gated insertion; optional built-in profiles remain generic
+or absent until explicitly configured and supplied with accepted assets.
+
+---
+
+## D-035: Dedicated companion art is catalogued and admitted atomically
+
+**Status:** Accepted (sprite insertion seam implemented)
+
+**Context:** D-021 made sprites presentation-only and D-034 placed the selected
+companion contextually. The original implementation kept pose filenames and
+bundle loading private to the view, matched either a normalized name or command,
+and loaded one image at a time. A similar or conflicting profile could receive
+the wrong identity, while a partial bundle could alternate dedicated and generic
+art across lifecycle states.
+
+**Decision:**
+
+1. `AgentSpriteCatalog` is the single identity/resource contract. It owns the
+   fixed six filenames and explicit full-profile-name + executable-basename
+   signatures. Both fields must match the same registration after only trimming
+   and case folding. Punctuation, substrings, wrappers, one-field matches, and
+   conflicting fields fail closed to the generic placeholder.
+2. Identity eligibility and artwork readiness remain separate. Dedicated art is
+   admitted only when all six images decode, all six paths appear in
+   `SHA256SUMS`, and the provenance ledger names the skin. Any missing,
+   unreadable, unmanifested, partial, or unrecorded set uses the generic
+   placeholder for every state.
+3. Available has no launched lifecycle pose and uses a neutral generic
+   presentation. Launched poses map only observed starting, output-active,
+   running-quiet, detached, exited, and failed state. Exited explicitly does not
+   imply success.
+4. Sprite views remain hidden from VoiceOver. Their containing task/session
+   labels disclose dedicated or generic-placeholder art while preserving agent,
+   lifecycle, activity, availability, backend, and Raw authority as text.
+5. P0 pose changes are static and immediate, including under Reduce Motion. The
+   periodic observation of terminal state is not decorative animation.
+6. A future approved skin requires one central catalog id/signature, the six
+   canonical files, a provenance-ledger entry, and six unique lowercase hashes. It requires no
+   provider, PTY, package dependency, SwiftUI layout, or external runtime asset
+   fetch. The external sprite repository remains design/approval reference only.
+
+**Rejected alternatives:** Fuzzy name matching; command-only identity; partial
+pose fallback; remote runtime fetching; a generated-asset pipeline inside
+Conduit; available reusing exited art; animated status theatre; treating a
+placeholder or dedicated character as availability, quality, completion, or
+verification evidence.
+
+**Consequences:** The existing Claude and Codex files remain byte-for-byte
+unchanged and grandfather their varied canvas sizes. The other eight built-ins
+remain honestly generic. Focused tests bind exact signatures, cue mapping,
+complete/partial admission, source hashes, placeholder labels, and immediate
+motion policy before a builder can add another dedicated identity.
+
+---
+
+## D-036: Inspector width is operator-controlled and account usage is explicit
+
+**Status:** Accepted (resizer and manual-only account refresh implemented)
+
+**Context:** D-034 established responsive Inspector overlay/pinning and fixed
+300/312/320/336-point widths. The task rail already had a native draggable
+splitter, while the trailing Inspector could not be adjusted. Separately,
+presentation-only account meters refreshed on view appearance: opening a
+non-Shell Conversation, the default Session Inspector, or the usage sheet could
+request access to Claude Code's Keychain credential even though account usage is
+not required for any task/session operation.
+
+**Decision:**
+
+1. Keep the Inspector outside `NavigationSplitView` and retain one stable
+   workspace/terminal topology. Overlay/pinned mode remains a pure function of
+   window width and density; user sizing never remounts, launches, reconnects,
+   selects, or changes PTY/tmux authority.
+2. The existing responsive values remain defaults. A leading splitter accepts
+   pointer drag, focused left/right arrows, and VoiceOver adjustable actions;
+   double-click or a named reset action returns to the responsive default. The
+   committed preference persists independently of density. The visual handle
+   stays a custom SwiftUI target; its accessibility representation is an AppKit
+   `NSSlider` so AX clients receive a stable title, value, help, and reset
+   action (SwiftUI `Slider` left `AXTitle` empty in live enumeration).
+3. Clamp the panel to 300–420 points and dynamically preserve at least 520 points
+   of Conversation. A temporary narrow-window clamp does not overwrite a wider
+   stored preference. Width changes are immediate and add no motion path.
+4. Account usage loads only after an explicit Refresh from Inspector › Usage
+   or the full usage sheet. Session context no longer embeds the account meter,
+   and Conversation/Inspector/sheet appearance performs no credential or
+   provider-account work.
+5. Claude's optional Keychain read is noninteractive. If its access control
+   requires UI, the meter fails closed instead of summoning SecurityAgent. A
+   missing account snapshot remains presentation absence, never agent
+   unavailability, launch failure, quota evidence, or task state.
+
+**Refines:** D-034 decision point 5: 320/336 are responsive defaults rather than
+immutable large-window widths. D-032's source-labelled account data boundary
+still applies.
+
+**Rejected alternatives:** A three-column split view that reparents the terminal;
+allowing the Inspector to consume the Conversation minimum; changing density on
+drag; animated width changes; automatic credential reads; modifying Keychain
+ACLs; treating missing account meters as provider health.
+
+**Consequences:** The right panel now has the same direct resize affordance as
+the left rail without becoming a second terminal/container authority. Normal app
+use does not request Claude Keychain access. Operators who choose Refresh receive
+only available, source-labelled account reports; all core agent/session behavior
+remains independent.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

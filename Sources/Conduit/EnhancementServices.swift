@@ -6,34 +6,22 @@ import Foundation
 import Speech
 import SwiftUI
 
-enum TerminalVisualState: String {
-    case launching
-    case working
-    case running
-    case detached
-    case exited
-    case failed
-
-    var label: String {
-        switch self {
-        case .launching: return "starting"
-        case .working: return "output active"
-        case .running: return "running"
-        case .detached: return "detached"
-        case .exited: return "exited"
-        case .failed: return "failed"
-        }
-    }
-}
-
 enum AgentHealthState: String, Sendable {
-    case ready
+    case observed
     case warning
     case unavailable
 
+    var displayName: String {
+        switch self {
+        case .observed: return "Observed"
+        case .warning: return "Attention"
+        case .unavailable: return "Unavailable"
+        }
+    }
+
     var systemImage: String {
         switch self {
-        case .ready: return "checkmark.circle.fill"
+        case .observed: return "info.circle.fill"
         case .warning: return "exclamationmark.triangle.fill"
         case .unavailable: return "xmark.circle.fill"
         }
@@ -41,7 +29,7 @@ enum AgentHealthState: String, Sendable {
 
     var color: Color {
         switch self {
-        case .ready: return .green
+        case .observed: return .blue
         case .warning: return .orange
         case .unavailable: return .red
         }
@@ -90,13 +78,25 @@ struct AgentHealthChecker {
                         .split(separator: "\n", omittingEmptySubsequences: true)
                         .first
                         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
-                    let detail = version.timedOut || version.status != 0 || firstLine.isEmpty
-                        ? path
-                        : "\(path) · \(firstLine)"
+                    let state: AgentHealthState
+                    let detail: String
+                    if version.timedOut {
+                        state = .warning
+                        detail = "\(path) · version probe timed out"
+                    } else if version.status != 0 {
+                        state = .warning
+                        detail = "\(path) · version probe exited \(version.status)"
+                    } else if firstLine.isEmpty {
+                        state = .warning
+                        detail = "\(path) · no version output observed"
+                    } else {
+                        state = .observed
+                        detail = "\(path) · \(firstLine)"
+                    }
                     results.append(AgentHealthResult(
                         id: "agent-\(agent.id.uuidString)",
                         name: agent.name,
-                        state: .ready,
+                        state: state,
                         detail: detail
                     ))
                 } else {
@@ -111,11 +111,30 @@ struct AgentHealthChecker {
 
             if let tmux = resolver.resolve("tmux") {
                 let version = SubprocessRunner.run(tmux, ["-V"], timeout: 5)
+                let firstLine = version.output
+                    .split(separator: "\n", omittingEmptySubsequences: true)
+                    .first
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                let state: AgentHealthState
+                let detail: String
+                if version.timedOut {
+                    state = .warning
+                    detail = "\(tmux) · version probe timed out"
+                } else if version.status != 0 {
+                    state = .warning
+                    detail = "\(tmux) · version probe exited \(version.status)"
+                } else if firstLine.isEmpty {
+                    state = .warning
+                    detail = "\(tmux) · no version output observed"
+                } else {
+                    state = .observed
+                    detail = "\(tmux) · \(firstLine)"
+                }
                 results.append(AgentHealthResult(
                     id: "tmux",
                     name: "Durable sessions",
-                    state: .ready,
-                    detail: version.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    state: state,
+                    detail: detail
                 ))
             } else {
                 results.append(AgentHealthResult(
@@ -135,7 +154,7 @@ struct AgentHealthChecker {
             results.append(AgentHealthResult(
                 id: "mainframe",
                 name: "MainFrame",
-                state: missing.isEmpty ? .ready : .warning,
+                state: missing.isEmpty ? .observed : .warning,
                 detail: missing.isEmpty ? root.path : "Missing: \(missing.joined(separator: ", "))"
             ))
         } else {
@@ -146,14 +165,14 @@ struct AgentHealthChecker {
         results.append(AgentHealthResult(
             id: "speech",
             name: "Speech recognition",
-            state: speech == .authorized ? .ready : .warning,
+            state: speech == .authorized ? .observed : .warning,
             detail: permissionLabel(speech)
         ))
         let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
         results.append(AgentHealthResult(
             id: "microphone",
             name: "Microphone",
-            state: microphone == .authorized ? .ready : .warning,
+            state: microphone == .authorized ? .observed : .warning,
             detail: permissionLabel(microphone)
         ))
         return results

@@ -490,7 +490,7 @@ struct ComposerView: View {
                     title: "Usage",
                     fraction: nil,
                     valueLabel: "—",
-                    detail: "account report unavailable"
+                    detail: "load manually in Inspector › Usage"
                 )
             }
 
@@ -510,9 +510,6 @@ struct ComposerView: View {
         .onAppear {
             composerModelID = agent.model
             model.refreshModelCatalog(for: agent)
-            if model.accountUsage.isEmpty {
-                model.refreshAccountUsage()
-            }
         }
         .onChange(of: model.activeSessionID) { _ in
             composerModelID = model.composerAgent?.model

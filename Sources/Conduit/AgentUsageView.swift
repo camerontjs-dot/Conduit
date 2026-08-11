@@ -29,11 +29,6 @@ struct AgentUsageSheet: View {
         }
         .frame(minWidth: 560, minHeight: 480)
         .background(palette.canvas)
-        .onAppear {
-            if model.accountUsage.isEmpty {
-                model.refreshAccountUsage()
-            }
-        }
     }
 
     private var header: some View {
@@ -52,6 +47,7 @@ struct AgentUsageSheet: View {
                     }
                 }
                 .disabled(model.accountUsageRefreshing)
+                .help("Refresh optional account meters without requesting interactive Claude Keychain access")
             }
         )
     }
@@ -79,7 +75,7 @@ struct AgentUsageSheet: View {
             }
 
             if model.accountUsage.isEmpty, !model.accountUsageRefreshing {
-                Text("No account data yet. Tap Refresh (requires Claude Keychain login, codex login, or local OpenCode DB).")
+                Text("No account data loaded. Refresh is optional; Claude credentials are read only when already available without a macOS prompt.")
                     .font(.caption)
                     .foregroundStyle(palette.faint)
             }
@@ -252,7 +248,7 @@ struct AgentUsageSheet: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("Account meters use each tool’s own auth (Keychain / codex login / local DB). Tokens are never stored by Conduit.")
+            Text("Account meters load only after Refresh. Conduit does not request interactive Claude Keychain access or place credentials in its settings, logs, or snapshots.")
                 .foregroundStyle(palette.dim)
             Text("Claude: 5h + weekly utilization. Codex: ChatGPT plan windows. OpenCode: local session tokens (not Zen pool %).")
                 .foregroundStyle(palette.faint)
@@ -301,6 +297,7 @@ struct AgentUsageMeterPanel: View {
                     .font(.caption2)
                     .foregroundStyle(palette.accent)
                     .disabled(model.accountUsageRefreshing)
+                    .help("Refresh optional account meters without requesting interactive Claude Keychain access")
                 Button("Details") { model.showAgentUsage = true }
                     .buttonStyle(.borderless)
                     .font(.caption2)
@@ -308,18 +305,13 @@ struct AgentUsageMeterPanel: View {
             }
 
             if model.accountUsage.isEmpty {
-                Text(model.accountUsageRefreshing ? "Loading…" : "Tap Refresh for Claude / Codex / OpenCode.")
+                Text(model.accountUsageRefreshing ? "Loading…" : "Optional · Refresh account meters manually.")
                     .font(.caption2)
                     .foregroundStyle(palette.faint)
             } else {
                 ForEach(model.accountUsage) { snap in
                     compactAccount(snap)
                 }
-            }
-        }
-        .onAppear {
-            if model.accountUsage.isEmpty {
-                model.refreshAccountUsage()
             }
         }
     }

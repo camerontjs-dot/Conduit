@@ -19,7 +19,7 @@ struct DiagnosticsView: View {
         VStack(spacing: 0) {
             ConduitSheetHeader(
                 title: "Conduit Doctor",
-                subtitle: "Agent CLI health and install checks",
+                subtitle: "Local command, path, and permission checks — not authentication, quota, or quality",
                 systemImage: "stethoscope",
                 trailing: {
                     Button("Refresh") { Task { await model.refreshHealth() } }
@@ -31,9 +31,15 @@ struct DiagnosticsView: View {
                     Image(systemName: result.state.systemImage)
                         .foregroundStyle(result.state.color)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(result.name)
-                            .font(.headline)
-                            .foregroundStyle(palette.text)
+                        HStack {
+                            Text(result.name)
+                                .font(.headline)
+                                .foregroundStyle(palette.text)
+                            Spacer()
+                            Text(result.state.displayName)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(result.state.color)
+                        }
                         Text(result.detail)
                             .font(.caption)
                             .foregroundStyle(palette.dim)
@@ -42,6 +48,7 @@ struct DiagnosticsView: View {
                 }
                 .padding(.vertical, 3)
                 .listRowBackground(palette.surface)
+                .accessibilityElement(children: .combine)
             }
             .scrollContentBackground(.hidden)
             .background(palette.app)

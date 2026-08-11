@@ -7,7 +7,10 @@ struct WorkspaceHeader: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var contextButtonFocused: Bool
+    @AccessibilityFocusState private var contextButtonAccessibilityFocused: Bool
     let project: MainframeProject
+    let inspectorFocusRequest: Int
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -40,8 +43,8 @@ struct WorkspaceHeader: View {
 
     private var contextButtonHelp: String {
         model.isContextInspectorPresented
-            ? "Hide the right inspector"
-            : "Show the right inspector (Session, Files, Review, Context)"
+            ? "Hide the right inspector (Command-Backslash)"
+            : "Show the right inspector: Session, Files, Review, Context, and Usage (Command-Backslash)"
     }
 
     var body: some View {
@@ -120,13 +123,22 @@ struct WorkspaceHeader: View {
                 }
             }
             .buttonStyle(.bordered)
+            .focused($contextButtonFocused)
+            .accessibilityFocused($contextButtonAccessibilityFocused)
             .accessibilityLabel(contextButtonAccessibilityLabel)
             .accessibilityValue(contextButtonAccessibilityValue)
             .help(contextButtonHelp)
-            .keyboardShortcut("\\", modifiers: [.command])
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
+        .onChange(of: inspectorFocusRequest) { request in
+            if request > 0 {
+                DispatchQueue.main.async {
+                    contextButtonFocused = true
+                    contextButtonAccessibilityFocused = true
+                }
+            }
+        }
     }
 
     private var taskSubtitle: String {
@@ -790,18 +802,15 @@ struct OperatorOpsDeck: View {
         let sub: String
         if results.isEmpty {
             big = "—"
-            sub = "Not checked"
+            sub = "Local probes not run"
         } else {
-            let ready = results.filter { $0.state == .ready }.count
-            big = "\(ready)/\(results.count)"
-            if ready == results.count {
-                sub = "All ready"
-            } else {
-                let other = results.count - ready
-                sub = "\(other) not ready"
-            }
+            let observed = results.filter { $0.state == .observed }.count
+            let warnings = results.filter { $0.state == .warning }.count
+            let unavailable = results.filter { $0.state == .unavailable }.count
+            big = "\(results.count)"
+            sub = "\(observed) observed · \(warnings) attention · \(unavailable) unavailable"
         }
-        return opsCard(key: "Doctor", big: big, sub: sub)
+        return opsCard(key: "Local probes · not auth/quota", big: big, sub: sub)
     }
 
     private func opsCard(key: String, big: String, sub: String) -> some View {
@@ -973,7 +982,9 @@ private struct OperatorSeat: View {
         }
         .buttonStyle(.plain)
         .opacity(0.5)
-        .accessibilityLabel("\(agent.name), available")
+        .accessibilityLabel(
+            "\(agent.name), \(AgentSpriteCue.available.accessibilityPhrase), neutral generic companion"
+        )
         .accessibilityHint("Launches a new \(agent.name) session for the selected project")
         .help("Launch \(agent.name)")
     }
@@ -1058,7 +1069,9 @@ private struct LaunchedOperatorSeat: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(agent.name), \(state.label)")
+        .accessibilityLabel(
+            "\(agent.name), \(state.spriteCue.accessibilityPhrase), \(AgentSpriteResources.accessibilityDescription(for: agent))"
+        )
         .accessibilityHint("Switches to the existing \(agent.name) session")
         .help("Select \(agent.name) session")
     }
@@ -1125,7 +1138,9 @@ private struct SessionPill: View {
 
     var body: some View {
         let state = controller.visualState(at: date)
-        let sprite = AgentSpriteResolver.resolve(runtime.descriptor.agent)
+        let artworkDescription = AgentSpriteResources.accessibilityDescription(
+            for: runtime.descriptor.agent
+        )
         HStack(spacing: 6) {
             AgentSpriteView(profile: runtime.descriptor.agent, state: state)
             Button {
@@ -1146,12 +1161,10 @@ private struct SessionPill: View {
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(runtime.descriptor.agent.name) session, \(state.label), \(controller.backendLabel)")
-            .accessibilityHint(
-                sprite.isExactMatch
-                    ? "Switches to this session"
-                    : "Switches to this session. A generic character is shown because this profile has no dedicated sprite."
+            .accessibilityLabel(
+                "\(runtime.descriptor.agent.name) session, \(state.spriteCue.accessibilityPhrase), \(controller.backendLabel), \(artworkDescription)"
             )
+            .accessibilityHint("Switches to this session")
             Button {
                 model.closeSession(runtime)
             } label: {

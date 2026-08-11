@@ -135,7 +135,8 @@ final class AppModel: ObservableObject {
     @Published var forwardingDraft: ForwardingDraft?
     /// Legacy settings-backed default; layout no longer embeds context in the workspace.
     @Published var showContext = true
-    /// Trailing inspector visibility. Collapsible like the left rail; default open.
+    /// Trailing inspector visibility. Fresh installs start closed; an explicit
+    /// operator choice persists independently of responsive overlay/pin geometry.
     /// Persists under `conduit.inspectorPresented`.
     @Published var isContextInspectorPresented: Bool = AppModel.loadPersistedInspectorPresented() {
         didSet {
@@ -189,11 +190,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Right inspector is operator-collapsible in every density (not pinned).
-    var isContextDetailPinned: Bool {
-        false
-    }
-
     let speech = SpeechTranscriber()
     private let store = SettingsStore()
     private let scanner = MainframeScanner()
@@ -235,11 +231,12 @@ final class AppModel: ObservableObject {
         return resolved
     }
 
-    /// Default open when the key has never been written.
+    /// Focused is the product default, so a fresh workspace protects the
+    /// Conversation reading surface until the operator asks for Inspector.
     private static func loadPersistedInspectorPresented() -> Bool {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: inspectorPresentedStorageKey) != nil else {
-            return true
+            return false
         }
         return defaults.bool(forKey: inspectorPresentedStorageKey)
     }
@@ -2646,7 +2643,10 @@ final class AppModel: ObservableObject {
     // MARK: - Health and resources
 
     func refreshHealth() async {
-        healthResults = await healthChecker.check(agents: settings.agents, mainframeRoot: settings.mainframeRoot)
+        healthResults = await healthChecker.check(
+            agents: settings.agents.filter(\.enabled),
+            mainframeRoot: settings.mainframeRoot
+        )
     }
 
     func refreshResources() async {

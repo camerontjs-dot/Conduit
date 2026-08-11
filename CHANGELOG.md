@@ -27,6 +27,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- A centralized **six-pose companion insertion seam** now defines exact
+  profile signatures, canonical filenames, lifecycle cues, provenance/hash
+  coverage, placeholder accessibility copy, and static Reduce Motion policy.
+  Future approved skins need one catalog entry plus the approved six files and
+  ledger/hash entries; no SwiftUI or layout rewrite is required.
 - **Provider-neutral model selection** for every non-shell agent profile, with
   lazy catalogs from Ollama, OpenCode, and Cursor Agent plus a CLI-default
   fallback for other CLIs.
@@ -35,9 +40,54 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 - Compact circular **Usage** and **Context** meters in the active composer.
   Usage is account-reported when available; Context is explicitly a visible
   Conversation/composer estimate.
+- A draggable trailing-Inspector splitter with persisted width, keyboard and
+  VoiceOver adjustment, and a reset to the responsive default.
 
 ### Changed
 
+- Inspector geometry now follows window width without changing saved density:
+  Focused always uses a temporary trailing overlay, every mode overlays below
+  1440 points, and Balanced/Operator pin a 320/336-point default panel at 1440+.
+  The operator can resize it between 300 and 420 points; narrow windows clamp
+  the effective width without overwriting the saved preference and preserve a
+  520-point Conversation minimum. Fresh installs start with Inspector closed;
+  opening moves keyboard/VoiceOver focus to its section control, closing
+  restores the prior workspace responder when possible (with the Inspector
+  toggle as fallback), and Escape closes it.
+- Account-reported usage is now operator-initiated from Inspector › Usage or
+  the usage sheet. Opening Conversation, Inspector, or the sheet no longer
+  refreshes account data, and the Session tab no longer embeds account meters.
+- Rail width now stays within 232–280 points across the three responsive
+  classes. The Review empty state distinguishes an observed clean tree from a
+  missing repository and repeats that clean is not completion evidence.
+- Dedicated Claude/Codex art now requires the full profile name and executable
+  to agree and the entire six-pose set to decode with provenance and manifest
+  coverage. Missing or partial sets fall back atomically to an explicitly
+  labelled generic companion instead of mixing identities pose by pose.
+- Available companions use a neutral generic presentation rather than the
+  exited pose. Selected task rows expose their selected trait and surrounding
+  VoiceOver labels disclose dedicated versus placeholder art; lifecycle text
+  remains authoritative.
+- Task history now scans as **Pinned → Active → Recent**, with
+  active/reconnectable pinned tasks first. Agent and project remain visible row
+  metadata, and Reconnect remains a separate explicit action.
+- The selected exact known-agent task may show its existing contextual companion
+  in the rail, while the Conversation header now states observed
+  attached/output/backend/Raw authority instead of ambiguous `Ready` or
+  agent-intent language. Companion art remains non-interactive and redundant to
+  text.
+- Raw chrome and the terminal footer now distinguish a live PTY, detached buffer,
+  exited buffer, and failed/blocked state. Ended and failed copy explicitly says
+  that process state does not establish task completion. A recorded launch issue
+  wins over the terminal lifecycle so a blocked launch cannot be mislabeled Ended.
+- Conversation header state and its Follow/Raw controls remain separate
+  VoiceOver elements instead of one combined action.
+- The existing Inspector reveal now becomes immediate when Reduce Motion is
+  enabled.
+- Operator-mode diagnostics now present neutral local probe counts with an
+  explicit no-auth/quota/quality boundary instead of aggregate readiness.
+  History-only task names cannot inherit dedicated identity art from current
+  settings when their executable signature was never recorded.
 - Agent profiles persist an optional model, launch style, and context-window
   limit. Choices apply to the next process launch and never mutate a live PTY.
 - The New Task sheet reserves a larger native macOS layout so the model popup
@@ -48,6 +98,21 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 - Gemini CLI is treated as a cloud-capable CLI whose free access depends on
   its configured authentication; Aider is treated as a provider-neutral
   local/BYOK CLI, not as a free cloud provider.
+
+### Fixed
+
+- The Inspector resize handle's accessibility representation now uses an AppKit
+  `NSSlider` so VoiceOver and other AX clients receive a stable title
+  (`Resize Inspector`), value in points, help text, and a named reset action.
+  The earlier SwiftUI `Slider` representation exposed adjustable semantics but
+  left `AXTitle` empty on macOS.
+
+### Security
+
+- Optional Claude account-usage refreshes use a noninteractive Keychain lookup.
+  If macOS requires authentication, the meter fails closed instead of summoning
+  SecurityAgent; Conduit never needs that credential for Conversation, Raw, or
+  provider launch.
 
 ---
 

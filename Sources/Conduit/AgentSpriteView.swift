@@ -3,30 +3,6 @@ import AppKit
 import ConduitCore
 import SwiftUI
 
-enum AgentSpritePose: String, CaseIterable {
-    case clipboard
-    case magnifyingGlass = "magnifying-glass"
-    case pointingWarning = "pointing-warning"
-    case shrug
-    case skeptical
-    case sleepingCoffee = "sleeping-coffee"
-}
-
-extension TerminalVisualState {
-    /// Poses describe only the terminal lifecycle Conduit can observe. None of
-    /// these represents task completion, validation, or agent intent.
-    var spritePose: AgentSpritePose {
-        switch self {
-        case .launching: return .clipboard
-        case .working: return .magnifyingGlass
-        case .running: return .skeptical
-        case .detached: return .shrug
-        case .exited: return .sleepingCoffee
-        case .failed: return .pointingWarning
-        }
-    }
-}
-
 /// Explicit seat/sprite presentation. Keeps unlaunched agents off the
 /// `TerminalVisualState` enum so "available" never masquerades as ready/running.
 enum AgentSpritePresentation: Equatable {
@@ -39,6 +15,7 @@ enum AgentSpritePresentation: Equatable {
 struct AgentSpriteView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let profile: AgentProfile
     let presentation: AgentSpritePresentation
     /// Default matches the session-pill chrome; operator seats pass a smaller size.
@@ -68,17 +45,12 @@ struct AgentSpriteView: View {
         themeStore.palette(for: colorScheme)
     }
 
-    private var resolution: AgentSpriteResolution {
-        AgentSpriteResolver.resolve(profile)
-    }
-
-    /// Available uses the idle sleeping pose without claiming an exited runtime.
-    private var pose: AgentSpritePose {
+    private var cue: AgentSpriteCue {
         switch presentation {
         case .available:
-            return .sleepingCoffee
+            return .available
         case .launched(let state):
-            return state.spritePose
+            return state.spriteCue
         }
     }
 
@@ -118,19 +90,33 @@ struct AgentSpriteView: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(markColor.opacity(washOpacity))
         )
+        .transaction { transaction in
+            if !AgentSpriteMotionPolicy.shouldAnimatePoseChange(
+                reduceMotion: reduceMotion
+            ) {
+                transaction.disablesAnimations = true
+            }
+        }
         .accessibilityHidden(true)
     }
 
     private var image: NSImage? {
-        guard let skin = resolution.skin else { return nil }
-        return AgentSpriteResources.image(skin: skin, pose: pose)
+        guard let pose = cue.pose else { return nil }
+        return AgentSpriteResources.image(profile: profile, pose: pose)
     }
 }
 
-private enum AgentSpriteResources {
-    private static let cache = NSCache<NSString, NSImage>()
+/// Resource-aware half of the insertion seam. It accepts a dedicated skin only
+/// when all six files decode and their manifest/provenance entries are present.
+/// A partial set therefore falls back atomically instead of changing character
+/// as lifecycle poses change.
+enum AgentSpriteResources {
+    private struct Snapshot {
+        let inventory: AgentSpriteResourceInventory
+        let images: [AgentSpriteSkin: [AgentSpritePose: NSImage]]
+    }
 
-    static let bundle: Bundle? = {
+    private static let bundle: Bundle? = {
         let bundleName = "Conduit_Conduit.bundle"
         let candidates = [
             Bundle.main.resourceURL?.appendingPathComponent(bundleName),
@@ -139,18 +125,92 @@ private enum AgentSpriteResources {
         return candidates.compactMap { $0 }.compactMap(Bundle.init(url:)).first
     }()
 
-    static func image(skin: AgentSpriteSkin, pose: AgentSpritePose) -> NSImage? {
-        let key = "\(skin.rawValue)/\(pose.rawValue)" as NSString
-        if let image = cache.object(forKey: key) { return image }
-        guard let url = bundle?.url(
-            forResource: pose.rawValue,
-            withExtension: "png",
-            subdirectory: "AgentSprites/\(skin.rawValue)"
-        ), let image = NSImage(contentsOf: url) else {
+    private static let snapshot: Snapshot = makeSnapshot()
+
+    static func artworkResolution(
+        for profile: AgentProfile
+    ) -> AgentSpriteArtworkResolution {
+        AgentSpriteCatalog.artworkResolution(
+            for: profile,
+            inventory: snapshot.inventory
+        )
+    }
+
+    static func accessibilityDescription(for profile: AgentProfile) -> String {
+        artworkResolution(for: profile)
+            .accessibilityDescription(profileName: profile.name)
+    }
+
+    static func visibleFallbackLabel(for profile: AgentProfile) -> String? {
+        artworkResolution(for: profile).visibleFallbackLabel
+    }
+
+    static func image(profile: AgentProfile, pose: AgentSpritePose) -> NSImage? {
+        guard case .dedicated(let skin) = artworkResolution(for: profile) else {
             return nil
         }
-        cache.setObject(image, forKey: key)
-        return image
+        return snapshot.images[skin]?[pose]
+    }
+
+    private static func makeSnapshot() -> Snapshot {
+        guard let bundle else {
+            return Snapshot(inventory: .empty, images: [:])
+        }
+
+        var readableRelativePaths = Set<String>()
+        var candidateImages: [AgentSpriteSkin: [AgentSpritePose: NSImage]] = [:]
+        for skin in AgentSpriteSkin.allCases {
+            var images: [AgentSpritePose: NSImage] = [:]
+            for pose in AgentSpritePose.allCases {
+                guard let url = bundle.url(
+                    forResource: pose.rawValue,
+                    withExtension: "png",
+                    subdirectory: "AgentSprites/\(skin.rawValue)"
+                ), let image = NSImage(contentsOf: url) else {
+                    continue
+                }
+                images[pose] = image
+                readableRelativePaths.insert("\(skin.rawValue)/\(pose.fileName)")
+            }
+            candidateImages[skin] = images
+        }
+
+        let manifestText = textResource(
+            name: "SHA256SUMS",
+            extension: nil,
+            bundle: bundle
+        )
+        let provenanceText = textResource(
+            name: "README",
+            extension: "md",
+            bundle: bundle
+        )
+        let inventory = AgentSpriteResourceInventory(
+            readableRelativePaths: readableRelativePaths,
+            manifestHashes: AgentSpriteHashManifest.parse(manifestText),
+            provenanceText: provenanceText
+        )
+
+        let completeImages = candidateImages.filter { skin, _ in
+            AgentSpriteCatalog.validation(
+                for: skin,
+                inventory: inventory
+            ).isComplete
+        }
+        return Snapshot(inventory: inventory, images: completeImages)
+    }
+
+    private static func textResource(
+        name: String,
+        extension fileExtension: String?,
+        bundle: Bundle
+    ) -> String {
+        guard let url = bundle.url(
+            forResource: name,
+            withExtension: fileExtension,
+            subdirectory: "AgentSprites"
+        ) else { return "" }
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 }
 
