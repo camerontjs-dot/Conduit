@@ -87,6 +87,23 @@ struct ConduitApp: App {
                     .keyboardShortcut("w", modifiers: [.command, .shift])
                 Button(contextCommandTitle) { model.toggleContextPresentation() }
                     .keyboardShortcut("\\", modifiers: [.command])
+                Menu("Inspector Cards") {
+                    ForEach(InspectorCard.allCases) { card in
+                        Button {
+                            model.toggleInspectorCardVisibility(card)
+                        } label: {
+                            if model.isInspectorCardVisible(card) {
+                                Text("✓ \(card.title)")
+                            } else {
+                                Text(card.title)
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("Reset Cards to Density Defaults") {
+                        model.resetInspectorCardsToDensityDefaults()
+                    }
+                }
                 Button("Refresh MainFrame") { model.refreshProjects() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
             }

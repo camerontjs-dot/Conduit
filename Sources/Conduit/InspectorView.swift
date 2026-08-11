@@ -3,7 +3,9 @@ import AppKit
 import ConduitCore
 import SwiftUI
 
-enum InspectorTab: String, CaseIterable, Identifiable {
+/// Tool-window cards in the trailing Inspector (C86). Visibility and expansion
+/// persist; density supplies defaults until the operator customizes.
+enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
     case session
     case files
     case review
@@ -21,7 +23,81 @@ enum InspectorTab: String, CaseIterable, Identifiable {
         case .usage: return "Usage"
         }
     }
+
+    /// Short source / job label shown in the card chrome.
+    var subtitle: String {
+        switch self {
+        case .session: return "Runtime and safe actions"
+        case .files: return "Paths · not verification"
+        case .review: return "Observed git only"
+        case .context: return "Work session · nominations"
+        case .usage: return "Account meters · manual refresh"
+        }
+    }
+
+    enum DefaultKind {
+        case visibility
+        case expanded
+    }
+
+    /// Density-as-perspective defaults (Focused quieter, Operator fuller).
+    static func defaultMap(
+        for density: Density,
+        kind: DefaultKind
+    ) -> [InspectorCard: Bool] {
+        switch kind {
+        case .visibility:
+            switch density {
+            case .focused:
+                return [
+                    .session: true,
+                    .files: false,
+                    .review: false,
+                    .context: false,
+                    .usage: false
+                ]
+            case .balanced:
+                return [
+                    .session: true,
+                    .files: true,
+                    .review: true,
+                    .context: false,
+                    .usage: false
+                ]
+            case .operator:
+                return Dictionary(
+                    uniqueKeysWithValues: allCases.map { ($0, true) }
+                )
+            }
+        case .expanded:
+            switch density {
+            case .focused:
+                return Dictionary(
+                    uniqueKeysWithValues: allCases.map { ($0, $0 == .session) }
+                )
+            case .balanced:
+                return [
+                    .session: true,
+                    .files: false,
+                    .review: false,
+                    .context: false,
+                    .usage: false
+                ]
+            case .operator:
+                return [
+                    .session: true,
+                    .files: true,
+                    .review: false,
+                    .context: false,
+                    .usage: false
+                ]
+            }
+        }
+    }
 }
+
+/// Historical name used by focus / menu jump targets.
+typealias InspectorTab = InspectorCard
 
 /// Trailing inspector: session, files, git review, project context.
 struct InspectorView: View {
@@ -37,47 +113,35 @@ struct InspectorView: View {
     @State private var gitBranch: String = ""
     @State private var gitError: String?
     @State private var gitLoading = false
-    @FocusState private var sectionPickerFocused: Bool
-    @AccessibilityFocusState private var sectionPickerAccessibilityFocused: Bool
+    @FocusState private var focusedCard: InspectorCard?
+    @AccessibilityFocusState private var cardAccessibilityFocused: Bool
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
+    }
+
+    private var visibleCards: [InspectorCard] {
+        InspectorCard.allCases.filter { model.isInspectorCardVisible($0) }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(palette.line)
-            Picker("Inspector", selection: $model.inspectorTab) {
-                ForEach(InspectorTab.allCases) { tab in
-                    Text(tab.title).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .focused($sectionPickerFocused)
-            .accessibilityFocused($sectionPickerAccessibilityFocused)
-            .accessibilityLabel("Inspector sections")
-            .accessibilityValue(model.inspectorTab.title)
-            .accessibilityHint("Choose Session, Files, Review, Context, or Usage")
-            .padding(10)
-
             ScrollView {
-                Group {
-                    switch model.inspectorTab {
-                    case .session:
-                        sessionPane
-                    case .files:
-                        filesPane
-                    case .review:
-                        reviewPane
-                    case .context:
-                        contextPane
-                    case .usage:
-                        usagePane
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(visibleCards) { card in
+                        inspectorCard(card)
+                    }
+                    if visibleCards.isEmpty {
+                        Text("All Inspector cards are hidden. Use View → Inspector Cards to show one.")
+                            .font(.caption)
+                            .foregroundStyle(palette.dim)
+                            .padding(.vertical, 8)
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.bottom, 16)
+                .padding(.vertical, 10)
             }
         }
         .background(
@@ -88,19 +152,20 @@ struct InspectorView: View {
             )
         )
         .onChange(of: model.inspectorTab) { tab in
-            if tab == .review {
-                refreshGit()
+            model.focusInspectorCard(tab)
+            if tab == .review || model.isInspectorCardExpanded(.review) {
+                refreshGitIfNeeded()
             }
+            focusedCard = tab
         }
         .onChange(of: project?.id) { _ in
-            if model.inspectorTab == .review {
-                refreshGit()
-            }
+            refreshGitIfNeeded()
+        }
+        .onChange(of: model.inspectorCardExpanded[.review] ?? false) { expanded in
+            if expanded { refreshGitIfNeeded() }
         }
         .onAppear {
-            if model.inspectorTab == .review {
-                refreshGit()
-            }
+            refreshGitIfNeeded()
             if focusRequest > 0 {
                 requestInspectorFocus()
             }
@@ -115,6 +180,73 @@ struct InspectorView: View {
                 onClose?()
             }
         }
+    }
+
+    @ViewBuilder
+    private func inspectorCard(_ card: InspectorCard) -> some View {
+        let expanded = model.isInspectorCardExpanded(card)
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                model.toggleInspectorCardExpanded(card)
+                if card == .review, !expanded {
+                    refreshGitIfNeeded()
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(palette.dim)
+                        .frame(width: 10)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(card.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(palette.text)
+                        Text(card.subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(palette.faint)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .focused($focusedCard, equals: card)
+            .accessibilityLabel(card.title)
+            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(card.subtitle)
+            .accessibilityAddTraits(.isHeader)
+
+            if expanded {
+                Divider().overlay(palette.line)
+                Group {
+                    switch card {
+                    case .session: sessionPane
+                    case .files: filesPane
+                    case .review: reviewPane
+                    case .context: contextPane
+                    case .usage: usagePane
+                    }
+                }
+                .padding(10)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(palette.sink.opacity(colorScheme == .dark ? 0.55 : 0.9))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(palette.line.opacity(0.9), lineWidth: 1)
+        )
+    }
+
+    private func refreshGitIfNeeded() {
+        guard model.isInspectorCardVisible(.review),
+              model.isInspectorCardExpanded(.review)
+        else { return }
+        refreshGit()
     }
 
     private var header: some View {
@@ -149,8 +281,12 @@ struct InspectorView: View {
 
     private func requestInspectorFocus() {
         DispatchQueue.main.async {
-            sectionPickerFocused = true
-            sectionPickerAccessibilityFocused = true
+            let target = model.isInspectorCardVisible(model.inspectorTab)
+                ? model.inspectorTab
+                : (visibleCards.first ?? .session)
+            model.focusInspectorCard(target)
+            focusedCard = target
+            cardAccessibilityFocused = true
         }
     }
 

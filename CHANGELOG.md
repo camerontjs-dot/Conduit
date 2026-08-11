@@ -45,6 +45,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Changed
 
+- Inspector tool panels are **stacked collapsible cards** (Session, Files,
+  Review, Context, Usage) instead of a single segmented form. Visibility and
+  expansion persist; density supplies quieter/fuller defaults until customized.
+  **Conduit → Inspector Cards** toggles each card; Reset restores density
+  defaults. Layout still never remounts the PTY.
 - Inspector geometry now follows window width without changing saved density:
   Focused always uses a temporary trailing overlay, every mode overlays below
   1440 points, and Balanced/Operator pin a 320/336-point default panel at 1440+.

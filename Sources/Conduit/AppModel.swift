@@ -92,6 +92,9 @@ final class AppModel: ObservableObject {
     static let densityStorageKey = "conduit.density"
     /// UserDefaults key for trailing inspector visibility.
     static let inspectorPresentedStorageKey = "conduit.inspectorPresented"
+    static let inspectorCardVisibilityKey = "conduit.inspectorCardVisibility"
+    static let inspectorCardExpandedKey = "conduit.inspectorCardExpanded"
+    static let inspectorCardsCustomizedKey = "conduit.inspectorCardsCustomized"
     static let newTaskScopeStorageKey = "conduit.newTask.scope"
 
     @Published var settings = ConduitSettings()
@@ -146,7 +149,33 @@ final class AppModel: ObservableObject {
             )
         }
     }
+    /// Focus / jump target when opening Inspector (expands that card if visible).
     @Published var inspectorTab: InspectorTab = .session
+    /// Which Inspector tool cards are shown. Persists under
+    /// `conduit.inspectorCardVisibility`. Density defaults apply until customized.
+    @Published var inspectorCardVisibility: [InspectorCard: Bool] =
+        AppModel.loadInspectorCardMap(key: AppModel.inspectorCardVisibilityKey) {
+            didSet {
+                Self.persistInspectorCardMap(
+                    inspectorCardVisibility,
+                    key: Self.inspectorCardVisibilityKey
+                )
+            }
+        }
+    /// Which visible cards are expanded. Persists under
+    /// `conduit.inspectorCardExpanded`.
+    @Published var inspectorCardExpanded: [InspectorCard: Bool] =
+        AppModel.loadInspectorCardMap(key: AppModel.inspectorCardExpandedKey) {
+            didSet {
+                Self.persistInspectorCardMap(
+                    inspectorCardExpanded,
+                    key: Self.inspectorCardExpandedKey
+                )
+            }
+        }
+    /// When false, density changes re-apply card show/expand defaults.
+    @Published private(set) var inspectorCardsCustomized: Bool =
+        UserDefaults.standard.bool(forKey: AppModel.inspectorCardsCustomizedKey)
     @Published var statusMessage: String?
     @Published var errorMessage: String?
     @Published var isDropTargeted = false
@@ -187,6 +216,9 @@ final class AppModel: ObservableObject {
     @Published var density: Density = AppModel.loadPersistedDensity() {
         didSet {
             UserDefaults.standard.set(density.rawValue, forKey: Self.densityStorageKey)
+            if !inspectorCardsCustomized {
+                applyInspectorCardDefaults(for: density)
+            }
         }
     }
 
@@ -239,6 +271,100 @@ final class AppModel: ObservableObject {
             return false
         }
         return defaults.bool(forKey: inspectorPresentedStorageKey)
+    }
+
+    private static func loadInspectorCardMap(key: String) -> [InspectorCard: Bool] {
+        let defaults = UserDefaults.standard
+        guard let data = defaults.data(forKey: key),
+              let raw = try? JSONDecoder().decode([String: Bool].self, from: data)
+        else {
+            return InspectorCard.defaultMap(
+                for: loadPersistedDensity(),
+                kind: key == inspectorCardExpandedKey ? .expanded : .visibility
+            )
+        }
+        var map: [InspectorCard: Bool] = [:]
+        for card in InspectorCard.allCases {
+            map[card] = raw[card.rawValue] ?? true
+        }
+        return map
+    }
+
+    private static func persistInspectorCardMap(
+        _ map: [InspectorCard: Bool],
+        key: String
+    ) {
+        var raw: [String: Bool] = [:]
+        for (card, value) in map {
+            raw[card.rawValue] = value
+        }
+        if let data = try? JSONEncoder().encode(raw) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    func isInspectorCardVisible(_ card: InspectorCard) -> Bool {
+        inspectorCardVisibility[card] ?? true
+    }
+
+    func isInspectorCardExpanded(_ card: InspectorCard) -> Bool {
+        inspectorCardExpanded[card] ?? (card == .session)
+    }
+
+    func toggleInspectorCardVisibility(_ card: InspectorCard) {
+        markInspectorCardsCustomized()
+        var next = inspectorCardVisibility
+        let visible = next[card] ?? true
+        // Keep at least one card visible so Inspector never becomes empty chrome.
+        if visible {
+            let others = InspectorCard.allCases.contains {
+                $0 != card && (next[$0] ?? true)
+            }
+            guard others else { return }
+        }
+        next[card] = !visible
+        inspectorCardVisibility = next
+    }
+
+    func toggleInspectorCardExpanded(_ card: InspectorCard) {
+        markInspectorCardsCustomized()
+        var next = inspectorCardExpanded
+        next[card] = !(next[card] ?? (card == .session))
+        inspectorCardExpanded = next
+    }
+
+    func setInspectorCardExpanded(_ card: InspectorCard, expanded: Bool) {
+        var next = inspectorCardExpanded
+        next[card] = expanded
+        inspectorCardExpanded = next
+    }
+
+    func focusInspectorCard(_ card: InspectorCard) {
+        inspectorTab = card
+        if !(inspectorCardVisibility[card] ?? true) {
+            markInspectorCardsCustomized()
+            var visibility = inspectorCardVisibility
+            visibility[card] = true
+            inspectorCardVisibility = visibility
+        }
+        setInspectorCardExpanded(card, expanded: true)
+    }
+
+    func resetInspectorCardsToDensityDefaults() {
+        inspectorCardsCustomized = false
+        UserDefaults.standard.set(false, forKey: Self.inspectorCardsCustomizedKey)
+        applyInspectorCardDefaults(for: density)
+    }
+
+    private func markInspectorCardsCustomized() {
+        guard !inspectorCardsCustomized else { return }
+        inspectorCardsCustomized = true
+        UserDefaults.standard.set(true, forKey: Self.inspectorCardsCustomizedKey)
+    }
+
+    private func applyInspectorCardDefaults(for density: Density) {
+        inspectorCardVisibility = InspectorCard.defaultMap(for: density, kind: .visibility)
+        inspectorCardExpanded = InspectorCard.defaultMap(for: density, kind: .expanded)
     }
 
     var selectedProject: MainframeProject? {
