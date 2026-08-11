@@ -179,6 +179,26 @@ check("empty inbox attention is honest",
         archived: [],
         discoveredCount: 0
       ).summaryLine == "No tasks in this scope")
+check("companion master resolves OpenCode by name",
+      AgentCompanionMaster.resolve(
+        for: AgentProfile(name: "OpenCode", command: "opencode")
+      ) == .opencode)
+check("companion master resolves Shell by executable",
+      AgentCompanionMaster.resolve(
+        for: AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell)
+      ) == .localShell)
+check("mid-session model switch for OpenCode uses slash",
+      AgentMidSessionModelPolicy.applyMode(
+        for: AgentProfile(name: "OpenCode", command: "opencode"),
+        modelID: "opencode/deepseek-v4-flash-free",
+        hasLiveRuntime: true
+      ) == .liveSlash("/model opencode/deepseek-v4-flash-free"))
+check("mid-session model for Codex requires relaunch when live",
+      AgentMidSessionModelPolicy.applyMode(
+        for: AgentProfile(name: "Codex", command: "codex"),
+        modelID: "o3",
+        hasLiveRuntime: true
+      ) == .liveRequiresRelaunch)
 check("small-window inspector stays an overlay in Operator density",
       WorkspaceGeometryPolicy.resolve(
         windowWidth: 1_080,

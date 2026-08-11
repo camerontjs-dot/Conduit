@@ -173,6 +173,15 @@ struct ConduitApp: App {
                                 : "Output-Active Companion Pulse"
                         )
                     }
+                    Button {
+                        model.companionChromeEnabled.toggle()
+                    } label: {
+                        Text(
+                            model.companionChromeEnabled
+                                ? "✓ Conversation Companion Bar"
+                                : "Conversation Companion Bar"
+                        )
+                    }
                 }
                 Button("Refresh MainFrame") { model.refreshProjects() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])

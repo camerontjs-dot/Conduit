@@ -279,69 +279,110 @@ struct ConversationView: View {
         ]
         .compactMap { $0 }
         .joined(separator: " · ")
-        return HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                AgentSpriteView(
-                    profile: runtime.descriptor.agent,
-                    state: state,
-                    frameSize: CGSize(width: companionSide, height: companionSide + 6)
-                )
-                .scaleEffect(pulse ? 1.03 : 1.0)
-                .animation(
-                    pulse
-                        ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
-                        : .default,
-                    value: pulse
-                )
-                Circle()
-                    .fill(palette.color(forTerminalState: state))
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(runtime.descriptor.agent.name)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(palette.text)
+        return Group {
+            if model.companionChromeEnabled {
+                HStack(spacing: 10) {
+                    Button {
+                        // Presentation-only: open Session inspector, never launch.
+                        model.isContextInspectorPresented = true
+                        model.focusInspectorCard(.session)
+                    } label: {
+                        HStack(spacing: 10) {
+                            AgentSpriteView(
+                                profile: runtime.descriptor.agent,
+                                state: state,
+                                frameSize: CGSize(
+                                    width: companionSide,
+                                    height: companionSide + 6
+                                )
+                            )
+                            .scaleEffect(pulse ? 1.03 : 1.0)
+                            .animation(
+                                pulse
+                                    ? .easeInOut(duration: 0.55)
+                                        .repeatForever(autoreverses: true)
+                                    : .default,
+                                value: pulse
+                            )
+                            Circle()
+                                .fill(palette.color(forTerminalState: state))
+                                .frame(width: 8, height: 8)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(runtime.descriptor.agent.name)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(palette.text)
+                                Text(conversationStateLabel(state: state, at: date))
+                                    .font(.caption)
+                                    .foregroundStyle(palette.dim)
+                                    .lineLimit(1)
+                                Text(authorityLine)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(palette.faint)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Session inspector (does not launch or reconnect)")
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        "\(runtime.descriptor.agent.name), \(conversationStateLabel(state: state, at: date)), \(controller.backendLabel), Raw authoritative, \(artworkDescription)"
+                    )
+                    .accessibilityHint("Opens Session inspector. Does not launch or reconnect.")
+
+                    Spacer(minLength: 4)
+                    Button {
+                        followLatest.toggle()
+                    } label: {
+                        Image(systemName: followLatest ? "lock.fill" : "lock.open")
+                            .font(.caption)
+                            .foregroundStyle(followLatest ? palette.accent : palette.dim)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(
+                        followLatest
+                            ? "Following latest. Click to stop auto-scroll."
+                            : "Not following. Click to follow latest."
+                    )
+                    .accessibilityLabel(
+                        followLatest ? "Following latest" : "Not following latest"
+                    )
+                    Button("Raw") {
+                        runtime.selectedSurface = .raw
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                    .accessibilityHint("Opens the Raw view for this same terminal session")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, layout.headerVerticalPadding)
+                .background(palette.surface)
+                .accessibilityElement(children: .contain)
+            } else {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(palette.color(forTerminalState: state))
+                        .frame(width: 8, height: 8)
                     Text(conversationStateLabel(state: state, at: date))
                         .font(.caption)
                         .foregroundStyle(palette.dim)
                         .lineLimit(1)
-                    Text(authorityLine)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(palette.faint)
-                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Button("Raw") {
+                        runtime.selectedSurface = .raw
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.accent)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(palette.surface)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                "\(runtime.descriptor.agent.name), \(conversationStateLabel(state: state, at: date)), \(controller.backendLabel), Raw authoritative, \(artworkDescription)"
-            )
-            Spacer(minLength: 4)
-            Button {
-                followLatest.toggle()
-            } label: {
-                Image(systemName: followLatest ? "lock.fill" : "lock.open")
-                    .font(.caption)
-                    .foregroundStyle(followLatest ? palette.accent : palette.dim)
-            }
-            .buttonStyle(.borderless)
-            .help(
-                followLatest
-                    ? "Following latest. Click to stop auto-scroll."
-                    : "Not following. Click to follow latest."
-            )
-            .accessibilityLabel(followLatest ? "Following latest" : "Not following latest")
-            Button("Raw") {
-                runtime.selectedSurface = .raw
-            }
-            .buttonStyle(.borderless)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(palette.accent)
-            .accessibilityHint("Opens the Raw view for this same terminal session")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, layout.headerVerticalPadding)
-        .background(palette.surface)
-        .accessibilityElement(children: .contain)
     }
 
     private func conversationStateLabel(

@@ -95,6 +95,55 @@ public enum AgentSpriteSkin: String, Codable, CaseIterable, Hashable, Sendable {
     case codex
 }
 
+/// Locked companion **master** identities for interim display when a full
+/// six-pose runtime set is not yet bundled. Soft-matched by profile name or
+/// executable only — never treated as exact six-pose provenance.
+public enum AgentCompanionMaster: String, Codable, CaseIterable, Hashable, Sendable {
+    case claude
+    case codex
+    case localShell = "local-shell"
+    case grok
+    case antigravity
+    case opencode
+    case geminiCli = "gemini-cli"
+    case ollama
+
+    public var resourceDirectory: String { rawValue }
+
+    /// Conservative soft map for display art. Prefer exact name, then executable.
+    public static func resolve(for profile: AgentProfile) -> AgentCompanionMaster? {
+        let name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let executable = URL(fileURLWithPath: profile.command)
+            .lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        switch name {
+        case "claude", "claude code": return .claude
+        case "codex": return .codex
+        case "shell", "local", "local/shell", "zsh": return .localShell
+        case "grok": return .grok
+        case "antigravity", "agy": return .antigravity
+        case "opencode", "open code": return .opencode
+        case "gemini", "gemini cli", "gemini-cli": return .geminiCli
+        case "ollama": return .ollama
+        default: break
+        }
+
+        switch executable {
+        case "claude": return .claude
+        case "codex": return .codex
+        case "zsh", "bash", "sh", "fish": return .localShell
+        case "grok": return .grok
+        case "agy", "antigravity": return .antigravity
+        case "opencode": return .opencode
+        case "gemini": return .geminiCli
+        case "ollama": return .ollama
+        default: return nil
+        }
+    }
+}
+
 /// One conservative, provenance-gated identity mapping. Both the full profile
 /// name and executable basename must match the same signature.
 public struct AgentSpriteRegistration: Equatable, Sendable {
@@ -160,6 +209,37 @@ public enum AgentSpriteArtworkResolution: Equatable, Sendable {
             return "Generic placeholder companion; no approved dedicated sprite can be matched to this exact \(profileName) profile identity"
         case .genericPlaceholder(.incompleteSet):
             return "Generic placeholder companion; \(profileName)'s registered sprite set is incomplete or unavailable"
+        }
+    }
+}
+
+/// How companion art was resolved for presentation.
+public enum AgentCompanionArtKind: Equatable, Sendable {
+    /// Full six-pose exact set.
+    case dedicatedPose
+    /// Locked master sprite (interim identity; not six-pose complete).
+    case lockedMaster(AgentCompanionMaster)
+    /// Vector generic robot.
+    case genericPlaceholder
+
+    public var visibleLabel: String? {
+        switch self {
+        case .dedicatedPose: return nil
+        case .lockedMaster:
+            return "locked master companion (poses pending)"
+        case .genericPlaceholder:
+            return "generic placeholder companion"
+        }
+    }
+
+    public func accessibilityDescription(profileName: String) -> String {
+        switch self {
+        case .dedicatedPose:
+            return "Dedicated \(profileName) companion character"
+        case .lockedMaster(let master):
+            return "\(profileName) locked master companion (\(master.rawValue)); full pose set not yet shipped"
+        case .genericPlaceholder:
+            return "Generic placeholder companion for \(profileName)"
         }
     }
 }

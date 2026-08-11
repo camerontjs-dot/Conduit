@@ -79,9 +79,13 @@ never substitutes for availability or lifecycle text.
 
 ## Built-in profile coverage
 
-- Dedicated exact art: Claude and Codex.
-- Generic placeholder: Shell, Antigravity, Grok, OpenCode, Gemini CLI, Ollama,
-  Cursor Agent, and Aider.
+- Dedicated exact art (six poses): Claude and Codex.
+- Locked masters (interim companion identity, not six-pose complete): under
+  `masters/<skin>/master.png` for Claude, Codex, Shell (`local-shell`), Grok,
+  Antigravity, OpenCode, Gemini CLI, and Ollama. Soft-mapped by profile name or
+  executable; labeled “locked master companion (poses pending)” in the UI.
+- Generic vector placeholder: any profile without a master or exact set
+  (Cursor Agent, Aider, custom commands).
 
 This list describes art coverage only. It does not claim that a command is
 enabled, authenticated, within quota, running, or capable of completing work.

@@ -27,6 +27,23 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- **Locked companion masters** bundled under `AgentSprites/masters/` (256px
+  nearest-neighbor from the pixel-sprites repo) for Claude, Codex, Shell,
+  Grok, Antigravity, OpenCode, Gemini CLI, and Ollama. UI shows them as
+  interim identity art when a full six-pose set is not available.
+- Optional **Conversation companion bar** (toggle in Settings / Workbench View);
+  click opens Session inspector only (never launches).
+- **Mid-session model switch** for OpenCode and Claude via injected `/model …`
+  when a live runtime exists; other CLIs still save for next launch with honest
+  status copy.
+
+### Fixed
+
+- **Tools → Settings…** now opens Settings reliably (system scene or sheet
+  fallback).
+
+### Added (prior)
+
 - **Workbench Game Layer Phases 2–4 chrome:** agent-inbox summary on the rail
   (true reconnectable/active/pinned counts only), density-scaled companion
   prominence in the Conversation header and selected-row shelf, Session card

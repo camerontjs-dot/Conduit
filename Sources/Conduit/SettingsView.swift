@@ -220,6 +220,13 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.borderless)
 
+                Toggle(
+                    "Conversation companion bar",
+                    isOn: $model.companionChromeEnabled
+                )
+                .help(
+                    "Optional selected-agent strip above Conversation. Uses locked masters or exact poses; never launches."
+                )
                 Toggle("Selected companion shelf in rail", isOn: $model.companionShelfEnabled)
                 Toggle("Sprites on all known-profile rows", isOn: $model.railSpritesForAllRows)
                 Toggle("Juicy operator feedback", isOn: $model.juicyFeedbackEnabled)

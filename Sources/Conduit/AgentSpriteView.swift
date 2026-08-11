@@ -72,16 +72,33 @@ struct AgentSpriteView: View {
         }
     }
 
+    private var artKind: AgentCompanionArtKind {
+        AgentSpriteResources.companionArtKind(for: profile)
+    }
+
+    private var imageOpacity: Double {
+        switch presentation {
+        case .available: return 0.55
+        case .launched: return 1.0
+        }
+    }
+
     var body: some View {
         Group {
-            if let image = image {
+            if let image = displayImage {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.none)
                     .antialiased(false)
                     .scaledToFit()
+                    .opacity(imageOpacity)
             } else {
-                GenericPixelOperator(mark: markColor, palette: palette, side: min(frameSize.width, frameSize.height) * 0.78)
+                GenericPixelOperator(
+                    mark: markColor,
+                    palette: palette,
+                    side: min(frameSize.width, frameSize.height) * 0.78
+                )
+                .opacity(imageOpacity)
             }
         }
         .frame(width: frameSize.width, height: frameSize.height)
@@ -89,6 +106,13 @@ struct AgentSpriteView: View {
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(markColor.opacity(washOpacity))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(
+                            markColor.opacity(presentation == .available ? 0.15 : 0.35),
+                            lineWidth: 1
+                        )
+                )
         )
         .transaction { transaction in
             if !AgentSpriteMotionPolicy.shouldAnimatePoseChange(
@@ -100,20 +124,25 @@ struct AgentSpriteView: View {
         .accessibilityHidden(true)
     }
 
-    private var image: NSImage? {
-        guard let pose = cue.pose else { return nil }
-        return AgentSpriteResources.image(profile: profile, pose: pose)
+    /// Prefer exact six-pose art; fall back to locked master for identity.
+    private var displayImage: NSImage? {
+        if let pose = cue.pose,
+           let exact = AgentSpriteResources.image(profile: profile, pose: pose) {
+            return exact
+        }
+        return AgentSpriteResources.masterImage(for: profile)
     }
 }
 
 /// Resource-aware half of the insertion seam. It accepts a dedicated skin only
 /// when all six files decode and their manifest/provenance entries are present.
 /// A partial set therefore falls back atomically instead of changing character
-/// as lifecycle poses change.
+/// as lifecycle poses change. Locked masters may still identify the companion.
 enum AgentSpriteResources {
     private struct Snapshot {
         let inventory: AgentSpriteResourceInventory
         let images: [AgentSpriteSkin: [AgentSpritePose: NSImage]]
+        let masters: [AgentCompanionMaster: NSImage]
     }
 
     private static let bundle: Bundle? = {
@@ -136,13 +165,24 @@ enum AgentSpriteResources {
         )
     }
 
+    static func companionArtKind(for profile: AgentProfile) -> AgentCompanionArtKind {
+        if case .dedicated = artworkResolution(for: profile) {
+            return .dedicatedPose
+        }
+        if let master = AgentCompanionMaster.resolve(for: profile),
+           snapshot.masters[master] != nil {
+            return .lockedMaster(master)
+        }
+        return .genericPlaceholder
+    }
+
     static func accessibilityDescription(for profile: AgentProfile) -> String {
-        artworkResolution(for: profile)
+        companionArtKind(for: profile)
             .accessibilityDescription(profileName: profile.name)
     }
 
     static func visibleFallbackLabel(for profile: AgentProfile) -> String? {
-        artworkResolution(for: profile).visibleFallbackLabel
+        companionArtKind(for: profile).visibleLabel
     }
 
     static func image(profile: AgentProfile, pose: AgentSpritePose) -> NSImage? {
@@ -152,9 +192,16 @@ enum AgentSpriteResources {
         return snapshot.images[skin]?[pose]
     }
 
+    static func masterImage(for profile: AgentProfile) -> NSImage? {
+        guard let master = AgentCompanionMaster.resolve(for: profile) else {
+            return nil
+        }
+        return snapshot.masters[master]
+    }
+
     private static func makeSnapshot() -> Snapshot {
         guard let bundle else {
-            return Snapshot(inventory: .empty, images: [:])
+            return Snapshot(inventory: .empty, images: [:], masters: [:])
         }
 
         var readableRelativePaths = Set<String>()
@@ -173,6 +220,17 @@ enum AgentSpriteResources {
                 readableRelativePaths.insert("\(skin.rawValue)/\(pose.fileName)")
             }
             candidateImages[skin] = images
+        }
+
+        var masters: [AgentCompanionMaster: NSImage] = [:]
+        for master in AgentCompanionMaster.allCases {
+            if let url = bundle.url(
+                forResource: "master",
+                withExtension: "png",
+                subdirectory: "AgentSprites/masters/\(master.resourceDirectory)"
+            ), let image = NSImage(contentsOf: url) {
+                masters[master] = image
+            }
         }
 
         let manifestText = textResource(
@@ -197,7 +255,11 @@ enum AgentSpriteResources {
                 inventory: inventory
             ).isComplete
         }
-        return Snapshot(inventory: inventory, images: completeImages)
+        return Snapshot(
+            inventory: inventory,
+            images: completeImages,
+            masters: masters
+        )
     }
 
     private static func textResource(

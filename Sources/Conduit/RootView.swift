@@ -98,6 +98,20 @@ struct RootView: View {
                 .environmentObject(model)
                 .environmentObject(themeStore)
         }
+        .sheet(isPresented: $model.showSettingsSheet) {
+            NavigationStack {
+                SettingsView()
+                    .environmentObject(model)
+                    .environmentObject(themeStore)
+                    .frame(minWidth: 640, minHeight: 520)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { model.showSettingsSheet = false }
+                        }
+                    }
+            }
+            .frame(width: 700, height: 580)
+        }
         .onChange(of: model.speech.isRecording) { recording in
             if !recording { model.absorbSpeechTranscript() }
         }

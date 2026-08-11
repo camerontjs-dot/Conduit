@@ -890,8 +890,7 @@ struct TaskSidebarView: View {
     }
 
     private func openAppSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        model.openSettings()
     }
 
     private var footer: some View {

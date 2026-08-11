@@ -94,7 +94,9 @@ struct AgentModelPicker: View {
         .menuStyle(.borderlessButton)
         .accessibilityLabel("Model for \(agent.name)")
         .accessibilityValue(selectedOption?.displayName ?? selectedModelID ?? "CLI default")
-        .help("Choose the model for the next \(agent.name) launch")
+        .help(
+            "Choose \(agent.name)’s model. OpenCode/Claude try a live /model switch; others apply on the next launch."
+        )
     }
 
     private func optionDetail(_ option: AgentModelOption) -> String {

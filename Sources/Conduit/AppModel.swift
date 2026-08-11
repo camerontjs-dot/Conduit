@@ -105,6 +105,7 @@ final class AppModel: ObservableObject {
     static let railSpritesForAllRowsKey = "conduit.railSprites.allRows"
     static let juicyFeedbackEnabledKey = "conduit.juicyFeedback.enabled"
     static let outputActivePulseEnabledKey = "conduit.outputActivePulse.enabled"
+    static let companionChromeEnabledKey = "conduit.companionChrome.enabled"
 
     @Published var settings = ConduitSettings()
     @Published var projects: [MainframeProject] = []
@@ -278,6 +279,22 @@ final class AppModel: ObservableObject {
             )
         }
     }
+
+    /// Conversation header companion strip (optional).
+    @Published var companionChromeEnabled: Bool =
+        UserDefaults.standard.object(forKey: AppModel.companionChromeEnabledKey) as? Bool
+            ?? true
+    {
+        didSet {
+            UserDefaults.standard.set(
+                companionChromeEnabled,
+                forKey: Self.companionChromeEnabledKey
+            )
+        }
+    }
+
+    /// Opens Settings as a sheet when the system Settings scene action fails.
+    @Published var showSettingsSheet = false
 
     /// Brief presentation token after Send — UI flash only, not delivery proof.
     @Published private(set) var composerSendFlashToken: Int = 0
@@ -708,8 +725,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Stores a model choice for future launches. An open runtime keeps its
-    /// original descriptor and is never mutated underneath the PTY.
+    /// Stores a model choice for future launches. When a live runtime for this
+    /// agent supports mid-session switch (e.g. OpenCode `/model`), inject that
+    /// slash command into the PTY; otherwise keep config for next launch only.
     func setModelSelection(
         _ option: AgentModelOption?,
         forAgentID id: UUID,
@@ -725,7 +743,33 @@ final class AppModel: ObservableObject {
         if persist {
             saveSettings()
         }
-        statusMessage = "\(agent.name) model → \(agent.model ?? "CLI default"). Applies to the next launch."
+
+        let liveRuntime = sessions.first {
+            $0.descriptor.agent.id == id
+                && !$0.controller.lifecycle.isTerminal
+        }
+        let applyMode = AgentMidSessionModelPolicy.applyMode(
+            for: agent,
+            modelID: agent.model,
+            hasLiveRuntime: liveRuntime != nil
+        )
+        switch applyMode {
+        case .nextLaunchOnly:
+            statusMessage =
+                "\(agent.name) model → \(agent.model ?? "CLI default"). Applies to the next launch."
+        case .liveRequiresRelaunch:
+            statusMessage =
+                "\(agent.name) model → \(agent.model ?? "CLI default") saved. This live session keeps its current model until you leave and relaunch."
+        case .liveSlash(let command):
+            if let runtime = liveRuntime {
+                runtime.controller.injectSlashCommand(command)
+                statusMessage =
+                    "\(agent.name): sent \(command) to the live session. Confirm in Raw if the TUI accepted it."
+            } else {
+                statusMessage =
+                    "\(agent.name) model → \(agent.model ?? "CLI default"). Applies to the next launch."
+            }
+        }
 
         guard let selectedModel = agent.model,
               option?.contextWindowTokens == nil
@@ -750,6 +794,38 @@ final class AppModel: ObservableObject {
                     )
                 }
                 if persist { saveSettings() }
+            }
+        }
+    }
+
+    func openSettings() {
+        // Prefer the SwiftUI Settings scene when the system action responds;
+        // always offer the sheet as a reliable same-window fallback.
+        let opened = NSApp.sendAction(
+            Selector(("showSettingsWindow:")),
+            to: nil,
+            from: nil
+        ) || NSApp.sendAction(
+            Selector(("showPreferencesWindow:")),
+            to: nil,
+            from: nil
+        )
+        if !opened {
+            showSettingsSheet = true
+        } else {
+            // Some macOS builds report success without raising a window.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self else { return }
+                let settingsVisible = NSApp.windows.contains {
+                    $0.isVisible
+                        && (
+                            $0.title.localizedCaseInsensitiveContains("settings")
+                                || $0.title.localizedCaseInsensitiveContains("preferences")
+                        )
+                }
+                if !settingsVisible {
+                    self.showSettingsSheet = true
+                }
             }
         }
     }
