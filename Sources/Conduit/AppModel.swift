@@ -760,11 +760,10 @@ final class AppModel: ObservableObject {
         case .liveRequiresRelaunch:
             statusMessage =
                 "\(agent.name) model → \(agent.model ?? "CLI default") saved. This live session keeps its current model until you leave and relaunch."
-        case .liveSlash(let command):
+        case .liveSequence(let steps, let operatorNote):
             if let runtime = liveRuntime {
-                runtime.controller.injectSlashCommand(command)
-                statusMessage =
-                    "\(agent.name): sent \(command) to the live session. Confirm in Raw if the TUI accepted it."
+                runtime.controller.injectModelSwitchSequence(steps)
+                statusMessage = "\(agent.name): \(operatorNote)"
             } else {
                 statusMessage =
                     "\(agent.name) model → \(agent.model ?? "CLI default"). Applies to the next launch."
@@ -3380,12 +3379,17 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         if let eventID = activeOutputEventID,
            let previous = presentationEvents.first(where: { $0.id == eventID }),
            case .agentOutput(let previousOutput) = previous.kind {
+            // Keep thinking/reasoning that the TUI painted then collapsed.
+            let mergedText = ConversationCaptureMerge.preservingEphemeral(
+                previous: previousOutput.text,
+                next: derived.text
+            )
             event = SessionPresentation.agentOutputEvent(
                 promptEventID: previousOutput.promptEventID ?? linkedPromptID,
-                text: derived.text,
+                text: mergedText,
                 state: .live,
                 extraction: previousOutput.extraction,
-                truncated: derived.truncated,
+                truncated: derived.truncated || previousOutput.truncated,
                 id: previous.id,
                 occurredAt: previous.occurredAt
             )

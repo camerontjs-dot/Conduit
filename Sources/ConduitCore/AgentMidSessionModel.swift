@@ -1,58 +1,90 @@
 import Foundation
 
+/// One step in a best-effort live model switch sequence.
+public enum AgentModelSwitchStep: Equatable, Sendable {
+    /// Type a slash command and press Enter (clears buffer first).
+    case slashCommand(String)
+    /// Type plain text without Enter (picker filter, etc.).
+    case typeText(String)
+    /// Press Enter alone.
+    case enter
+    /// Wait before the next step (seconds).
+    case wait(Double)
+}
+
 /// How Conduit can apply a model choice relative to a live runtime.
 public enum AgentModelApplyMode: Equatable, Sendable {
     /// No open runtime for this agent — config only for next launch.
     case nextLaunchOnly
-    /// Live session can receive a slash command to switch models.
-    case liveSlash(String)
+    /// Live session can receive a typed switch sequence.
+    case liveSequence([AgentModelSwitchStep], operatorNote: String)
     /// Live session exists but this CLI has no known mid-session switch.
     case liveRequiresRelaunch
 }
 
 /// Resolves whether a model pick can affect the current PTY or only the next launch.
 public enum AgentMidSessionModelPolicy {
-    /// Slash command to switch models in a live TUI, when known.
-    public static func slashCommand(
-        for profile: AgentProfile,
-        modelID: String?
-    ) -> String? {
-        guard profile.kind != .shell else { return nil }
-        let executable = URL(fileURLWithPath: profile.command)
-            .lastPathComponent
-            .lowercased()
-        let trimmed = modelID?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let model = (trimmed?.isEmpty == false) ? trimmed : nil
-
-        switch executable {
-        case "opencode":
-            // OpenCode TUI: `/model provider/model` (or bare `/model` for picker).
-            if let model { return "/model \(model)" }
-            return "/model"
-        case "claude":
-            // Claude Code: `/model <id>` when supported by the installed CLI.
-            if let model { return "/model \(model)" }
-            return "/model"
-        case "codex", "gemini", "cursor-agent", "aider", "grok", "agy", "ollama":
-            // No reliable mid-session switch known; launch flags only.
-            return nil
-        default:
-            // Conservative try for other agent TUIs that share the /model builtin.
-            if let model { return "/model \(model)" }
-            return nil
-        }
-    }
-
     public static func applyMode(
         for profile: AgentProfile,
         modelID: String?,
         hasLiveRuntime: Bool
     ) -> AgentModelApplyMode {
         guard hasLiveRuntime else { return .nextLaunchOnly }
-        if let command = slashCommand(for: profile, modelID: modelID) {
-            return .liveSlash(command)
+        guard profile.kind != .shell else { return .nextLaunchOnly }
+
+        let executable = URL(fileURLWithPath: profile.command)
+            .lastPathComponent
+            .lowercased()
+        let trimmed = modelID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = (trimmed?.isEmpty == false) ? trimmed! : nil
+
+        switch executable {
+        case "opencode":
+            // OpenCode's slash is `/models` (alias `/mo`), which opens a
+            // filterable picker — not `/model <id>`. Best-effort: open picker,
+            // type the model id to filter, Enter to select.
+            if let model {
+                return .liveSequence(
+                    [
+                        .slashCommand("/models"),
+                        .wait(0.28),
+                        .typeText(model),
+                        .wait(0.18),
+                        .enter
+                    ],
+                    operatorNote:
+                        "OpenCode: opened model picker and typed \(model). Confirm in Raw that the footer model changed."
+                )
+            }
+            return .liveSequence(
+                [.slashCommand("/models")],
+                operatorNote:
+                    "OpenCode: opened model picker. Choose a model in Raw/TUI."
+            )
+        case "claude":
+            if let model {
+                return .liveSequence(
+                    [.slashCommand("/model \(model)")],
+                    operatorNote:
+                        "Claude: sent /model \(model). Confirm in Raw if accepted."
+                )
+            }
+            return .liveSequence(
+                [.slashCommand("/model")],
+                operatorNote: "Claude: opened /model. Confirm selection in Raw."
+            )
+        case "codex", "gemini", "cursor-agent", "aider", "grok", "agy", "ollama":
+            return .liveRequiresRelaunch
+        default:
+            if let model {
+                return .liveSequence(
+                    [.slashCommand("/model \(model)")],
+                    operatorNote:
+                        "Sent /model \(model) as a best-effort switch. Confirm in Raw."
+                )
+            }
+            return .liveRequiresRelaunch
         }
-        return .liveRequiresRelaunch
     }
 }

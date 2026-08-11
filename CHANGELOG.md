@@ -41,6 +41,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 - **Tools → Settings…** now opens Settings reliably (system scene or sheet
   fallback).
+- **OpenCode mid-session model** uses `/models` + filter + Enter (not the
+  incorrect `/model <id>` path that never switched the TUI model).
+- **Conversation preserves live thinking/reasoning** that the TUI collapses
+  after the final answer paints; duration-only thought chrome is still dropped.
 
 ### Added (prior)
 

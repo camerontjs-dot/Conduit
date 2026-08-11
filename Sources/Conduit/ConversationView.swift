@@ -598,11 +598,12 @@ struct ConversationView: View {
     ) -> some View {
         let isCurrentCapture = runtime.activeOutputEventID == event.id
         let displayText = ConversationDisplayText.workstationDerived(output.text)
-        let menuOptions = TerminalMenuParser.options(in: displayText)
-        let interactiveMenu = TerminalMenuParser.looksLikeInteractiveMenu(displayText)
+        let split = splitPreservedThinking(displayText)
+        let menuOptions = TerminalMenuParser.options(in: split.answer)
+        let interactiveMenu = TerminalMenuParser.looksLikeInteractiveMenu(split.answer)
             && !menuOptions.isEmpty
             && !controller.lifecycle.isTerminal
-        let blocks = ConversationDisplayText.proseBlocks(in: displayText)
+        let blocks = ConversationDisplayText.proseBlocks(in: split.answer)
         let showLive = isCurrentCapture && output.state == .live
 
         return VStack(alignment: .leading, spacing: layout.blockSpacing) {
@@ -627,7 +628,11 @@ struct ConversationView: View {
                     .foregroundStyle(palette.faint)
             }
 
-            if displayText.isEmpty {
+            if let thinking = split.thinking, !thinking.isEmpty {
+                preservedThinkingBlock(thinking)
+            }
+
+            if split.answer.isEmpty {
                 if showLive {
                     Text("…")
                         .font(.callout)
@@ -635,7 +640,7 @@ struct ConversationView: View {
                 }
             } else if interactiveMenu {
                 ConversationProseView(
-                    blocks: ConversationDisplayText.proseBlocks(in: displayText),
+                    blocks: ConversationDisplayText.proseBlocks(in: split.answer),
                     palette: palette,
                     layout: layout
                 )
@@ -656,6 +661,58 @@ struct ConversationView: View {
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    private func preservedThinkingBlock(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Thinking")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(palette.dim)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(palette.dim)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.sink.opacity(0.65))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(palette.lineSoft, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Thinking, \(text)")
+    }
+
+    /// Split merged capture text into optional thinking + answer for layout.
+    private func splitPreservedThinking(
+        _ text: String
+    ) -> (thinking: String?, answer: String) {
+        let header = ConversationCaptureMerge.thinkingHeader
+        guard text.hasPrefix(header) || text.contains("\n\(header)\n")
+                || text.contains(header)
+        else {
+            return (nil, text)
+        }
+        // Prefer canonical wrapper: header … — … answer
+        let parts = text.components(separatedBy: "\n—\n")
+        if parts.count >= 2 {
+            var thinking = parts[0]
+            if thinking.hasPrefix(header) {
+                thinking = thinking
+                    .dropFirst(header.count)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if let range = thinking.range(of: header) {
+                thinking = String(thinking[range.upperBound...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            let answer = parts.dropFirst().joined(separator: "\n—\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (thinking.isEmpty ? nil : thinking, answer)
+        }
+        return (nil, text)
     }
 
     private func sourceDisclosure(

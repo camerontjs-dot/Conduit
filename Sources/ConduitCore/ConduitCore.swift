@@ -823,8 +823,10 @@ public enum ConversationDisplayText {
             return true
         }
 
-        // Status / activity rows.
-        if lower.hasPrefix("+ thought") || lower.hasPrefix("thought:") {
+        // Thought *duration* chrome only (e.g. "+ Thought: 1.0s"). Keep real
+        // thought/reasoning content so Conversation can show it while live and
+        // merge can preserve it after the TUI collapses the block.
+        if ConversationCaptureMerge.isThoughtDurationOnly(trimmed) {
             return true
         }
         if lower.hasPrefix("compaction") || lower.hasPrefix("build ·")

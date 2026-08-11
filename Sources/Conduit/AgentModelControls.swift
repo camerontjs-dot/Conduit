@@ -95,7 +95,7 @@ struct AgentModelPicker: View {
         .accessibilityLabel("Model for \(agent.name)")
         .accessibilityValue(selectedOption?.displayName ?? selectedModelID ?? "CLI default")
         .help(
-            "Choose \(agent.name)’s model. OpenCode/Claude try a live /model switch; others apply on the next launch."
+            "Choose \(agent.name)’s model. OpenCode opens /models and filters; Claude tries /model; others apply on next launch. Confirm in Raw."
         )
     }
 

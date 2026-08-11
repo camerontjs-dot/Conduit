@@ -187,18 +187,30 @@ check("companion master resolves Shell by executable",
       AgentCompanionMaster.resolve(
         for: AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell)
       ) == .localShell)
-check("mid-session model switch for OpenCode uses slash",
-      AgentMidSessionModelPolicy.applyMode(
+check("mid-session OpenCode opens /models picker sequence", {
+    guard case .liveSequence(let steps, _) = AgentMidSessionModelPolicy.applyMode(
         for: AgentProfile(name: "OpenCode", command: "opencode"),
         modelID: "opencode/deepseek-v4-flash-free",
         hasLiveRuntime: true
-      ) == .liveSlash("/model opencode/deepseek-v4-flash-free"))
+    ) else { return false }
+    return steps.contains(.slashCommand("/models"))
+        && steps.contains(.typeText("opencode/deepseek-v4-flash-free"))
+}())
 check("mid-session model for Codex requires relaunch when live",
       AgentMidSessionModelPolicy.applyMode(
         for: AgentProfile(name: "Codex", command: "codex"),
         modelID: "o3",
         hasLiveRuntime: true
       ) == .liveRequiresRelaunch)
+check("capture merge preserves orphaned reasoning", {
+    let merged = ConversationCaptureMerge.preservingEphemeral(
+        previous: "I should check the project layout before answering.\n\nHello!",
+        next: "Hello! What would you like to work on?"
+    )
+    return merged.contains("I should check the project layout")
+        && merged.contains("Hello! What would you like to work on?")
+        && merged.contains(ConversationCaptureMerge.thinkingHeader)
+}())
 check("small-window inspector stays an overlay in Operator density",
       WorkspaceGeometryPolicy.resolve(
         windowWidth: 1_080,
@@ -1464,6 +1476,7 @@ withTempDir { root in
     let openCodePaint = """
         | /cost
         + Thought: 1.0s
+        I should explain that /cost is built-in.
         /cost is an opencode built-in — token usage.
         Context
         10% used
@@ -1476,7 +1489,15 @@ withTempDir { root in
     )
     check(
         "workstation derived drops opencode side panel",
-        !openCodeDoc.contains("10% used") && !openCodeDoc.contains("Thought")
+        !openCodeDoc.contains("10% used")
+    )
+    check(
+        "workstation derived drops duration-only thought chrome",
+        !openCodeDoc.lowercased().contains("thought: 1.0s")
+    )
+    check(
+        "workstation derived keeps thought content prose",
+        openCodeDoc.contains("I should explain")
     )
     let proseBlocks = ConversationDisplayText.proseBlocks(
         in: "## Title\n\nBody line.\n"

@@ -1002,6 +1002,43 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         }
     }
 
+    /// Runs a multi-step model-switch sequence (picker open → filter → Enter).
+    func injectModelSwitchSequence(_ steps: [AgentModelSwitchStep]) {
+        guard lifecycle == .running || lifecycle == .launching else { return }
+        guard !steps.isEmpty else { return }
+        runModelSwitchSteps(steps, index: 0)
+    }
+
+    private func runModelSwitchSteps(
+        _ steps: [AgentModelSwitchStep],
+        index: Int
+    ) {
+        guard index < steps.count else { return }
+        guard lifecycle == .running || lifecycle == .launching else { return }
+        switch steps[index] {
+        case .slashCommand(let command):
+            let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+            injectControlKey(.escape)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+                guard let self else { return }
+                self.injectControlInput(trimmed, submit: false)
+                self.injectControlKey(.enter)
+                self.runModelSwitchSteps(steps, index: index + 1)
+            }
+        case .typeText(let text):
+            injectControlInput(text, submit: false)
+            runModelSwitchSteps(steps, index: index + 1)
+        case .enter:
+            injectControlKey(.enter)
+            runModelSwitchSteps(steps, index: index + 1)
+        case .wait(let seconds):
+            let delay = max(0, seconds)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.runModelSwitchSteps(steps, index: index + 1)
+            }
+        }
+    }
+
     /// Arms Derived-from-Raw capture using an already-taken baseline without
     /// delivering a prompt. Used for slash-command inject and reconnect catch-up.
     func armConversationCapture(from baseline: RawDerivedCapture) {
