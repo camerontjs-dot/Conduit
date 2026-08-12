@@ -43,18 +43,19 @@ public enum AgentMidSessionModelPolicy {
         case "opencode":
             // OpenCode's slash is `/models` (alias `/mo`), which opens a
             // filterable picker — not `/model <id>`. Best-effort: open picker,
-            // type the model id to filter, Enter to select.
+            // type the model id (or unique suffix) to filter, Enter to select.
             if let model {
+                let filter = openCodeFilterToken(for: model)
                 return .liveSequence(
                     [
                         .slashCommand("/models"),
-                        .wait(0.28),
-                        .typeText(model),
-                        .wait(0.18),
+                        .wait(0.55),
+                        .typeText(filter),
+                        .wait(0.35),
                         .enter
                     ],
                     operatorNote:
-                        "OpenCode: opened model picker and typed \(model). Confirm in Raw that the footer model changed."
+                        "OpenCode: opened /models and filtered to \(filter). Confirm footer model in Raw."
                 )
             }
             return .liveSequence(
@@ -62,6 +63,7 @@ public enum AgentMidSessionModelPolicy {
                 operatorNote:
                     "OpenCode: opened model picker. Choose a model in Raw/TUI."
             )
+
         case "claude":
             if let model {
                 return .liveSequence(
@@ -74,8 +76,78 @@ public enum AgentMidSessionModelPolicy {
                 [.slashCommand("/model")],
                 operatorNote: "Claude: opened /model. Confirm selection in Raw."
             )
-        case "codex", "gemini", "cursor-agent", "aider", "grok", "agy", "ollama":
+
+        case "grok":
+            // Grok documents `/model <name>` (alias `/m`) for mid-session switch.
+            if let model {
+                return .liveSequence(
+                    [.slashCommand("/model \(model)")],
+                    operatorNote:
+                        "Grok: sent /model \(model). Confirm in Raw if accepted."
+                )
+            }
+            return .liveSequence(
+                [.slashCommand("/model")],
+                operatorNote: "Grok: opened /model picker. Confirm in Raw."
+            )
+
+        case "gemini":
+            // Gemini CLI exposes `/model` as a picker command. Passing an id is
+            // best-effort; relaunch still applies the --model flag reliably.
+            if let model {
+                return .liveSequence(
+                    [
+                        .slashCommand("/model"),
+                        .wait(0.4),
+                        .typeText(model),
+                        .wait(0.25),
+                        .enter
+                    ],
+                    operatorNote:
+                        "Gemini: opened /model and typed \(model). Confirm in Raw; relaunch if unchanged."
+                )
+            }
+            return .liveSequence(
+                [.slashCommand("/model")],
+                operatorNote: "Gemini: opened /model. Confirm selection in Raw."
+            )
+
+        case "codex":
+            // Codex TUI uses `/model` to open the model picker.
+            if let model {
+                return .liveSequence(
+                    [
+                        .slashCommand("/model"),
+                        .wait(0.45),
+                        .typeText(model),
+                        .wait(0.25),
+                        .enter
+                    ],
+                    operatorNote:
+                        "Codex: opened /model and filtered to \(model). Confirm in Raw; relaunch if unchanged."
+                )
+            }
+            return .liveSequence(
+                [.slashCommand("/model")],
+                operatorNote: "Codex: opened /model picker. Confirm in Raw."
+            )
+
+        case "agy":
+            if let model {
+                return .liveSequence(
+                    [.slashCommand("/model \(model)")],
+                    operatorNote:
+                        "Antigravity: sent /model \(model). Confirm in Raw; relaunch if unchanged."
+                )
+            }
+            return .liveSequence(
+                [.slashCommand("/model")],
+                operatorNote: "Antigravity: opened /model. Confirm in Raw."
+            )
+
+        case "cursor-agent", "agent", "aider", "ollama":
             return .liveRequiresRelaunch
+
         default:
             if let model {
                 return .liveSequence(
@@ -86,5 +158,15 @@ public enum AgentMidSessionModelPolicy {
             }
             return .liveRequiresRelaunch
         }
+    }
+
+    /// OpenCode filter boxes match substrings; prefer the unique trailing
+    /// segment when the id is `provider/name` so typing is short and reliable.
+    private static func openCodeFilterToken(for model: String) -> String {
+        if let slash = model.lastIndex(of: "/") {
+            let tail = String(model[model.index(after: slash)...])
+            if !tail.isEmpty, tail.count >= 4 { return tail }
+        }
+        return model
     }
 }

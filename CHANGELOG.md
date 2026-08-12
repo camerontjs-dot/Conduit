@@ -33,16 +33,21 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   interim identity art when a full six-pose set is not available.
 - Optional **Conversation companion bar** (toggle in Settings / Workbench View);
   click opens Session inspector only (never launches).
-- **Mid-session model switch** for OpenCode and Claude via injected `/model …`
-  when a live runtime exists; other CLIs still save for next launch with honest
-  status copy.
+- **Mid-session model switch** for OpenCode (`/models` filter), Claude, Grok,
+  Codex, Gemini, and Antigravity when a live runtime exists; Cursor, Aider,
+  and Ollama still save for next launch with honest status copy.
 
 ### Fixed
 
+- **Model picker catalogs** now populate for every default CLI profile:
+  Codex (`debug models` JSON), Grok (`models`), Antigravity (`models`),
+  Claude and Gemini documented aliases, Aider shortlist + local Ollama tags,
+  plus the existing OpenCode / Cursor / Ollama discovery paths. Empty menus
+  no longer claim “no catalog” when a Refresh or Settings custom ID can help.
 - **Tools → Settings…** now opens Settings reliably (system scene or sheet
   fallback).
-- **OpenCode mid-session model** uses `/models` + filter + Enter (not the
-  incorrect `/model <id>` path that never switched the TUI model).
+- **OpenCode mid-session model** uses `/models` + unique-suffix filter + Enter
+  (not the incorrect `/model <id>` path that never switched the TUI model).
 - **Conversation preserves live thinking/reasoning** that the TUI collapses
   after the final answer paints; duration-only thought chrome is still dropped.
 

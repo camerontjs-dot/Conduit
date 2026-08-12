@@ -56,7 +56,7 @@ struct AgentModelPicker: View {
             } else if isRefreshing {
                 Text("Reading \(agent.name) models…")
             } else {
-                Text("No model catalog reported by this CLI")
+                Text("No models found — Refresh, or set a custom ID in Settings")
             }
 
             Divider()
@@ -95,7 +95,7 @@ struct AgentModelPicker: View {
         .accessibilityLabel("Model for \(agent.name)")
         .accessibilityValue(selectedOption?.displayName ?? selectedModelID ?? "CLI default")
         .help(
-            "Choose \(agent.name)’s model. OpenCode opens /models and filters; Claude tries /model; others apply on next launch. Confirm in Raw."
+            "Choose \(agent.name)’s model. Catalogs come from each CLI when possible (Codex/OpenCode/Cursor/Grok/Agy/Ollama; Claude/Gemini use documented aliases). Live switch when supported — always confirm in Raw. Relaunch applies --model for every agent."
         )
     }
 

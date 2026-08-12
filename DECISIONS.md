@@ -705,7 +705,7 @@ stay first-class; Raw stays one click away.
 
 ## D-032: Model choice is provider-neutral, launch-bound, and source-labelled
 
-**Status:** Accepted (model-selection and composer limits)
+**Status:** Accepted (model-selection and composer limits; catalog coverage expanded)
 
 **Context:** Conduit needs one model chooser across independent agent CLIs,
 including local Ollama and OpenCode models, without pretending that every CLI
@@ -714,11 +714,18 @@ shares the same provider API or exposes the same quota/context metadata.
 **Decision:**
 
 1. Store an optional model, launch style, and context-window value on the
-   agent profile. A model choice is applied only when the next process starts;
-   an existing PTY descriptor remains unchanged.
-2. Discover model IDs through the installed CLI when possible. Ollama uses a
-   positional `run MODEL` launch; common model-flag CLIs use `--model MODEL`.
-   Unknown CLIs retain a CLI-default path and may use a configured model ID.
+   agent profile. Launch applies via `--model` / Ollama positional args. When a
+   live PTY exists and the CLI has a known switch surface, Conduit may inject a
+   best-effort slash sequence; the operator must confirm in Raw. Otherwise the
+   choice is next-launch only with honest status copy.
+2. Discover model IDs through the installed CLI when possible:
+   - OpenCode `models`, Cursor `models`, Ollama `list`/`ls`, Grok `models`,
+     Antigravity `models`, Codex `debug models` (JSON).
+   - Claude Code and Gemini CLI lack a non-interactive list: surface their
+     documented aliases / known IDs and label them as aliases, not as a
+     vendor inventory dump.
+   - Aider uses a practical shortlist plus local Ollama tags and sampled
+     `--list-models` prefixes (full Aider catalog is intentionally not mirrored).
 3. Show account usage only when a vendor/tool reports it. Show the composer
    context ring as a labelled visible-content estimate, never as provider token
    accounting. Unknown values stay unknown.
@@ -726,9 +733,10 @@ shares the same provider API or exposes the same quota/context metadata.
    access. OpenCode free models and Ollama cloud tags are discoverable, while
    remaining pool/quota claims require a separate authoritative source.
 
-**Rejected alternatives:** A Conduit-owned provider registry, silently
-rewriting a live session's model, deriving vendor quota from PTY output, or
-turning local token totals into remaining cloud allowance.
+**Rejected alternatives:** A Conduit-owned full provider registry as the source
+of truth, silently rewriting a live session without operator confirmation,
+deriving vendor quota from PTY output, or turning local token totals into
+remaining cloud allowance.
 
 **Consequences:** New Task and the active composer share one model-selection
 surface. Provider adapters can be added later without changing the profile or

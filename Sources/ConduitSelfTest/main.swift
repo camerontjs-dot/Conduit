@@ -193,13 +193,31 @@ check("mid-session OpenCode opens /models picker sequence", {
         modelID: "opencode/deepseek-v4-flash-free",
         hasLiveRuntime: true
     ) else { return false }
+    // Prefer unique trailing segment as filter token.
     return steps.contains(.slashCommand("/models"))
-        && steps.contains(.typeText("opencode/deepseek-v4-flash-free"))
+        && steps.contains(.typeText("deepseek-v4-flash-free"))
 }())
-check("mid-session model for Codex requires relaunch when live",
-      AgentMidSessionModelPolicy.applyMode(
+check("mid-session Codex opens /model picker when live", {
+    guard case .liveSequence(let steps, _) = AgentMidSessionModelPolicy.applyMode(
         for: AgentProfile(name: "Codex", command: "codex"),
-        modelID: "o3",
+        modelID: "gpt-5.6-luna",
+        hasLiveRuntime: true
+    ) else { return false }
+    return steps.contains(.slashCommand("/model"))
+        && steps.contains(.typeText("gpt-5.6-luna"))
+}())
+check("mid-session Grok uses /model id when live", {
+    guard case .liveSequence(let steps, _) = AgentMidSessionModelPolicy.applyMode(
+        for: AgentProfile(name: "Grok", command: "grok"),
+        modelID: "grok-4.5",
+        hasLiveRuntime: true
+    ) else { return false }
+    return steps.contains(.slashCommand("/model grok-4.5"))
+}())
+check("mid-session Cursor still requires relaunch",
+      AgentMidSessionModelPolicy.applyMode(
+        for: AgentProfile(name: "Cursor Agent", command: "cursor-agent"),
+        modelID: "auto",
         hasLiveRuntime: true
       ) == .liveRequiresRelaunch)
 check("capture merge preserves orphaned reasoning", {
