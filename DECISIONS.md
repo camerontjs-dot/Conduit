@@ -935,6 +935,41 @@ remains independent.
 
 ---
 
+## D-037: Attention board is a read-only MainFrame projection
+
+**Status:** Accepted (Inspector card + sheet implemented)
+
+**Context:** The workstation Focus Board already ranks operator attention from
+recorded truth feeds. Conduit needed the same daily-drive surface without
+becoming a second writer of focus authority or blending into the left-rail
+agent inbox.
+
+**Decision:**
+
+1. Port the workstation ranker into `ConduitCore` as a pure projector. App
+   loaders read MainFrame-relative files and may run existing `bin/ingest-status
+   --json` with a short timeout. Conduit does not call the workstation HTTP API.
+2. The operator-facing name is **Attention**. Types may keep `FocusBoard`.
+   Placement is Inspector card + full sheet (Usage-style). Refresh is manual.
+3. Weekly proposal and approved `current.yaml` are display overlays only. There
+   is no approve, promote, or write path to focus authority, STATE.md, eval
+   registries, or session-close apply.
+4. Missing or unreadable feeds produce an explicit insufficient / unavailable
+   state. That is not an all-clear. Green weekly means a recorded
+   `all_passed=true` within the ADR-036 window.
+5. This board is distinct from `AgentInboxAttention` reconnect counts and from
+   Doctor “Attention” health copy.
+
+**Rejected alternatives:** Embedding the pixel office; merging into the task
+rail; a 25s background poller; shelling `git status` or `eval-schedule check`;
+an in-app approve button.
+
+**Consequences:** Operators can daily-drive the same ranked feeds inside
+Conduit. Ranking rules stay faithful to the workstation contract until a later
+session reshapes UX after real use.
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  

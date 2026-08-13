@@ -78,6 +78,11 @@ struct RootView: View {
                 .environmentObject(model)
                 .environmentObject(themeStore)
         }
+        .sheet(isPresented: $model.showFocusBoardSheet) {
+            FocusBoardSheet()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        }
         .sheet(isPresented: $model.showContextBundle) {
             ContextBundleView()
                 .environmentObject(model)

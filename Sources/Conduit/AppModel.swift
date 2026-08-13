@@ -307,7 +307,11 @@ final class AppModel: ObservableObject {
     @Published var showResources = false
     @Published var showAgentUsage = false
     @Published var showMindGraph = false
+    @Published var showFocusBoardSheet = false
     @Published var showContextBundle = false
+    @Published var focusBoard: FocusBoardSnapshot?
+    @Published var focusBoardRefreshing = false
+    @Published var focusBoardError: String?
     /// Account-reported usage (Claude / Codex / OpenCode). Separate from Tier A.
     @Published private(set) var accountUsage: [AccountUsageSnapshot] = []
     @Published private(set) var accountUsageRefreshing = false
@@ -474,9 +478,13 @@ final class AppModel: ObservableObject {
                 kind: key == inspectorCardExpandedKey ? .expanded : .visibility
             )
         }
+        let density = loadPersistedDensity()
+        let kind: InspectorCard.DefaultKind =
+            key == inspectorCardExpandedKey ? .expanded : .visibility
+        let densityDefaults = InspectorCard.defaultMap(for: density, kind: kind)
         var map: [InspectorCard: Bool] = [:]
         for card in InspectorCard.allCases {
-            map[card] = raw[card.rawValue] ?? true
+            map[card] = raw[card.rawValue] ?? densityDefaults[card] ?? false
         }
         return map
     }
@@ -967,6 +975,41 @@ final class AppModel: ObservableObject {
             live: liveUsageSnapshots(),
             now: date
         )
+    }
+
+    /// Reload the MainFrame Focus Board from recorded feeds. Manual only.
+    func refreshFocusBoard() {
+        guard !focusBoardRefreshing else { return }
+        guard let root = settings.mainframeRoot else {
+            focusBoardError = FocusBoardLoadError.rootMissing.displayMessage
+            return
+        }
+        focusBoardRefreshing = true
+        focusBoardError = nil
+        Task { @MainActor in
+            let result = await FocusBoardService.load(mainframeRoot: root)
+            self.focusBoardRefreshing = false
+            switch result {
+            case .success(let snapshot):
+                self.focusBoard = snapshot
+            case .failure(let error):
+                self.focusBoardError = error.displayMessage
+            }
+        }
+    }
+
+    /// Reveal a MainFrame-relative evidence path in Finder when it is safe.
+    func revealFocusBoardEvidence(_ relativePath: String) {
+        guard let root = settings.mainframeRoot,
+              let url = FocusBoard.resolvedEvidenceURL(
+                path: relativePath,
+                mainframeRoot: root
+              )
+        else {
+            statusMessage = "Evidence path is not revealable from Conduit."
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     /// Pull Claude OAuth, Codex app-server, and OpenCode DB account usage.

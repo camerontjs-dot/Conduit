@@ -25,9 +25,24 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- Attention inspector card now loads recorded feeds on first appear when the
+  card is already expanded (Operator default and persisted expand). Previously
+  only collapse→expand and the full sheet triggered a read, so a cold start
+  could show an empty “projection only” card.
+
 ### Added
 
-- **Locked companion masters** bundled under `AgentSprites/masters/` (256px
+- **Attention / Focus Board** as a read-only MainFrame projection in the
+  Inspector (card title **Attention**, subtitle `MainFrame Focus Board ·
+  read-only`) plus a full sheet from **Conduit → Attention Board…**. Ranked
+  items come from session-close, eval-schedule, project-index, and optional
+  `ingest-status` feeds; weekly proposal and approved focus are display-only
+  overlays with no approve action. Missing feeds show an explicit “not an
+  all-clear” banner. Refresh is manual (no background poller). Distinct from
+  the agent-inbox reconnect counts and Doctor health.
+- **Locked companion masters** bundled under `AgentSprites/masters/` (256px)
   nearest-neighbor from the pixel-sprites repo) for Claude, Codex, Shell,
   Grok, Antigravity, OpenCode, Gemini CLI, and Ollama. UI shows them as
   interim identity art when a full six-pose set is not available.

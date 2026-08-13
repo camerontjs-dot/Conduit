@@ -2025,6 +2025,85 @@ check(
     MindGraphScope.projects.trustProfile == "project_status"
 )
 
+// MARK: - Focus Board (workstation port, pure)
+
+check("focus weekly stale days", FocusBoardConstants.weeklyStaleDays == 8)
+check("focus active cap", FocusBoardConstants.activeCap == 10)
+check("focus parseJsonl skips bad lines", FocusBoard.parseJsonl("{not json\n{\"a\":1}\n").count == 1)
+let missingBoard = FocusBoard.buildFocusBoard(
+    FocusBoardInputs(feedsMissing: true, fixture: true)
+)
+check("focus missing feeds insufficient", missingBoard.insufficient)
+check("focus missing feeds not empty success", missingBoard.items.first?.source == .feedsMissing)
+check(
+    "focus missing feeds title",
+    missingBoard.items.first?.title.contains("No truth feeds") == true
+)
+let wipBoard = FocusBoard.buildFocusBoard(
+    FocusBoardInputs(
+        scheduleRuns: [
+            FocusBoardJSON([
+                "fixture": .bool(true),
+                "run_id": .string("weekly"),
+                "cadence": .string("weekly"),
+                "all_passed": .bool(true),
+                "finished_at": .string("2026-07-12T10:05:00+00:00"),
+            ]),
+        ],
+        projectIndex: FocusBoardProjectIndexSummary(
+            activeCount: 11,
+            activeCap: 10,
+            problems: [
+                FocusBoardProjectProblem(
+                    code: "missing_frontmatter",
+                    project: "repo-radar",
+                    detail: "missing project_state frontmatter"
+                ),
+            ],
+            fixture: true
+        ),
+        nowMs: 1_783_879_200_000,
+        fixture: true
+    )
+)
+check("focus wip first is urgent", wipBoard.items.first?.severity == .urgent)
+check("focus wip breach id", wipBoard.items.contains { $0.id == "project-wip-breach" })
+let rankedFocus = FocusBoard.rankFocusItems([
+    FocusBoardItem(
+        id: "i",
+        severity: .info,
+        title: "i",
+        detail: "",
+        source: .sessionClose,
+        evidencePath: "p",
+        asOf: "2026-07-12"
+    ),
+    FocusBoardItem(
+        id: "u",
+        severity: .urgent,
+        title: "u",
+        detail: "",
+        source: .sessionClose,
+        evidencePath: "p",
+        asOf: "2026-07-12"
+    ),
+    FocusBoardItem(
+        id: "w",
+        severity: .watch,
+        title: "w",
+        detail: "",
+        source: .sessionClose,
+        evidencePath: "p",
+        asOf: "2026-07-10"
+    ),
+])
+check("focus rank urgent first", rankedFocus.first?.id == "u")
+check("focus bin evidence not viewable", !FocusBoard.isViewableEvidencePath("bin/ingest-status"))
+check(
+    "focus relative jsonl viewable",
+    FocusBoard.isViewableEvidencePath("20_live/workstation/session-close-feed.jsonl")
+)
+
 // MARK: - Optional real-tree smoke (set CONDUIT_SMOKE_ROOT=/path/to/MainFrame)
 
 if let smokeRoot = ProcessInfo.processInfo.environment["CONDUIT_SMOKE_ROOT"] {
@@ -2042,6 +2121,35 @@ if let smokeRoot = ProcessInfo.processInfo.environment["CONDUIT_SMOKE_ROOT"] {
             if !candidates.isEmpty && !bundle.markdown.contains("Trust label") { bundleOK = false }
         }
         check("real-tree context bundles assemble", bundleOK)
+        let closeText = try? String(
+            contentsOf: root.appendingPathComponent(FocusBoardPaths.sessionClose),
+            encoding: .utf8
+        )
+        let scheduleText = try? String(
+            contentsOf: root.appendingPathComponent(FocusBoardPaths.scheduleRuns),
+            encoding: .utf8
+        )
+        let indexText = try? String(
+            contentsOf: root.appendingPathComponent(FocusBoardPaths.projectIndex),
+            encoding: .utf8
+        )
+        let liveBoard = FocusBoard.buildFocusBoard(
+            FocusBoardInputs(
+                sessionCloseRecords: closeText.map { FocusBoard.parseJsonl($0) },
+                scheduleRuns: scheduleText.map { FocusBoard.parseJsonl($0) },
+                projectIndex: indexText.map {
+                    FocusBoard.parseProjectIndexMarkdown($0, asOf: "smoke")
+                }
+            )
+        )
+        check(
+            "real-tree focus board is a projection",
+            !liveBoard.items.isEmpty && liveBoard.items.allSatisfy { !$0.title.isEmpty }
+        )
+        check(
+            "real-tree missing feeds stay honest",
+            !liveBoard.insufficient || liveBoard.items.first?.source == .feedsMissing
+        )
         print("   ↳ scanned \(projects.count - 1) projects under \(root.lastPathComponent):")
         for project in projects.dropFirst().prefix(8) {
             let state = project.metadata.projectState ?? project.metadata.status ?? "—"

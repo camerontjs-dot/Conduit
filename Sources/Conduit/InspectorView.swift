@@ -11,6 +11,7 @@ enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
     case review
     case context
     case usage
+    case attention
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
         case .review: return "Review"
         case .context: return "Context"
         case .usage: return "Usage"
+        case .attention: return "Attention"
         }
     }
 
@@ -32,6 +34,7 @@ enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
         case .review: return "Observed git only"
         case .context: return "Work session · nominations"
         case .usage: return "Account meters · manual refresh"
+        case .attention: return "MainFrame Focus Board · read-only"
         }
     }
 
@@ -54,7 +57,8 @@ enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
                     .files: false,
                     .review: false,
                     .context: false,
-                    .usage: false
+                    .usage: false,
+                    .attention: false
                 ]
             case .balanced:
                 return [
@@ -62,7 +66,8 @@ enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
                     .files: true,
                     .review: true,
                     .context: false,
-                    .usage: false
+                    .usage: false,
+                    .attention: true
                 ]
             case .operator:
                 return Dictionary(
@@ -81,7 +86,8 @@ enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
                     .files: false,
                     .review: false,
                     .context: false,
-                    .usage: false
+                    .usage: false,
+                    .attention: false
                 ]
             case .operator:
                 return [
@@ -89,7 +95,8 @@ enum InspectorCard: String, CaseIterable, Identifiable, Codable, Hashable {
                     .files: true,
                     .review: false,
                     .context: false,
-                    .usage: false
+                    .usage: false,
+                    .attention: true
                 ]
             }
         }
@@ -164,6 +171,9 @@ struct InspectorView: View {
         .onChange(of: model.inspectorCardExpanded[.review] ?? false) { expanded in
             if expanded { refreshGitIfNeeded() }
         }
+        .onChange(of: model.inspectorCardExpanded[.attention] ?? false) { expanded in
+            if expanded { model.refreshFocusBoard() }
+        }
         .onAppear {
             refreshGitIfNeeded()
             if focusRequest > 0 {
@@ -190,6 +200,9 @@ struct InspectorView: View {
                 model.toggleInspectorCardExpanded(card)
                 if card == .review, !expanded {
                     refreshGitIfNeeded()
+                }
+                if card == .attention, !expanded {
+                    model.refreshFocusBoard()
                 }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -227,6 +240,7 @@ struct InspectorView: View {
                     case .review: reviewPane
                     case .context: contextPane
                     case .usage: usagePane
+                    case .attention: FocusBoardPanel()
                     }
                 }
                 .padding(10)
