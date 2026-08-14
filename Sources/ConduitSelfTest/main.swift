@@ -2173,6 +2173,42 @@ if let configPath = ProcessInfo.processInfo.environment["CONDUIT_CONFIG_PATH"] {
     }
 }
 
+// MARK: - Codex app-server mapping (D-038)
+
+var mapper = CodexAppServerMapper()
+let mappedDelta = mapper.apply(
+    .notification(
+        method: "item/agentMessage/delta",
+        params: .object(["delta": .string("Hi")])
+    )
+)
+check(
+    "app-server mapper grows structured text",
+    mappedDelta == [.upsertOutput(text: "Hi", state: .live)]
+)
+check(
+    "Codex profile prefers app-server",
+    AgentProfile(name: "Codex", command: "codex").preferredSessionBackend == .appServer
+)
+check(
+    "Claude profile stays PTY-primary",
+    AgentProfile(name: "Claude", command: "claude").preferredSessionBackend == .pty
+)
+check(
+    "session API rejects blended MindGraph scope",
+    !ConduitSessionAPI.allowsMindGraphScope("both")
+)
+let adapterEvent = SessionPresentation.agentOutputEvent(
+    promptEventID: nil,
+    text: "Hi",
+    extraction: .structuredAdapter,
+    truncated: false
+)
+check(
+    "structured adapter events are toolReported",
+    adapterEvent.authority == .toolReported
+)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

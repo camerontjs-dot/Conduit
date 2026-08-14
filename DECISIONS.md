@@ -80,6 +80,8 @@ MainFrame-only coordination decisions live outside this tree.
 
 **Decision:** Conduit launches, displays, and communicates with agents but does not route tasks autonomously, judge completion from terminal prose, or run agent-to-agent loops by default.
 
+**Refined by D-039 (2026-08-13):** operator-visible external orchestrator clients (ChatGPT chat, later the phone bridge) may call a capability-scoped session API. Conduit itself still does not become a router.
+
 **Consequences:** Features such as task DAGs and invisible shared memory stay deferred. Inter-agent handoff is operator-mediated (e.g. forwarded selection with an unverified-output boundary).
 
 ---
@@ -970,6 +972,96 @@ session reshapes UX after real use.
 
 ---
 
+## D-038: Codex app-server is the preferred Codex transport
+
+**Status:** Accepted (2026-08-13)
+
+**Context:** Daily Codex work is still the interactive `codex` TUI in a
+Conduit-owned PTY/tmux session (D-003, D-015). Conversation then projects
+screen paint (`derivedFromRaw`). OpenAI documents `codex app-server` as the
+JSON-RPC control plane used by the Codex VS Code extension and other rich
+clients of the same harness: threads, turns, items, approvals, streaming,
+skills, plugins, MCP, model list, and ChatGPT login. Conduit already spawns a
+short-lived app-server process for account rate limits (D-036) and then kills
+it. D-031 allows structured adapters as an additive labelled channel but still
+requires the real CLI to start in a PTY. For Codex, that PTY-first rule is the
+wrong owner: app-server *is* the official session host, and the TUI can attach
+with `codex --remote`.
+
+**Decision:**
+
+1. For the Codex profile only, a long-lived `codex app-server` process is the
+   preferred session host. Conversation is fed by app-server events labelled
+   `structuredAdapter` / `toolReported`.
+2. Raw remains available as an optional attach to that same server
+   (`codex --remote` or an equivalent documented listener), or as an explicit
+   PTY fallback profile. Conversation does not replace Raw.
+3. This is not a fake-chat transport and does not relax D-031 for other
+   agents. Claude, Grok, Gemini, OpenCode, and Shell stay PTY-primary until
+   they expose an equally explicit protocol.
+4. Composer send uses one path: app-server `turn/start` / `turn/steer`. Do not
+   dual-submit the same prompt into a TUI PTY.
+5. Permission requests arrive as app-server server-requests and render as
+   Conduit SwiftUI approvals. Do not auto-approve for UX (D-029).
+6. App-server turn completion is not verified success (D-011 / D-022).
+
+**Rejected alternatives:** Treating app-server as another usage-only probe;
+replacing every agent TUI with a chat client; scraping the Codex desktop app;
+billing Codex through the OpenAI API just to get structured events.
+
+**Consequences:** Codex becomes the first first-class structured worker.
+`AccountUsageService` should prefer a live app-server when one exists.
+Project and workbench `AGENTS.md` now allow Codex to use app-server as the
+session host. Other agents remain PTY-primary.
+
+---
+
+## D-039: External orchestrator clients, not a Conduit router
+
+**Status:** Accepted (2026-08-13)
+
+**Context:** D-007 forbids autonomous orchestration in v0.x: Conduit launches,
+displays, and communicates with agents but does not route tasks, judge
+completion from prose, or run agent-to-agent loops by default. That remains
+correct for *Conduit*. The operator also wants ChatGPT **chat** (separate from
+the Codex/agentic pool) to plan and delegate by calling Conduit tools. There
+is no supported API to embed ChatGPT chat inside Conduit on subscription chat
+quota. The supported invert is ChatGPT Developer Mode → Secure MCP Tunnel →
+a loopback Conduit MCP server. The phone-bridge plan already specified a
+second client of AppModel with the same session verbs.
+
+**Decision:**
+
+1. Conduit itself stays deterministic. It does not gain a hidden LLM router or
+   `@team` auto-dispatch.
+2. Capability-scoped **external orchestrator clients** may call a single
+   Conduit session API (list / status / create / send / interrupt / close).
+   First client: ChatGPT chat via Developer Mode + loopback MCP + official
+   Secure MCP Tunnel. Later client: the phone bridge, same verbs.
+3. Every spawn or send is one explicit tool call the operator can see in
+   Conduit, with origin `chatgpt` | `composer` | `phone`. Multi-hop and
+   agent-to-agent loops stay forbidden until a later ADR.
+4. ChatGPT-originated `send_prompt` is not permission to run destructive
+   tools. Approvals stay Mac-side.
+5. Write tools stay off the MindGraph daemon. Conduit MCP binds loopback only
+   on a dedicated port, off by default, with a local token even on localhost.
+6. ChatGPT receives summaries, paths, and authority labels — not raw PTY
+   transcripts or vault dumps. ChatGPT **Work** is not an orchestrator
+   (it shares the Codex/agentic pool).
+7. This does not change I15 (read-only Ask MainFrame). Spawn/steer is a
+   different trust class.
+
+**Rejected alternatives:** Embedding or scraping ChatGPT; putting write tools
+on `:8000`; Funnel or a public plugin listing; treating ChatGPT as a Conduit
+seat that impersonates subscription chat via the API.
+
+**Consequences:** Softens D-007 only for operator-visible external tool calls.
+Phone-bridge Unit 2 and the ChatGPT connector share one session API.
+Implementation waits for D-038’s Codex adapter (Phase 1) before enabling
+write tools (Phase 3).
+
+---
+
 ## Deferred deliberately (not rejected forever)
 
 - Autonomous routing and agent-to-agent loops  
@@ -979,6 +1071,8 @@ session reshapes UX after real use.
 - General-purpose process termination  
 - MindGraph retrieval blending into the default loop  
 - Private project wiring inside the repository  
+- Embedding ChatGPT chat inside Conduit  
+- Conduit-owned LLM router / `@team` auto-dispatch  
 
 ---
 

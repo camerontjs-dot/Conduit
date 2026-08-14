@@ -78,6 +78,24 @@ private struct ActiveSessionSurface: View {
                 controller.refreshConversationCapture()
             }
         }
+        .alert(
+            "Codex approval",
+            isPresented: Binding(
+                get: { runtime.pendingAppServerApproval != nil },
+                set: { if !$0 && runtime.pendingAppServerApproval != nil {
+                    runtime.respondToAppServerApproval(accept: false)
+                } }
+            )
+        ) {
+            Button("Allow") {
+                runtime.respondToAppServerApproval(accept: true)
+            }
+            Button("Deny", role: .cancel) {
+                runtime.respondToAppServerApproval(accept: false)
+            }
+        } message: {
+            Text(runtime.pendingAppServerApproval?.summary ?? "Codex requested approval.")
+        }
     }
 
     private var terminalRuntimeFooter: some View {
@@ -182,7 +200,13 @@ private struct ActiveSessionSurface: View {
 
     private var surfaceAuthorityLabel: String {
         guard runtime.selectedSurface == .raw else {
-            return "Conversation · Raw authoritative"
+            return runtime.usesAppServer
+                ? "Conversation · app-server events"
+                : "Conversation · Raw authoritative"
+        }
+
+        if runtime.usesAppServer {
+            return "Raw · app-server host (no TUI attach yet)"
         }
 
         if controller.launchIssue != nil {
@@ -204,11 +228,26 @@ private struct ActiveSessionSurface: View {
     }
 
     private var rawTerminal: some View {
-        TerminalHostView(
-            controller: controller,
-            theme: TerminalTheme(palette: palette),
-            claimsFocus: runtime.selectedSurface == .raw
-        )
+        ZStack {
+            TerminalHostView(
+                controller: controller,
+                theme: TerminalTheme(palette: palette),
+                claimsFocus: runtime.selectedSurface == .raw && !runtime.usesAppServer
+            )
+            if runtime.usesAppServer {
+                VStack(spacing: 8) {
+                    Text("Codex is hosted by app-server")
+                        .font(.headline)
+                    Text("Conversation is the live surface. A Raw TUI attach (`codex --remote`) is not wired yet. This is not a completion claim.")
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(palette.dim)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(palette.surface.opacity(0.96))
+            }
+        }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(palette.surface)

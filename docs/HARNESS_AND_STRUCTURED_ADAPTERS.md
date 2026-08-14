@@ -50,5 +50,55 @@ A bad harness:
 ## Relation to existing enums
 
 `AgentOutputExtraction.structuredAdapter` and
-`SessionEventAuthority.toolReported` already exist. The missing work is wiring
-real producers — not inventing a second authority model.
+`SessionEventAuthority.toolReported` already exist. Codex `app-server` is the
+first producer (D-038). Other agents still degrade to Derived-from-Raw.
+
+## Verification required before calling this daily-driver
+
+This slice is **not** installed-app smoked. Do not treat `swift build` as
+operator proof.
+
+Required on a machine with full Xcode when possible:
+
+```bash
+swift run conduit-selftest
+swift test
+./scripts/build-app.sh
+```
+
+Then one **disposable** Codex New Task in the installed app (not a live work
+session):
+
+1. Status says app-server, not an immediate silent PTY fallback.
+2. Composer send grows Conversation with a structured-adapter / `toolReported`
+   label (not only Derived-from-Raw).
+3. An approval request shows Allow/Deny and does **not** auto-accept.
+4. Close & Receipt still writes an evidence-aware receipt; turn completion is
+   not treated as success.
+5. Leave/End stops the app-server process (no tmux durability for this host).
+6. If `codex` is missing or initialize fails, fallback to PTY is explicit.
+
+Do not spend Codex `turn/start` quota from automation. An operator must be
+present for approvals.
+
+`swift test` was not run on the 2026-08-13 authoring machine (Command Line
+Tools only; XCTest module unavailable). Selftest was 325 passed; Conduit
+target compiled.
+
+## Next moves (in order)
+
+1. Rebuild/install and run the disposable Codex smoke above.
+2. Fix Resume/Reconnect for Codex: the current resume path can still call
+   `startIfNeeded()` (PTY) instead of reattaching app-server.
+3. Prefer a live app-server for account usage refresh instead of
+   spawn-read-kill.
+4. Tighten permission-deny replies for `item/permissions/requestApproval`
+   (empty `permissions: {}` is not an honest deny).
+5. Optional Raw attach via `codex --remote` to the same server.
+6. Phase 2: loopback session API on `127.0.0.1:8750`, **read tools only**,
+   off by default.
+7. Phase 0B/3: operator enables ChatGPT Developer Mode and installs
+   `tunnel-client`, then a ping-only MCP. Write tools stay off until Phase 1
+   smoke is green.
+8. Daily-driver UX cuts remain the installed-app next_action unless the
+   operator pauses them.

@@ -550,6 +550,10 @@ struct ConversationView: View {
                     Text("· \(sourceAgentName)")
                         .font(.caption2)
                         .foregroundStyle(palette.dim)
+                } else if prompt.origin != .composer {
+                    Text("· \(prompt.origin.displayName)")
+                        .font(.caption2)
+                        .foregroundStyle(palette.dim)
                 }
                 if prompt.delivery != .delivered {
                     deliveryMark(prompt.delivery)

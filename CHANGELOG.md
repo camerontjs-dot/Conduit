@@ -25,6 +25,16 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Added
+
+- Codex tasks now prefer a long-lived `codex app-server` session (D-038).
+  Conversation grows from structured adapter events (`toolReported`) instead
+  of only scraping the TUI. Approvals surface as a Conduit alert. If
+  app-server fails to start, Conduit falls back to the existing PTY path.
+- Prompt origin can now record ChatGPT or phone as well as the composer
+  (D-039). The Conduit session API types exist; the ChatGPT MCP listener is
+  not enabled yet.
+
 ### Fixed
 
 - Attention inspector card now loads recorded feeds on first appear when the

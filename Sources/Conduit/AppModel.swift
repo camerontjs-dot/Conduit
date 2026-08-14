@@ -1545,6 +1545,7 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.set(scannedProject.id, forKey: Self.newTaskScopeStorageKey)
         beginWorkSessionIfNeeded(scannedProject)
         let instance = nextInstanceNumber(for: agent, in: scannedProject)
+        let prefersAppServer = agent.preferredSessionBackend == .appServer
         let runtime = start(
             descriptor: SessionDescriptor(
                 projectPath: scannedProject.path,
@@ -1552,12 +1553,16 @@ final class AppModel: ObservableObject {
                 instance: instance
             ),
             project: scannedProject,
-            backendLabel: settings.restoreSessions ? "durable-requested" : "pty",
+            backendLabel: prefersAppServer
+                ? AgentSessionBackend.appServer.workSessionLabel
+                : (settings.restoreSessions ? "durable-requested" : "pty"),
             entry: .started(
                 agentName: agent.name,
-                requestedBackend: settings.restoreSessions
-                    ? "durable tmux, with PTY fallback"
-                    : "direct PTY"
+                requestedBackend: prefersAppServer
+                    ? "codex app-server"
+                    : (settings.restoreSessions
+                        ? "durable tmux, with PTY fallback"
+                        : "direct PTY")
             )
         )
         if runtime != nil {
@@ -2041,8 +2046,29 @@ final class AppModel: ObservableObject {
         }
         // The terminal used to start only when its SwiftTerm view appeared.
         // Conversation is now the default, so process ownership must not depend
-        // on mounting the Raw surface.
-        runtime.controller.startIfNeeded()
+        // on mounting the Raw surface. Codex prefers app-server (D-038).
+        if descriptor.agent.preferredSessionBackend == .appServer {
+            runtime.attachAppServer(
+                cwd: descriptor.projectPath,
+                model: descriptor.agent.model
+            )
+            Task { @MainActor [weak self, weak runtime] in
+                guard let self, let runtime else { return }
+                if let failure = await runtime.startAppServerIfNeeded() {
+                    runtime.stopAppServer()
+                    self.statusMessage =
+                        "Codex app-server failed (\(failure)). Falling back to PTY."
+                    runtime.controller.startIfNeeded()
+                    if let issue = runtime.controller.launchIssue {
+                        self.errorMessage = issue.localizedDescription
+                    }
+                } else {
+                    self.statusMessage = "Codex is running on app-server."
+                }
+            }
+        } else {
+            runtime.controller.startIfNeeded()
+        }
         if let issue = runtime.controller.launchIssue {
             _ = appendTaskEvent(
                 TaskSessionEvent(
@@ -2205,6 +2231,7 @@ final class AppModel: ObservableObject {
         // Persist a deterministic closure before direct PTY termination can
         // deallocate the runtime and its weak lifecycle callback.
         runtime.closeAgentOutputCapture()
+        runtime.stopAppServer()
         runtime.controller.closeSession()
         if let taskID = runtime.descriptor.taskSessionID {
             let state: TaskSessionOperationalState = keptRunning
@@ -2256,6 +2283,7 @@ final class AppModel: ObservableObject {
             : nil
         explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
         runtime.closeAgentOutputCapture()
+        runtime.stopAppServer()
         let runtimeEnded = runtime.controller.endSession()
         if let taskID = runtime.descriptor.taskSessionID {
             let state: TaskSessionOperationalState = runtimeEnded
@@ -2414,7 +2442,12 @@ final class AppModel: ObservableObject {
         // Slash/skills: complete in the Conduit composer, then on Return run as
         // a real CLI command (TUI inject). Paste delivery is treated as chat by
         // OpenCode/Claude and does not invoke builtins like `/cost`.
+        if runtime.usesAppServer, runtime.appServer?.isReady != true {
+            errorMessage = "Codex app-server is still starting. Wait for it to become ready before sending."
+            return
+        }
         if savedAttachments.isEmpty,
+           !runtime.usesAppServer,
            AgentSlashCatalog.looksLikeSlashCommand(trimmedComposer) {
             sendSlashCommand(
                 trimmedComposer,
@@ -2444,6 +2477,21 @@ final class AppModel: ObservableObject {
                 : "Sent with \(attachmentCount) attachments."
         }
         let agentName = runtime.controller.descriptor.agent.name
+        if runtime.appServer?.isReady == true {
+            let delivered = runtime.sendAppServerPrompt(text: assembled)
+            runtime.updatePromptDelivery(
+                eventID: eventID,
+                to: delivered ? .delivered : .failed
+            )
+            if !delivered {
+                if composerText.isEmpty && attachments.isEmpty {
+                    composerText = savedText
+                    attachments = savedAttachments
+                }
+                errorMessage = "The prompt could not be delivered to Codex app-server. It has been kept in the composer."
+            }
+            return
+        }
         // Capture uses the human-visible assembled prompt for echo stripping,
         // not the host envelope wrapper.
         runtime.controller.deliverPrompt(
@@ -3119,6 +3167,10 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     @Published private(set) var isAwaitingAgentOutput = false
     @Published private(set) var activeOutputEventID: UUID?
     @Published private(set) var conversationCaptureNotice: String?
+    @Published private(set) var appServer: CodexAppServerClient?
+    @Published var pendingAppServerApproval: CodexAppServerApproval?
+
+    var usesAppServer: Bool { appServer != nil }
 
     private struct ActiveOutputCapture {
         let id: UUID
@@ -3505,6 +3557,114 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         recordEventRevision?(settled)
         lastPersistedOutputAt = Date()
         lastPersistedOutputText = output.text
+    }
+
+    func attachAppServer(cwd: URL, model: String?) {
+        let client = CodexAppServerClient(cwd: cwd, model: model)
+        client.onEffect = { [weak self] effect in
+            self?.applyAppServerEffect(effect)
+        }
+        client.onFailed = { [weak self] message in
+            self?.conversationCaptureNotice = message
+        }
+        client.onExited = { [weak self] in
+            self?.controller.markAdapterExited()
+        }
+        appServer = client
+    }
+
+    func startAppServerIfNeeded() async -> String? {
+        guard let appServer else { return "Codex app-server client is missing." }
+        guard let executable = EnvironmentResolver.shared.resolve(
+            descriptor.agent.command
+        ) ?? EnvironmentResolver.shared.resolve("codex") else {
+            return "codex is not on PATH."
+        }
+        do {
+            try await appServer.start(executable: executable)
+            controller.markAdapterHosted()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func sendAppServerPrompt(text: String) -> Bool {
+        do {
+            try appServer?.sendTurn(text: text)
+            return true
+        } catch {
+            conversationCaptureNotice = error.localizedDescription
+            return false
+        }
+    }
+
+    func stopAppServer() {
+        appServer?.stop()
+        appServer = nil
+        pendingAppServerApproval = nil
+    }
+
+    func respondToAppServerApproval(accept: Bool) {
+        appServer?.respondToApproval(accept: accept)
+        pendingAppServerApproval = nil
+    }
+
+    private func applyAppServerEffect(_ effect: CodexAppServerEffect) {
+        switch effect {
+        case .threadStarted:
+            break
+        case .upsertOutput(let text, let state):
+            upsertAdapterOutput(text: text, state: state)
+        case .requestApproval(let approval):
+            pendingAppServerApproval = approval
+        case .turnCompleted:
+            closeAgentOutputCapture()
+        case .failed(let message):
+            conversationCaptureNotice = message
+        }
+    }
+
+    private func upsertAdapterOutput(text: String, state: AgentOutputState) {
+        conversationCaptureNotice = nil
+        let promptID = presentationEvents.last(where: {
+            if case .userPrompt = $0.kind { return true }
+            return false
+        })?.id
+        let event: SessionPresentationEvent
+        if let eventID = activeOutputEventID,
+           let previous = presentationEvents.first(where: { $0.id == eventID }),
+           case .agentOutput(let previousOutput) = previous.kind,
+           previousOutput.extraction == .structuredAdapter {
+            event = SessionPresentation.agentOutputEvent(
+                promptEventID: previousOutput.promptEventID ?? promptID,
+                text: text,
+                state: state,
+                extraction: .structuredAdapter,
+                truncated: previousOutput.truncated,
+                id: previous.id,
+                occurredAt: previous.occurredAt
+            )
+        } else {
+            event = SessionPresentation.agentOutputEvent(
+                promptEventID: promptID,
+                text: text,
+                state: state,
+                extraction: .structuredAdapter,
+                truncated: false
+            )
+        }
+        presentationEvents = SessionPresentation.upsertingAgentOutput(
+            in: presentationEvents,
+            event: event
+        )
+        activeOutputEventID = event.id
+        isAwaitingAgentOutput = state == .live
+        recordEventRevision?(event)
+        if state == .closed {
+            activeOutputCapture = nil
+            isAwaitingAgentOutput = false
+        }
     }
 }
 #endif

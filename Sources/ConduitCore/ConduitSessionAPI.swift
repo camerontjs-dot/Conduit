@@ -1,0 +1,74 @@
+import Foundation
+
+/// Capability-scoped verbs for external orchestrator clients (D-039).
+///
+/// ChatGPT Developer Mode and the later phone bridge share this contract.
+/// Conduit itself stays deterministic; every write is one explicit call.
+public enum ConduitSessionOrigin: String, Codable, Equatable, Sendable {
+    case composer
+    case chatgpt
+    case phone
+
+    public var promptOrigin: PromptOrigin {
+        switch self {
+        case .composer: return .composer
+        case .chatgpt: return .chatgpt
+        case .phone: return .phone
+        }
+    }
+}
+
+public struct ConduitSessionSnapshot: Equatable, Sendable {
+    public var taskSessionID: String
+    public var agentName: String
+    public var projectSlug: String
+    public var backend: AgentSessionBackend
+    public var lifecycle: String
+    public var originLastPrompt: ConduitSessionOrigin?
+
+    public init(
+        taskSessionID: String,
+        agentName: String,
+        projectSlug: String,
+        backend: AgentSessionBackend,
+        lifecycle: String,
+        originLastPrompt: ConduitSessionOrigin? = nil
+    ) {
+        self.taskSessionID = taskSessionID
+        self.agentName = agentName
+        self.projectSlug = projectSlug
+        self.backend = backend
+        self.lifecycle = lifecycle
+        self.originLastPrompt = originLastPrompt
+    }
+}
+
+public enum ConduitSessionCommand: Equatable, Sendable {
+    case listProjects
+    case listSessions
+    case sessionStatus(taskSessionID: String)
+    case queryMindGraph(question: String, scope: String)
+    case createTask(agent: String, projectSlug: String, objective: String)
+    case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin)
+    case interrupt(taskSessionID: String)
+    case closeSession(taskSessionID: String)
+}
+
+public enum ConduitSessionAPI {
+    /// Loopback-only MCP listen address. Do not share with MindGraph :8000.
+    public static let loopbackPort = 8750
+    public static let loopbackPath = "/mcp"
+
+    public static func isWrite(_ command: ConduitSessionCommand) -> Bool {
+        switch command {
+        case .listProjects, .listSessions, .sessionStatus, .queryMindGraph:
+            return false
+        case .createTask, .sendPrompt, .interrupt, .closeSession:
+            return true
+        }
+    }
+
+    public static func allowsMindGraphScope(_ scope: String) -> Bool {
+        scope == "knowledge" || scope == "projects"
+    }
+}

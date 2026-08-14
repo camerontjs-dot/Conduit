@@ -245,6 +245,7 @@ final class EnvironmentResolver: @unchecked Sendable {
 /// These are identity failures, not agent exit codes and not permission to
 /// launch a duplicate direct-PTY replacement.
 enum TerminalLaunchIssue: Equatable, Sendable, LocalizedError {
+    case appServerFailed(String)
     case tmuxUnavailableForReconnect(sessionName: String)
     case durableSessionMissing(sessionName: String)
     case durableSessionPresenceInspectionFailed(sessionName: String)
@@ -267,6 +268,8 @@ enum TerminalLaunchIssue: Equatable, Sendable, LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .appServerFailed(let message):
+            return "Codex app-server failed: \(message)"
         case .tmuxUnavailableForReconnect(let sessionName):
             return "Did not reconnect to \(sessionName): tmux is not currently available. No replacement process was started."
         case .durableSessionMissing(let sessionName):

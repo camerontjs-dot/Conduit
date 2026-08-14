@@ -465,6 +465,25 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         failPendingPrompts()
     }
 
+    /// Mark this controller as hosting a non-PTY adapter (D-038). The PTY is
+    /// not started; Conversation is the live surface.
+    func markAdapterHosted(titleSuffix: String = "app-server") {
+        launchIssue = nil
+        if lifecycle == .idle {
+            _ = lifecycle.transition(to: .launching)
+        }
+        _ = lifecycle.transition(to: .running)
+        usesTmux = false
+        attachedAt = Date()
+        terminalTitle = "\(descriptor.title) · \(titleSuffix)"
+    }
+
+    func markAdapterExited(code: Int32? = nil) {
+        guard !lifecycle.isTerminal else { return }
+        _ = lifecycle.transition(to: .exited(code: code))
+        failPendingPrompts()
+    }
+
     // MARK: - Private
 
     private func failLaunch(_ issue: TerminalLaunchIssue) {

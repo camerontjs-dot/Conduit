@@ -70,7 +70,19 @@ public enum PromptDeliveryState: String, Codable, Equatable, Sendable {
 
 public enum PromptOrigin: Codable, Equatable, Sendable {
     case composer
+    case chatgpt
+    case phone
     case forwardedTerminalOutput(sourceAgentName: String)
+
+    public var displayName: String {
+        switch self {
+        case .composer: return "Composer"
+        case .chatgpt: return "ChatGPT"
+        case .phone: return "Phone"
+        case .forwardedTerminalOutput(let source):
+            return "Forwarded from \(source)"
+        }
+    }
 }
 
 /// Whether a raw-derived output block is actively changing, has gone quiet,
