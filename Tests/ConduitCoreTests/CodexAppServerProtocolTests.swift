@@ -110,6 +110,35 @@ final class CodexAppServerProtocolTests: XCTestCase {
         XCTAssertEqual(ConduitSessionOrigin.chatgpt.promptOrigin, .chatgpt)
     }
 
+    func testPermissionDeclineUsesRPCError() {
+        let approval = CodexAppServerApproval(
+            id: "p",
+            rpcID: .number(1),
+            method: "item/permissions/requestApproval",
+            summary: "fs"
+        )
+        XCTAssertTrue(approval.declineUsesRPCError)
+        let command = CodexAppServerApproval(
+            id: "c",
+            rpcID: .number(2),
+            method: "item/commandExecution/requestApproval",
+            summary: "git status"
+        )
+        XCTAssertFalse(command.declineUsesRPCError)
+        XCTAssertEqual(command.declineResult["decision"] as? String, "decline")
+    }
+
+    func testAdapterThreadStoreRoundTrip() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("conduit-adapter-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = AdapterThreadStore(directory: directory)
+        let task = TaskSessionID()
+        store.save(taskSessionID: task, backend: "app-server", threadID: "thr_9")
+        XCTAssertEqual(store.threadID(for: task), "thr_9")
+    }
+
     func testStructuredAdapterEventUsesToolReportedAuthority() {
         let event = SessionPresentation.agentOutputEvent(
             promptEventID: nil,

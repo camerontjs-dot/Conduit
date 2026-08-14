@@ -87,18 +87,14 @@ target compiled.
 
 ## Next moves (in order)
 
-1. Rebuild/install and run the disposable Codex smoke above.
-2. Fix Resume/Reconnect for Codex: the current resume path can still call
-   `startIfNeeded()` (PTY) instead of reattaching app-server.
-3. Prefer a live app-server for account usage refresh instead of
-   spawn-read-kill.
-4. Tighten permission-deny replies for `item/permissions/requestApproval`
-   (empty `permissions: {}` is not an honest deny).
-5. Optional Raw attach via `codex --remote` to the same server.
-6. Phase 2: loopback session API on `127.0.0.1:8750`, **read tools only**,
-   off by default.
-7. Phase 0B/3: operator enables ChatGPT Developer Mode and installs
+1. Rebuild/install and run the disposable Codex smoke above (still required).
+2. Confirm Reconnect on a Codex task after Leave starts app-server / 
+   `thread/resume` rather than a PTY.
+3. Confirm Raw attach via `codex --remote` when a unix socket is present.
+4. Optional: enable Session API in Settings, `curl` `/healthz` and
+   `POST /mcp` with the bearer token in `~/.conduit/session-api-token`.
+5. Phase 0B/3: operator enables ChatGPT Developer Mode and installs
    `tunnel-client`, then a ping-only MCP. Write tools stay off until Phase 1
    smoke is green.
-8. Daily-driver UX cuts remain the installed-app next_action unless the
+6. Daily-driver UX cuts remain the installed-app next_action unless the
    operator pauses them.

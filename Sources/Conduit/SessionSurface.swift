@@ -74,6 +74,9 @@ private struct ActiveSessionSurface: View {
             if surface == .conversation {
                 runtime.resyncConversationCapture()
             } else {
+                if runtime.usesAppServer {
+                    runtime.ensureRemoteTUI()
+                }
                 // Pull once while entering Raw so the projection stays warm.
                 controller.refreshConversationCapture()
             }
@@ -206,7 +209,9 @@ private struct ActiveSessionSurface: View {
         }
 
         if runtime.usesAppServer {
-            return "Raw · app-server host (no TUI attach yet)"
+            return runtime.appServer?.socketPath == nil
+                ? "Raw · app-server host (stdio; no TUI socket)"
+                : "Raw · app-server + optional remote TUI"
         }
 
         if controller.launchIssue != nil {
@@ -234,11 +239,11 @@ private struct ActiveSessionSurface: View {
                 theme: TerminalTheme(palette: palette),
                 claimsFocus: runtime.selectedSurface == .raw && !runtime.usesAppServer
             )
-            if runtime.usesAppServer {
+            if runtime.usesAppServer && !controller.remoteTUIAttached {
                 VStack(spacing: 8) {
                     Text("Codex is hosted by app-server")
                         .font(.headline)
-                    Text("Conversation is the live surface. A Raw TUI attach (`codex --remote`) is not wired yet. This is not a completion claim.")
+                    Text("Conversation is the live surface. Opening Raw attaches `codex --remote` when a unix socket is available. This is not a completion claim.")
                         .font(.caption)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(palette.dim)

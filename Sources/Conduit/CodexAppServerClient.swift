@@ -40,6 +40,7 @@ final class CodexAppServerClient: ObservableObject {
     var onExited: (() -> Void)?
 
     private var process: Process?
+    private var serverProcess: Process?
     private var stdinHandle: FileHandle?
     private var buffer = Data()
     private var nextID = 1
@@ -47,10 +48,13 @@ final class CodexAppServerClient: ObservableObject {
     private var pendingResponses: [Int: CheckedContinuation<CodexJSON, Error>] = [:]
     private let cwd: URL
     private let model: String?
+    private let resumeThreadID: String?
+    private(set) var socketPath: String?
 
-    init(cwd: URL, model: String?) {
+    init(cwd: URL, model: String?, resumeThreadID: String? = nil) {
         self.cwd = cwd
         self.model = model
+        self.resumeThreadID = resumeThreadID
     }
 
     func start(executable: String) async throws {
@@ -59,16 +63,72 @@ final class CodexAppServerClient: ObservableObject {
             throw ClientError.executableMissing
         }
 
+        do {
+            try startUnixHost(executable: executable)
+        } catch {
+            stopProcesses()
+            socketPath = nil
+            try startStdioHost(executable: executable)
+        }
+
+        do {
+            try await handshake()
+        } catch {
+            lastError = error.localizedDescription
+            stop()
+            throw error
+        }
+    }
+
+    private func startUnixHost(executable: String) throws {
+        let directory = AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("codex-sockets", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let socket = directory
+            .appendingPathComponent("\(UUID().uuidString).sock")
+            .path
+        let server = Process()
+        server.executableURL = URL(fileURLWithPath: executable)
+        server.arguments = ["app-server", "--listen", "unix://\(socket)"]
+        server.currentDirectoryURL = cwd
+        server.standardInput = FileHandle.nullDevice
+        server.standardOutput = Pipe()
+        server.standardError = Pipe()
+        try server.run()
+        serverProcess = server
+
+        let deadline = Date().addingTimeInterval(2.5)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: socket) { break }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        guard FileManager.default.fileExists(atPath: socket) else {
+            throw ClientError.protocolError("app-server unix socket did not appear.")
+        }
+        socketPath = socket
+        try spawnRPCProcess(
+            executable: executable,
+            arguments: ["app-server", "proxy", "--sock", socket]
+        )
+    }
+
+    private func startStdioHost(executable: String) throws {
+        try spawnRPCProcess(executable: executable, arguments: ["app-server"])
+    }
+
+    private func spawnRPCProcess(executable: String, arguments: [String]) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = ["app-server"]
+        process.arguments = arguments
         process.currentDirectoryURL = cwd
         let stdin = Pipe()
         let stdout = Pipe()
-        let stderr = Pipe()
         process.standardInput = stdin
         process.standardOutput = stdout
-        process.standardError = stderr
+        process.standardError = Pipe()
         process.terminationHandler = { [weak self] _ in
             Task { @MainActor in
                 self?.handleExit()
@@ -77,39 +137,42 @@ final class CodexAppServerClient: ObservableObject {
         try process.run()
         self.process = process
         self.stdinHandle = stdin.fileHandleForWriting
-
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             Task { @MainActor in
                 self?.ingest(chunk)
             }
         }
+    }
 
-        do {
-            _ = try await request(CodexAppServerRequests.initialize(id: 0))
-            send(CodexAppServerRequests.initialized())
-            let started = try await request(
+    private func handshake() async throws {
+        _ = try await request(CodexAppServerRequests.initialize(id: 0))
+        send(CodexAppServerRequests.initialized())
+        let started: CodexJSON
+        if let resumeThreadID, !resumeThreadID.isEmpty {
+            started = try await request(
+                CodexAppServerRequests.threadResume(id: 0, threadID: resumeThreadID)
+            )
+        } else {
+            started = try await request(
                 CodexAppServerRequests.threadStart(
                     id: 0,
                     cwd: cwd.path,
                     model: model
                 )
             )
-            if let threadID = started["thread"]?["id"]?.stringValue
-                ?? started["threadId"]?.stringValue {
-                self.threadID = threadID
-                mapper.threadID = threadID
-            }
-            guard self.threadID != nil else {
-                throw ClientError.protocolError("thread/start did not return a thread id.")
-            }
-            isReady = true
-            onReady?()
-        } catch {
-            lastError = error.localizedDescription
-            stop()
-            throw error
         }
+        if let threadID = started["thread"]?["id"]?.stringValue
+            ?? started["threadId"]?.stringValue
+            ?? resumeThreadID {
+            self.threadID = threadID
+            mapper.threadID = threadID
+        }
+        guard self.threadID != nil else {
+            throw ClientError.protocolError("thread start/resume did not return a thread id.")
+        }
+        isReady = true
+        onReady?()
     }
 
     func sendTurn(text: String) throws {
@@ -143,23 +206,47 @@ final class CodexAppServerClient: ObservableObject {
     func respondToApproval(accept: Bool) {
         guard let approval = pendingApproval else { return }
         pendingApproval = nil
-        let payload: [String: Any] = [
+        if !accept && approval.declineUsesRPCError {
+            send([
+                "id": approval.rpcID.jsonObject,
+                "error": [
+                    "code": -32003,
+                    "message": "operator declined",
+                ] as [String: Any],
+            ])
+            return
+        }
+        send([
             "id": approval.rpcID.jsonObject,
             "result": accept ? approval.acceptResult : approval.declineResult
-        ]
-        send(payload)
+        ])
+    }
+
+    func readRateLimits() async throws -> Data {
+        let result = try await request(CodexAppServerRequests.rateLimitsRead(id: 0))
+        let payload: [String: Any] = ["result": result.jsonObject()]
+        return try JSONSerialization.data(withJSONObject: payload)
     }
 
     func stop() {
-        stdinHandle = nil
-        process?.terminationHandler = nil
-        if let process, process.isRunning {
-            process.terminate()
-        }
-        process = nil
+        stopProcesses()
         failPending("Codex app-server stopped.")
         isReady = false
         isTurnActive = false
+        socketPath = nil
+    }
+
+    private func stopProcesses() {
+        stdinHandle = nil
+        process?.terminationHandler = nil
+        serverProcess?.terminationHandler = nil
+        if let process, process.isRunning { process.terminate() }
+        if let serverProcess, serverProcess.isRunning { serverProcess.terminate() }
+        process = nil
+        serverProcess = nil
+        if let socketPath {
+            try? FileManager.default.removeItem(atPath: socketPath)
+        }
     }
 
     private func handleExit() {

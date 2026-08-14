@@ -316,6 +316,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var accountUsage: [AccountUsageSnapshot] = []
     @Published private(set) var accountUsageRefreshing = false
     @Published private(set) var accountUsageError: String?
+    @Published private(set) var sessionAPIAddress: String?
+    private var sessionAPIServer: ConduitSessionAPIServer?
     /// Lazy, CLI-owned model catalogs keyed by saved profile identity.
     @Published private(set) var modelOptionsByAgentID: [UUID: [AgentModelOption]] = [:]
     @Published private(set) var modelCatalogRefreshingAgentIDs: Set<UUID> = []
@@ -1018,7 +1020,11 @@ final class AppModel: ObservableObject {
         accountUsageRefreshing = true
         accountUsageError = nil
         Task { @MainActor in
-            let snaps = await AccountUsageService.refreshAll()
+            var liveCodex: Data?
+            if let ready = sessions.compactMap(\.appServer).first(where: \.isReady) {
+                liveCodex = try? await ready.readRateLimits()
+            }
+            let snaps = await AccountUsageService.refreshAll(codexOverride: liveCodex)
             self.accountUsage = snaps
             self.accountUsageRefreshing = false
             let failed = snaps.compactMap(\.error)
@@ -1135,6 +1141,7 @@ final class AppModel: ObservableObject {
         async let health: Void = refreshHealth()
         async let resources: Void = refreshResources()
         _ = await (health, resources)
+        syncSessionAPI()
     }
 
     /// Startup scanning touches a protected user-selected folder. Keep that
@@ -1627,14 +1634,43 @@ final class AppModel: ObservableObject {
             _ = selectSession(runtime)
             return
         }
-        guard let task = taskSessions.first(where: { $0.id == id }),
-              let discovered = reconnectableDiscoveredSession(for: task)
-        else {
-            errorMessage = "No identity-compatible tmux runtime was observed for this task. Refresh discovery or inspect the recovery details."
+        guard let task = taskSessions.first(where: { $0.id == id }) else {
+            errorMessage = "That task is no longer in the local catalog."
             return
         }
-        let explicitProject = project(for: task)
-        _ = resume(discovered, adoptingInto: explicitProject)
+        if let discovered = reconnectableDiscoveredSession(for: task) {
+            let explicitProject = project(for: task)
+            _ = resume(discovered, adoptingInto: explicitProject)
+            return
+        }
+        if let project = project(for: task),
+           let agent = agentProfile(named: task.metadata.agentName),
+           agent.preferredSessionBackend == .appServer {
+            selectProject(project)
+            beginWorkSessionIfNeeded(project)
+            _ = start(
+                descriptor: SessionDescriptor(
+                    projectPath: project.path,
+                    agent: agent,
+                    taskSessionID: task.id,
+                    recordsIdentity: true
+                ),
+                project: project,
+                backendLabel: AgentSessionBackend.appServer.workSessionLabel,
+                entry: .started(
+                    agentName: agent.name,
+                    requestedBackend: "codex app-server resume"
+                )
+            )
+            return
+        }
+        errorMessage = "No identity-compatible tmux runtime was observed for this task. Refresh discovery or inspect the recovery details."
+    }
+
+    private func agentProfile(named name: String?) -> AgentProfile? {
+        guard let name else { return nil }
+        return settings.agents.first { $0.name == name }
+            ?? enabledAgents.first { $0.name == name }
     }
 
     func leaveTask(_ id: TaskSessionID) {
@@ -1770,7 +1806,8 @@ final class AppModel: ObservableObject {
             // a second operator-close event.
             removeSessionTab(stale)
         }
-        if let durable = discoveredSessions.first(where: { discovered in
+        if agent.preferredSessionBackend != .appServer,
+           let durable = discoveredSessions.first(where: { discovered in
             discovered.projectPath?.standardizedFileURL == project.path.standardizedFileURL
                 && discovered.agentName == agent.name
                 && !sessions.contains(where: { runtime in
@@ -1789,6 +1826,7 @@ final class AppModel: ObservableObject {
             }
         }
 
+        let hosted = hostedBackend(for: agent)
         return start(
             descriptor: SessionDescriptor(
                 projectPath: project.path,
@@ -1796,10 +1834,10 @@ final class AppModel: ObservableObject {
                 instance: nextInstanceNumber(for: agent, in: project)
             ),
             project: project,
-            backendLabel: settings.restoreSessions ? "durable-requested" : "pty",
+            backendLabel: hosted.label,
             entry: .started(
                 agentName: agent.name,
-                requestedBackend: settings.restoreSessions ? "durable tmux, with PTY fallback" : "direct PTY"
+                requestedBackend: hosted.requested
             )
         )
     }
@@ -1815,6 +1853,7 @@ final class AppModel: ObservableObject {
         }
         beginWorkSessionIfNeeded(project)
         let instance = nextInstanceNumber(for: agent, in: project)
+        let hosted = hostedBackend(for: agent)
         let runtime = start(
             descriptor: SessionDescriptor(
                 projectPath: project.path,
@@ -1822,10 +1861,10 @@ final class AppModel: ObservableObject {
                 instance: instance
             ),
             project: project,
-            backendLabel: settings.restoreSessions ? "durable-requested" : "pty",
+            backendLabel: hosted.label,
             entry: .started(
                 agentName: agent.name,
-                requestedBackend: settings.restoreSessions ? "durable tmux, with PTY fallback" : "direct PTY"
+                requestedBackend: hosted.requested
             )
         )
         if runtime != nil {
@@ -1944,6 +1983,19 @@ final class AppModel: ObservableObject {
         return runtime
     }
 
+    private func hostedBackend(for agent: AgentProfile) -> (label: String, requested: String) {
+        if agent.preferredSessionBackend == .appServer {
+            return (
+                AgentSessionBackend.appServer.workSessionLabel,
+                "codex app-server"
+            )
+        }
+        if settings.restoreSessions {
+            return ("durable-requested", "durable tmux, with PTY fallback")
+        }
+        return ("pty", "direct PTY")
+    }
+
     /// Lowest instance number not already taken by an open tab or a live tmux
     /// session, so a new instance never collides with a detached one.
     private func nextInstanceNumber(for agent: AgentProfile, in project: MainframeProject) -> Int {
@@ -2037,7 +2089,8 @@ final class AppModel: ObservableObject {
         _ = selectSession(runtime)
         // After durable reattach, rebuild any incomplete turn projection from
         // the live pane (missed paint while Conduit was away).
-        if case .resumed = entry {
+        if case .resumed = entry,
+           descriptor.agent.preferredSessionBackend != .appServer {
             Task { @MainActor [weak runtime] in
                 try? await Task.sleep(nanoseconds: 450_000_000)
                 runtime?.controller.startIfNeeded()
@@ -2048,9 +2101,13 @@ final class AppModel: ObservableObject {
         // Conversation is now the default, so process ownership must not depend
         // on mounting the Raw surface. Codex prefers app-server (D-038).
         if descriptor.agent.preferredSessionBackend == .appServer {
+            let resumeThreadID = AdapterThreadStore(
+                directory: AdapterThreadStore.defaultDirectory()
+            ).threadID(for: taskSessionID)
             runtime.attachAppServer(
                 cwd: descriptor.projectPath,
-                model: descriptor.agent.model
+                model: descriptor.agent.model,
+                resumeThreadID: resumeThreadID
             )
             Task { @MainActor [weak self, weak runtime] in
                 guard let self, let runtime else { return }
@@ -3142,6 +3199,112 @@ final class AppModel: ObservableObject {
         await refreshResources()
     }
 
+    func syncSessionAPI() {
+        sessionAPIServer?.stop()
+        sessionAPIServer = nil
+        sessionAPIAddress = nil
+        guard settings.enableSessionAPI else { return }
+        let token = ConduitSessionAPIServer.loadOrCreateToken()
+        let server = ConduitSessionAPIServer(token: token) { [weak self] command in
+            self?.sessionAPIPayload(command) ?? ["error": "Conduit is not ready."]
+        }
+        do {
+            try server.start()
+            sessionAPIServer = server
+            sessionAPIAddress =
+                "http://127.0.0.1:\(ConduitSessionAPI.loopbackPort)\(ConduitSessionAPI.loopbackPath)"
+            statusMessage = "Session API listening on \(sessionAPIAddress ?? "")."
+        } catch {
+            errorMessage = "Session API failed to start: \(error.localizedDescription)"
+        }
+    }
+
+    private func sessionAPIPayload(_ command: ConduitSessionCommand) -> [String: Any] {
+        switch command {
+        case .listProjects:
+            return [
+                "projects": projects.map { project in
+                    [
+                        "slug": project.slug,
+                        "title": project.metadata.title,
+                        "state": project.metadata.projectState ?? "",
+                    ]
+                }
+            ]
+        case .listSessions:
+            return [
+                "sessions": taskSessions.prefix(40).map { task -> [String: Any] in
+                    let live = sessions.first {
+                        $0.descriptor.taskSessionID == task.id
+                            && !$0.controller.lifecycle.isTerminal
+                    }
+                    return [
+                        "taskSessionID": task.id.rawValue.uuidString,
+                        "title": task.displayTitle,
+                        "agent": task.metadata.agentName ?? "",
+                        "backend": live?.usesAppServer == true
+                            ? AgentSessionBackend.appServer.workSessionLabel
+                            : AgentSessionBackend.pty.workSessionLabel,
+                        "live": live != nil,
+                    ]
+                }
+            ]
+        case .sessionStatus(let rawID):
+            guard let uuid = UUID(uuidString: rawID),
+                  let task = taskSessions.first(where: { $0.id.rawValue == uuid })
+            else {
+                return ["error": "unknown task"]
+            }
+            let live = sessions.first { $0.descriptor.taskSessionID == task.id }
+            let events = (live?.presentationEvents ?? []).suffix(6).map { event in
+                switch event.kind {
+                case .userPrompt(let prompt):
+                    return "user[\(prompt.origin.displayName)]: \(prompt.text.prefix(240))"
+                case .agentOutput(let output):
+                    return "agent[\(output.extraction.displayName)]: \(output.text.prefix(240))"
+                case .sessionOpened:
+                    return "opened[\(event.authority.displayName)]"
+                }
+            }
+            return [
+                "taskSessionID": rawID,
+                "title": task.displayTitle,
+                "live": live != nil && live?.controller.lifecycle.isTerminal == false,
+                "events": Array(events),
+                "authority": "observed summaries; not verification",
+            ]
+        case .queryMindGraph(let question, let scope):
+            guard ConduitSessionAPI.allowsMindGraphScope(scope) else {
+                return ["error": "scope must be knowledge or projects"]
+            }
+            guard let binary = MindGraphQuerySupport.resolveBinary(
+                mainframeRoot: settings.mainframeRoot
+            ) else {
+                return ["error": "mindgraph binary not found"]
+            }
+            let parsedScope = scope == "projects"
+                ? MindGraphScope.projects
+                : MindGraphScope.knowledge
+            let db = MindGraphQuerySupport.databaseURL(for: parsedScope)
+            let result = SubprocessRunner.run(
+                binary.path,
+                [
+                    "query", question, "--db", db.path,
+                    "--top-k", "8", "--json", "--no-intent",
+                ],
+                timeout: 45
+            )
+            return [
+                "scope": scope,
+                "output": String(result.output.prefix(8_000)),
+                "status": result.status,
+                "trust": "nomination only",
+            ]
+        case .createTask, .sendPrompt, .interrupt, .closeSession:
+            return ["error": "write tools are disabled"]
+        }
+    }
+
     func saveSettings() {
         Task {
             do {
@@ -3149,6 +3312,7 @@ final class AppModel: ObservableObject {
                 statusMessage = "Settings saved."
                 refreshProjects()
                 await refreshHealth()
+                self.syncSessionAPI()
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -3559,8 +3723,12 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         lastPersistedOutputText = output.text
     }
 
-    func attachAppServer(cwd: URL, model: String?) {
-        let client = CodexAppServerClient(cwd: cwd, model: model)
+    func attachAppServer(cwd: URL, model: String?, resumeThreadID: String? = nil) {
+        let client = CodexAppServerClient(
+            cwd: cwd,
+            model: model,
+            resumeThreadID: resumeThreadID
+        )
         client.onEffect = { [weak self] effect in
             self?.applyAppServerEffect(effect)
         }
@@ -3612,8 +3780,15 @@ final class TerminalRuntime: ObservableObject, Identifiable {
 
     private func applyAppServerEffect(_ effect: CodexAppServerEffect) {
         switch effect {
-        case .threadStarted:
-            break
+        case .threadStarted(let id):
+            if let taskID = descriptor.taskSessionID {
+                AdapterThreadStore(directory: AdapterThreadStore.defaultDirectory())
+                    .save(
+                        taskSessionID: taskID,
+                        backend: AgentSessionBackend.appServer.workSessionLabel,
+                        threadID: id
+                    )
+            }
         case .upsertOutput(let text, let state):
             upsertAdapterOutput(text: text, state: state)
         case .requestApproval(let approval):
@@ -3665,6 +3840,15 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             activeOutputCapture = nil
             isAwaitingAgentOutput = false
         }
+    }
+
+    func ensureRemoteTUI() {
+        guard let socketPath = appServer?.socketPath,
+              let executable = EnvironmentResolver.shared.resolve(
+                descriptor.agent.command
+              ) ?? EnvironmentResolver.shared.resolve("codex")
+        else { return }
+        controller.attachRemoteTUI(executable: executable, socketPath: socketPath)
     }
 }
 #endif

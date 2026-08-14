@@ -2208,6 +2208,22 @@ check(
     "structured adapter events are toolReported",
     adapterEvent.authority == .toolReported
 )
+let permissionDecline = CodexAppServerApproval(
+    id: "p",
+    rpcID: .number(1),
+    method: "item/permissions/requestApproval",
+    summary: "fs"
+)
+check(
+    "permission deny uses JSON-RPC error",
+    permissionDecline.declineUsesRPCError
+)
+withTempDir { directory in
+    let store = AdapterThreadStore(directory: directory)
+    let task = TaskSessionID()
+    store.save(taskSessionID: task, backend: "app-server", threadID: "thr_x")
+    check("adapter thread store remembers thread id", store.threadID(for: task) == "thr_x")
+}
 
 // MARK: - Summary
 

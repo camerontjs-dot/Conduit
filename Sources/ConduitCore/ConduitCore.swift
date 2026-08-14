@@ -290,6 +290,8 @@ public struct ConduitSettings: Codable, Sendable {
     public var followConversationByDefault: Bool
     /// When true, show the in-Conversation terminal control strip for menu replies.
     public var showConversationControls: Bool
+    /// Loopback read-only session API (D-039). Off by default.
+    public var enableSessionAPI: Bool
 
     public init(
         mainframeRoot: URL? = nil,
@@ -299,7 +301,8 @@ public struct ConduitSettings: Codable, Sendable {
         restoreSessions: Bool = true,
         injectHostEnvelope: Bool = true,
         followConversationByDefault: Bool = true,
-        showConversationControls: Bool = true
+        showConversationControls: Bool = true,
+        enableSessionAPI: Bool = false
     ) {
         self.mainframeRoot = mainframeRoot
         self.mainframeRootBookmark = mainframeRootBookmark
@@ -309,12 +312,14 @@ public struct ConduitSettings: Codable, Sendable {
         self.injectHostEnvelope = injectHostEnvelope
         self.followConversationByDefault = followConversationByDefault
         self.showConversationControls = showConversationControls
+        self.enableSessionAPI = enableSessionAPI
     }
 
     private enum CodingKeys: String, CodingKey {
         case mainframeRoot, mainframeRootBookmark, agents
         case showContextByDefault, restoreSessions
         case injectHostEnvelope, followConversationByDefault, showConversationControls
+        case enableSessionAPI
     }
 
     public init(from decoder: Decoder) throws {
@@ -346,6 +351,10 @@ public struct ConduitSettings: Codable, Sendable {
             Bool.self,
             forKey: .showConversationControls
         ) ?? true
+        enableSessionAPI = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .enableSessionAPI
+        ) ?? false
     }
 }
 

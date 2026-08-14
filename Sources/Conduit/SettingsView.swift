@@ -152,6 +152,16 @@ struct SettingsView: View {
             )
             .help("Closing a Conduit tab detaches tmux instead of ending the work.")
             Toggle(
+                "Listen for read-only Session API on loopback",
+                isOn: $model.settings.enableSessionAPI
+            )
+            .help("D-039. 127.0.0.1:8750/mcp with a local bearer token. Write tools stay off. Save settings to apply.")
+            if let address = model.sessionAPIAddress {
+                Text("Listening at \(address). Token: ~/.conduit/session-api-token")
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+            }
+            Toggle(
                 "Show project context by default",
                 isOn: $model.settings.showContextByDefault
             )

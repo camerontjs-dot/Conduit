@@ -7,9 +7,9 @@ import Security
 ///
 /// Separate from Tier A Conduit observation. Never logs tokens or secrets.
 enum AccountUsageService {
-    static func refreshAll() async -> [AccountUsageSnapshot] {
+    static func refreshAll(codexOverride: Data? = nil) async -> [AccountUsageSnapshot] {
         async let claude = fetchClaude()
-        async let codex = fetchCodex()
+        async let codex = fetchCodex(overrideJSON: codexOverride)
         async let openCode = fetchOpenCode()
         return await [claude, codex, openCode]
     }
@@ -129,8 +129,25 @@ enum AccountUsageService {
 
     // MARK: - Codex (app-server rate limits)
 
-    private static func fetchCodex() async -> AccountUsageSnapshot {
-        await BlockingWork.run(qos: .userInitiated) {
+    private static func fetchCodex(overrideJSON: Data?) async -> AccountUsageSnapshot {
+        if let overrideJSON {
+            do {
+                var snapshot = try AccountUsageParsing.parseCodexRateLimits(overrideJSON)
+                snapshot = AccountUsageSnapshot(
+                    agentName: snapshot.agentName,
+                    sourceLabel: "OpenAI / ChatGPT account (live Codex app-server)",
+                    windows: snapshot.windows,
+                    notes: snapshot.notes,
+                    fetchedAt: snapshot.fetchedAt,
+                    error: snapshot.error
+                )
+                return snapshot
+            } catch {
+                // Fall through to a fresh probe.
+                _ = error
+            }
+        }
+        return await BlockingWork.run(qos: .userInitiated) {
             guard let codex = EnvironmentResolver.shared.resolve("codex"),
                   FileManager.default.isExecutableFile(atPath: codex)
             else {

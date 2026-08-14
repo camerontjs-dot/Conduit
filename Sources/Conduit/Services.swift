@@ -484,6 +484,20 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         failPendingPrompts()
     }
 
+    private(set) var remoteTUIAttached = false
+
+    /// Attach the Codex TUI to the same app-server unix socket (D-038 Raw).
+    func attachRemoteTUI(executable: String, socketPath: String) {
+        guard !remoteTUIAttached else { return }
+        remoteTUIAttached = true
+        terminalView.startProcess(
+            executable: executable,
+            args: ["--remote", "unix://\(socketPath)"],
+            currentDirectory: descriptor.projectPath.path
+        )
+        terminalTitle = "\(descriptor.title) · app-server + remote TUI"
+    }
+
     // MARK: - Private
 
     private func failLaunch(_ issue: TerminalLaunchIssue) {

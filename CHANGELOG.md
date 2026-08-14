@@ -31,9 +31,20 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   Conversation grows from structured adapter events (`toolReported`) instead
   of only scraping the TUI. Approvals surface as a Conduit alert. If
   app-server fails to start, Conduit falls back to the existing PTY path.
+- Codex Reconnect starts app-server (and `thread/resume` when a thread id was
+  stored) instead of requiring a tmux PTY.
+- Raw can attach `codex --remote` to the same unix socket when app-server
+  exposes one.
+- Optional loopback Session API (`127.0.0.1:8750/mcp`, Settings toggle, bearer
+  token, read tools only). Write tools stay off.
 - Prompt origin can now record ChatGPT or phone as well as the composer
-  (D-039). The Conduit session API types exist; the ChatGPT MCP listener is
-  not enabled yet.
+  (D-039).
+
+### Changed
+
+- Account usage Refresh prefers a live Codex app-server when one is ready.
+- Declining `item/permissions/requestApproval` sends a JSON-RPC error instead
+  of an empty grant.
 
 ### Fixed
 

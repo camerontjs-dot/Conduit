@@ -165,8 +165,6 @@ public struct CodexAppServerApproval: Equatable, Identifiable, Sendable {
         switch method {
         case "item/commandExecution/requestApproval", "execCommandApproval":
             return ["decision": "decline"]
-        case "item/permissions/requestApproval":
-            return ["permissions": [String: Any](), "scope": "turn"]
         default:
             return [
                 "decision": [
@@ -174,6 +172,13 @@ public struct CodexAppServerApproval: Equatable, Identifiable, Sendable {
                 ]
             ]
         }
+    }
+
+    /// `item/permissions/requestApproval` has no deny payload — an empty
+    /// `permissions` object would grant the request. Decline that method with
+    /// a JSON-RPC error instead.
+    public var declineUsesRPCError: Bool {
+        method == "item/permissions/requestApproval"
     }
 }
 
@@ -385,6 +390,22 @@ public enum CodexAppServerRequests {
             "method": "turn/interrupt",
             "id": id,
             "params": ["threadId": threadID]
+        ]
+    }
+
+    public static func threadResume(id: Int, threadID: String) -> [String: Any] {
+        [
+            "method": "thread/resume",
+            "id": id,
+            "params": ["threadId": threadID]
+        ]
+    }
+
+    public static func rateLimitsRead(id: Int) -> [String: Any] {
+        [
+            "method": "account/rateLimits/read",
+            "id": id,
+            "params": [String: Any]()
         ]
     }
 }
