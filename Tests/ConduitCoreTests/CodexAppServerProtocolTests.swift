@@ -2,6 +2,14 @@ import XCTest
 @testable import ConduitCore
 
 final class CodexAppServerProtocolTests: XCTestCase {
+    func testJSONNumberOneIsNotBool() {
+        guard case .object(let object) = CodexJSON.parseLine("{\"id\":1,\"ok\":true}") else {
+            return XCTFail("expected object")
+        }
+        XCTAssertEqual(object["id"], .number(1))
+        XCTAssertEqual(object["ok"], .bool(true))
+    }
+
     func testParsesNotificationWithoutJsonrpcHeader() {
         let line = #"{"method":"item/agentMessage/delta","params":{"delta":"Hello"}}"#
         let message = CodexJSONRPCMessage.parseLine(line)

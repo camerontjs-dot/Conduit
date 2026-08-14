@@ -36,7 +36,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 - Raw can attach `codex --remote` to the same unix socket when app-server
   exposes one.
 - Optional loopback Session API (`127.0.0.1:8750/mcp`, Settings toggle, bearer
-  token, read tools only). Write tools stay off.
+  token, read tools only). Write tools stay off. Bind is IPv4 localhost.
+  HTTP responses use a correct CRLF terminator.
+
+### Fixed
+
+- Session API dropped HTTP bodies (bad header terminator / Network.framework).
+- JSON `1` was parsed as `true`, so MCP request ids became booleans.
+- Codex `thread/resume` with no rollout now falls back to `thread/start`.
 - Prompt origin can now record ChatGPT or phone as well as the composer
   (D-039).
 

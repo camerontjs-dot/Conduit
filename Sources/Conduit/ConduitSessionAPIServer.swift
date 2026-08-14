@@ -1,12 +1,17 @@
 #if os(macOS)
 import ConduitCore
+import Darwin
 import Foundation
-import Network
 
 /// Loopback HTTP/MCP listener for D-039 read tools. Off unless enabled.
+///
+/// Uses a POSIX IPv4 `127.0.0.1` socket so the full HTTP body is written
+/// before close. Network.framework's listener was observed dropping bodies.
 @MainActor
 final class ConduitSessionAPIServer {
-    private var listener: NWListener?
+    private var listenFD: Int32 = -1
+    private var running = false
+    private let acceptQueue = DispatchQueue(label: "dev.camerontjs.conduit.session-api")
     private let token: String
     private let handle: (ConduitSessionCommand) -> [String: Any]
 
@@ -17,24 +22,73 @@ final class ConduitSessionAPIServer {
 
     func start() throws {
         stop()
-        let parameters = NWParameters.tcp
-        parameters.allowLocalEndpointReuse = true
-        parameters.acceptLocalOnly = true
-        let port = NWEndpoint.Port(rawValue: UInt16(ConduitSessionAPI.loopbackPort))!
-        let listener = try NWListener(using: parameters, on: port)
-        listener.newConnectionHandler = { [weak self] connection in
-            connection.start(queue: .main)
-            Task { @MainActor in
-                self?.serve(connection)
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw NSError(
+                domain: "Conduit.SessionAPI",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Could not create loopback socket."]
+            )
+        }
+        var yes: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(UInt16(ConduitSessionAPI.loopbackPort).bigEndian)
+        addr.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+        let bound = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
-        listener.start(queue: .main)
-        self.listener = listener
+        guard bound == 0, listen(fd, 8) == 0 else {
+            close(fd)
+            throw NSError(
+                domain: "Conduit.SessionAPI",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Could not bind 127.0.0.1:\(ConduitSessionAPI.loopbackPort)."]
+            )
+        }
+        listenFD = fd
+        running = true
+        acceptQueue.async { [weak self] in
+            self?.acceptLoop()
+        }
     }
 
     func stop() {
-        listener?.cancel()
-        listener = nil
+        running = false
+        if listenFD >= 0 {
+            close(listenFD)
+            listenFD = -1
+        }
+    }
+
+    private func acceptLoop() {
+        while running {
+            let client = accept(listenFD, nil, nil)
+            guard client >= 0 else {
+                if running { Thread.sleep(forTimeInterval: 0.02) }
+                continue
+            }
+            var buffer = [UInt8](repeating: 0, count: 65_536)
+            let count = recv(client, &buffer, buffer.count, 0)
+            let request = Data(buffer.prefix(max(0, Int(count))))
+            let lock = DispatchSemaphore(value: 0)
+            var response = Data()
+            DispatchQueue.main.async {
+                response = self.response(for: request)
+                lock.signal()
+            }
+            lock.wait()
+            response.withUnsafeBytes { raw in
+                if let base = raw.baseAddress {
+                    _ = send(client, base, response.count, 0)
+                }
+            }
+            close(client)
+        }
     }
 
     static func loadOrCreateToken() -> String {
@@ -51,28 +105,6 @@ final class ConduitSessionAPIServer {
         )
         try? token.write(to: url, atomically: true, encoding: .utf8)
         return token
-    }
-
-    private func serve(_ connection: NWConnection) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 64_000) { [weak self] data, _, _, error in
-            guard let data, error == nil else {
-                connection.cancel()
-                return
-            }
-            Task { @MainActor in
-                guard let self else {
-                    connection.cancel()
-                    return
-                }
-                let response = self.response(for: data)
-                connection.send(
-                    content: response,
-                    completion: .contentProcessed { _ in
-                        connection.cancel()
-                    }
-                )
-            }
-        }
     }
 
     private func response(for request: Data) -> Data {
@@ -111,8 +143,14 @@ final class ConduitSessionAPIServer {
     }
 
     private func mcpReply(_ payload: CodexJSON) -> [String: Any] {
-        let id: Any = payload["id"]?.stringValue
-            ?? (payload["id"] != nil ? payload["id"]!.jsonObject() : NSNull())
+        let id: Any = {
+            switch payload["id"] {
+            case .string(let value): return value
+            case .number(let value): return Int(value)
+            case .bool(let value): return value
+            default: return NSNull()
+            }
+        }()
         let method = payload["method"]?.stringValue ?? ""
         switch method {
         case "initialize":
@@ -222,13 +260,11 @@ final class ConduitSessionAPIServer {
 
     private func http(_ status: Int, body: String, contentType: String = "application/json") -> Data {
         let phrase = status == 200 ? "OK" : "Error"
-        let header = """
-        HTTP/1.1 \(status) \(phrase)\r
-        Content-Type: \(contentType)\r
-        Content-Length: \(body.utf8.count)\r
-        Connection: close\r
-        \r
-        """
+        let header =
+            "HTTP/1.1 \(status) \(phrase)\r\n"
+            + "Content-Type: \(contentType)\r\n"
+            + "Content-Length: \(body.utf8.count)\r\n"
+            + "Connection: close\r\n\r\n"
         return Data(header.utf8) + Data(body.utf8)
     }
 }

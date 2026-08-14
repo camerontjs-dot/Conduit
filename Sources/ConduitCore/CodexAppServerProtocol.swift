@@ -56,14 +56,15 @@ public enum CodexJSON: Equatable, Sendable {
         switch raw {
         case is NSNull:
             return .null
-        case let value as Bool:
-            return .bool(value)
         case let value as NSNumber:
             // JSONSerialization uses NSNumber for both bool and number.
+            // Check CFBoolean first; a Swift `as Bool` cast would also eat 0/1.
             if CFGetTypeID(value) == CFBooleanGetTypeID() {
                 return .bool(value.boolValue)
             }
             return .number(value.doubleValue)
+        case let value as Bool:
+            return .bool(value)
         case let value as String:
             return .string(value)
         case let value as [Any]:

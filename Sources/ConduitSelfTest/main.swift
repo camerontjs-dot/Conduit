@@ -2186,6 +2186,13 @@ check(
     "app-server mapper grows structured text",
     mappedDelta == [.upsertOutput(text: "Hi", state: .live)]
 )
+if case .object(let object) = CodexJSON.parseLine("{\"id\":1,\"ok\":true}"),
+   case .number = object["id"],
+   case .bool(true) = object["ok"] {
+    check("JSON 1 stays a number, true stays a bool", true)
+} else {
+    check("JSON 1 stays a number, true stays a bool", false)
+}
 check(
     "Codex profile prefers app-server",
     AgentProfile(name: "Codex", command: "codex").preferredSessionBackend == .appServer

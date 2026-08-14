@@ -148,11 +148,21 @@ final class CodexAppServerClient: ObservableObject {
     private func handshake() async throws {
         _ = try await request(CodexAppServerRequests.initialize(id: 0))
         send(CodexAppServerRequests.initialized())
-        let started: CodexJSON
+        var started: CodexJSON
         if let resumeThreadID, !resumeThreadID.isEmpty {
-            started = try await request(
-                CodexAppServerRequests.threadResume(id: 0, threadID: resumeThreadID)
-            )
+            do {
+                started = try await request(
+                    CodexAppServerRequests.threadResume(id: 0, threadID: resumeThreadID)
+                )
+            } catch {
+                started = try await request(
+                    CodexAppServerRequests.threadStart(
+                        id: 0,
+                        cwd: cwd.path,
+                        model: model
+                    )
+                )
+            }
         } else {
             started = try await request(
                 CodexAppServerRequests.threadStart(
