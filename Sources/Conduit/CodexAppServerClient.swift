@@ -50,6 +50,7 @@ final class CodexAppServerClient: ObservableObject {
     private let model: String?
     private let resumeThreadID: String?
     private(set) var socketPath: String?
+    private var ignoreProcessExit = false
 
     init(cwd: URL, model: String?, resumeThreadID: String? = nil) {
         self.cwd = cwd
@@ -65,18 +66,22 @@ final class CodexAppServerClient: ObservableObject {
 
         do {
             try startUnixHost(executable: executable)
-        } catch {
-            stopProcesses()
-            socketPath = nil
-            try startStdioHost(executable: executable)
-        }
-
-        do {
             try await handshake()
         } catch {
-            lastError = error.localizedDescription
-            stop()
-            throw error
+            // Proxy-over-unix has been observed to hang on initialize.
+            // Fall back to the proven stdio host (Raw --remote unavailable).
+            ignoreProcessExit = true
+            stopProcesses()
+            ignoreProcessExit = false
+            socketPath = nil
+            try startStdioHost(executable: executable)
+            do {
+                try await handshake()
+            } catch {
+                lastError = error.localizedDescription
+                stop()
+                throw error
+            }
         }
     }
 
@@ -262,6 +267,7 @@ final class CodexAppServerClient: ObservableObject {
     private func handleExit() {
         process = nil
         stdinHandle = nil
+        if ignoreProcessExit { return }
         isReady = false
         isTurnActive = false
         failPending("Codex app-server exited.")
@@ -315,6 +321,24 @@ final class CodexAppServerClient: ObservableObject {
     }
 
     private func request(_ payload: [String: Any]) async throws -> CodexJSON {
+        try await withThrowingTaskGroup(of: CodexJSON.self) { group in
+            group.addTask { @MainActor in
+                try await self.requestOnce(payload)
+            }
+            group.addTask { @MainActor in
+                try await Task.sleep(nanoseconds: 6_000_000_000)
+                self.failPending("app-server request timed out")
+                throw ClientError.protocolError("app-server request timed out")
+            }
+            defer { group.cancelAll() }
+            guard let value = try await group.next() else {
+                throw ClientError.protocolError("app-server request aborted")
+            }
+            return value
+        }
+    }
+
+    private func requestOnce(_ payload: [String: Any]) async throws -> CodexJSON {
         let id = nextID
         nextID += 1
         var payload = payload

@@ -469,10 +469,19 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     /// not started; Conversation is the live surface.
     func markAdapterHosted(titleSuffix: String = "app-server") {
         launchIssue = nil
-        if lifecycle == .idle {
+        // A failed unix-proxy attempt can mark the controller exited before
+        // stdio fallback succeeds. Re-host instead of staying dead.
+        switch lifecycle {
+        case .idle:
             _ = lifecycle.transition(to: .launching)
+            _ = lifecycle.transition(to: .running)
+        case .launching:
+            _ = lifecycle.transition(to: .running)
+        case .running:
+            break
+        case .detached, .exited:
+            lifecycle = .running
         }
-        _ = lifecycle.transition(to: .running)
         usesTmux = false
         attachedAt = Date()
         terminalTitle = "\(descriptor.title) · \(titleSuffix)"

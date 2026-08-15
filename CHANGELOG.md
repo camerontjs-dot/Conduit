@@ -44,6 +44,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 - Session API dropped HTTP bodies (bad header terminator / Network.framework).
 - JSON `1` was parsed as `true`, so MCP request ids became booleans.
 - Codex `thread/resume` with no rollout now falls back to `thread/start`.
+- Unix `app-server` + `proxy` handshake timeout now falls back to stdio
+  instead of leaving the session Ended.
+- Adapter re-host can recover a controller that was marked exited during
+  that fallback.
 - Prompt origin can now record ChatGPT or phone as well as the composer
   (D-039).
 
