@@ -290,8 +290,11 @@ public struct ConduitSettings: Codable, Sendable {
     public var followConversationByDefault: Bool
     /// When true, show the in-Conversation terminal control strip for menu replies.
     public var showConversationControls: Bool
-    /// Loopback read-only session API (D-039). Off by default.
+    /// Loopback session API (D-039). Off by default.
     public var enableSessionAPI: Bool
+    /// Allow ChatGPT/phone clients to create, send, interrupt, and close.
+    /// Approvals still stay Mac-side. Off unless Session API is also on.
+    public var enableSessionAPIWrites: Bool
 
     public init(
         mainframeRoot: URL? = nil,
@@ -302,7 +305,8 @@ public struct ConduitSettings: Codable, Sendable {
         injectHostEnvelope: Bool = true,
         followConversationByDefault: Bool = true,
         showConversationControls: Bool = true,
-        enableSessionAPI: Bool = false
+        enableSessionAPI: Bool = false,
+        enableSessionAPIWrites: Bool = false
     ) {
         self.mainframeRoot = mainframeRoot
         self.mainframeRootBookmark = mainframeRootBookmark
@@ -313,13 +317,14 @@ public struct ConduitSettings: Codable, Sendable {
         self.followConversationByDefault = followConversationByDefault
         self.showConversationControls = showConversationControls
         self.enableSessionAPI = enableSessionAPI
+        self.enableSessionAPIWrites = enableSessionAPIWrites
     }
 
     private enum CodingKeys: String, CodingKey {
         case mainframeRoot, mainframeRootBookmark, agents
         case showContextByDefault, restoreSessions
         case injectHostEnvelope, followConversationByDefault, showConversationControls
-        case enableSessionAPI
+        case enableSessionAPI, enableSessionAPIWrites
     }
 
     public init(from decoder: Decoder) throws {
@@ -354,6 +359,10 @@ public struct ConduitSettings: Codable, Sendable {
         enableSessionAPI = try container.decodeIfPresent(
             Bool.self,
             forKey: .enableSessionAPI
+        ) ?? false
+        enableSessionAPIWrites = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .enableSessionAPIWrites
         ) ?? false
     }
 }
@@ -579,8 +588,10 @@ public enum HostEnvelope {
     }
 
     /// Whether Conduit should inject a host envelope for this agent profile.
+    /// App-server Codex already has structured task/cwd/model on the thread;
+    /// wrapping those turns as a PTY host block pollutes Conversation records.
     public static func shouldInject(for agent: AgentProfile) -> Bool {
-        agent.kind != .shell
+        agent.kind != .shell && agent.preferredSessionBackend != .appServer
     }
 
     public static func render(_ context: Context) -> String {

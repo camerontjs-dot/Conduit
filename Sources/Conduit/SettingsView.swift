@@ -152,12 +152,44 @@ struct SettingsView: View {
             )
             .help("Closing a Conduit tab detaches tmux instead of ending the work.")
             Toggle(
-                "Listen for read-only Session API on loopback",
+                "Listen for Session API on loopback",
                 isOn: $model.settings.enableSessionAPI
             )
-            .help("D-039. 127.0.0.1:8750/mcp with a local bearer token. Write tools stay off. Save settings to apply.")
+            .help("D-039. 127.0.0.1:8750/mcp with a local bearer token. Save settings to apply.")
+            Toggle(
+                "Allow ChatGPT to create, send, interrupt, and close sessions",
+                isOn: $model.settings.enableSessionAPIWrites
+            )
+            .disabled(!model.settings.enableSessionAPI)
+            .help("Phase 3 write tools. Approvals still pop in Conduit. Save settings to apply.")
             if let address = model.sessionAPIAddress {
-                Text("Listening at \(address). Token: ~/.conduit/session-api-token")
+                Text("Listening at \(address)")
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+                    .textSelection(.enabled)
+                HStack(spacing: 8) {
+                    Button("Copy token") {
+                        model.copySessionAPIToken()
+                    }
+                    .help("Copies the bearer token from ~/.conduit/session-api-token")
+                    if let tunnelID = model.chatgptTunnelID {
+                        Text("Tunnel \(tunnelID)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(palette.dim)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help("Stored in ~/.conduit/chatgpt-tunnel-id")
+                    }
+                }
+                Text(
+                    model.settings.enableSessionAPIWrites
+                        ? "ChatGPT reaches this API through `scripts/chatgpt-tunnel`. Writes are on; approvals stay on this Mac."
+                        : "ChatGPT reaches this API through `scripts/chatgpt-tunnel`. Writes are off."
+                )
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+            } else if model.settings.enableSessionAPI {
+                Text("Session API is enabled but not listening. Save settings or restart Conduit.")
                     .font(.caption2)
                     .foregroundStyle(palette.dim)
             }
@@ -464,7 +496,7 @@ struct SettingsView: View {
                 "Inject Conduit host envelope on CLI deliveries",
                 isOn: $model.settings.injectHostEnvelope
             )
-            .help("Prepends task/project/agent context for non-shell agents. Conversation still shows what you typed.")
+            .help("Prepends task/project/agent context for PTY CLIs. Codex app-server and shell skip the envelope.")
             Toggle(
                 "Follow latest messages by default",
                 isOn: $model.settings.followConversationByDefault

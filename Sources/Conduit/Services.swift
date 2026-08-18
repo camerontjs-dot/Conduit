@@ -465,6 +465,17 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         failPendingPrompts()
     }
 
+    /// Show launching before handshake so composer stays up and we never flash
+    /// an Ended footer while stdio initialize is in flight.
+    func markAdapterLaunching() {
+        launchIssue = nil
+        if lifecycle == .idle {
+            _ = lifecycle.transition(to: .launching)
+        }
+        usesTmux = false
+        terminalTitle = "\(descriptor.title) · starting app-server"
+    }
+
     /// Mark this controller as hosting a non-PTY adapter (D-038). The PTY is
     /// not started; Conversation is the live surface.
     func markAdapterHosted(titleSuffix: String = "app-server") {

@@ -75,6 +75,11 @@ public enum TaskSessionAvailabilityResolver {
             )
         case .interrupted:
             return .interrupted
+        case .runtimeProvisioning, .runtimeProvisioningFailed:
+            // The task remains durable, but no current runtime has been
+            // proved usable. The MCP surface exposes the more specific
+            // provisioning state and recovery reason.
+            return .interrupted
         case .runtimeOpened:
             if case .succeeded = context.externalObservation {
                 return .interrupted

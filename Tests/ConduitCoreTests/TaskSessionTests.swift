@@ -203,6 +203,87 @@ final class TaskSessionModelTests: XCTestCase {
         )
     }
 
+    func testProvisioningFailureIsDurableAndKeepsTargetForRecovery() throws {
+        let sessionID = TaskSessionID(
+            rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000030")!
+        )
+        let attemptID = RuntimeAttemptID(
+            rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000031")!
+        )
+        let metadata = TaskSessionMetadata(
+            workspace: .project(
+                ProjectWorkspaceScopeSnapshot(
+                    rootURL: rootURL,
+                    projectURL: projectURL,
+                    fallbackTitle: "Conduit",
+                    fallbackSlug: "conduit"
+                )
+            ),
+            agentName: "Claude",
+            defaultTitle: "Claude · Conduit"
+        )
+        let target = "conduit-conduit-claude-deadbeef"
+        let events = [
+            event(
+                sessionID,
+                at: Date(timeIntervalSince1970: 1_800_000_000),
+                authority: .conduitRecorded,
+                kind: .created(metadata)
+            ),
+            event(
+                sessionID,
+                at: Date(timeIntervalSince1970: 1_800_000_001),
+                authority: .conduitRecorded,
+                kind: .operationalStateChanged(
+                    .runtimeProvisioning(
+                        attemptID,
+                        backend: "tmux",
+                        tmuxSessionName: target
+                    )
+                )
+            ),
+            event(
+                sessionID,
+                at: Date(timeIntervalSince1970: 1_800_000_002),
+                authority: .conduitRecorded,
+                kind: .operationalStateChanged(
+                    .runtimeProvisioningFailed(
+                        attemptID,
+                        tmuxSessionName: target,
+                        reason: "tmux identity inspection was inconclusive",
+                        recoverable: true
+                    )
+                )
+            )
+        ]
+
+        let snapshot = try XCTUnwrap(
+            TaskSessionProjection.project(taskSessionID: sessionID, events: events)
+        )
+        XCTAssertEqual(
+            snapshot.operationalState,
+            .runtimeProvisioningFailed(
+                attemptID,
+                tmuxSessionName: target,
+                reason: "tmux identity inspection was inconclusive",
+                recoverable: true
+            )
+        )
+        XCTAssertEqual(
+            TaskSessionAvailabilityResolver.resolve(
+                session: snapshot,
+                context: TaskSessionAvailabilityContext()
+            ),
+            .interrupted
+        )
+        let encoded = String(
+            decoding: try JSONEncoder().encode(events),
+            as: UTF8.self
+        )
+        XCTAssertTrue(encoded.contains(target))
+        XCTAssertTrue(encoded.contains("identity inspection was inconclusive"))
+    }
+
     func testUnknownAgentIdentityDoesNotRequirePersistingAPlaceholder() throws {
         let sessionID = TaskSessionID()
         let metadata = TaskSessionMetadata(

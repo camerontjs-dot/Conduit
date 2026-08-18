@@ -243,10 +243,17 @@ private struct ActiveSessionSurface: View {
                 VStack(spacing: 8) {
                     Text("Codex is hosted by app-server")
                         .font(.headline)
-                    Text("Conversation is the live surface. Opening Raw attaches `codex --remote` when a unix socket is available. This is not a completion claim.")
-                        .font(.caption)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(palette.dim)
+                    if runtime.appServer?.socketPath == nil {
+                        Text("Conversation is the live surface. This session uses stdio, so there is no unix socket for `codex --remote`. Raw is a blank PTY, not a second Codex TUI.")
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(palette.dim)
+                    } else {
+                        Text("Conversation is the live surface. Opening Raw attaches `codex --remote` to the unix socket. This is not a completion claim.")
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(palette.dim)
+                    }
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

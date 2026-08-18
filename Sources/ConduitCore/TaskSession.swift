@@ -143,7 +143,24 @@ public enum TaskSessionEventAuthority: String, Codable, Equatable, Sendable {
 /// Operational facts only. None of these states asserts task completion,
 /// correctness, success, or verification.
 public enum TaskSessionOperationalState: Codable, Equatable, Sendable {
+    /// A runtime attempt has been registered but the PTY/tmux or adapter host
+    /// has not yet been proved usable. The target name is retained so an
+    /// explicit reconciliation can retry the same safe target instead of
+    /// silently allocating another task.
+    case runtimeProvisioning(
+        RuntimeAttemptID,
+        backend: String,
+        tmuxSessionName: String?
+    )
     case runtimeOpened(RuntimeAttemptID)
+    /// Conduit refused or failed to attach the attempted runtime. This is a
+    /// task-level operational fact, not a task-content or completion claim.
+    case runtimeProvisioningFailed(
+        RuntimeAttemptID,
+        tmuxSessionName: String?,
+        reason: String,
+        recoverable: Bool
+    )
     case runtimeDetached(RuntimeAttemptID)
     case closed(TaskSessionCloseReason)
     case interrupted(RuntimeAttemptID?)
@@ -244,7 +261,7 @@ public struct TaskSessionEvent: Identifiable, Codable, Equatable, Sendable {
             return authority == .conduitRecorded
         case .operationalStateChanged(let state):
             switch state {
-            case .runtimeOpened:
+            case .runtimeProvisioning, .runtimeOpened, .runtimeProvisioningFailed:
                 return authority == .conduitRecorded
             case .runtimeDetached:
                 return authority == .conduitRecorded

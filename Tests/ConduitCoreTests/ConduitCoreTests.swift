@@ -362,8 +362,10 @@ final class HostEnvelopeTests: XCTestCase {
     func testShellAgentsDoNotInject() {
         let shell = AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell)
         let cli = AgentProfile(name: "Grok", command: "grok", kind: .cli)
+        let codex = AgentProfile(name: "Codex", command: "codex", kind: .cli)
         XCTAssertFalse(HostEnvelope.shouldInject(for: shell))
         XCTAssertTrue(HostEnvelope.shouldInject(for: cli))
+        XCTAssertFalse(HostEnvelope.shouldInject(for: codex))
     }
 }
 
