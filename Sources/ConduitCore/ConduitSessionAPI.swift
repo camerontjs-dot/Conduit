@@ -47,8 +47,10 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     case listProjects
     case listSessions
     case sessionStatus(taskSessionID: String)
+    case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
     case queryMindGraph(question: String, scope: String)
     case createTask(agent: String, projectSlug: String, objective: String)
+    case reconcileTask(taskSessionID: String)
     case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin)
     case interrupt(taskSessionID: String)
     case closeSession(taskSessionID: String)
@@ -61,14 +63,21 @@ public enum ConduitSessionAPI {
 
     public static func isWrite(_ command: ConduitSessionCommand) -> Bool {
         switch command {
-        case .listProjects, .listSessions, .sessionStatus, .queryMindGraph:
+        case .listProjects, .listSessions, .sessionStatus, .sessionEvents, .queryMindGraph:
             return false
-        case .createTask, .sendPrompt, .interrupt, .closeSession:
+        case .createTask, .reconcileTask, .sendPrompt, .interrupt, .closeSession:
             return true
         }
     }
 
     public static func allowsMindGraphScope(_ scope: String) -> Bool {
         scope == "knowledge" || scope == "projects"
+    }
+
+    public static func matchesAgent(_ profile: AgentProfile, name: String) -> Bool {
+        let needle = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return false }
+        if profile.name.lowercased() == needle { return true }
+        return URL(fileURLWithPath: profile.command).lastPathComponent.lowercased() == needle
     }
 }

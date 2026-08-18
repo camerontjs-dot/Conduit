@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- ChatGPT and other Session API clients can now page incremental Conversation
+  events through `conduit_session_events`. The tool is read-only, cursor-bounded,
+  and returns authority/source labels, truncation/redaction state, artifact path
+  refs without file contents, and a turn snapshot that stays distinct from
+  session lifecycle. Codex app-server can report structured turn completion and
+  complete bounded assistant messages; PTY output stays explicitly ambiguous.
 - Codex tasks now prefer a long-lived `codex app-server` session (D-038).
   Conversation grows from structured adapter events (`toolReported`) instead
   of only scraping the TUI. Approvals surface as a Conduit alert. If
@@ -36,18 +42,46 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 - Raw can attach `codex --remote` to the same unix socket when app-server
   exposes one.
 - Optional loopback Session API (`127.0.0.1:8750/mcp`, Settings toggle, bearer
-  token, read tools only). Write tools stay off. Bind is IPv4 localhost.
-  HTTP responses use a correct CRLF terminator.
+  token). Read tools list projects/sessions and proxy MindGraph. Optional
+  write toggle exposes `conduit_create_task`, `conduit_send_prompt`,
+  `conduit_interrupt`, and `conduit_close_session`. Approvals stay on the Mac.
+  Bind is IPv4 localhost. HTTP responses use a correct CRLF terminator.
+- Settings can copy the Session API token and shows a stored ChatGPT tunnel
+  id. `scripts/chatgpt-tunnel` writes the local `tunnel-client` profile.
+
+### Changed
+
+- Codex app-server now starts over stdio by default. The unix-proxy path hung
+  on initialize and added a six-second Ended flicker; set `CONDUIT_CODEX_UNIX=1`
+  only when debugging Raw `--remote`.
+- Launch-or-Reconnect for Codex reconnects the latest matching task instead of
+  minting a new thread. New Task / New Session For still create a new task.
+- Codex app-server sends no longer get the PTY `<<CONDUIT_HOST` envelope.
 
 ### Fixed
 
+- MCP tool discovery now advertises standard risk annotations: Conduit's local
+  read-only queries are marked read-only and closed-world, while lifecycle
+  controls remain conservatively state-changing/destructive.
+- Session API now returns the standard absent-metadata response for OAuth
+  protected-resource discovery, allowing no-auth tunnel-client readiness checks
+  to distinguish it from malformed metadata.
+- MCP task creation now reports explicit provisioning failure and recovery
+  state instead of marking an absent runtime ready. Reconciliation retries the
+  same durable task and preserves uncertain tmux sessions.
 - Session API dropped HTTP bodies (bad header terminator / Network.framework).
+- Session API now reads the complete declared HTTP body, so fragmented MCP
+  discovery requests no longer fail with HTTP 400.
 - JSON `1` was parsed as `true`, so MCP request ids became booleans.
 - Codex `thread/resume` with no rollout now falls back to `thread/start`.
 - Unix `app-server` + `proxy` handshake timeout now falls back to stdio
   instead of leaving the session Ended.
 - Adapter re-host can recover a controller that was marked exited during
   that fallback.
+- Conversation no longer prepends `[userMessage]` / other chat-chrome item
+  tags to Codex adapter output.
+- Reconnect of an existing Codex task no longer stops after loading history;
+  it continues automatically once the JSONL is in memory.
 - Prompt origin can now record ChatGPT or phone as well as the composer
   (D-039).
 

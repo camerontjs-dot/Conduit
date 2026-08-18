@@ -1060,6 +1060,13 @@ Phone-bridge Unit 2 and the ChatGPT connector share one session API.
 Implementation waits for D-038’s Codex adapter (Phase 1) before enabling
 write tools (Phase 3).
 
+**Refined 2026-08-17:** `conduit_session_events` is the incremental,
+cursor-bounded read surface for Conversation events and observed turn state.
+It remains observation, not verification. PTY-derived output stays
+`derivedFromRaw` and cannot claim turn completion. Structured adapter events
+stay `toolReported`. The tool does not export raw transcripts, credentials,
+or chain-of-thought, and does not read artifact file contents.
+
 ---
 
 ## Deferred deliberately (not rejected forever)

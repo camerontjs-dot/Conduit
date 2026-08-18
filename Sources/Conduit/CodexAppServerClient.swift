@@ -31,6 +31,7 @@ final class CodexAppServerClient: ObservableObject {
     @Published private(set) var threadID: String?
     @Published private(set) var isReady = false
     @Published private(set) var isTurnActive = false
+    @Published private(set) var lastTurnStatus: String?
     @Published var pendingApproval: CodexAppServerApproval?
     @Published private(set) var lastError: String?
 
@@ -64,24 +65,29 @@ final class CodexAppServerClient: ObservableObject {
             throw ClientError.executableMissing
         }
 
+        // Unix listen + `app-server proxy` hangs on initialize (2026-08-15
+        // smoke). Stdio is the proven host. Opt into the hanging path with
+        // CONDUIT_CODEX_UNIX=1 only when debugging Raw --remote.
+        let preferUnix = ProcessInfo.processInfo.environment["CONDUIT_CODEX_UNIX"] == "1"
+        if preferUnix {
+            do {
+                try startUnixHost(executable: executable)
+                try await handshake()
+                return
+            } catch {
+                ignoreProcessExit = true
+                stopProcesses()
+                ignoreProcessExit = false
+                socketPath = nil
+            }
+        }
         do {
-            try startUnixHost(executable: executable)
+            try startStdioHost(executable: executable)
             try await handshake()
         } catch {
-            // Proxy-over-unix has been observed to hang on initialize.
-            // Fall back to the proven stdio host (Raw --remote unavailable).
-            ignoreProcessExit = true
-            stopProcesses()
-            ignoreProcessExit = false
-            socketPath = nil
-            try startStdioHost(executable: executable)
-            do {
-                try await handshake()
-            } catch {
-                lastError = error.localizedDescription
-                stop()
-                throw error
-            }
+            lastError = error.localizedDescription
+            stop()
+            throw error
         }
     }
 
@@ -211,6 +217,7 @@ final class CodexAppServerClient: ObservableObject {
             )
         }
         isTurnActive = true
+        lastTurnStatus = nil
     }
 
     func interrupt() {
@@ -248,6 +255,7 @@ final class CodexAppServerClient: ObservableObject {
         failPending("Codex app-server stopped.")
         isReady = false
         isTurnActive = false
+        lastTurnStatus = nil
         socketPath = nil
     }
 
@@ -312,8 +320,9 @@ final class CodexAppServerClient: ObservableObject {
             isTurnActive = true
         case .requestApproval(let approval):
             pendingApproval = approval
-        case .turnCompleted:
+        case .turnCompleted(let status):
             isTurnActive = false
+            lastTurnStatus = status
         case .failed(let message):
             lastError = message
         }

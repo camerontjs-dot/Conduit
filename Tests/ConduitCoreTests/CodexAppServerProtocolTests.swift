@@ -61,6 +61,7 @@ final class CodexAppServerProtocolTests: XCTestCase {
             ]
         )
         XCTAssertFalse(mapper.turnActive)
+        XCTAssertEqual(mapper.lastTurnStatus, "completed")
     }
 
     func testMapperThreadStartResponseAndApproval() {
@@ -106,6 +107,11 @@ final class CodexAppServerProtocolTests: XCTestCase {
         XCTAssertFalse(
             ConduitSessionAPI.isWrite(.listSessions)
         )
+        XCTAssertFalse(
+            ConduitSessionAPI.isWrite(
+                .sessionEvents(taskSessionID: "t", cursor: "v1:0", limit: 20)
+            )
+        )
         XCTAssertTrue(
             ConduitSessionAPI.isWrite(
                 .sendPrompt(
@@ -115,7 +121,24 @@ final class CodexAppServerProtocolTests: XCTestCase {
                 )
             )
         )
+        XCTAssertTrue(
+            ConduitSessionAPI.isWrite(
+                .reconcileTask(taskSessionID: "task")
+            )
+        )
         XCTAssertEqual(ConduitSessionOrigin.chatgpt.promptOrigin, .chatgpt)
+        XCTAssertTrue(
+            ConduitSessionAPI.matchesAgent(
+                AgentProfile(name: "Codex", command: "codex"),
+                name: "codex"
+            )
+        )
+        XCTAssertFalse(
+            ConduitSessionAPI.matchesAgent(
+                AgentProfile(name: "Claude", command: "claude"),
+                name: "codex"
+            )
+        )
     }
 
     func testPermissionDeclineUsesRPCError() {
@@ -145,6 +168,41 @@ final class CodexAppServerProtocolTests: XCTestCase {
         let task = TaskSessionID()
         store.save(taskSessionID: task, backend: "app-server", threadID: "thr_9")
         XCTAssertEqual(store.threadID(for: task), "thr_9")
+    }
+
+    func testMapperSkipsUserMessageChrome() {
+        var mapper = CodexAppServerMapper()
+        let chrome = mapper.apply(
+            .notification(
+                method: "item/started",
+                params: .object([
+                    "item": .object(["type": .string("userMessage")])
+                ])
+            )
+        )
+        let command = mapper.apply(
+            .notification(
+                method: "item/started",
+                params: .object([
+                    "item": .object([
+                        "type": .string("commandExecution"),
+                        "command": .string("git status"),
+                    ])
+                ])
+            )
+        )
+        let delta = mapper.apply(
+            .notification(
+                method: "item/agentMessage/delta",
+                params: .object(["delta": .string("pong")])
+            )
+        )
+        XCTAssertTrue(chrome.isEmpty)
+        XCTAssertEqual(
+            command,
+            [.upsertOutput(text: "[commandExecution] git status", state: .live)]
+        )
+        XCTAssertEqual(delta, [.upsertOutput(text: "[commandExecution] git status\npong", state: .live)])
     }
 
     func testStructuredAdapterEventUsesToolReportedAuthority() {

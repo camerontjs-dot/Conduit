@@ -196,6 +196,8 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     public var threadID: String?
     public var accumulatedText = ""
     public var turnActive = false
+    public var lastTurnStatus: String?
+    public var lastAppendWasNote = false
 
     public init() {}
 
@@ -234,6 +236,8 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     public mutating func resetTurn() {
         accumulatedText = ""
         turnActive = false
+        lastTurnStatus = nil
+        lastAppendWasNote = false
     }
 
     private mutating func applyNotification(
@@ -253,13 +257,21 @@ public struct CodexAppServerMapper: Equatable, Sendable {
         case "item/agentMessage/delta":
             let delta = Self.deltaText(in: params)
             guard !delta.isEmpty else { return [] }
+            if lastAppendWasNote, !accumulatedText.hasSuffix("\n"), !delta.hasPrefix("\n") {
+                accumulatedText += "\n"
+            }
             accumulatedText += delta
+            lastAppendWasNote = false
             turnActive = true
             return [.upsertOutput(text: accumulatedText, state: .live)]
         case "item/started", "item/completed":
+            // Skip chat-chrome items (userMessage, agentMessage, …). Those
+            // already have Conversation events; dumping `[userMessage]` into
+            // the assistant card makes the turn look like a protocol dump.
             if let note = Self.itemNote(in: params) {
                 if !accumulatedText.isEmpty { accumulatedText += "\n" }
                 accumulatedText += note
+                lastAppendWasNote = true
                 return [.upsertOutput(text: accumulatedText, state: .live)]
             }
             return []
@@ -268,6 +280,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             let status = params["turn"]?["status"]?.stringValue
                 ?? params["status"]?.stringValue
                 ?? "completed"
+            lastTurnStatus = status
             var effects: [CodexAppServerEffect] = []
             if !accumulatedText.isEmpty {
                 effects.append(.upsertOutput(text: accumulatedText, state: .closed))
@@ -297,17 +310,29 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             ?? ""
     }
 
+    private static let conversationChromeTypes: Set<String> = [
+        "userMessage",
+        "agentMessage",
+        "reasoning",
+        "thought",
+        "plan",
+        "contextCompacted",
+        "compaction",
+        "tokenUsage",
+    ]
+
     private static func itemNote(in params: CodexJSON) -> String? {
         let item = params["item"] ?? params
         let type = item["type"]?.stringValue ?? item["itemType"]?.stringValue
-        guard let type, type != "agentMessage" else { return nil }
-        if let command = item["command"]?.stringValue {
+        guard let type, !conversationChromeTypes.contains(type) else { return nil }
+        if let command = item["command"]?.stringValue, !command.isEmpty {
             return "[\(type)] \(command)"
         }
-        if let path = item["path"]?.stringValue ?? item["changes"]?.stringValue {
+        if let path = item["path"]?.stringValue ?? item["changes"]?.stringValue,
+           !path.isEmpty {
             return "[\(type)] \(path)"
         }
-        return "[\(type)]"
+        return nil
     }
 
     private static func approvalSummary(method: String, params: CodexJSON) -> String {

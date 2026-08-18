@@ -133,6 +133,13 @@ final class AppModel: ObservableObject {
         [TaskSessionID: [ConversationEventLogDiagnostic]] = [:]
     @Published private(set) var conversationRetentionStateByTask:
         [TaskSessionID: ConversationRetentionState] = [:]
+    /// Reconnect of a known task used to abort until history finished loading.
+    /// Finish the reconnect automatically once the JSONL is in memory.
+    private var reconnectAfterHistoryLoad: Set<TaskSessionID> = []
+    /// Explicit MCP reconciliation of a known task also waits for its local
+    /// conversation log, but must resume the same task rather than take the
+    /// ordinary UI reconnect path.
+    private var reconcileAfterHistoryLoad: Set<TaskSessionID> = []
     @Published private(set) var taskReconnectabilityObservation: ExternalReconnectabilityObservation = .notChecked
     /// Completed observed-usage records for this root, loaded from the log at
     /// bootstrap and appended to as sessions end.
@@ -318,6 +325,16 @@ final class AppModel: ObservableObject {
     @Published private(set) var accountUsageError: String?
     @Published private(set) var sessionAPIAddress: String?
     private var sessionAPIServer: ConduitSessionAPIServer?
+
+    var chatgptTunnelID: String? {
+        let url = AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("chatgpt-tunnel-id")
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
     /// Lazy, CLI-owned model catalogs keyed by saved profile identity.
     @Published private(set) var modelOptionsByAgentID: [UUID: [AgentModelOption]] = [:]
     @Published private(set) var modelCatalogRefreshingAgentIDs: Set<UUID> = []
@@ -1326,6 +1343,12 @@ final class AppModel: ObservableObject {
                     self.conversationRetentionStateByTask[taskSessionID] =
                         .legacyPreRetention
                 }
+
+                if self.reconcileAfterHistoryLoad.remove(taskSessionID) != nil {
+                    self.reconcileTask(taskSessionID)
+                } else if self.reconnectAfterHistoryLoad.remove(taskSessionID) != nil {
+                    self.reconnectTask(taskSessionID)
+                }
             }
         }
     }
@@ -1539,7 +1562,11 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
-    func createTask(agent: AgentProfile, project: MainframeProject) -> TerminalRuntime? {
+    func createTask(
+        agent: AgentProfile,
+        project: MainframeProject,
+        taskSessionID requestedTaskSessionID: TaskSessionID? = nil
+    ) -> TerminalRuntime? {
         guard enabledAgents.contains(where: { $0.id == agent.id }) else {
             errorMessage = "That agent is not currently enabled."
             return nil
@@ -1552,12 +1579,15 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.set(scannedProject.id, forKey: Self.newTaskScopeStorageKey)
         beginWorkSessionIfNeeded(scannedProject)
         let instance = nextInstanceNumber(for: agent, in: scannedProject)
+        let taskSessionID = requestedTaskSessionID ?? TaskSessionID()
         let prefersAppServer = agent.preferredSessionBackend == .appServer
         let runtime = start(
             descriptor: SessionDescriptor(
                 projectPath: scannedProject.path,
                 agent: agent,
-                instance: instance
+                taskSessionID: taskSessionID,
+                instance: instance,
+                recordsIdentity: true
             ),
             project: scannedProject,
             backendLabel: prefersAppServer
@@ -1667,10 +1697,109 @@ final class AppModel: ObservableObject {
         errorMessage = "No identity-compatible tmux runtime was observed for this task. Refresh discovery or inspect the recovery details."
     }
 
+    /// Explicit MCP recovery for a task whose runtime was not provisioned.
+    /// This reuses the durable task ID and, when recorded, the exact attempted
+    /// tmux name. It never kills, replaces, or adopts an uncertain session.
+    func reconcileTask(_ id: TaskSessionID) {
+        if let runtime = sessionAPILiveRuntime(for: id) {
+            _ = selectSession(runtime)
+            return
+        }
+        guard let task = taskSessions.first(where: { $0.id == id }) else {
+            errorMessage = "That task is no longer in the local catalog."
+            return
+        }
+        guard task.operationalState != nil else {
+            errorMessage = "That task has no runtime attempt to reconcile."
+            return
+        }
+        if conversationHistoryByTask[id] == nil {
+            reconcileAfterHistoryLoad.insert(id)
+            loadConversationHistory(for: id)
+            statusMessage = "Loading this task's local history before reconciliation."
+            return
+        }
+        if let discovered = reconnectableDiscoveredSession(for: task) {
+            _ = resume(discovered, adoptingInto: project(for: task))
+            return
+        }
+        let retryableProvisioningState: Bool = {
+            switch task.operationalState {
+            case .runtimeProvisioning?, .runtimeProvisioningFailed?:
+                return true
+            default:
+                return false
+            }
+        }()
+        guard retryableProvisioningState,
+              let project = project(for: task),
+              let agent = agentProfile(named: task.metadata.agentName)
+        else {
+            if case .runtimeProvisioningFailed(_, _, _, let recoverable)? = task.operationalState,
+               !recoverable {
+                errorMessage = "This task's provisioning failure is not marked recoverable."
+            } else {
+                errorMessage = "No identity-compatible runtime was observed for this task. Refresh discovery before retrying."
+            }
+            return
+        }
+
+        let targetSessionName: String?
+        switch task.operationalState {
+        case .runtimeProvisioning(_, _, let name)?,
+             .runtimeProvisioningFailed(_, let name, _, _)?:
+            targetSessionName = name
+        default:
+            targetSessionName = nil
+        }
+        selectProject(project)
+        beginWorkSessionIfNeeded(project)
+        _ = start(
+            descriptor: SessionDescriptor(
+                projectPath: project.path,
+                agent: agent,
+                tmuxSessionName: targetSessionName,
+                taskSessionID: task.id,
+                instance: targetSessionName == nil
+                    ? nextInstanceNumber(for: agent, in: project)
+                    : 1,
+                recordsIdentity: true
+            ),
+            project: project,
+            backendLabel: agent.preferredSessionBackend == .appServer
+                ? AgentSessionBackend.appServer.workSessionLabel
+                : (targetSessionName == nil && !settings.restoreSessions
+                    ? AgentSessionBackend.pty.workSessionLabel
+                    : "durable-reconcile"),
+            entry: .started(
+                agentName: agent.name,
+                requestedBackend: targetSessionName == nil && !settings.restoreSessions
+                    ? "direct PTY retry"
+                    : "safe durable runtime reconciliation"
+            ),
+            requiresDurableSession: targetSessionName != nil
+        )
+    }
+
     private func agentProfile(named name: String?) -> AgentProfile? {
         guard let name else { return nil }
         return settings.agents.first { $0.name == name }
             ?? enabledAgents.first { $0.name == name }
+    }
+
+    /// Most recently active unarchived app-server task for this agent/project.
+    /// Used by Launch-or-Reconnect so Codex does not mint a new thread.
+    private func latestAppServerTask(
+        agent: AgentProfile,
+        project: MainframeProject
+    ) -> TaskSessionSnapshot? {
+        taskSessions
+            .filter { task in
+                !task.isArchived
+                    && task.metadata.agentName == agent.name
+                    && self.task(task, belongsTo: project)
+            }
+            .max(by: { $0.lastActivityAt < $1.lastActivityAt })
     }
 
     func leaveTask(_ id: TaskSessionID) {
@@ -1805,6 +1934,18 @@ final class AppModel: ObservableObject {
             // Removing stale presentation must not overwrite that state with
             // a second operator-close event.
             removeSessionTab(stale)
+        }
+        if agent.preferredSessionBackend == .appServer,
+           let existingTask = latestAppServerTask(agent: agent, project: project) {
+            reconnectTask(existingTask.id)
+            if let runtime = sessions.first(where: {
+                $0.descriptor.taskSessionID == existingTask.id
+                    && !$0.controller.lifecycle.isTerminal
+            }) {
+                statusMessage = "Reconnecting \(existingTask.displayTitle)."
+                return runtime
+            }
+            return nil
         }
         if agent.preferredSessionBackend != .appServer,
            let durable = discoveredSessions.first(where: { discovered in
@@ -2045,9 +2186,10 @@ final class AppModel: ObservableObject {
         }
         if taskWasAlreadyKnown,
            conversationHistoryByTask[taskSessionID] == nil {
+            reconnectAfterHistoryLoad.insert(taskSessionID)
             loadConversationHistory(for: taskSessionID)
             statusMessage =
-                "Loading this task's local conversation history. Reconnect again after it appears."
+                "Loading this task's local conversation history, then reconnecting."
             return nil
         }
         descriptor.taskSessionID = taskSessionID
@@ -2056,7 +2198,13 @@ final class AppModel: ObservableObject {
             TaskSessionEvent(
                 taskSessionID: taskSessionID,
                 authority: .conduitRecorded,
-                kind: .operationalStateChanged(.runtimeOpened(runtimeAttemptID))
+                kind: .operationalStateChanged(
+                    .runtimeProvisioning(
+                        runtimeAttemptID,
+                        backend: useDurableSession ? "tmux" : "pty",
+                        tmuxSessionName: descriptor.tmuxSessionName
+                    )
+                )
             )
         ) else {
             return nil
@@ -2111,6 +2259,7 @@ final class AppModel: ObservableObject {
             )
             Task { @MainActor [weak self, weak runtime] in
                 guard let self, let runtime else { return }
+                self.statusMessage = "Starting Codex on app-server…"
                 if let failure = await runtime.startAppServerIfNeeded() {
                     runtime.stopAppServer()
                     self.statusMessage =
@@ -2130,9 +2279,14 @@ final class AppModel: ObservableObject {
             _ = appendTaskEvent(
                 TaskSessionEvent(
                     taskSessionID: taskSessionID,
-                    authority: .processObserved,
+                    authority: .conduitRecorded,
                     kind: .operationalStateChanged(
-                        .interrupted(runtimeAttemptID)
+                        .runtimeProvisioningFailed(
+                            runtimeAttemptID,
+                            tmuxSessionName: descriptor.tmuxSessionName,
+                            reason: issue.localizedDescription,
+                            recoverable: true
+                        )
                     )
                 )
             )
@@ -2140,6 +2294,15 @@ final class AppModel: ObservableObject {
             removeSessionTab(runtime)
             return nil
         }
+        _ = appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: taskSessionID,
+                authority: .conduitRecorded,
+                kind: .operationalStateChanged(
+                    .runtimeOpened(runtimeAttemptID)
+                )
+            )
+        )
         if runtime.controller.usesTmux {
             noteDurableRuntimeAvailable(runtime)
         }
@@ -2631,6 +2794,7 @@ final class AppModel: ObservableObject {
     ) -> String {
         let agent = runtime.descriptor.agent
         guard settings.injectHostEnvelope,
+              !runtime.usesAppServer,
               HostEnvelope.shouldInject(for: agent) else { return assembled }
         let projectPath = runtime.descriptor.projectPath.path
         let taskID = selectedTaskSnapshot?.id.rawValue.uuidString
@@ -3199,13 +3363,23 @@ final class AppModel: ObservableObject {
         await refreshResources()
     }
 
+    func copySessionAPIToken() {
+        let token = ConduitSessionAPIServer.loadOrCreateToken()
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(token, forType: .string)
+        statusMessage = "Session API token copied. ChatGPT still needs tunnel-client running."
+    }
+
     func syncSessionAPI() {
         sessionAPIServer?.stop()
         sessionAPIServer = nil
         sessionAPIAddress = nil
         guard settings.enableSessionAPI else { return }
         let token = ConduitSessionAPIServer.loadOrCreateToken()
-        let server = ConduitSessionAPIServer(token: token) { [weak self] command in
+        let server = ConduitSessionAPIServer(
+            token: token,
+            allowWrites: settings.enableSessionAPIWrites
+        ) { [weak self] command in
             self?.sessionAPIPayload(command) ?? ["error": "Conduit is not ready."]
         }
         do {
@@ -3234,19 +3408,7 @@ final class AppModel: ObservableObject {
         case .listSessions:
             return [
                 "sessions": taskSessions.prefix(40).map { task -> [String: Any] in
-                    let live = sessions.first {
-                        $0.descriptor.taskSessionID == task.id
-                            && !$0.controller.lifecycle.isTerminal
-                    }
-                    return [
-                        "taskSessionID": task.id.rawValue.uuidString,
-                        "title": task.displayTitle,
-                        "agent": task.metadata.agentName ?? "",
-                        "backend": live?.usesAppServer == true
-                            ? AgentSessionBackend.appServer.workSessionLabel
-                            : AgentSessionBackend.pty.workSessionLabel,
-                        "live": live != nil,
-                    ]
+                    sessionAPITaskPayload(for: task)
                 }
             ]
         case .sessionStatus(let rawID):
@@ -3255,24 +3417,17 @@ final class AppModel: ObservableObject {
             else {
                 return ["error": "unknown task"]
             }
-            let live = sessions.first { $0.descriptor.taskSessionID == task.id }
-            let events = (live?.presentationEvents ?? []).suffix(6).map { event in
-                switch event.kind {
-                case .userPrompt(let prompt):
-                    return "user[\(prompt.origin.displayName)]: \(prompt.text.prefix(240))"
-                case .agentOutput(let output):
-                    return "agent[\(output.extraction.displayName)]: \(output.text.prefix(240))"
-                case .sessionOpened:
-                    return "opened[\(event.authority.displayName)]"
-                }
-            }
-            return [
-                "taskSessionID": rawID,
-                "title": task.displayTitle,
-                "live": live != nil && live?.controller.lifecycle.isTerminal == false,
-                "events": Array(events),
-                "authority": "observed summaries; not verification",
-            ]
+            var payload = sessionAPITaskPayload(for: task, includeEvents: true)
+            // Preserve the caller's spelling for the identifier in this
+            // response while the task record remains UUID-authoritative.
+            payload["taskSessionID"] = rawID
+            return payload
+        case .sessionEvents(let rawID, let cursor, let limit):
+            return sessionAPISessionEvents(
+                taskSessionID: rawID,
+                cursor: cursor,
+                limit: limit
+            )
         case .queryMindGraph(let question, let scope):
             guard ConduitSessionAPI.allowsMindGraphScope(scope) else {
                 return ["error": "scope must be knowledge or projects"]
@@ -3300,9 +3455,464 @@ final class AppModel: ObservableObject {
                 "status": result.status,
                 "trust": "nomination only",
             ]
-        case .createTask, .sendPrompt, .interrupt, .closeSession:
+        case .createTask(let agentName, let projectSlug, let objective):
+            return sessionAPICreateTask(
+                agentName: agentName,
+                projectSlug: projectSlug,
+                objective: objective
+            )
+        case .reconcileTask(let rawID):
+            return sessionAPIReconcileTask(taskSessionID: rawID)
+        case .sendPrompt(let rawID, let text, let origin):
+            return sessionAPISendPrompt(
+                taskSessionID: rawID,
+                text: text,
+                origin: origin
+            )
+        case .interrupt(let rawID):
+            return sessionAPIInterrupt(taskSessionID: rawID)
+        case .closeSession(let rawID):
+            return sessionAPIClose(taskSessionID: rawID)
+        }
+    }
+
+    private func sessionAPITaskID(_ rawID: String) -> TaskSessionID? {
+        guard let uuid = UUID(uuidString: rawID) else { return nil }
+        return TaskSessionID(rawValue: uuid)
+    }
+
+    private func sessionAPILiveRuntime(for id: TaskSessionID) -> TerminalRuntime? {
+        sessions.first {
+            $0.descriptor.taskSessionID == id
+                && !$0.controller.lifecycle.isTerminal
+        }
+    }
+
+    private func sessionAPIRuntimeLifecycle(
+        _ lifecycle: SessionLifecycle
+    ) -> String {
+        switch lifecycle {
+        case .idle: return "idle"
+        case .launching: return "starting"
+        case .running: return "running"
+        case .detached: return "detached"
+        case .exited: return "closed"
+        }
+    }
+
+    /// MCP-facing state projection. These fields deliberately keep durable
+    /// registration, provisioning, runtime presence, and readiness separate.
+    /// In particular, an absent runtime can never satisfy `ready` through an
+    /// optional-chain default.
+    private func sessionAPITaskPayload(
+        for task: TaskSessionSnapshot,
+        includeEvents: Bool = false
+    ) -> [String: Any] {
+        let live = sessionAPILiveRuntime(for: task.id)
+        let isLive = live != nil
+        let profile = agentProfile(named: task.metadata.agentName)
+        let backend: String
+        if let live {
+            backend = live.usesAppServer
+                ? AgentSessionBackend.appServer.workSessionLabel
+                : AgentSessionBackend.pty.workSessionLabel
+        } else {
+            backend = profile?.preferredSessionBackend.workSessionLabel ?? "unknown"
+        }
+
+        var provisioning = "unknown"
+        var runtimeState = "absent"
+        var lifecycle = "unknown"
+        var ready = false
+        var recoverable = false
+        var recoveryAction: String?
+        var failure: String?
+        var targetSessionName: String?
+
+        if let live {
+            let controllerLifecycle = live.controller.lifecycle
+            runtimeState = sessionAPIRuntimeLifecycle(controllerLifecycle)
+            lifecycle = runtimeState
+            let adapterReady = live.appServer == nil || live.appServer?.isReady == true
+            provisioning = adapterReady ? "ready" : "starting"
+            ready = isLive && adapterReady
+            recoverable = false
+        } else {
+            switch task.operationalState {
+            case .runtimeProvisioning(_, _, let tmuxSessionName):
+                provisioning = "pending"
+                runtimeState = "pending"
+                lifecycle = "provisioning"
+                recoverable = true
+                recoveryAction = "conduit_reconcile_task"
+                targetSessionName = tmuxSessionName
+            case .runtimeProvisioningFailed(_, let tmuxSessionName, let reason, let canRecover):
+                provisioning = "failed"
+                runtimeState = "absent"
+                lifecycle = "provisioning_failed"
+                failure = reason
+                recoverable = canRecover
+                if canRecover {
+                    recoveryAction = "conduit_reconcile_task"
+                }
+                targetSessionName = tmuxSessionName
+            case .runtimeDetached:
+                runtimeState = "detached"
+                lifecycle = "detached"
+                recoverable = true
+                recoveryAction = "conduit_reconcile_task"
+            case .interrupted:
+                provisioning = "unknown"
+                runtimeState = "interrupted"
+                lifecycle = "interrupted"
+                recoverable = true
+                recoveryAction = "conduit_reconcile_task"
+            case .runtimeOpened:
+                runtimeState = "absent"
+                lifecycle = "runtime_missing"
+                recoverable = true
+                recoveryAction = "conduit_reconcile_task"
+            case .closed:
+                runtimeState = "closed"
+                lifecycle = "closed"
+            case nil:
+                break
+            }
+        }
+
+        var payload: [String: Any] = [
+            "taskSessionID": task.id.rawValue.uuidString,
+            "title": task.displayTitle,
+            "agent": task.metadata.agentName ?? "",
+            "project": project(for: task)?.slug ?? "",
+            "backend": backend,
+            "durable_state": "registered",
+            "provisioning_state": provisioning,
+            "runtime_state": runtimeState,
+            "lifecycle": lifecycle,
+            "live": isLive,
+            "ready": ready,
+            "recoverable": recoverable,
+        ]
+        if let failure {
+            payload["failure"] = failure
+        }
+        if let recoveryAction {
+            payload["recovery_action"] = recoveryAction
+        }
+        if let targetSessionName {
+            payload["runtime_target"] = targetSessionName
+        }
+        if includeEvents {
+            let eventSource = live?.presentationEvents
+                ?? conversationHistoryByTask[task.id]
+                ?? []
+            let events = eventSource.suffix(6).map { event in
+                switch event.kind {
+                case .userPrompt(let prompt):
+                    return "user[\(prompt.origin.displayName)]: \(prompt.text.prefix(240))"
+                case .agentOutput(let output):
+                    return "agent[\(output.extraction.displayName)]: \(output.text.prefix(240))"
+                case .sessionOpened:
+                    return "opened[\(event.authority.displayName)]"
+                }
+            }
+            payload["events"] = Array(events)
+            payload["authority"] = "observed summaries; not verification"
+        }
+        return payload
+    }
+
+    private func sessionAPISessionEvents(
+        taskSessionID rawID: String,
+        cursor: String?,
+        limit: Int?
+    ) -> [String: Any] {
+        guard let uuid = UUID(uuidString: rawID),
+              let task = taskSessions.first(where: { $0.id.rawValue == uuid })
+        else {
+            return ["error": "unknown task"]
+        }
+        let live = sessionAPILiveRuntime(for: task.id)
+        let status = sessionAPITaskPayload(for: task)
+        let backend: AgentSessionBackend = {
+            if live?.usesAppServer == true { return .appServer }
+            let profile = agentProfile(named: task.metadata.agentName)
+            return profile?.preferredSessionBackend ?? .pty
+        }()
+        let adapter: ConduitSessionAdapterSnapshot? = live?.appServer.map { server in
+            ConduitSessionAdapterSnapshot(
+                threadID: server.threadID,
+                turnActive: server.isTurnActive,
+                lastTurnStatus: server.lastTurnStatus,
+                pendingApproval: server.pendingApproval != nil,
+                pendingApprovalSummary: server.pendingApproval?.summary
+            )
+        }
+        let eventSource = live?.presentationEvents
+            ?? conversationHistoryByTask[task.id]
+            ?? []
+        let source = ConduitSessionEventSource(
+            taskSessionID: rawID,
+            backend: backend,
+            sessionLifecycle: status["lifecycle"] as? String ?? "unknown",
+            runtimeState: status["runtime_state"] as? String ?? "unknown",
+            live: status["live"] as? Bool ?? false,
+            ready: status["ready"] as? Bool ?? false,
+            events: eventSource,
+            adapter: adapter
+        )
+        return ConduitSessionEventExport.page(
+            source: source,
+            cursor: cursor,
+            limit: limit
+        ).jsonObject()
+    }
+
+    private func sessionAPICreateTask(
+        agentName: String,
+        projectSlug: String,
+        objective: String
+    ) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
         }
+        guard let agent = enabledAgents.first(where: {
+            ConduitSessionAPI.matchesAgent($0, name: agentName)
+        }) else {
+            return [
+                "error": "unknown or disabled agent",
+                "agent": agentName,
+                "enabled": enabledAgents.map(\.name),
+            ]
+        }
+        guard let project = projects.first(where: {
+            $0.slug.lowercased() == projectSlug.lowercased()
+        }) else {
+            return ["error": "unknown project_slug", "project_slug": projectSlug]
+        }
+        let taskID = TaskSessionID()
+        guard let runtime = createTask(
+            agent: agent,
+            project: project,
+            taskSessionID: taskID
+        ) else {
+            guard let task = taskSessions.first(where: { $0.id == taskID }) else {
+                return [
+                    "error": errorMessage ?? "create_task failed",
+                    "agent": agent.name,
+                    "project": project.slug,
+                ]
+            }
+            var failedPayload = sessionAPITaskPayload(for: task)
+            failedPayload["error"] = task.metadata.agentName == agent.name
+                ? (failedPayload["failure"] as? String ?? errorMessage ?? "create_task failed")
+                : (errorMessage ?? "create_task failed")
+            failedPayload["created"] = true
+            failedPayload["objective_delivered"] = false
+            failedPayload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
+            failedPayload["authority"] = "task registered; provisioning failed"
+            return failedPayload
+        }
+        guard let task = taskSessions.first(where: { $0.id == taskID }) else {
+            return [
+                "error": "runtime started but durable task could not be reloaded",
+                "taskSessionID": taskID.rawValue.uuidString,
+                "agent": agent.name,
+                "project": project.slug,
+            ]
+        }
+        var payload = sessionAPITaskPayload(for: task)
+        payload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
+        payload["authority"] = "session created; not verification"
+        let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return payload }
+        let sent = sessionAPIDeliver(
+            trimmed,
+            to: runtime,
+            origin: .chatgpt
+        )
+        payload["objective_delivered"] = sent["delivered"] as? Bool ?? false
+        if let error = sent["error"] {
+            payload["objective_error"] = error
+        }
+        return payload
+    }
+
+    private func sessionAPIReconcileTask(
+        taskSessionID rawID: String
+    ) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
+            return ["error": "write tools are disabled"]
+        }
+        guard let taskID = sessionAPITaskID(rawID),
+              let task = taskSessions.first(where: { $0.id == taskID })
+        else {
+            return ["error": "unknown task", "taskSessionID": rawID]
+        }
+        let retryable: Bool = {
+            switch task.operationalState {
+            case .runtimeProvisioning?, .runtimeProvisioningFailed?:
+                return true
+            default:
+                return false
+            }
+        }()
+        reconcileTask(taskID)
+        guard let current = taskSessions.first(where: { $0.id == taskID }) else {
+            return ["error": "task disappeared during reconciliation", "taskSessionID": rawID]
+        }
+        var payload = sessionAPITaskPayload(for: current)
+        payload["taskSessionID"] = rawID
+        if sessionAPILiveRuntime(for: taskID) != nil {
+            payload["reconciled"] = true
+        } else if retryable {
+            // History loading and tmux re-observation can be asynchronous. The
+            // durable ID and explicit state remain the handoff contract.
+            payload["reconcile_requested"] = true
+        } else if payload["error"] == nil {
+            payload["error"] = errorMessage
+                ?? "No safe runtime reconciliation is available for this task"
+        }
+        payload["authority"] = "reconciliation requested; inspect status for observation"
+        return payload
+    }
+
+    private func sessionAPISendPrompt(
+        taskSessionID rawID: String,
+        text: String,
+        origin: ConduitSessionOrigin
+    ) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
+            return ["error": "write tools are disabled"]
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ["error": "text is empty"]
+        }
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        if sessionAPILiveRuntime(for: taskID) == nil {
+            reconnectTask(taskID)
+        }
+        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
+            return [
+                "error": errorMessage
+                    ?? "no live runtime; create a new task or reconnect in Conduit",
+                "taskSessionID": rawID,
+            ]
+        }
+        return sessionAPIDeliver(trimmed, to: runtime, origin: origin)
+    }
+
+    private func sessionAPIDeliver(
+        _ text: String,
+        to runtime: TerminalRuntime,
+        origin: ConduitSessionOrigin
+    ) -> [String: Any] {
+        if runtime.usesAppServer, runtime.appServer?.isReady != true {
+            return [
+                "error": "agent runtime is still starting; retry conduit_send_prompt",
+                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                "delivered": false,
+                "ready": false,
+            ]
+        }
+        _ = selectSession(runtime)
+        let eventID = runtime.recordPrompt(
+            origin: origin.promptOrigin,
+            text: text,
+            attachmentPaths: [],
+            renderedPayload: text
+        )
+        runtime.selectedSurface = .conversation
+        if runtime.appServer?.isReady == true {
+            let delivered = runtime.sendAppServerPrompt(text: text)
+            runtime.updatePromptDelivery(
+                eventID: eventID,
+                to: delivered ? .delivered : .failed
+            )
+            return [
+                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                "delivered": delivered,
+                "backend": AgentSessionBackend.appServer.workSessionLabel,
+                "origin": origin.rawValue,
+                "authority": "prompt recorded; not verification",
+            ]
+        }
+        if AgentSlashCatalog.looksLikeSlashCommand(text) {
+            sendSlashCommand(text, via: runtime)
+            return [
+                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                "delivered": true,
+                "backend": AgentSessionBackend.pty.workSessionLabel,
+                "origin": origin.rawValue,
+                "authority": "slash injected; not verification",
+            ]
+        }
+        runtime.controller.deliverPrompt(
+            text,
+            willDeliver: { [weak runtime] baseline in
+                runtime?.beginAgentOutputCapture(
+                    promptEventID: eventID,
+                    promptText: text,
+                    baseline: baseline
+                )
+            }
+        ) { [weak runtime] delivered in
+            runtime?.updatePromptDelivery(
+                eventID: eventID,
+                to: delivered ? .delivered : .failed
+            )
+        }
+        return [
+            "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+            "delivered": true,
+            "backend": AgentSessionBackend.pty.workSessionLabel,
+            "origin": origin.rawValue,
+            "authority": "prompt queued to PTY; not verification",
+        ]
+    }
+
+    private func sessionAPIInterrupt(taskSessionID rawID: String) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
+            return ["error": "write tools are disabled"]
+        }
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
+            return ["error": "no live runtime to interrupt", "taskSessionID": rawID]
+        }
+        if runtime.usesAppServer {
+            runtime.appServer?.interrupt()
+        } else {
+            runtime.controller.interrupt()
+        }
+        return [
+            "taskSessionID": rawID,
+            "interrupted": true,
+            "authority": "interrupt sent; not verification",
+        ]
+    }
+
+    private func sessionAPIClose(taskSessionID rawID: String) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
+            return ["error": "write tools are disabled"]
+        }
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        guard sessionAPILiveRuntime(for: taskID) != nil else {
+            return ["error": "no live runtime to close", "taskSessionID": rawID]
+        }
+        leaveTask(taskID)
+        return [
+            "taskSessionID": rawID,
+            "closed": true,
+            "authority": "leave requested; not verification",
+        ]
     }
 
     func saveSettings() {
@@ -3748,6 +4358,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         ) ?? EnvironmentResolver.shared.resolve("codex") else {
             return "codex is not on PATH."
         }
+        controller.markAdapterLaunching()
         do {
             try await appServer.start(executable: executable)
             controller.markAdapterHosted()

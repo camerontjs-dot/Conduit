@@ -1477,6 +1477,14 @@ withTempDir { root in
           HostEnvelope.shouldInject(
               for: AgentProfile(name: "Shell", command: "/bin/zsh", kind: .shell)
           ) == false)
+    check("host envelope skips Codex app-server",
+          HostEnvelope.shouldInject(
+              for: AgentProfile(name: "Codex", command: "codex")
+          ) == false)
+    check("host envelope still wraps PTY CLIs",
+          HostEnvelope.shouldInject(
+              for: AgentProfile(name: "Grok", command: "grok")
+          ) == true)
     check("display text compacts blank runs",
           ConversationDisplayText.compactDerived("a\n\n\n\nb\n") == "a\n\nb")
     check(
@@ -2186,6 +2194,16 @@ check(
     "app-server mapper grows structured text",
     mappedDelta == [.upsertOutput(text: "Hi", state: .live)]
 )
+var chromeMapper = CodexAppServerMapper()
+let chromeEffects = chromeMapper.apply(
+    .notification(
+        method: "item/started",
+        params: .object([
+            "item": .object(["type": .string("userMessage")])
+        ])
+    )
+)
+check("app-server mapper skips userMessage chrome", chromeEffects.isEmpty)
 if case .object(let object) = CodexJSON.parseLine("{\"id\":1,\"ok\":true}"),
    case .number = object["id"],
    case .bool(true) = object["ok"] {
@@ -2205,6 +2223,143 @@ check(
     "session API rejects blended MindGraph scope",
     !ConduitSessionAPI.allowsMindGraphScope("both")
 )
+check(
+    "session API matches Codex by command name",
+    ConduitSessionAPI.matchesAgent(
+        AgentProfile(name: "Codex", command: "codex"),
+        name: "codex"
+    )
+)
+check(
+    "session API write flag defaults off",
+    ConduitSettings().enableSessionAPIWrites == false
+)
+check(
+    "session events tool is read-only",
+    !ConduitSessionAPI.isWrite(
+        .sessionEvents(taskSessionID: "t", cursor: "v1:0", limit: 2)
+    )
+)
+do {
+    let stamp = Date(timeIntervalSince1970: 1_787_000_000)
+    let prompt = SessionPresentation.promptEvent(
+        origin: .chatgpt,
+        text: "Use Bearer sk-test-secret-abcdefg",
+        attachmentPaths: ["/tmp/a.md"],
+        renderedPayload: "hidden",
+        occurredAt: stamp
+    )
+    let output = SessionPresentation.agentOutputEvent(
+        promptEventID: prompt.id,
+        text: "Pong from adapter",
+        state: .closed,
+        extraction: .structuredAdapter,
+        truncated: false,
+        occurredAt: stamp.addingTimeInterval(1)
+    )
+    let ptyOutput = SessionPresentation.agentOutputEvent(
+        promptEventID: prompt.id,
+        text: "quiet pane",
+        state: .settled,
+        extraction: .tmuxPane,
+        truncated: false,
+        occurredAt: stamp.addingTimeInterval(1)
+    )
+    let events = (0..<3).map { index in
+        SessionPresentation.promptEvent(
+            origin: .chatgpt,
+            text: "n\(index)",
+            attachmentPaths: [],
+            renderedPayload: "n\(index)",
+            occurredAt: stamp.addingTimeInterval(Double(index))
+        )
+    }
+    let firstPage = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .pty,
+            sessionLifecycle: "running",
+            runtimeState: "running",
+            live: true,
+            ready: true,
+            events: events
+        ),
+        limit: 2
+    )
+    let latePage = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .pty,
+            sessionLifecycle: "running",
+            runtimeState: "running",
+            live: true,
+            ready: true,
+            events: events + [ptyOutput]
+        ),
+        cursor: firstPage.nextCursor,
+        limit: 2
+    )
+    let stale = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .pty,
+            sessionLifecycle: "running",
+            runtimeState: "running",
+            live: true,
+            ready: true,
+            events: events
+        ),
+        cursor: "v1:9"
+    )
+    let secretPage = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .pty,
+            sessionLifecycle: "running",
+            runtimeState: "running",
+            live: true,
+            ready: true,
+            events: [prompt]
+        )
+    )
+    let codexPage = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .appServer,
+            sessionLifecycle: "running",
+            runtimeState: "running",
+            live: true,
+            ready: true,
+            events: [prompt, output],
+            adapter: ConduitSessionAdapterSnapshot(
+                threadID: "thr",
+                lastTurnStatus: "completed"
+            )
+        )
+    )
+    let ptyPage = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .pty,
+            sessionLifecycle: "running",
+            runtimeState: "running",
+            live: true,
+            ready: true,
+            events: [prompt, ptyOutput]
+        )
+    )
+    check("session events paginate with next cursor", firstPage.nextCursor == "v1:2" && firstPage.hasMore)
+    check(
+        "session events surface late items after cursor",
+        latePage.events.map(\.kind) == ["user_prompt", "agent_output"]
+            && latePage.events.last?.text == "quiet pane"
+    )
+    check("session events mark stale ahead cursor", stale.cursorState == .ahead && stale.events.isEmpty)
+    check("session events redact secrets", secretPage.events.first?.redacted == true && secretPage.events.first?.text?.contains("sk-test-secret") != true)
+    check("session events keep Codex turn completed distinct from running session", codexPage.turn.state == "completed" && codexPage.session.lifecycle == "running")
+    check("session events keep PTY quiet ambiguous", ptyPage.turn.state == "ambiguous" && ptyPage.turn.ambiguity == "pty_output_quiet")
+    check("session events label structured Codex output", codexPage.events.last?.authority == "toolReported" && codexPage.events.last?.turnStatus == "completed")
+}
 let adapterEvent = SessionPresentation.agentOutputEvent(
     promptEventID: nil,
     text: "Hi",
