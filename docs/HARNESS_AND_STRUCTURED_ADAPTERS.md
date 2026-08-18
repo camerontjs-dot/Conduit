@@ -91,10 +91,11 @@ target compiled.
 2. Confirm Reconnect on a Codex task after Leave starts app-server / 
    `thread/resume` rather than a PTY.
 3. Confirm Raw attach via `codex --remote` when a unix socket is present.
-4. Optional: enable Session API in Settings, `curl` `/healthz` and
-   `POST /mcp` with the bearer token in `~/.conduit/session-api-token`.
-5. Phase 0B/3: operator enables ChatGPT Developer Mode and installs
-   `tunnel-client`, then a ping-only MCP. Write tools stay off until Phase 1
-   smoke is green.
+4. Session API: enable in Settings, `curl` `/healthz` and `POST /mcp` with
+   the bearer token in `~/.conduit/session-api-token`.
+5. ChatGPT: enable Session API writes, then
+   `export CONTROL_PLANE_API_KEY=sk-...` and `scripts/chatgpt-tunnel`.
+   Developer Mode → Connectors → Tunnel, paste `~/.conduit/chatgpt-tunnel-id`.
+   Use Chat, not Work. Approvals stay in Conduit.
 6. Daily-driver UX cuts remain the installed-app next_action unless the
    operator pauses them.

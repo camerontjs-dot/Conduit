@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Wire OpenAI tunnel-client to the local Conduit Session API (D-039).
+#
+# Needs:
+#   - Conduit running with Session API enabled (127.0.0.1:8750/mcp)
+#   - tunnel-client on PATH (brew install openai/tools/tunnel-client)
+#   - CONTROL_PLANE_API_KEY from Platform Runtime API keys (Tunnels Read+Use)
+#   - a tunnel_id (argument, CONTROL_PLANE_TUNNEL_ID, or ~/.conduit/chatgpt-tunnel-id)
+#
+# ChatGPT chat is the orchestrator; keep Work off.
+# Write tools require Conduit Settings → Session API writes.
+set -euo pipefail
+
+CONDUIT_DIR="${CONDUIT_DIR:-$HOME/.conduit}"
+PROFILE_DIR="${TUNNEL_CLIENT_PROFILE_DIR:-$HOME/.config/tunnel-client}"
+PROFILE_NAME="${CONDUIT_TUNNEL_PROFILE:-conduit}"
+MCP_URL="${CONDUIT_SESSION_API_URL:-http://127.0.0.1:8750/mcp}"
+HEALTH_ADDR="${CONDUIT_TUNNEL_HEALTH_ADDR:-127.0.0.1:8760}"
+TUNNEL_ID="${1:-${CONTROL_PLANE_TUNNEL_ID:-}}"
+
+mkdir -p "$CONDUIT_DIR" "$PROFILE_DIR"
+
+if [[ -z "$TUNNEL_ID" && -f "$CONDUIT_DIR/chatgpt-tunnel-id" ]]; then
+  TUNNEL_ID="$(tr -d '[:space:]' < "$CONDUIT_DIR/chatgpt-tunnel-id")"
+fi
+
+if [[ -z "$TUNNEL_ID" ]]; then
+  echo "usage: $0 [tunnel_id]" >&2
+  echo "or set CONTROL_PLANE_TUNNEL_ID / write $CONDUIT_DIR/chatgpt-tunnel-id" >&2
+  exit 2
+fi
+
+if [[ ! "$TUNNEL_ID" =~ ^tunnel_[0-9a-f]{32}$ ]]; then
+  echo "tunnel id looks wrong: $TUNNEL_ID" >&2
+  exit 2
+fi
+
+printf '%s\n' "$TUNNEL_ID" > "$CONDUIT_DIR/chatgpt-tunnel-id"
+
+TOKEN_FILE="$CONDUIT_DIR/session-api-token"
+AUTH_FILE="$CONDUIT_DIR/session-api-authorization"
+if [[ ! -s "$TOKEN_FILE" ]]; then
+  echo "missing $TOKEN_FILE — start Conduit with Session API enabled first." >&2
+  exit 2
+fi
+TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE")"
+printf 'Bearer %s\n' "$TOKEN" > "$AUTH_FILE"
+chmod 600 "$AUTH_FILE" "$CONDUIT_DIR/chatgpt-tunnel-id"
+
+PROFILE="$PROFILE_DIR/${PROFILE_NAME}.yaml"
+cat > "$PROFILE" <<EOF
+config_version: 1
+control_plane:
+  tunnel_id: ${TUNNEL_ID}
+  api_key: env:CONTROL_PLANE_API_KEY
+health:
+  listen_addr: ${HEALTH_ADDR}
+admin_ui:
+  open_browser: false
+mcp:
+  server_urls:
+    - channel: main
+      url: ${MCP_URL}
+  extra_headers:
+    Authorization: file:${AUTH_FILE}
+EOF
+
+if ! command -v tunnel-client >/dev/null 2>&1; then
+  echo "tunnel-client is not on PATH. Install with:" >&2
+  echo "  brew install openai/tools/tunnel-client" >&2
+  exit 127
+fi
+
+if [[ -z "${CONTROL_PLANE_API_KEY:-}" && -n "${OPENAI_API_KEY:-}" ]]; then
+  export CONTROL_PLANE_API_KEY="$OPENAI_API_KEY"
+fi
+
+echo "profile: $PROFILE"
+echo "tunnel:  $TUNNEL_ID"
+echo "mcp:     $MCP_URL"
+echo "health:  http://${HEALTH_ADDR}/ui"
+echo "chatgpt: Settings → Connectors → Developer Mode → Connection: Tunnel"
+
+if [[ -z "${CONTROL_PLANE_API_KEY:-}" ]]; then
+  echo
+  echo "Profile written. Still needed: CONTROL_PLANE_API_KEY"
+  echo "Create a restricted Platform runtime key with Tunnels Read + Use:"
+  echo "  https://platform.openai.com/settings/organization/api-keys"
+  echo "Then:"
+  echo "  export CONTROL_PLANE_API_KEY=sk-..."
+  echo "  $0"
+  echo "  # or: tunnel-client doctor --profile $PROFILE_NAME --explain"
+  echo "  #      tunnel-client run --profile $PROFILE_NAME"
+  exit 3
+fi
+
+tunnel-client doctor --profile "$PROFILE_NAME" --explain
+exec tunnel-client run --profile "$PROFILE_NAME"
