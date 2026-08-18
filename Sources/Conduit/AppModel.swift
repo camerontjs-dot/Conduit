@@ -3649,9 +3649,17 @@ final class AppModel: ObservableObject {
                 pendingApprovalSummary: server.pendingApproval?.summary
             )
         }
-        let eventSource = live?.presentationEvents
-            ?? conversationHistoryByTask[task.id]
-            ?? []
+        let eventSource: [SessionPresentationEvent]
+        if let live {
+            eventSource = live.presentationEvents
+        } else if let cached = conversationHistoryByTask[task.id], !cached.isEmpty {
+            eventSource = cached
+        } else {
+            eventSource = ConversationEventLog(
+                directory: conversationDirectory,
+                taskSessionID: task.id
+            ).read().events
+        }
         let source = ConduitSessionEventSource(
             taskSessionID: rawID,
             backend: backend,
