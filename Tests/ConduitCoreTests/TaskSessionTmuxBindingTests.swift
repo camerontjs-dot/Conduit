@@ -152,4 +152,162 @@ final class TaskSessionTmuxBindingTests: XCTestCase {
         XCTAssertEqual(decoded.adoptsLegacyTaskSession, true)
         XCTAssertEqual(decoded.requiresExistingTmuxSession, true)
     }
+
+    func testRestartReconcilerExemptsExactDiscoveredTaskBinding() throws {
+        let taskID = taskID(301)
+        let attemptID = attemptID(401)
+        let task = try openedTask(taskID, attemptID: attemptID)
+        let discovered = DiscoveredSession(
+            tmuxName: "conduit-bound",
+            projectPath: URL(fileURLWithPath: "/tmp/OtherProject"),
+            agentName: "Different Agent",
+            taskSessionBinding: .valid(taskID)
+        )
+
+        XCTAssertEqual(
+            TaskSessionRestartReconciler.interruptionCandidates(
+                taskSessions: [task],
+                liveTaskIDs: [],
+                discoveredSessions: [discovered]
+            ),
+            []
+        )
+    }
+
+    func testRestartReconcilerMarksOpenedTaskMissingFromCompleteDiscovery() throws {
+        let taskID = taskID(302)
+        let attemptID = attemptID(402)
+        let task = try openedTask(taskID, attemptID: attemptID)
+
+        XCTAssertEqual(
+            TaskSessionRestartReconciler.interruptionCandidates(
+                taskSessions: [task],
+                liveTaskIDs: [],
+                discoveredSessions: []
+            ),
+            [
+                TaskSessionInterruptionCandidate(
+                    taskSessionID: taskID,
+                    runtimeAttemptID: attemptID
+                )
+            ]
+        )
+    }
+
+    func testRestartReconcilerDoesNotLetUnrelatedBindingProtectMissingTask() throws {
+        let targetTaskID = taskID(303)
+        let attemptID = attemptID(403)
+        let task = try openedTask(targetTaskID, attemptID: attemptID)
+        let discovered = DiscoveredSession(
+            tmuxName: "conduit-other",
+            taskSessionBinding: .valid(taskID(304))
+        )
+
+        XCTAssertEqual(
+            TaskSessionRestartReconciler.interruptionCandidates(
+                taskSessions: [task],
+                liveTaskIDs: [],
+                discoveredSessions: [discovered]
+            ).map(\.taskSessionID),
+            [targetTaskID]
+        )
+    }
+
+    func testRestartReconcilerExemptsInProcessTask() throws {
+        let taskID = taskID(305)
+        let task = try openedTask(taskID, attemptID: attemptID(405))
+
+        XCTAssertEqual(
+            TaskSessionRestartReconciler.interruptionCandidates(
+                taskSessions: [task],
+                liveTaskIDs: [taskID],
+                discoveredSessions: []
+            ),
+            []
+        )
+    }
+
+    func testRestartReconcilerSuppressesAllNegativeInferenceForMalformedBinding() throws {
+        let taskID = taskID(306)
+        let task = try openedTask(taskID, attemptID: attemptID(406))
+        let malformed = DiscoveredSession(
+            tmuxName: "conduit-malformed",
+            taskSessionBinding: .malformed(rawValue: "not-a-task-id")
+        )
+
+        XCTAssertEqual(
+            TaskSessionRestartReconciler.interruptionCandidates(
+                taskSessions: [task],
+                liveTaskIDs: [],
+                discoveredSessions: [malformed]
+            ),
+            []
+        )
+    }
+
+    private func openedTask(
+        _ taskID: TaskSessionID,
+        attemptID: RuntimeAttemptID
+    ) throws -> TaskSessionSnapshot {
+        let time = Date(timeIntervalSince1970: 1_800_000_000)
+        let metadata = TaskSessionMetadata(
+            workspace: .project(
+                ProjectWorkspaceScopeSnapshot(
+                    rootURL: URL(fileURLWithPath: "/tmp/MainFrame"),
+                    projectURL: URL(
+                        fileURLWithPath: "/tmp/MainFrame/30_projects/conduit"
+                    ),
+                    fallbackTitle: "Conduit",
+                    fallbackSlug: "conduit"
+                )
+            ),
+            agentName: "Shell",
+            defaultTitle: "Shell · Conduit"
+        )
+        return try XCTUnwrap(
+            TaskSessionProjection.project(
+                taskSessionID: taskID,
+                events: [
+                    TaskSessionEvent(
+                        taskSessionID: taskID,
+                        occurredAt: time,
+                        recordedAt: time,
+                        authority: .conduitRecorded,
+                        kind: .created(metadata)
+                    ),
+                    TaskSessionEvent(
+                        taskSessionID: taskID,
+                        occurredAt: time.addingTimeInterval(1),
+                        recordedAt: time.addingTimeInterval(1),
+                        authority: .conduitRecorded,
+                        kind: .operationalStateChanged(
+                            .runtimeOpened(attemptID)
+                        )
+                    )
+                ]
+            )
+        )
+    }
+
+    private func taskID(_ suffix: Int) -> TaskSessionID {
+        TaskSessionID(
+            rawValue: UUID(
+                uuidString: String(
+                    format: "00000000-0000-0000-0000-%012d",
+                    suffix
+                )
+            )!
+        )
+    }
+
+    private func attemptID(_ suffix: Int) -> RuntimeAttemptID {
+        RuntimeAttemptID(
+            rawValue: UUID(
+                uuidString: String(
+                    format: "10000000-0000-0000-0000-%012d",
+                    suffix
+                )
+            )!
+        )
+    }
 }

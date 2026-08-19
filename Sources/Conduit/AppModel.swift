@@ -2394,29 +2394,25 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// A successful tmux observation plus the absence of an in-process runtime
-    /// lets Conduit record that a previously-open attempt was interrupted.
-    /// Failed discovery remains unknown and never becomes negative evidence.
+    /// A successful tmux observation plus the absence of both an in-process
+    /// runtime and a positively bound durable runtime lets Conduit record that
+    /// a previously-open attempt was interrupted. Failed or malformed
+    /// discovery remains unknown and never becomes negative evidence.
     private func reconcileInterruptedTaskSessions() {
         let liveTaskIDs = Set(sessions.compactMap(\.descriptor.taskSessionID))
-        // A malformed binding could belong to any prior attempt. Until it is
-        // repaired or reviewed, absence is not safe negative evidence.
-        guard !discoveredSessions.contains(where: {
-            if case .malformed = $0.taskSessionBinding { return true }
-            return false
-        }) else { return }
-        let candidates = taskSessions.compactMap { task -> (TaskSessionID, RuntimeAttemptID)? in
-            guard !liveTaskIDs.contains(task.id),
-                  case .runtimeOpened(let attempt)? = task.operationalState
-            else { return nil }
-            return (task.id, attempt)
-        }
-        for (taskID, attemptID) in candidates {
+        let candidates = TaskSessionRestartReconciler.interruptionCandidates(
+            taskSessions: taskSessions,
+            liveTaskIDs: liveTaskIDs,
+            discoveredSessions: discoveredSessions
+        )
+        for candidate in candidates {
             _ = appendTaskEvent(
                 TaskSessionEvent(
-                    taskSessionID: taskID,
+                    taskSessionID: candidate.taskSessionID,
                     authority: .processObserved,
-                    kind: .operationalStateChanged(.interrupted(attemptID))
+                    kind: .operationalStateChanged(
+                        .interrupted(candidate.runtimeAttemptID)
+                    )
                 )
             )
         }

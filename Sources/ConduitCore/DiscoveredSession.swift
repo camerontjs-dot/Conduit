@@ -66,6 +66,59 @@ public struct DiscoveredSession: Equatable, Sendable {
     }
 }
 
+/// A previously-open runtime attempt that a complete tmux observation proves
+/// is absent. The caller may append an interrupted event for this pair.
+public struct TaskSessionInterruptionCandidate: Equatable, Sendable {
+    public let taskSessionID: TaskSessionID
+    public let runtimeAttemptID: RuntimeAttemptID
+
+    public init(
+        taskSessionID: TaskSessionID,
+        runtimeAttemptID: RuntimeAttemptID
+    ) {
+        self.taskSessionID = taskSessionID
+        self.runtimeAttemptID = runtimeAttemptID
+    }
+}
+
+/// Pure restart-reconciliation policy for converting complete tmux discovery
+/// into safe negative evidence.
+public enum TaskSessionRestartReconciler {
+    public static func interruptionCandidates(
+        taskSessions: [TaskSessionSnapshot],
+        liveTaskIDs: Set<TaskSessionID>,
+        discoveredSessions: [DiscoveredSession]
+    ) -> [TaskSessionInterruptionCandidate] {
+        // A malformed binding could belong to any prior task. Until it is
+        // reviewed, absence is not safe negative evidence for any task.
+        guard !discoveredSessions.contains(where: {
+            if case .malformed = $0.taskSessionBinding { return true }
+            return false
+        }) else { return [] }
+
+        // A valid task binding is positive continuity evidence even when its
+        // descriptive project/agent metadata conflicts. Compatibility is a
+        // separate explicit-reconnect gate; it must not be rewritten as
+        // evidence that the runtime disappeared.
+        let discoveredTaskIDs = Set(
+            discoveredSessions.compactMap(
+                \.taskSessionBinding.taskSessionID
+            )
+        )
+
+        return taskSessions.compactMap { task in
+            guard !liveTaskIDs.contains(task.id),
+                  !discoveredTaskIDs.contains(task.id),
+                  case .runtimeOpened(let attemptID)? = task.operationalState
+            else { return nil }
+            return TaskSessionInterruptionCandidate(
+                taskSessionID: task.id,
+                runtimeAttemptID: attemptID
+            )
+        }
+    }
+}
+
 /// Parses `tmux list-sessions -F` output. Pure so it can be tested against
 /// real captured output instead of only against a live server.
 public enum TmuxSessionListParser {
