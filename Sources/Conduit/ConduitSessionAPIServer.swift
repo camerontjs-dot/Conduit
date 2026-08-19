@@ -353,6 +353,12 @@ final class ConduitSessionAPIServer {
         "destructiveHint": true,
     ]
 
+    private static let nonDestructiveStateChangingAnnotations: [String: Any] = [
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false,
+    ]
+
     private static let sessionEventsOutputSchema: [String: Any] = [
         "type": "object",
         "required": [
@@ -539,8 +545,8 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_reconcile_task",
-            "description": "Retry or reconnect a failed task runtime using the same task ID. Never replaces an uncertain tmux session.",
-            "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
+            "description": "Reconnect an existing task to its identity-compatible runtime, or retry its recorded provisioning target. Preserves the task ID and never kills, replaces, or deletes a runtime or task history.",
+            "annotations": ConduitSessionAPIServer.nonDestructiveStateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
                 "properties": [

@@ -67,6 +67,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 - `conduit_reconcile_task` now reports an accepted asynchronous reconcile when
   a compatible discovered runtime can be resumed after local history loads,
   instead of returning a false immediate error while recovery proceeds.
+- MCP discovery now labels `conduit_reconcile_task` as state-changing but
+  non-destructive, matching its same-ID, no-kill, no-replace recovery contract.
 - MCP tool discovery now advertises standard risk annotations: Conduit's local
   read-only queries are marked read-only and closed-world, while lifecycle
   controls remain conservatively state-changing/destructive.
