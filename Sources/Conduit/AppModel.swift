@@ -3754,14 +3754,12 @@ final class AppModel: ObservableObject {
         else {
             return ["error": "unknown task", "taskSessionID": rawID]
         }
-        let retryable: Bool = {
-            switch task.operationalState {
-            case .runtimeProvisioning?, .runtimeProvisioningFailed?:
-                return true
-            default:
-                return false
-            }
-        }()
+        let requestMayProceed = ConduitSessionAPI
+            .reconciliationRequestMayProceed(
+                operationalState: task.operationalState,
+                hasCompatibleDiscoveredRuntime:
+                    reconnectableDiscoveredSession(for: task) != nil
+            )
         reconcileTask(taskID)
         guard let current = taskSessions.first(where: { $0.id == taskID }) else {
             return ["error": "task disappeared during reconciliation", "taskSessionID": rawID]
@@ -3770,7 +3768,7 @@ final class AppModel: ObservableObject {
         payload["taskSessionID"] = rawID
         if sessionAPILiveRuntime(for: taskID) != nil {
             payload["reconciled"] = true
-        } else if retryable {
+        } else if requestMayProceed {
             // History loading and tmux re-observation can be asynchronous. The
             // durable ID and explicit state remain the handoff contract.
             payload["reconcile_requested"] = true

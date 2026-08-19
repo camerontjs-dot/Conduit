@@ -141,6 +141,37 @@ final class CodexAppServerProtocolTests: XCTestCase {
         )
     }
 
+    func testSessionAPIAcceptsAsynchronousReconcileOnlyWithSafeEvidence() {
+        let attemptID = RuntimeAttemptID(
+            rawValue: UUID(
+                uuidString: "10000000-0000-0000-0000-000000000501"
+            )!
+        )
+
+        XCTAssertTrue(
+            ConduitSessionAPI.reconciliationRequestMayProceed(
+                operationalState: .runtimeOpened(attemptID),
+                hasCompatibleDiscoveredRuntime: true
+            )
+        )
+        XCTAssertTrue(
+            ConduitSessionAPI.reconciliationRequestMayProceed(
+                operationalState: .runtimeProvisioning(
+                    attemptID,
+                    backend: "tmux",
+                    tmuxSessionName: "conduit-canary"
+                ),
+                hasCompatibleDiscoveredRuntime: false
+            )
+        )
+        XCTAssertFalse(
+            ConduitSessionAPI.reconciliationRequestMayProceed(
+                operationalState: .runtimeOpened(attemptID),
+                hasCompatibleDiscoveredRuntime: false
+            )
+        )
+    }
+
     func testPermissionDeclineUsesRPCError() {
         let approval = CodexAppServerApproval(
             id: "p",

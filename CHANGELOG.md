@@ -64,6 +64,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   interrupted when complete tmux discovery still contains that task's exact
   durable binding. Malformed bindings continue to suppress negative inference,
   and project/agent compatibility remains an explicit reconnect gate.
+- `conduit_reconcile_task` now reports an accepted asynchronous reconcile when
+  a compatible discovered runtime can be resumed after local history loads,
+  instead of returning a false immediate error while recovery proceeds.
 - MCP tool discovery now advertises standard risk annotations: Conduit's local
   read-only queries are marked read-only and closed-world, while lifecycle
   controls remain conservatively state-changing/destructive.

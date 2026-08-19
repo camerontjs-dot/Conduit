@@ -80,4 +80,22 @@ public enum ConduitSessionAPI {
         if profile.name.lowercased() == needle { return true }
         return URL(fileURLWithPath: profile.command).lastPathComponent.lowercased() == needle
     }
+
+    /// Whether an explicit reconcile call has a deterministic path that may
+    /// complete after the synchronous MCP response. A compatible discovered
+    /// runtime is safe positive evidence for every unfinished operational
+    /// state; otherwise only the provisioning retry states have enough target
+    /// information to accept the request.
+    public static func reconciliationRequestMayProceed(
+        operationalState: TaskSessionOperationalState?,
+        hasCompatibleDiscoveredRuntime: Bool
+    ) -> Bool {
+        if hasCompatibleDiscoveredRuntime { return true }
+        switch operationalState {
+        case .runtimeProvisioning?, .runtimeProvisioningFailed?:
+            return true
+        default:
+            return false
+        }
+    }
 }
