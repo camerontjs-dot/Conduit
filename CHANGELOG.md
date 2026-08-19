@@ -69,6 +69,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   instead of returning a false immediate error while recovery proceeds.
 - MCP discovery now labels `conduit_reconcile_task` as state-changing but
   non-destructive, matching its same-ID, no-kill, no-replace recovery contract.
+- MCP discovery now labels `conduit_send_prompt` as an additive message write,
+  while retaining the explicit boundary that delivery grants no agent approval.
 - MCP tool discovery now advertises standard risk annotations: Conduit's local
   read-only queries are marked read-only and closed-world, while lifecycle
   controls remain conservatively state-changing/destructive.

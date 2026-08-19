@@ -532,8 +532,8 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_send_prompt",
-            "description": "Send one prompt to an existing Conduit task. Origin is recorded as ChatGPT. Does not approve tools.",
-            "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
+            "description": "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. This does not approve agent tools or permissions.",
+            "annotations": ConduitSessionAPIServer.nonDestructiveStateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
                 "properties": [
