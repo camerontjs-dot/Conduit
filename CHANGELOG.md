@@ -92,6 +92,16 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- The sprite integrity manifest now covers every bundled image. Since the
+  structured-adapter pass the app has shipped and rendered eight per-identity
+  companion masters that `SHA256SUMS` did not list, so that art could drift
+  without anything noticing. All twenty bundled PNGs are now pinned, the
+  provenance ledger records the `masters/` import, and the bundle contract test
+  models both asset classes instead of assuming every image belongs to a
+  six-pose set. Masters still never satisfy the six-pose completeness gate.
+- The XCTest target compiles again. A recorder test read its own recorder from
+  inside the closure passed to that recorder's initializer, which had broken the
+  whole suite; the running total is now kept in a separate lock-guarded counter.
 - The ChatGPT tunnel launcher now stores the control-plane key instead of
   reading it only from the environment. It previously resolved the key as
   `env:CONTROL_PLANE_API_KEY`, so the key lived solely in whichever shell

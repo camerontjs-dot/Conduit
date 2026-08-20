@@ -30,9 +30,17 @@ Run:
 
 ```bash
 swift run conduit-selftest   # always (works with Command Line Tools only)
-swift test                   # when full Xcode is available
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 ./scripts/build-app.sh
 ```
+
+`swift test` needs XCTest, which ships inside Xcode.app and **not** with the
+Command Line Tools. If `xcode-select -p` points at `/Library/Developer/CommandLineTools`,
+a bare `swift test` fails with `no such module 'XCTest'`. That is a toolchain
+selection problem, not a missing dependency: set `DEVELOPER_DIR` for the one
+command as above (no sudo), or switch the whole machine with
+`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
+Do not record "XCTest unavailable" without checking `ls /Applications/Xcode.app` first.
 
 Keep `Sources/ConduitSelfTest` and `Tests/ConduitCoreTests` in step when core behavior changes.
 

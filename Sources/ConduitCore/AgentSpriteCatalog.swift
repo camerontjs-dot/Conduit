@@ -312,6 +312,35 @@ public enum AgentSpriteCatalog {
         AgentSpritePose.allCases.map { "\(skin.rawValue)/\($0.fileName)" }
     }
 
+    public static let masterFileName = "master"
+
+    /// Bundle subdirectory holding one identity's interim display master.
+    /// Single definition so the loader and the manifest cannot disagree.
+    public static func masterResourceSubdirectory(
+        for master: AgentCompanionMaster
+    ) -> String {
+        "masters/\(master.resourceDirectory)"
+    }
+
+    public static func masterRelativePath(
+        for master: AgentCompanionMaster
+    ) -> String {
+        "\(masterResourceSubdirectory(for: master))/\(masterFileName).png"
+    }
+
+    /// Every PNG the bundle ships, across both asset classes.
+    ///
+    /// Six-pose runtime sets and interim display masters are different kinds of
+    /// asset: a master is one presentation file per identity and is never
+    /// evidence that a lifecycle set is complete. They are equally shipped and
+    /// rendered, though, so both carry manifest hashes. A rendered image that
+    /// nothing pins can drift silently, which is the whole reason the manifest
+    /// exists.
+    public static var manifestedRelativePaths: [String] {
+        AgentSpriteSkin.allCases.flatMap { requiredRelativePaths(for: $0) }
+            + AgentCompanionMaster.allCases.map { masterRelativePath(for: $0) }
+    }
+
     public static func registration(for profile: AgentProfile) -> AgentSpriteRegistration? {
         let name = exactKey(profile.name)
         let executable = exactKey(URL(fileURLWithPath: profile.command).lastPathComponent)

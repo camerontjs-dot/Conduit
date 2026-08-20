@@ -21,6 +21,14 @@ existing there is not enough to approve or bundle that file here.
   provenance README. Treat the generation route as incompletely documented.
   Exact profile signatures are `Claude` + `claude` and `Claude Code` + `claude`.
 
+- `masters/`: imported on 2026-08-11 as interim companion identities for the
+  eight built-in profiles. These are operator-locked masters downscaled to 256px
+  height with nearest-neighbor, one presentation file per identity. They are not
+  six-pose sets and never satisfy the completeness gate above. Per-file source,
+  lock records, and import route are in `masters/README.md`. They are bundled
+  and rendered, so they carry `SHA256SUMS` entries like every other PNG here; a
+  rendered image that nothing pins can drift without anyone noticing.
+
 Cameron explicitly authorized internal Conduit reuse for this finish task on
 2026-07-22. No separate license or public-redistribution proof was found in the
 source folders. This ledger records internal-use provenance; it does not claim

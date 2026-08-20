@@ -261,23 +261,23 @@ final class AgentSpriteBundledResourceTests: XCTestCase {
         )
         let manifest = AgentSpriteHashManifest.parse(manifestText)
 
+        // Both asset classes ship and both render, so both are pinned: the
+        // six-pose runtime sets and the one-file-per-identity display masters.
         var readablePaths = Set<String>()
         let actualPNGPaths = try allPNGRelativePaths(in: root)
-        for skin in AgentSpriteSkin.allCases {
-            for relativePath in AgentSpriteCatalog.requiredRelativePaths(for: skin) {
-                let url = root.appendingPathComponent(relativePath)
-                let data = try Data(contentsOf: url)
-                XCTAssertNotNil(NSImage(contentsOf: url), "Cannot decode \(relativePath)")
-                let bitmap = NSBitmapImageRep(data: data)
-                XCTAssertNotNil(bitmap, "Cannot decode bitmap data for \(relativePath)")
-                XCTAssertEqual(bitmap?.hasAlpha, true, "Alpha channel missing for \(relativePath)")
-                readablePaths.insert(relativePath)
-                XCTAssertEqual(
-                    manifest[relativePath],
-                    sha256Hex(data),
-                    "Hash drift for \(relativePath)"
-                )
-            }
+        for relativePath in AgentSpriteCatalog.manifestedRelativePaths {
+            let url = root.appendingPathComponent(relativePath)
+            let data = try Data(contentsOf: url)
+            XCTAssertNotNil(NSImage(contentsOf: url), "Cannot decode \(relativePath)")
+            let bitmap = NSBitmapImageRep(data: data)
+            XCTAssertNotNil(bitmap, "Cannot decode bitmap data for \(relativePath)")
+            XCTAssertEqual(bitmap?.hasAlpha, true, "Alpha channel missing for \(relativePath)")
+            readablePaths.insert(relativePath)
+            XCTAssertEqual(
+                manifest[relativePath],
+                sha256Hex(data),
+                "Hash drift for \(relativePath)"
+            )
         }
 
         let inventory = AgentSpriteResourceInventory(
@@ -295,11 +295,36 @@ final class AgentSpriteBundledResourceTests: XCTestCase {
             )
         }
         XCTAssertEqual(Set(manifest.keys), actualPNGPaths)
-        XCTAssertEqual(actualPNGPaths.count, AgentSpriteSkin.allCases.count * 6)
+        XCTAssertEqual(actualPNGPaths, Set(AgentSpriteCatalog.manifestedRelativePaths))
+        XCTAssertEqual(
+            actualPNGPaths.count,
+            AgentSpriteSkin.allCases.count * AgentSpritePose.allCases.count
+                + AgentCompanionMaster.allCases.count
+        )
         XCTAssertEqual(
             Set(AgentSpriteCatalog.registrations.map(\.skin)),
             Set(AgentSpriteSkin.allCases)
         )
+
+        // Every built-in identity has master art, and no master is ever mistaken
+        // for part of a six-pose set. That distinction is the reason a master
+        // may not claim lifecycle completion.
+        let poseSetPaths = Set(
+            AgentSpriteSkin.allCases.flatMap {
+                AgentSpriteCatalog.requiredRelativePaths(for: $0)
+            }
+        )
+        for master in AgentCompanionMaster.allCases {
+            let path = AgentSpriteCatalog.masterRelativePath(for: master)
+            XCTAssertTrue(
+                actualPNGPaths.contains(path),
+                "Missing bundled master art for \(master.rawValue)"
+            )
+            XCTAssertFalse(
+                poseSetPaths.contains(path),
+                "\(path) must not count as part of a six-pose runtime set"
+            )
+        }
     }
 
     private var resourceRoot: URL {

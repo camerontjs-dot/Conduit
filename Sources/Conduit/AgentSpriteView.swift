@@ -225,9 +225,10 @@ enum AgentSpriteResources {
         var masters: [AgentCompanionMaster: NSImage] = [:]
         for master in AgentCompanionMaster.allCases {
             if let url = bundle.url(
-                forResource: "master",
+                forResource: AgentSpriteCatalog.masterFileName,
                 withExtension: "png",
-                subdirectory: "AgentSprites/masters/\(master.resourceDirectory)"
+                subdirectory: "AgentSprites/"
+                    + AgentSpriteCatalog.masterResourceSubdirectory(for: master)
             ), let image = NSImage(contentsOf: url) {
                 masters[master] = image
             }

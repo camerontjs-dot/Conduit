@@ -236,16 +236,15 @@ final class CodexAppServerStreamPumpTests: XCTestCase {
     func testDeliveryBatchesRemainBoundedAcrossManyControlResponses() {
         let worker = DispatchQueue(label: "test.codex.worker.batches")
         let delivered = expectation(description: "all responses")
+        // The observer is an argument to the recorder's own initializer, so it
+        // cannot read the recorder back. Accumulate here instead, and fulfil on
+        // the batch that carries the run past the last expected response.
+        let observed = CodexResponseCounter()
         let recorder = CodexDeliveryRecorder { values in
-            let responseCount = values.filter {
-                if case .response = $0 { return true }
-                return false
-            }.count
-            if responseCount > 0 {
-                // The recorder checks the cumulative total under the same lock.
-                if recorderResponseCount(values: recorder.deliveries) == 20 {
-                    delivered.fulfill()
-                }
+            let batch = recorderResponseCount(values: values)
+            guard batch > 0 else { return }
+            if observed.add(batch) == 20 {
+                delivered.fulfill()
             }
         }
         let pump = CodexAppServerStreamPump(
@@ -362,6 +361,22 @@ private func recorderResponseCount(values: [CodexAppServerDelivery]) -> Int {
         if case .response = $0 { return true }
         return false
     }.count
+}
+
+/// A lock-guarded running total for observers that cannot read the recorder
+/// they are being installed into.
+private final class CodexResponseCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var total = 0
+
+    /// Adds to the running total and returns the new value.
+    @discardableResult
+    func add(_ count: Int) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        total += count
+        return total
+    }
 }
 
 private final class CodexDeliveryRecorder: @unchecked Sendable {
