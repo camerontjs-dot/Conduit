@@ -577,7 +577,10 @@ final class ConduitSessionAPIServer {
             "inputSchema": [
                 "type": "object",
                 "properties": [
-                    "taskSessionID": ["type": "string"]
+                    "taskSessionID": [
+                        "type": "string",
+                        "description": "Task id from conduit_create_task, or the taskSessionID field of any conduit_list_sessions row. Poll this after creating a task: ready turns true when the runtime will accept a prompt.",
+                    ]
                 ],
                 "required": ["taskSessionID"],
             ],
@@ -615,8 +618,15 @@ final class ConduitSessionAPIServer {
             "inputSchema": [
                 "type": "object",
                 "properties": [
-                    "question": ["type": "string"],
-                    "scope": ["type": "string", "enum": ["knowledge", "projects"]],
+                    "question": [
+                        "type": "string",
+                        "description": "Free-text search phrase. Matched both semantically and lexically, so a topic or a whole sentence works better than bare keywords. An empty question is refused.",
+                    ],
+                    "scope": [
+                        "type": "string",
+                        "enum": ["knowledge", "projects"],
+                        "description": "Which index to search: knowledge for the operator's 10_knowledge notes, projects for 30_projects working files. Required — there is no default, and the two indexes hold different material.",
+                    ],
                 ],
                 "required": ["question", "scope"],
             ],
@@ -626,14 +636,23 @@ final class ConduitSessionAPIServer {
     private static let writeTools: [[String: Any]] = [
         [
             "name": "conduit_create_task",
-            "description": "Start a Conduit agent session. agent is a profile name (Codex, Claude, Grok, OpenCode, Antigravity, …). project_slug is a 30_projects folder name. objective is sent as the first prompt when the runtime is ready. Structured backends (app-server, ACP, OpenCode HTTP, stream-json) are used when the profile prefers them; PTY is the fallback. Approvals stay on the Mac.",
+            "description": "Start a Conduit agent session and return its taskSessionID. Delivery of objective is attempted once, immediately; a runtime that is still starting returns objective_delivered false, and you then send it yourself with conduit_send_prompt once conduit_session_status reports ready. Nothing is delivered later on your behalf. Approvals stay on the Mac.",
             "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
                 "properties": [
-                    "agent": ["type": "string"],
-                    "project_slug": ["type": "string"],
-                    "objective": ["type": "string"],
+                    "agent": [
+                        "type": "string",
+                        "description": "Agent profile name, matched case-insensitively against the name or command field of conduit_list_adapters — for example OpenCode, Codex, Claude, Grok, Gemini CLI, Shell. Call conduit_list_adapters first; an unlisted or disabled profile is refused.",
+                    ],
+                    "project_slug": [
+                        "type": "string",
+                        "description": "Folder name of a project as returned in the slug field of conduit_list_projects. This is the session working directory, so it must be an existing project, not a new name.",
+                    ],
+                    "objective": [
+                        "type": "string",
+                        "description": "Optional first prompt. Delivered only if the runtime is ready the moment the task is created; otherwise the response reports objective_delivered false and it is yours to send. Omit it and send the first prompt explicitly if you want one clear delivery point.",
+                    ],
                     "idempotency_key": [
                         "type": "string",
                         "description": "Optional. Pass a stable key to make a retried create safe: an identical repeat returns the original task instead of starting a second one. Use a fresh key when you genuinely want another task.",
@@ -644,13 +663,19 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_send_prompt",
-            "description": "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. This does not approve agent tools or permissions.",
+            "description": "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. This does not approve agent tools or permissions. The reply is not in this response — read it with conduit_session_events once the agent has produced output.",
             "annotations": ConduitSessionAPIServer.nonDestructiveStateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
                 "properties": [
-                    "taskSessionID": ["type": "string"],
-                    "text": ["type": "string"],
+                    "taskSessionID": [
+                        "type": "string",
+                        "description": "Task id from conduit_create_task, or the taskSessionID field of any conduit_list_sessions row.",
+                    ],
+                    "text": [
+                        "type": "string",
+                        "description": "Message text delivered to the agent verbatim, as one prompt. Sending a second prompt before the first turn finishes queues it behind that turn rather than interrupting it.",
+                    ],
                 ],
                 "required": ["taskSessionID", "text"],
             ],
@@ -662,7 +687,10 @@ final class ConduitSessionAPIServer {
             "inputSchema": [
                 "type": "object",
                 "properties": [
-                    "taskSessionID": ["type": "string"],
+                    "taskSessionID": [
+                        "type": "string",
+                        "description": "Task id from conduit_create_task, or the taskSessionID field of any conduit_list_sessions row. Use it after a task reports a runtime that is detached, failed to provision, or otherwise not live.",
+                    ],
                 ],
                 "required": ["taskSessionID"],
             ],
@@ -674,7 +702,10 @@ final class ConduitSessionAPIServer {
             "inputSchema": [
                 "type": "object",
                 "properties": [
-                    "taskSessionID": ["type": "string"],
+                    "taskSessionID": [
+                        "type": "string",
+                        "description": "Task id from conduit_create_task, or the taskSessionID field of any conduit_list_sessions row. Interrupting a task with no turn in flight is accepted and does nothing.",
+                    ],
                 ],
                 "required": ["taskSessionID"],
             ],
@@ -686,7 +717,10 @@ final class ConduitSessionAPIServer {
             "inputSchema": [
                 "type": "object",
                 "properties": [
-                    "taskSessionID": ["type": "string"],
+                    "taskSessionID": [
+                        "type": "string",
+                        "description": "Task id from conduit_create_task, or the taskSessionID field of any conduit_list_sessions row. Closing frees one slot against the concurrent-task limit; a runtime that dies on its own does not.",
+                    ],
                 ],
                 "required": ["taskSessionID"],
             ],

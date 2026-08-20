@@ -251,7 +251,7 @@ public struct ACPSessionMapper: Equatable, Sendable {
             ?? update["kind"]?.stringValue
             ?? params["type"]?.stringValue
             ?? ""
-        if kind == "agent_message_chunk" || kind == "agent_message" || kind == "message" {
+        if Self.answerKinds.contains(kind) {
             let delta = Self.text(in: update) ?? Self.text(in: params) ?? ""
             guard !delta.isEmpty else { return [] }
             accumulatedText += delta
@@ -265,15 +265,28 @@ public struct ACPSessionMapper: Equatable, Sendable {
             }
             return []
         }
-        if let delta = Self.text(in: update),
-           kind.contains("agent") || kind.contains("message") {
-            guard !delta.isEmpty else { return [] }
-            accumulatedText += delta
-            turnActive = true
-            return [.upsertOutput(text: accumulatedText, state: .live)]
-        }
+        // Anything else that carries text is not the agent's answer.
+        //
+        // This used to fall through on `kind.contains("agent")` or
+        // `kind.contains("message")`, which swallowed two different things:
+        // `agent_thought_chunk`, the model's private reasoning, and
+        // `user_message_chunk`, the operator's own prompt echoed back by the
+        // agent. Both were concatenated into agent output with no separator,
+        // so a caller reading the result could not tell reasoning, prompt, and
+        // answer apart. Gemini emits thought chunks on ordinary turns, so this
+        // was not a hypothetical.
         return []
     }
+
+    /// ACP `sessionUpdate` kinds whose text is the agent's answer.
+    ///
+    /// An allowlist on purpose. A new chunk kind is silent until it is
+    /// understood, rather than being merged into the answer by a name match.
+    static let answerKinds: Set<String> = [
+        "agent_message_chunk",
+        "agent_message",
+        "message",
+    ]
 
     private static func text(in json: CodexJSON) -> String? {
         if let text = json["content"]?["text"]?.stringValue { return text }

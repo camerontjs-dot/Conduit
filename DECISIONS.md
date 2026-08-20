@@ -1227,3 +1227,68 @@ bucket. Persistence queue depth stays unmeasured until there is a queue to
 measure, and the owned-process-tree reading covers Conduit and its own
 descendants, not agents that tmux has reparented. Fleet size is bounded by the
 live-task ceiling instead.
+
+## D-042: A structured adapter reports the agent's answer, not everything it saw
+
+**Status:** Accepted (2026-08-20)
+
+**Context:** D-040 put each agent on its first-party structured host. Every one
+of those hosts multiplexes several streams down one channel: the model's answer,
+the model's private reasoning, the operator's own prompt echoed back, tool
+traffic, and lifecycle bookkeeping. Conduit's mappers picked text out of those
+streams by pattern — `kind.contains("agent")` for ACP, "any part that has a
+`text` field" for OpenCode — and appended whatever matched to one buffer.
+
+Driven from the ChatGPT seat on 2026-08-20, a one-word turn came back as
+`"Say PONG only.PONGPONG"`, recorded three times. Four separate faults stacked
+into that one string: the operator's prompt was accumulated as agent output; the
+snapshot channel (`message.part.updated`, which carries the whole part) and the
+delta channel (`message.part.delta`, which carries an increment) were both
+appended, doubling every token; completion is announced three times per turn and
+each announcement appended another finished copy; and `message.updated` — the
+only event carrying a role — was being discarded as belonging to a foreign
+session, because the resolver read `info.id`, a *message* id, as a session id.
+
+Gemini over ACP failed the same way for a different reason: `agent_thought_chunk`
+contains the substring `agent`, so its private reasoning was concatenated into
+the answer. `Reply with exactly READY.` returned
+`"**Initiating System Integration**\nREADY. I've begun integrating..."`.
+
+An orchestrator cannot act on that. It cannot tell reasoning from answer, cannot
+tell its own prompt from the reply, and cannot tell one turn from three.
+
+**Decision:**
+
+1. Answer-bearing streams are named in an allowlist. A chunk kind or part kind
+   that is not on the list contributes nothing to agent output. A new kind is
+   silent until it is understood, rather than being merged in by a name match.
+2. A stream is attributed before it is accumulated. ACP attributes by
+   `sessionUpdate` kind; OpenCode attributes by the role of the part's message,
+   learned from `message.updated`, and by the part's declared kind.
+3. Snapshots replace, deltas extend. Text is held per part id, because OpenCode
+   reports the same part on both channels and only the part id ties them
+   together.
+4. A part's kind is stated once, on its snapshot, and never repeated on its
+   deltas. The id of a non-answer part is therefore remembered for the turn, or
+   its deltas are indistinguishable from the reply.
+5. Session identity is resolved only from a field that holds a session id.
+   `info.id` on a message event is a message id, and may be read as a session
+   only for `session.*` events.
+6. A turn closes once. Repeated completion signals after the first are ignored
+   until the next turn opens.
+7. Where the two conflict, dropping suspected output is worse than including
+   it: an unknown message id or an undeclared part kind is still accepted, so
+   the rule cannot silently lose real agent output.
+
+**Consequences:** The operator's reasoning stream is no longer visible through
+the Session API at all. That is a deliberate narrowing — it was never legible
+where it was, having been concatenated into the answer without a separator. If
+reasoning is wanted later it needs its own event kind and its own authority
+label, not a shared buffer.
+
+**Rejected alternatives:** Matching on substrings, which is what produced both
+bugs. A denylist of known-bad kinds, which fails open the next time a host adds
+a stream. Emitting reasoning into agent output behind a marker string, which
+would leave callers parsing prose to find the answer. Deferring the fix to the
+caller, which would require every orchestrator to know each host's stream
+taxonomy.

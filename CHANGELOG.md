@@ -25,6 +25,35 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- A structured adapter no longer reports the operator's own prompt, the model's
+  private reasoning, or a turn's output more than once as the agent's answer
+  (D-042). Driven from an external orchestrator seat, a one-word OpenCode turn
+  returned `"Say PONG only.PONGPONG"` three times over, and a one-word Gemini
+  turn returned its own thinking ahead of the answer. Four faults stacked:
+  `message.updated` was discarded as a foreign session because a message id was
+  read as a session id, so message roles were never learned and the prompt was
+  accumulated as output; the snapshot and delta channels were both appended,
+  doubling every token; completion is announced three times per turn and each
+  announcement appended another finished copy; and ACP's `agent_thought_chunk`
+  matched a `contains("agent")` test. Answer-bearing streams are now named in an
+  allowlist, text is tracked per part so a snapshot replaces and a delta
+  extends, and a turn closes once.
+- `conduit_create_task` no longer claims that `objective` is delivered when the
+  runtime becomes ready. Delivery is attempted once, at create, and a runtime
+  that is still starting reports `objective_delivered: false` — which is what it
+  always did. Nothing is queued for later delivery, because every Session API
+  write is one explicit call. The tool description now says so.
+
+### Changed
+
+- Every Session API tool parameter now carries a description. Nine were empty,
+  including every required argument of all five write tools, so a caller reading
+  `tools/list` could not tell whether `agent` wanted a profile name or a command,
+  or where a `taskSessionID` comes from. All 28 tool and parameter fields are now
+  described, at a cost of 11.6 KB for the full 11-tool listing.
+
 ### Added
 
 - Session API writes now pass a bounded admission boundary before they reach a
