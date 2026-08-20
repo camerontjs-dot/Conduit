@@ -289,6 +289,15 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         drainPromptQueueIfPossible()
     }
 
+    /// Prompts accepted but not yet written to the terminal, plus the single
+    /// write that currently owns the output boundary.
+    ///
+    /// This is queue depth for admission accounting. It says nothing about
+    /// whether the agent has read, understood, or finished anything.
+    var queuedPromptDepth: Int {
+        pendingPrompts.count + (deliveryWriteInProgress ? 1 : 0)
+    }
+
     func interrupt() {
         guard lifecycle == .running || lifecycle == .launching else { return }
         let bytes = Array("\u{3}".utf8)

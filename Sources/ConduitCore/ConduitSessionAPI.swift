@@ -43,6 +43,28 @@ public struct ConduitSessionSnapshot: Equatable, Sendable {
     }
 }
 
+/// Who is on the other end of a Session API request.
+///
+/// The listener holds one bearer token and speaks MCP `2024-11-05`, which has
+/// no per-request session header, so identity is the `clientInfo` from the most
+/// recent `initialize` on this listener. That bounds the total write rate
+/// through the MCP surface; it is not proof of per-caller isolation between two
+/// clients sharing the token.
+public struct ConduitSessionCaller: Equatable, Sendable {
+    public let identity: String?
+    public let observedAt: Date?
+
+    public init(identity: String?, observedAt: Date?) {
+        self.identity = identity
+        self.observedAt = observedAt
+    }
+
+    public static let unidentified = ConduitSessionCaller(
+        identity: nil,
+        observedAt: nil
+    )
+}
+
 public enum ConduitSessionCommand: Equatable, Sendable {
     case listProjects
     case listSessions
@@ -50,7 +72,12 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     case sessionStatus(taskSessionID: String)
     case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
     case queryMindGraph(question: String, scope: String)
-    case createTask(agent: String, projectSlug: String, objective: String)
+    case createTask(
+        agent: String,
+        projectSlug: String,
+        objective: String,
+        idempotencyKey: String?
+    )
     case reconcileTask(taskSessionID: String)
     case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin)
     case interrupt(taskSessionID: String)

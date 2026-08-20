@@ -1146,3 +1146,84 @@ oauth-personal still returns Code Assist `IneligibleTierError`. OpenCode
 ## Change control
 
 Add a new `D-0xx` entry when architecture, safety boundaries, session durability, evidence rules, or packaging posture change. Prefer small accepted ADRs over silent README drift.
+
+---
+
+## D-041: MCP writes pass a bounded admission boundary
+
+**Status:** Accepted (2026-08-20)
+
+**Context:** D-039 put five write tools behind one setting, `enableSessionAPIWrites`.
+That boolean is binary: once it is on, an external orchestrator can call
+`conduit_create_task` as fast as it can emit tool calls, and nothing in Conduit
+refuses the second, tenth, or fiftieth spawn. `MCPAdmissionController` in
+`ConduitCore/ConduitSafety.swift` was written for exactly this job and then left
+unreferenced. On 2026-08-20 it had zero call sites in `Sources/`, zero cases in
+the selftest, and zero XCTest coverage. The 2026-08-18 host overload is the
+failure it was designed to stop, and it was not in the path when that happened.
+
+**Decision:**
+
+1. Every Session API write passes the admission boundary before it reaches a
+   runtime. Creates take a capacity reservation, prompts take a bounded queue
+   slot, and reconcile, interrupt, and close consume the caller's write budget.
+2. Validation runs before admission. A request naming an agent or project that
+   does not exist is refused on its own terms and never spends create budget or
+   holds a reservation.
+3. A create that does not reach a started runtime returns its reserved slot.
+   Capacity is committed only once a runtime exists for that task id.
+4. Live-task capacity is released by an explicit lifecycle verb, `leaveTask` or
+   `endTask`. A runtime that detaches or dies on its own does not free a slot,
+   because Conduit has not been told the task is over.
+5. The resource circuit breaker evaluates only the metrics this host actually
+   samples: available physical memory, Conduit's own process-tree resident size,
+   and prompt queue depth. Persistence queue depth has no sensor yet, so it is
+   declared unmeasured rather than reported as a fabricated zero. A required
+   metric that comes back unknown, stale, or over its limit refuses the write.
+6. Caller identity is the `clientInfo` from the most recent `initialize` on the
+   listener. A listener that has never seen an `initialize` refuses writes with
+   `caller_identity_required`.
+7. Idempotency is opt-in. `conduit_create_task` accepts an optional
+   `idempotency_key`; an identical repeat returns the original task instead of
+   starting a second one, and the same key against a different request is
+   refused rather than silently reused.
+8. A refusal is a structured payload carrying `code`, `detail`, and where
+   relevant `retry_after_seconds` and the resource violations, so the caller can
+   tell a rate limit from a capacity wall from an open circuit.
+9. The shipped numbers live in `MCPAdmissionPolicy.conduitSessionAPI`, not as a
+   literal buried in `AppModel`, and both test suites pin them. Loosening a
+   limit should be a deliberate edit with a failing test behind it.
+
+**Rejected alternatives:** Leaving the boolean as the only gate and relying on
+the orchestrator to behave. Reporting unmeasured metrics as zero so the circuit
+would close. Requiring an idempotency key on every create, which would refuse
+every ChatGPT call, since ChatGPT does not send one. Freeing capacity on runtime
+exit, which would let a crash loop reopen slots faster than an operator can see
+what is happening.
+
+**Limits chosen:** four live tasks per caller, six creates per caller per
+minute, thirty writes per caller per minute, prompt queue four per task and
+sixteen overall. The live ceiling is the protection; the create rate sits above
+it deliberately, so a legitimate orchestrator can start its whole planned fleet
+in one burst and meet the capacity wall rather than a rate wall. The create rate
+then only binds on churn, which is its actual job: a create that fails to
+provision hands its slot back, so without a rate limit a broken retry loop could
+spin forever without ever occupying capacity.
+
+**Evidence:** `conduit-selftest` 396 passed, up from 353. The XCTest suite runs
+235 tests with `DEVELOPER_DIR` pointed at Xcode. Two live rehearsals through
+`tunnel-client dev proxy`, the same dispatcher hop ChatGPT uses. The second, run
+against the shipped limits, passed 14 of 14: create refused before any
+`initialize`, unknown agent refused without spending budget, four tasks started
+in one 2.5 second burst, fifth refused on capacity rather than rate, duplicate
+create deduplicated to the original task while the fleet was full, same key
+against a different request refused, and an explicit close returning a slot the
+next create used. Receipt: `outputs/2026-08-20-mcp-admission-rehearsal.md`.
+
+**Consequences:** Per-caller isolation is nominal rather than real: MCP `2024-11-05`
+over HTTP has no per-request session id, this listener holds one bearer token
+and closes every connection, so two clients sharing the token share a rate
+bucket. Persistence queue depth stays unmeasured until there is a queue to
+measure, and the owned-process-tree reading covers Conduit and its own
+descendants, not agents that tmux has reparented. Fleet size is bounded by the
+live-task ceiling instead.

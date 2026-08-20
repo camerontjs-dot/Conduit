@@ -444,6 +444,12 @@ final class AppModel: ObservableObject {
     private let receiptWriter = WorkSessionReceiptWriter()
     private let healthChecker = AgentHealthChecker()
     private let resourceService = ResourceService()
+    /// Bounded admission for Session API writes (D-039).
+    ///
+    /// Rebuilt on every `syncSessionAPI()` so the policy always matches the
+    /// current writes toggle, and seeded additively from the runtimes Conduit
+    /// is actually hosting so a relaunch cannot forget occupied capacity.
+    private var mcpAdmission: MCPAdmissionController?
     private let worklogDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".conduit/worklog", isDirectory: true)
     private let taskSessionStore = TaskSessionEventStore(
@@ -1804,6 +1810,9 @@ final class AppModel: ObservableObject {
             statusMessage = "This task has no open runtime to leave."
             return
         }
+        // Leaving is an explicit lifecycle verb, so it releases the admission
+        // slot. A runtime that merely detached or died on its own does not.
+        mcpAdmission?.markTaskEnded(id)
         closeSession(runtime)
     }
 
@@ -1815,6 +1824,7 @@ final class AppModel: ObservableObject {
             statusMessage = "Reconnect this task before ending its runtime."
             return
         }
+        mcpAdmission?.markTaskEnded(id)
         endSession(runtime)
     }
 
@@ -3354,6 +3364,87 @@ final class AppModel: ObservableObject {
         await refreshResources()
     }
 
+    @discardableResult
+    private func rebuildMCPAdmission() -> MCPAdmissionController {
+        let controller = MCPAdmissionController(
+            policy: .conduitSessionAPI(
+                writesEnabled: settings.enableSessionAPIWrites
+            ),
+            initialLiveTaskSessionIDs: Set(
+                sessions
+                    .filter { !$0.controller.lifecycle.isTerminal }
+                    .compactMap(\.descriptor.taskSessionID)
+            )
+        )
+        mcpAdmission = controller
+        return controller
+    }
+
+    private var sessionAPIAdmission: MCPAdmissionController {
+        mcpAdmission ?? rebuildMCPAdmission()
+    }
+
+    /// A fresh resource sample for one admission decision.
+    ///
+    /// The circuit breaker rejects stale samples, so this is measured per
+    /// request rather than cached. Both sensors are pure syscalls.
+    private func sessionAPIResourceSnapshot() -> ConduitResourceSnapshot {
+        let now = Date()
+        func measured(_ value: UInt64?) -> ConduitResourceMeasurement {
+            guard let value else { return .unknown }
+            return .known(value: value, observedAt: now)
+        }
+        let queued = sessions.reduce(into: UInt64(0)) { total, runtime in
+            total += UInt64(max(0, runtime.controller.queuedPromptDepth))
+        }
+        return ConduitResourceSnapshot(
+            availablePhysicalMemoryBytes: measured(
+                ConduitResourceSensors.availablePhysicalMemoryBytes()
+            ),
+            ownedProcessTreeRSSBytes: measured(
+                ConduitResourceSensors.ownedProcessTreeRSSBytes()
+            ),
+            persistenceQueueCount: .unknown,
+            persistenceQueueBytes: .unknown,
+            promptQueueDepth: .known(value: queued, observedAt: now)
+        )
+    }
+
+    private func sessionAPIAdmissionRefusal(
+        _ decision: MCPAdmissionDecision
+    ) -> [String: Any] {
+        var admission: [String: Any] = [
+            "outcome": decision.outcome.rawValue,
+            "code": decision.code.rawValue,
+            "detail": decision.detail,
+        ]
+        if let retry = decision.retryAfterSeconds {
+            admission["retry_after_seconds"] = Int(retry.rounded(.up))
+        }
+        if !decision.resourceViolations.isEmpty {
+            admission["resource_violations"] = decision.resourceViolations.map {
+                violation -> [String: Any] in
+                var row: [String: Any] = [
+                    "metric": violation.metric.rawValue,
+                    "code": violation.code.rawValue,
+                    "detail": violation.detail,
+                ]
+                if let observed = violation.observedValue {
+                    row["observed"] = NSNumber(value: observed)
+                }
+                if let limit = violation.limitValue {
+                    row["limit"] = NSNumber(value: limit)
+                }
+                return row
+            }
+        }
+        return [
+            "error": "mcp admission refused",
+            "admission": admission,
+            "authority": "admission decision; no runtime was started, changed, or ended",
+        ]
+    }
+
     func copySessionAPIToken() {
         let token = ConduitSessionAPIServer.loadOrCreateToken()
         NSPasteboard.general.clearContents()
@@ -3367,11 +3458,13 @@ final class AppModel: ObservableObject {
         sessionAPIAddress = nil
         guard settings.enableSessionAPI else { return }
         let token = ConduitSessionAPIServer.loadOrCreateToken()
+        rebuildMCPAdmission()
         let server = ConduitSessionAPIServer(
             token: token,
             allowWrites: settings.enableSessionAPIWrites
-        ) { [weak self] command in
-            self?.sessionAPIPayload(command) ?? ["error": "Conduit is not ready."]
+        ) { [weak self] command, caller in
+            self?.sessionAPIPayload(command, caller: caller)
+                ?? ["error": "Conduit is not ready."]
         }
         do {
             try server.start()
@@ -3384,7 +3477,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func sessionAPIPayload(_ command: ConduitSessionCommand) -> [String: Any] {
+    private func sessionAPIPayload(
+        _ command: ConduitSessionCommand,
+        caller: ConduitSessionCaller = .unidentified
+    ) -> [String: Any] {
         switch command {
         case .listProjects:
             return [
@@ -3448,24 +3544,27 @@ final class AppModel: ObservableObject {
                 "status": result.status,
                 "trust": "nomination only",
             ]
-        case .createTask(let agentName, let projectSlug, let objective):
+        case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
             return sessionAPICreateTask(
                 agentName: agentName,
                 projectSlug: projectSlug,
-                objective: objective
+                objective: objective,
+                idempotencyKey: idempotencyKey,
+                caller: caller
             )
         case .reconcileTask(let rawID):
-            return sessionAPIReconcileTask(taskSessionID: rawID)
+            return sessionAPIReconcileTask(taskSessionID: rawID, caller: caller)
         case .sendPrompt(let rawID, let text, let origin):
             return sessionAPISendPrompt(
                 taskSessionID: rawID,
                 text: text,
-                origin: origin
+                origin: origin,
+                caller: caller
             )
         case .interrupt(let rawID):
-            return sessionAPIInterrupt(taskSessionID: rawID)
+            return sessionAPIInterrupt(taskSessionID: rawID, caller: caller)
         case .closeSession(let rawID):
-            return sessionAPIClose(taskSessionID: rawID)
+            return sessionAPIClose(taskSessionID: rawID, caller: caller)
         }
     }
 
@@ -3736,7 +3835,9 @@ final class AppModel: ObservableObject {
     private func sessionAPICreateTask(
         agentName: String,
         projectSlug: String,
-        objective: String
+        objective: String,
+        idempotencyKey: String?,
+        caller: ConduitSessionCaller
     ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
@@ -3755,6 +3856,55 @@ final class AppModel: ObservableObject {
         }) else {
             return ["error": "unknown project_slug", "project_slug": projectSlug]
         }
+
+        // Admission runs only once the request is known to name a real agent
+        // and project, so a typo can never burn create-rate budget or hold a
+        // capacity reservation.
+        let admission = sessionAPIAdmission
+        let dedupe = idempotencyKey.map { key in
+            MCPCreateDedupeIdentity(
+                idempotencyKey: key,
+                requestFingerprint: MCPCreateDedupeIdentity.fingerprint(
+                    canonicalComponents: [
+                        "conduit_create_task",
+                        agent.name,
+                        project.slug,
+                        ConduitSafetyHash.digest(
+                            namespace: "mcp-create-objective",
+                            text: objective
+                        ),
+                    ]
+                )
+            )
+        }
+        let decision = admission.admitCreate(
+            callerIdentity: caller.identity,
+            dedupeIdentity: dedupe,
+            resources: sessionAPIResourceSnapshot()
+        )
+        if decision.code == .duplicateCompleted,
+           let existingID = decision.taskSessionID,
+           let existing = taskSessions.first(where: { $0.id == existingID }) {
+            var payload = sessionAPITaskPayload(for: existing)
+            payload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
+            payload["deduplicated"] = true
+            payload["authority"] =
+                "an identical create already completed; the original task is returned and no second runtime was started"
+            return payload
+        }
+        guard decision.shouldExecute,
+              let reservationID = decision.reservationID else {
+            return sessionAPIAdmissionRefusal(decision)
+        }
+        // Any path that does not reach a started runtime gives the reserved
+        // slot straight back, so a failed provision cannot leak capacity.
+        var reservationCommitted = false
+        defer {
+            if !reservationCommitted {
+                admission.cancelCreate(reservationID: reservationID)
+            }
+        }
+
         let taskID = TaskSessionID()
         guard let runtime = createTask(
             agent: agent,
@@ -3778,6 +3928,10 @@ final class AppModel: ObservableObject {
             failedPayload["authority"] = "task registered; provisioning failed"
             return failedPayload
         }
+        // A runtime exists for this id, so the reserved slot is now genuinely
+        // occupied whatever the durable reload does next.
+        admission.commitCreate(reservationID: reservationID, taskSessionID: taskID)
+        reservationCommitted = true
         guard let task = taskSessions.first(where: { $0.id == taskID }) else {
             return [
                 "error": "runtime started but durable task could not be reloaded",
@@ -3804,7 +3958,8 @@ final class AppModel: ObservableObject {
     }
 
     private func sessionAPIReconcileTask(
-        taskSessionID rawID: String
+        taskSessionID rawID: String,
+        caller: ConduitSessionCaller
     ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
@@ -3813,6 +3968,13 @@ final class AppModel: ObservableObject {
               let task = taskSessions.first(where: { $0.id == taskID })
         else {
             return ["error": "unknown task", "taskSessionID": rawID]
+        }
+        let reconcileDecision = sessionAPIAdmission.admitWrite(
+            callerIdentity: caller.identity,
+            resources: sessionAPIResourceSnapshot()
+        )
+        guard reconcileDecision.shouldExecute else {
+            return sessionAPIAdmissionRefusal(reconcileDecision)
         }
         let requestMayProceed = ConduitSessionAPI
             .reconciliationRequestMayProceed(
@@ -3843,7 +4005,8 @@ final class AppModel: ObservableObject {
     private func sessionAPISendPrompt(
         taskSessionID rawID: String,
         text: String,
-        origin: ConduitSessionOrigin
+        origin: ConduitSessionOrigin,
+        caller: ConduitSessionCaller
     ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
@@ -3855,6 +4018,25 @@ final class AppModel: ObservableObject {
         guard let taskID = sessionAPITaskID(rawID) else {
             return ["error": "invalid taskSessionID"]
         }
+        let admission = sessionAPIAdmission
+        let decision = admission.admitPrompt(
+            callerIdentity: caller.identity,
+            taskSessionID: taskID,
+            observedTaskQueueDepth: UInt64(
+                max(0, sessionAPILiveRuntime(for: taskID)?
+                    .controller.queuedPromptDepth ?? 0)
+            ),
+            resources: sessionAPIResourceSnapshot()
+        )
+        guard decision.shouldExecute,
+              let reservationID = decision.reservationID else {
+            return sessionAPIAdmissionRefusal(decision)
+        }
+        // The reservation covers handing the prompt to a runtime, not the
+        // agent's turn. It is released as soon as this call returns either
+        // way; a queued PTY write is still tracked by the runtime's own depth.
+        defer { admission.markPromptFinished(reservationID: reservationID) }
+
         if sessionAPILiveRuntime(for: taskID) == nil {
             reconnectTask(taskID)
         }
@@ -3907,10 +4089,11 @@ final class AppModel: ObservableObject {
             sendSlashCommand(text, via: runtime)
             return [
                 "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
-                "delivered": true,
+                "delivered": false,
+                "delivery": "queued",
                 "backend": AgentSessionBackend.pty.workSessionLabel,
                 "origin": origin.rawValue,
-                "authority": "slash injected; not verification",
+                "authority": "slash command queued to PTY; delivery is decided asynchronously. Read conduit_session_events for the recorded delivery state.",
             ]
         }
         runtime.controller.deliverPrompt(
@@ -3930,19 +4113,33 @@ final class AppModel: ObservableObject {
         }
         return [
             "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
-            "delivered": true,
+            // Queued, not delivered. The terminal write completes after this
+            // response is serialized, and its real result is recorded on the
+            // durable prompt event, which can still turn out to be `failed`.
+            "delivered": false,
+            "delivery": "queued",
             "backend": AgentSessionBackend.pty.workSessionLabel,
             "origin": origin.rawValue,
-            "authority": "prompt queued to PTY; not verification",
+            "authority": "prompt queued to PTY; delivery is decided asynchronously. Read conduit_session_events for the recorded delivery state; neither value is agent completion.",
         ]
     }
 
-    private func sessionAPIInterrupt(taskSessionID rawID: String) -> [String: Any] {
+    private func sessionAPIInterrupt(
+        taskSessionID rawID: String,
+        caller: ConduitSessionCaller
+    ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
         }
         guard let taskID = sessionAPITaskID(rawID) else {
             return ["error": "invalid taskSessionID"]
+        }
+        let decision = sessionAPIAdmission.admitWrite(
+            callerIdentity: caller.identity,
+            resources: sessionAPIResourceSnapshot()
+        )
+        guard decision.shouldExecute else {
+            return sessionAPIAdmissionRefusal(decision)
         }
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to interrupt", "taskSessionID": rawID]
@@ -3959,12 +4156,22 @@ final class AppModel: ObservableObject {
         ]
     }
 
-    private func sessionAPIClose(taskSessionID rawID: String) -> [String: Any] {
+    private func sessionAPIClose(
+        taskSessionID rawID: String,
+        caller: ConduitSessionCaller
+    ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
         }
         guard let taskID = sessionAPITaskID(rawID) else {
             return ["error": "invalid taskSessionID"]
+        }
+        let decision = sessionAPIAdmission.admitWrite(
+            callerIdentity: caller.identity,
+            resources: sessionAPIResourceSnapshot()
+        )
+        guard decision.shouldExecute else {
+            return sessionAPIAdmissionRefusal(decision)
         }
         guard sessionAPILiveRuntime(for: taskID) != nil else {
             return ["error": "no live runtime to close", "taskSessionID": rawID]

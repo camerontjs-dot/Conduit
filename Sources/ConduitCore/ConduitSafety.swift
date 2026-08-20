@@ -2,7 +2,14 @@ import CryptoKit
 import Darwin
 import Foundation
 
-enum ConduitSafetyHash {
+public enum ConduitSafetyHash {
+    /// Namespaced digest for bounded, unbounded-length text such as an
+    /// objective or prompt body. Callers pass the digest into a fingerprint
+    /// instead of the raw text.
+    public static func digest(namespace: String, text: String) -> String {
+        digest(namespace: namespace, bytes: text.utf8)
+    }
+
     static func digest<S: Sequence>(namespace: String, bytes: S) -> String
         where S.Element == UInt8 {
         var hasher = SHA256()
@@ -127,6 +134,13 @@ public struct ConduitResourceCircuitPolicy: Equatable, Sendable {
     public var maximumSampleAge: TimeInterval
     public var maximumFutureClockSkew: TimeInterval
 
+    /// Metrics this host actually samples. Only these are evaluated, and each
+    /// one still fails closed when it is unknown, stale, or over its limit.
+    /// A metric is omitted when Conduit has no sensor for it — omission is an
+    /// explicit declaration of what is not measured, never a substitute
+    /// `known(0)` reading for a quantity nobody observed.
+    public var requiredMetrics: Set<ConduitResourceMetric>
+
     public init(
         minimumAvailablePhysicalMemoryBytes: UInt64 = 1_073_741_824,
         maximumOwnedProcessTreeRSSBytes: UInt64 = 6_442_450_944,
@@ -134,7 +148,8 @@ public struct ConduitResourceCircuitPolicy: Equatable, Sendable {
         maximumPersistenceQueueBytes: UInt64 = 67_108_864,
         maximumPromptQueueDepth: UInt64 = 32,
         maximumSampleAge: TimeInterval = 10,
-        maximumFutureClockSkew: TimeInterval = 1
+        maximumFutureClockSkew: TimeInterval = 1,
+        requiredMetrics: Set<ConduitResourceMetric> = Set(ConduitResourceMetric.allCases)
     ) {
         self.minimumAvailablePhysicalMemoryBytes = minimumAvailablePhysicalMemoryBytes
         self.maximumOwnedProcessTreeRSSBytes = maximumOwnedProcessTreeRSSBytes
@@ -143,9 +158,24 @@ public struct ConduitResourceCircuitPolicy: Equatable, Sendable {
         self.maximumPromptQueueDepth = maximumPromptQueueDepth
         self.maximumSampleAge = maximumSampleAge
         self.maximumFutureClockSkew = maximumFutureClockSkew
+        self.requiredMetrics = requiredMetrics
     }
 
     public static let conservativeDefault = ConduitResourceCircuitPolicy()
+
+    /// Only the metrics Conduit genuinely samples on macOS.
+    ///
+    /// Persistence queue depth is omitted because there is no persistence
+    /// queue: conversation and task logs are written synchronously. Declaring
+    /// it unmeasured is the honest encoding; reporting `known(0)` would pass a
+    /// check on a quantity nobody observed.
+    public static let conduitSampledMetrics = ConduitResourceCircuitPolicy(
+        requiredMetrics: [
+            .availablePhysicalMemoryBytes,
+            .ownedProcessTreeRSSBytes,
+            .promptQueueDepth,
+        ]
+    )
 
     public var isValid: Bool {
         minimumAvailablePhysicalMemoryBytes > 0
@@ -155,6 +185,7 @@ public struct ConduitResourceCircuitPolicy: Equatable, Sendable {
             && maximumPromptQueueDepth > 0
             && maximumSampleAge > 0
             && maximumFutureClockSkew >= 0
+            && !requiredMetrics.isEmpty
     }
 }
 
@@ -228,7 +259,10 @@ public struct ConduitResourceCircuitBreaker: Sendable {
         }
 
         var violations: [ConduitResourceCircuitViolation] = []
-        for metric in ConduitResourceMetric.allCases {
+        let evaluated = ConduitResourceMetric.allCases.filter {
+            policy.requiredMetrics.contains($0)
+        }
+        for metric in evaluated {
             switch snapshot.measurement(for: metric) {
             case .unknown:
                 violations.append(
@@ -429,6 +463,38 @@ public struct MCPAdmissionPolicy: Equatable, Sendable {
     }
 
     public static let conservativeDefault = MCPAdmissionPolicy()
+
+    /// The policy Conduit ships for its Session API (D-041).
+    ///
+    /// `globalLiveTaskLimit` is the protection that matters: it is a hard
+    /// ceiling on how many runtimes one external orchestrator can be holding
+    /// at once, and it cannot be outrun by any call rate.
+    ///
+    /// The rate limits defend a different failure: churn. A create that fails
+    /// to provision returns its slot, so a broken loop could retry forever
+    /// without ever occupying capacity. The create limit is therefore set to
+    /// let a legitimate orchestrator fill the whole fleet in one planning
+    /// burst and still have retries left, while capping a churn loop well
+    /// below the rate that overloaded this host on 2026-08-18. Creates also
+    /// consume the write budget, so the write limit leaves headroom for
+    /// prompting, interrupting, and closing the tasks that were started.
+    ///
+    /// Prompt queue depths are depth, not rate, and stay at the conservative
+    /// defaults.
+    public static func conduitSessionAPI(
+        writesEnabled: Bool
+    ) -> MCPAdmissionPolicy {
+        MCPAdmissionPolicy(
+            writesEnabled: writesEnabled,
+            // ChatGPT does not send an idempotency key, so requiring one would
+            // refuse every call. It stays opt-in.
+            requireCreateIdempotency: false,
+            globalLiveTaskLimit: 4,
+            perCallerCreateLimit: 6,
+            perCallerWriteLimit: 30,
+            resourcePolicy: .conduitSampledMetrics
+        )
+    }
 
     public var isValid: Bool {
         globalLiveTaskLimit > 0

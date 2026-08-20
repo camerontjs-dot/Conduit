@@ -2475,6 +2475,480 @@ withTempDir { directory in
     check("adapter thread store remembers thread id", store.threadID(for: task) == "thr_x")
 }
 
+
+// MARK: - MCP admission boundary
+//
+// This boundary had no call sites and no tests before 2026-08-20; it is what
+// stands between an external orchestrator and unbounded task spawning, so the
+// refusal codes are pinned here rather than assumed.
+
+do {
+    let now = Date(timeIntervalSince1970: 1_787_100_000)
+
+    /// Healthy readings for the three metrics Conduit actually samples.
+    /// Persistence queue depth has no sensor, so it stays `.unknown` and is
+    /// left out of `requiredMetrics` instead of being faked as zero.
+    func sampledResources(
+        availableBytes: UInt64 = 8_589_934_592,
+        ownedRSSBytes: UInt64 = 1_073_741_824,
+        promptDepth: UInt64 = 0,
+        observedAt: Date = now
+    ) -> ConduitResourceSnapshot {
+        ConduitResourceSnapshot(
+            availablePhysicalMemoryBytes: .known(
+                value: availableBytes,
+                observedAt: observedAt
+            ),
+            ownedProcessTreeRSSBytes: .known(
+                value: ownedRSSBytes,
+                observedAt: observedAt
+            ),
+            persistenceQueueCount: .unknown,
+            persistenceQueueBytes: .unknown,
+            promptQueueDepth: .known(value: promptDepth, observedAt: observedAt)
+        )
+    }
+
+    let sampledMetrics: Set<ConduitResourceMetric> = [
+        .availablePhysicalMemoryBytes,
+        .ownedProcessTreeRSSBytes,
+        .promptQueueDepth,
+    ]
+
+    func policy(
+        writesEnabled: Bool = true,
+        requireCallerIdentity: Bool = true,
+        requireCreateIdempotency: Bool = false,
+        globalLiveTaskLimit: Int = 4,
+        maximumPendingCreateReservations: Int = 2,
+        maximumGlobalPromptQueueDepth: Int = 16,
+        maximumPromptQueueDepthPerTask: Int = 4,
+        perCallerCreateLimit: Int = 64,
+        perCallerWriteLimit: Int = 256,
+        requiredMetrics: Set<ConduitResourceMetric>? = nil
+    ) -> MCPAdmissionPolicy {
+        MCPAdmissionPolicy(
+            writesEnabled: writesEnabled,
+            requireCallerIdentity: requireCallerIdentity,
+            requireCreateIdempotency: requireCreateIdempotency,
+            globalLiveTaskLimit: globalLiveTaskLimit,
+            maximumPendingCreateReservations: maximumPendingCreateReservations,
+            maximumGlobalPromptQueueDepth: maximumGlobalPromptQueueDepth,
+            maximumPromptQueueDepthPerTask: maximumPromptQueueDepthPerTask,
+            perCallerCreateLimit: perCallerCreateLimit,
+            perCallerWriteLimit: perCallerWriteLimit,
+            resourcePolicy: ConduitResourceCircuitPolicy(
+                requiredMetrics: requiredMetrics ?? sampledMetrics
+            )
+        )
+    }
+
+    func create(
+        _ controller: MCPAdmissionController,
+        caller: String? = "chatgpt-developer-mode/1.0",
+        dedupe: MCPCreateDedupeIdentity? = nil,
+        resources: ConduitResourceSnapshot? = nil,
+        at instant: Date = now
+    ) -> MCPAdmissionDecision {
+        controller.admitCreate(
+            callerIdentity: caller,
+            dedupeIdentity: dedupe,
+            resources: resources ?? sampledResources(observedAt: instant),
+            now: instant
+        )
+    }
+
+    // --- fail-closed gates -------------------------------------------------
+
+    check(
+        "admission refuses every write while writes are disabled",
+        create(MCPAdmissionController(policy: policy(writesEnabled: false)))
+            .code == .writesDisabled
+    )
+    check(
+        "admission refuses a write with no caller identity",
+        create(MCPAdmissionController(policy: policy()), caller: nil)
+            .code == .callerIdentityRequired
+    )
+    check(
+        "admission refuses a blank caller identity",
+        create(MCPAdmissionController(policy: policy()), caller: "   ")
+            .code == .callerIdentityRequired
+    )
+    check(
+        "admission refuses an oversized caller identity",
+        create(
+            MCPAdmissionController(policy: policy()),
+            caller: String(repeating: "c", count: 257)
+        ).code == .callerIdentityTooLarge
+    )
+    check(
+        "admission refuses a policy with no required metric",
+        create(
+            MCPAdmissionController(policy: policy(requiredMetrics: [])),
+            resources: sampledResources()
+        ).code == .configurationInvalid
+    )
+
+    // --- resource circuit --------------------------------------------------
+
+    check(
+        "admission refuses when a required metric is unknown",
+        create(
+            MCPAdmissionController(policy: policy()),
+            resources: .unknown
+        ).code == .resourceUnknown
+    )
+    check(
+        "admission ignores a metric this host does not sample",
+        create(MCPAdmissionController(policy: policy())).outcome == .admitted
+    )
+    check(
+        "admission refuses a stale resource sample",
+        create(
+            MCPAdmissionController(policy: policy()),
+            resources: sampledResources(
+                observedAt: now.addingTimeInterval(-45)
+            )
+        ).code == .resourceStale
+    )
+    check(
+        "admission refuses when free memory is under the floor",
+        create(
+            MCPAdmissionController(policy: policy()),
+            resources: sampledResources(availableBytes: 536_870_912)
+        ).code == .resourceLimitExceeded
+    )
+    check(
+        "admission names the metric that opened the circuit",
+        create(
+            MCPAdmissionController(policy: policy()),
+            resources: sampledResources(availableBytes: 536_870_912)
+        ).resourceViolations.contains {
+            $0.metric == .availablePhysicalMemoryBytes
+                && $0.code == .thresholdExceeded
+        }
+    )
+    check(
+        "admission refuses when Conduit's own RSS is over the ceiling",
+        create(
+            MCPAdmissionController(policy: policy()),
+            resources: sampledResources(ownedRSSBytes: 8_589_934_592)
+        ).code == .resourceLimitExceeded
+    )
+
+    // --- capacity ----------------------------------------------------------
+
+    do {
+        let controller = MCPAdmissionController(policy: policy(globalLiveTaskLimit: 1))
+        let first = create(controller)
+        let second = create(controller)
+        check(
+            "a pending create reserves capacity before it commits",
+            first.outcome == .admitted
+                && second.code == .globalLiveTaskLimitReached
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(
+            policy: policy(globalLiveTaskLimit: 8, maximumPendingCreateReservations: 1)
+        )
+        _ = create(controller)
+        check(
+            "the pending create queue is bounded on its own",
+            create(controller).code == .createReservationQueueFull
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(globalLiveTaskLimit: 1))
+        let first = create(controller)
+        check(
+            "cancelling a create returns the reserved slot",
+            controller.cancelCreate(reservationID: first.reservationID!)
+                && create(controller).outcome == .admitted
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(globalLiveTaskLimit: 1))
+        let task = TaskSessionID()
+        let first = create(controller)
+        controller.commitCreate(reservationID: first.reservationID!, taskSessionID: task)
+        let blocked = create(controller)
+        controller.markTaskEnded(task)
+        check(
+            "capacity is held until a task is explicitly ended",
+            blocked.code == .globalLiveTaskLimitReached
+                && create(controller).outcome == .admitted
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(globalLiveTaskLimit: 2))
+        controller.reconcileLiveTasks(additive: [TaskSessionID(), TaskSessionID()])
+        check(
+            "restart reconciliation restores occupied capacity",
+            create(controller).code == .globalLiveTaskLimitReached
+        )
+    }
+
+    // --- per-caller rate ---------------------------------------------------
+
+    do {
+        let controller = MCPAdmissionController(
+            policy: policy(globalLiveTaskLimit: 32, maximumPendingCreateReservations: 32, perCallerCreateLimit: 2)
+        )
+        _ = create(controller)
+        _ = create(controller)
+        let refused = create(controller)
+        check(
+            "a caller's create rate is bounded inside the window",
+            refused.code == .callerCreateRateLimited
+        )
+        check(
+            "a rate refusal tells the caller when to retry",
+            (refused.retryAfterSeconds ?? 0) > 0
+        )
+        check(
+            "the create-rate window drains",
+            create(controller, at: now.addingTimeInterval(61)).outcome == .admitted
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(perCallerWriteLimit: 1))
+        _ = controller.admitWrite(
+            callerIdentity: "chatgpt-developer-mode/1.0",
+            resources: sampledResources(),
+            now: now
+        )
+        check(
+            "a caller's total write rate is bounded",
+            controller.admitWrite(
+                callerIdentity: "chatgpt-developer-mode/1.0",
+                resources: sampledResources(),
+                now: now
+            ).code == .callerWriteRateLimited
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(perCallerCreateLimit: 1))
+        _ = create(controller, caller: "chatgpt-developer-mode/1.0")
+        check(
+            "rate budget is tracked per caller identity",
+            create(controller, caller: "conduit-preflight/1.0").outcome == .admitted
+        )
+    }
+
+    // --- idempotency -------------------------------------------------------
+
+    do {
+        let fingerprint = MCPCreateDedupeIdentity.fingerprint(
+            canonicalComponents: ["conduit_create_task", "Shell", "conduit", "digest"]
+        )
+        let identity = MCPCreateDedupeIdentity(
+            idempotencyKey: "retry-1",
+            requestFingerprint: fingerprint
+        )
+        let controller = MCPAdmissionController(policy: policy())
+        let first = create(controller, dedupe: identity)
+        let repeated = create(controller, dedupe: identity)
+        check(
+            "an identical create retried while pending is deduplicated",
+            repeated.outcome == .deduplicated
+                && repeated.code == .duplicatePending
+        )
+        let task = TaskSessionID()
+        controller.commitCreate(reservationID: first.reservationID!, taskSessionID: task)
+        let afterCommit = create(controller, dedupe: identity)
+        check(
+            "an identical create retried after commit returns the original task",
+            afterCommit.code == .duplicateCompleted
+                && afterCommit.taskSessionID == task
+        )
+        check(
+            "a deduplicated create is satisfied without executing",
+            afterCommit.isRequestSatisfied && !afterCommit.shouldExecute
+        )
+        let conflicting = MCPCreateDedupeIdentity(
+            idempotencyKey: "retry-1",
+            requestFingerprint: MCPCreateDedupeIdentity.fingerprint(
+                canonicalComponents: ["conduit_create_task", "Codex", "conduit", "digest"]
+            )
+        )
+        check(
+            "reusing a key for a different request is refused, not silently reused",
+            create(controller, dedupe: conflicting).code == .idempotencyConflict
+        )
+    }
+    check(
+        "create fingerprints separate different components",
+        MCPCreateDedupeIdentity.fingerprint(canonicalComponents: ["ab", "c"])
+            != MCPCreateDedupeIdentity.fingerprint(canonicalComponents: ["a", "bc"])
+    )
+    check(
+        "an objective digest is stable",
+        ConduitSafetyHash.digest(namespace: "mcp-create-objective", text: "reply pong")
+            == ConduitSafetyHash.digest(namespace: "mcp-create-objective", text: "reply pong")
+    )
+    check(
+        "create demands an idempotency key when the policy requires one",
+        create(
+            MCPAdmissionController(policy: policy(requireCreateIdempotency: true))
+        ).code == .invalidIdempotency
+    )
+
+    // --- prompt queue ------------------------------------------------------
+
+    do {
+        let controller = MCPAdmissionController(
+            policy: policy(maximumPromptQueueDepthPerTask: 2)
+        )
+        let task = TaskSessionID()
+        _ = controller.admitPrompt(
+            callerIdentity: "chatgpt-developer-mode/1.0",
+            taskSessionID: task,
+            resources: sampledResources(),
+            now: now
+        )
+        _ = controller.admitPrompt(
+            callerIdentity: "chatgpt-developer-mode/1.0",
+            taskSessionID: task,
+            resources: sampledResources(),
+            now: now
+        )
+        check(
+            "one task's prompt queue is bounded",
+            controller.admitPrompt(
+                callerIdentity: "chatgpt-developer-mode/1.0",
+                taskSessionID: task,
+                resources: sampledResources(),
+                now: now
+            ).code == .taskPromptQueueFull
+        )
+        check(
+            "another task is unaffected by the first task's queue",
+            controller.admitPrompt(
+                callerIdentity: "chatgpt-developer-mode/1.0",
+                taskSessionID: TaskSessionID(),
+                resources: sampledResources(),
+                now: now
+            ).outcome == .admitted
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(
+            policy: policy(maximumGlobalPromptQueueDepth: 2)
+        )
+        check(
+            "a runtime's own observed queue depth can refuse a prompt",
+            controller.admitPrompt(
+                callerIdentity: "chatgpt-developer-mode/1.0",
+                taskSessionID: TaskSessionID(),
+                resources: sampledResources(promptDepth: 2),
+                now: now
+            ).code == .globalPromptQueueFull
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(
+            policy: policy(maximumPromptQueueDepthPerTask: 1)
+        )
+        let task = TaskSessionID()
+        check(
+            "a runtime's own per-task depth can refuse a prompt",
+            controller.admitPrompt(
+                callerIdentity: "chatgpt-developer-mode/1.0",
+                taskSessionID: task,
+                observedTaskQueueDepth: 1,
+                resources: sampledResources(),
+                now: now
+            ).code == .taskPromptQueueFull
+        )
+    }
+    do {
+        let controller = MCPAdmissionController(
+            policy: policy(maximumPromptQueueDepthPerTask: 1)
+        )
+        let task = TaskSessionID()
+        let admitted = controller.admitPrompt(
+            callerIdentity: "chatgpt-developer-mode/1.0",
+            taskSessionID: task,
+            resources: sampledResources(),
+            now: now
+        )
+        check(
+            "finishing a prompt returns its queue slot",
+            controller.markPromptFinished(reservationID: admitted.reservationID!)
+                && controller.admitPrompt(
+                    callerIdentity: "chatgpt-developer-mode/1.0",
+                    taskSessionID: task,
+                    resources: sampledResources(),
+                    now: now
+                ).outcome == .admitted
+        )
+    }
+
+    // --- the policy Conduit actually ships ---------------------------------
+    //
+    // Pinned so that loosening a limit is a deliberate edit with a failing
+    // test, not a quiet drift.
+
+    do {
+        let shipped = MCPAdmissionPolicy.conduitSessionAPI(writesEnabled: true)
+        check(
+            "shipped policy caps the live fleet at four tasks",
+            shipped.globalLiveTaskLimit == 4
+        )
+        check(
+            "shipped create rate lets one caller fill the fleet in a burst",
+            shipped.perCallerCreateLimit >= shipped.globalLiveTaskLimit
+        )
+        check(
+            "shipped write rate leaves headroom beyond the creates it allows",
+            shipped.perCallerWriteLimit > shipped.perCallerCreateLimit
+        )
+        check(
+            "shipped policy still demands a caller identity",
+            shipped.requireCallerIdentity
+        )
+        check(
+            "shipped policy keeps idempotency opt-in",
+            !shipped.requireCreateIdempotency
+        )
+        check(
+            "shipped policy requires only the metrics Conduit samples",
+            shipped.resourcePolicy.requiredMetrics == [
+                .availablePhysicalMemoryBytes,
+                .ownedProcessTreeRSSBytes,
+                .promptQueueDepth,
+            ]
+        )
+        check(
+            "shipped policy never reports a persistence queue it cannot measure",
+            !shipped.resourcePolicy.requiredMetrics.contains(.persistenceQueueCount)
+                && !shipped.resourcePolicy.requiredMetrics.contains(.persistenceQueueBytes)
+        )
+        check(
+            "shipped policy is off until the operator enables writes",
+            !MCPAdmissionPolicy.conduitSessionAPI(writesEnabled: false).writesEnabled
+        )
+        check("shipped policy is internally valid", shipped.isValid)
+    }
+
+    // --- observability -----------------------------------------------------
+
+    do {
+        let controller = MCPAdmissionController(policy: policy())
+        let task = TaskSessionID()
+        let decision = create(controller)
+        controller.commitCreate(reservationID: decision.reservationID!, taskSessionID: task)
+        let snapshot = controller.stateSnapshot()
+        check(
+            "the admission snapshot reports committed capacity",
+            snapshot.liveTaskSessionIDs == [task]
+                && snapshot.pendingCreateReservationCount == 0
+        )
+    }
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

@@ -27,6 +27,18 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Session API writes now pass a bounded admission boundary before they reach a
+  runtime (D-041). Creates take a capacity reservation, prompts take a bounded
+  queue slot, and every write consumes a per-caller rate budget. Refusals are
+  structured: `code`, `detail`, and where relevant `retry_after_seconds` and the
+  resource violations that opened the circuit. Shipped limits are four live
+  tasks, six creates per caller per minute, thirty writes per caller per minute,
+  and a prompt queue of four per task. The live-task ceiling is the wall; the
+  create rate sits above it so a legitimate burst meets capacity rather than a
+  rate limit, and only churn hits the rate limiter.
+- `conduit_create_task` accepts an optional `idempotency_key`. An identical
+  repeat returns the original task instead of starting a second one. The same
+  key against a different request is refused rather than silently reused.
 - Gemini CLI prefers ACP (`gemini --acp`) when a Gemini API key is present.
   Consumer Code Assist oauth stays ineligible; PTY remains the fallback.
   Do not run Gemini CLI and Antigravity as two Google workers on one task.
@@ -80,6 +92,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- `conduit_send_prompt` no longer reports `delivered: true` for a PTY write that
+  has not happened yet. The terminal write completes after the MCP response is
+  serialized and can still fail, so the tool now returns `delivered: false` with
+  `delivery: "queued"` and points the caller at `conduit_session_events` for the
+  recorded delivery state. The durable prompt event was already truthful; only
+  the immediate tool result was optimistic.
 - Restart reconciliation no longer records a previously-open task as
   interrupted when complete tmux discovery still contains that task's exact
   durable binding. Malformed bindings continue to suppress negative inference,
@@ -115,6 +133,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   it continues automatically once the JSONL is in memory.
 - Prompt origin can now record ChatGPT or phone as well as the composer
   (D-039).
+
+### Security
+
+- Session API writes fail closed when the caller cannot be identified. A
+  listener that has not seen an MCP `initialize` refuses every write with
+  `caller_identity_required` instead of executing it anonymously.
+- The resource circuit breaker evaluates only metrics Conduit genuinely samples
+  and refuses a write when a required metric is unknown, stale, or over its
+  limit. Unmeasured metrics are declared unmeasured rather than reported as zero.
 
 ### Changed
 

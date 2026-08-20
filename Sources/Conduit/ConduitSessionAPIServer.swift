@@ -14,12 +14,20 @@ final class ConduitSessionAPIServer {
     private let acceptQueue = DispatchQueue(label: "dev.camerontjs.conduit.session-api")
     private let token: String
     private let allowWrites: Bool
-    private let handle: (ConduitSessionCommand) -> [String: Any]
+    private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
+
+    /// `clientInfo` from the most recent `initialize` on this listener.
+    ///
+    /// MCP `2024-11-05` over HTTP has no per-request session id, and this
+    /// listener closes every connection, so there is nothing else to key a
+    /// caller on. Writes fail closed until an `initialize` has been seen.
+    private var peerIdentity: String?
+    private var peerObservedAt: Date?
 
     init(
         token: String,
         allowWrites: Bool = false,
-        handle: @escaping (ConduitSessionCommand) -> [String: Any]
+        handle: @escaping (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     ) {
         self.token = token
         self.allowWrites = allowWrites
@@ -202,6 +210,17 @@ final class ConduitSessionAPIServer {
         let method = payload["method"]?.stringValue ?? ""
         switch method {
         case "initialize":
+            let info = payload["params"]?["clientInfo"]
+            let clientName = info?["name"]?.stringValue?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !clientName.isEmpty {
+                let version = info?["version"]?.stringValue?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                peerIdentity = version.isEmpty
+                    ? clientName
+                    : "\(clientName)/\(version)"
+                peerObservedAt = Date()
+            }
             return [
                 "jsonrpc": "2.0",
                 "id": id,
@@ -274,13 +293,20 @@ final class ConduitSessionAPIServer {
                 ?? arguments["projectSlug"]?.stringValue
                 ?? ""
             let objective = arguments["objective"]?.stringValue ?? ""
+            let idempotencyKey = (
+                arguments["idempotency_key"]?.stringValue
+                    ?? arguments["idempotencyKey"]?.stringValue
+            )?.trimmingCharacters(in: .whitespacesAndNewlines)
             if agent.isEmpty || projectSlug.isEmpty {
                 command = nil
             } else {
                 command = .createTask(
                     agent: agent,
                     projectSlug: projectSlug,
-                    objective: objective
+                    objective: objective,
+                    idempotencyKey: (idempotencyKey?.isEmpty ?? true)
+                        ? nil
+                        : idempotencyKey
                 )
             }
         case "conduit_reconcile_task":
@@ -326,7 +352,13 @@ final class ConduitSessionAPIServer {
                 ]],
             ]
         }
-        let payload = handle(command)
+        let payload = handle(
+            command,
+            ConduitSessionCaller(
+                identity: peerIdentity,
+                observedAt: peerObservedAt
+            )
+        )
         let text = (try? String(
             data: JSONSerialization.data(withJSONObject: payload),
             encoding: .utf8
@@ -582,6 +614,10 @@ final class ConduitSessionAPIServer {
                     "agent": ["type": "string"],
                     "project_slug": ["type": "string"],
                     "objective": ["type": "string"],
+                    "idempotency_key": [
+                        "type": "string",
+                        "description": "Optional. Pass a stable key to make a retried create safe: an identical repeat returns the original task instead of starting a second one. Use a fresh key when you genuinely want another task.",
+                    ],
                 ],
                 "required": ["agent", "project_slug"],
             ],
