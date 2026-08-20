@@ -4,7 +4,9 @@
 # Needs:
 #   - Conduit running with Session API enabled (127.0.0.1:8750/mcp)
 #   - tunnel-client on PATH (brew install openai/tools/tunnel-client)
-#   - CONTROL_PLANE_API_KEY from Platform Runtime API keys (Tunnels Read+Use)
+#   - a control-plane key from Platform Runtime API keys (Tunnels Read+Use),
+#     either stored at ~/.conduit/control-plane-api-key or exported once as
+#     CONTROL_PLANE_API_KEY, which this script then stores for you
 #   - a tunnel_id (argument, CONTROL_PLANE_TUNNEL_ID, or ~/.conduit/chatgpt-tunnel-id)
 #
 # ChatGPT chat is the orchestrator; keep Work off.
@@ -37,6 +39,17 @@ fi
 
 printf '%s\n' "$TUNNEL_ID" > "$CONDUIT_DIR/chatgpt-tunnel-id"
 
+KEY_FILE="${CONTROL_PLANE_API_KEY_FILE:-$CONDUIT_DIR/control-plane-api-key}"
+
+# The control-plane key used to live only in whichever shell exported it, so it
+# died with that terminal and the tunnel looked un-set-up on the next session.
+# Persist it once, owner-read-only, next to the Session API bearer.
+if [[ -n "${CONTROL_PLANE_API_KEY:-}" && ! -s "$KEY_FILE" ]]; then
+  ( umask 077; printf '%s\n' "$CONTROL_PLANE_API_KEY" > "$KEY_FILE" )
+  chmod 600 "$KEY_FILE"
+  echo "stored control-plane key: $KEY_FILE (chmod 600)"
+fi
+
 TOKEN_FILE="$CONDUIT_DIR/session-api-token"
 AUTH_FILE="$CONDUIT_DIR/session-api-authorization"
 if [[ ! -s "$TOKEN_FILE" ]]; then
@@ -47,12 +60,19 @@ TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE")"
 printf 'Bearer %s\n' "$TOKEN" > "$AUTH_FILE"
 chmod 600 "$AUTH_FILE" "$CONDUIT_DIR/chatgpt-tunnel-id"
 
+if [[ -s "$KEY_FILE" ]]; then
+  chmod 600 "$KEY_FILE"
+  API_KEY_SOURCE="file:${KEY_FILE}"
+else
+  API_KEY_SOURCE="env:CONTROL_PLANE_API_KEY"
+fi
+
 PROFILE="$PROFILE_DIR/${PROFILE_NAME}.yaml"
 cat > "$PROFILE" <<EOF
 config_version: 1
 control_plane:
   tunnel_id: ${TUNNEL_ID}
-  api_key: env:CONTROL_PLANE_API_KEY
+  api_key: ${API_KEY_SOURCE}
 health:
   listen_addr: ${HEALTH_ADDR}
 admin_ui:
@@ -79,18 +99,19 @@ echo "profile: $PROFILE"
 echo "tunnel:  $TUNNEL_ID"
 echo "mcp:     $MCP_URL"
 echo "health:  http://${HEALTH_ADDR}/ui"
+echo "key:     $API_KEY_SOURCE"
 echo "chatgpt: Settings → Connectors → Developer Mode → Connection: Tunnel"
 
-if [[ -z "${CONTROL_PLANE_API_KEY:-}" ]]; then
+if [[ ! -s "$KEY_FILE" && -z "${CONTROL_PLANE_API_KEY:-}" ]]; then
   echo
-  echo "Profile written. Still needed: CONTROL_PLANE_API_KEY"
+  echo "Profile written. Still needed: the control-plane key."
   echo "Create a restricted Platform runtime key with Tunnels Read + Use:"
   echo "  https://platform.openai.com/settings/organization/api-keys"
-  echo "Then:"
-  echo "  export CONTROL_PLANE_API_KEY=sk-..."
+  echo "Store it once, and every later run reuses it:"
+  echo "  umask 077; printf '%s\\n' 'sk-...' > $KEY_FILE"
   echo "  $0"
-  echo "  # or: tunnel-client doctor --profile $PROFILE_NAME --explain"
-  echo "  #      tunnel-client run --profile $PROFILE_NAME"
+  echo "Or export it once and let this script store it:"
+  echo "  export CONTROL_PLANE_API_KEY=sk-...; $0"
   exit 3
 fi
 

@@ -92,6 +92,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- The ChatGPT tunnel launcher now stores the control-plane key instead of
+  reading it only from the environment. It previously resolved the key as
+  `env:CONTROL_PLANE_API_KEY`, so the key lived solely in whichever shell
+  exported it and vanished with that terminal, leaving a working tunnel looking
+  un-set-up on the next session. The launcher now prefers
+  `file:~/.conduit/control-plane-api-key` (owner-read-only, beside the Session
+  API bearer), captures an exported key into that file on first run, and falls
+  back to the environment when no file exists.
 - `conduit_send_prompt` no longer reports `delivered: true` for a PTY write that
   has not happened yet. The terminal write completes after the MCP response is
   serialized and can still fail, so the tool now returns `delivered: false` with
