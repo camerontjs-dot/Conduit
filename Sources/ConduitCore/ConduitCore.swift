@@ -591,7 +591,7 @@ public enum HostEnvelope {
     /// App-server Codex already has structured task/cwd/model on the thread;
     /// wrapping those turns as a PTY host block pollutes Conversation records.
     public static func shouldInject(for agent: AgentProfile) -> Bool {
-        agent.kind != .shell && agent.preferredSessionBackend != .appServer
+        agent.kind != .shell && !agent.preferredSessionBackend.isStructured
     }
 
     public static func render(_ context: Context) -> String {

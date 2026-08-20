@@ -43,9 +43,12 @@ final class CodexAppServerClient: ObservableObject {
     private var process: Process?
     private var serverProcess: Process?
     private var stdinHandle: FileHandle?
-    private var buffer = Data()
+    private var stdoutHandle: FileHandle?
+    private var stderrHandle: FileHandle?
+    private var streamPump: CodexAppServerStreamPump?
+    private var stderrTail: CodexAppServerStderrTail?
+    private var streamGeneration: UUID?
     private var nextID = 1
-    private var mapper = CodexAppServerMapper()
     private var pendingResponses: [Int: CheckedContinuation<CodexJSON, Error>] = [:]
     private let cwd: URL
     private let model: String?
@@ -106,8 +109,10 @@ final class CodexAppServerClient: ObservableObject {
         server.arguments = ["app-server", "--listen", "unix://\(socket)"]
         server.currentDirectoryURL = cwd
         server.standardInput = FileHandle.nullDevice
-        server.standardOutput = Pipe()
-        server.standardError = Pipe()
+        // The RPC proxy owns the protocol stream. Discard the unix host's
+        // diagnostics so an unread Pipe cannot stall the host process.
+        server.standardOutput = FileHandle.nullDevice
+        server.standardError = FileHandle.nullDevice
         try server.run()
         serverProcess = server
 
@@ -137,21 +142,53 @@ final class CodexAppServerClient: ObservableObject {
         process.currentDirectoryURL = cwd
         let stdin = Pipe()
         let stdout = Pipe()
+        let stderr = Pipe()
         process.standardInput = stdin
         process.standardOutput = stdout
-        process.standardError = Pipe()
+        process.standardError = stderr
+        let generation = UUID()
+        let stderrTail = CodexAppServerStderrTail()
+        let pump = CodexAppServerStreamPump(
+            deliveryQueue: .main,
+            onDelivery: { [weak self] deliveries in
+                MainActor.assumeIsolated {
+                    self?.handle(deliveries, generation: generation)
+                }
+            },
+            onFailure: { [weak self] error in
+                MainActor.assumeIsolated {
+                    self?.handleStreamFailure(error, generation: generation)
+                }
+            }
+        )
         process.terminationHandler = { [weak self] _ in
             Task { @MainActor in
-                self?.handleExit()
+                self?.handleExit(generation: generation)
             }
         }
         try process.run()
         self.process = process
         self.stdinHandle = stdin.fileHandleForWriting
-        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        self.stdoutHandle = stdout.fileHandleForReading
+        self.stderrHandle = stderr.fileHandleForReading
+        self.streamPump = pump
+        self.stderrTail = stderrTail
+        self.streamGeneration = generation
+        stdout.fileHandleForReading.readabilityHandler = { [weak pump] handle in
             let chunk = handle.availableData
-            Task { @MainActor in
-                self?.ingest(chunk)
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                pump?.finish()
+            } else {
+                pump?.ingest(chunk)
+            }
+        }
+        stderr.fileHandleForReading.readabilityHandler = { [weak stderrTail] handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                stderrTail?.append(chunk)
             }
         }
     }
@@ -187,7 +224,7 @@ final class CodexAppServerClient: ObservableObject {
             ?? started["threadId"]?.stringValue
             ?? resumeThreadID {
             self.threadID = threadID
-            mapper.threadID = threadID
+            streamPump?.setThreadID(threadID)
         }
         guard self.threadID != nil else {
             throw ClientError.protocolError("thread start/resume did not return a thread id.")
@@ -198,7 +235,7 @@ final class CodexAppServerClient: ObservableObject {
 
     func sendTurn(text: String) throws {
         guard isReady, let threadID else { throw ClientError.notReady }
-        if mapper.turnActive {
+        if isTurnActive {
             send(
                 CodexAppServerRequests.turnSteer(
                     id: 0,
@@ -207,7 +244,7 @@ final class CodexAppServerClient: ObservableObject {
                 )
             )
         } else {
-            mapper.resetTurn()
+            streamPump?.resetTurn()
             send(
                 CodexAppServerRequests.turnStart(
                     id: 0,
@@ -260,6 +297,14 @@ final class CodexAppServerClient: ObservableObject {
     }
 
     private func stopProcesses() {
+        streamGeneration = nil
+        stdoutHandle?.readabilityHandler = nil
+        stderrHandle?.readabilityHandler = nil
+        streamPump?.cancel()
+        stdoutHandle = nil
+        stderrHandle = nil
+        streamPump = nil
+        stderrTail = nil
         stdinHandle = nil
         process?.terminationHandler = nil
         serverProcess?.terminationHandler = nil
@@ -272,7 +317,8 @@ final class CodexAppServerClient: ObservableObject {
         }
     }
 
-    private func handleExit() {
+    private func handleExit(generation: UUID) {
+        guard streamGeneration == generation else { return }
         process = nil
         stdinHandle = nil
         if ignoreProcessExit { return }
@@ -282,34 +328,41 @@ final class CodexAppServerClient: ObservableObject {
         onExited?()
     }
 
-    private func ingest(_ chunk: Data) {
-        guard !chunk.isEmpty else { return }
-        buffer.append(chunk)
-        while let range = buffer.firstRange(of: Data([0x0A])) {
-            let lineData = buffer.subdata(in: buffer.startIndex..<range.lowerBound)
-            buffer.removeSubrange(buffer.startIndex...range.lowerBound)
-            guard let line = String(data: lineData, encoding: .utf8),
-                  let message = CodexJSONRPCMessage.parseLine(line)
-            else { continue }
-            handle(message)
+    private func handle(
+        _ deliveries: [CodexAppServerDelivery],
+        generation: UUID
+    ) {
+        guard streamGeneration == generation else { return }
+        for delivery in deliveries {
+            switch delivery {
+            case .response(let id, let result):
+                if case .number(let number) = id,
+                   let continuation = pendingResponses.removeValue(forKey: number) {
+                    continuation.resume(returning: result)
+                }
+            case .error(let id, let message):
+                if case .number(let number)? = id,
+                   let continuation = pendingResponses.removeValue(forKey: number) {
+                    continuation.resume(throwing: ClientError.protocolError(message))
+                }
+            case .effect(let effect):
+                apply(effect)
+            }
         }
     }
 
-    private func handle(_ message: CodexJSONRPCMessage) {
-        if case .response(let id, let result) = message,
-           case .number(let number) = id,
-           let continuation = pendingResponses.removeValue(forKey: number) {
-            continuation.resume(returning: result)
-        } else if case .error(let id, let message) = message,
-                  case .number(let number)? = id,
-                  let continuation = pendingResponses.removeValue(forKey: number) {
-            continuation.resume(throwing: ClientError.protocolError(message))
-        }
-
-        let effects = mapper.apply(message)
-        for effect in effects {
-            apply(effect)
-        }
+    private func handleStreamFailure(
+        _ error: CodexAppServerStreamError,
+        generation: UUID
+    ) {
+        guard streamGeneration == generation else { return }
+        let message = error.localizedDescription
+        lastError = message
+        failPending(message)
+        isReady = false
+        isTurnActive = false
+        onFailed?(message)
+        stopProcesses()
     }
 
     private func apply(_ effect: CodexAppServerEffect) {

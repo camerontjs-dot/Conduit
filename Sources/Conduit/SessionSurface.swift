@@ -82,22 +82,22 @@ private struct ActiveSessionSurface: View {
             }
         }
         .alert(
-            "Codex approval",
+            "Agent approval",
             isPresented: Binding(
-                get: { runtime.pendingAppServerApproval != nil },
-                set: { if !$0 && runtime.pendingAppServerApproval != nil {
-                    runtime.respondToAppServerApproval(accept: false)
+                get: { runtime.structuredPendingApproval },
+                set: { if !$0 && runtime.structuredPendingApproval {
+                    runtime.respondToStructuredApproval(accept: false)
                 } }
             )
         ) {
             Button("Allow") {
-                runtime.respondToAppServerApproval(accept: true)
+                runtime.respondToStructuredApproval(accept: true)
             }
             Button("Deny", role: .cancel) {
-                runtime.respondToAppServerApproval(accept: false)
+                runtime.respondToStructuredApproval(accept: false)
             }
         } message: {
-            Text(runtime.pendingAppServerApproval?.summary ?? "Codex requested approval.")
+            Text(runtime.structuredPendingApprovalSummary ?? "The agent requested approval.")
         }
     }
 
@@ -203,9 +203,10 @@ private struct ActiveSessionSurface: View {
 
     private var surfaceAuthorityLabel: String {
         guard runtime.selectedSurface == .raw else {
-            return runtime.usesAppServer
-                ? "Conversation · app-server events"
-                : "Conversation · Raw authoritative"
+            if runtime.usesStructuredHost {
+                return "Conversation · \(runtime.descriptor.agent.preferredSessionBackend.displayName) events"
+            }
+            return "Conversation · Raw authoritative"
         }
 
         if runtime.usesAppServer {
@@ -237,9 +238,20 @@ private struct ActiveSessionSurface: View {
             TerminalHostView(
                 controller: controller,
                 theme: TerminalTheme(palette: palette),
-                claimsFocus: runtime.selectedSurface == .raw && !runtime.usesAppServer
+                claimsFocus: runtime.selectedSurface == .raw && !runtime.usesStructuredHost
             )
-            if runtime.usesAppServer && !controller.remoteTUIAttached {
+            if runtime.usesStructuredHost && !runtime.usesAppServer {
+                VStack(spacing: 8) {
+                    Text("\(runtime.descriptor.agent.name) is hosted by \(runtime.descriptor.agent.preferredSessionBackend.displayName)")
+                        .font(.headline)
+                    Text("Conversation is the live surface. Raw is not a second TUI for this adapter.")
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(palette.dim)
+                }
+                .padding(24)
+                .frame(maxWidth: 420)
+            } else if runtime.usesAppServer && !controller.remoteTUIAttached {
                 VStack(spacing: 8) {
                     Text("Codex is hosted by app-server")
                         .font(.headline)

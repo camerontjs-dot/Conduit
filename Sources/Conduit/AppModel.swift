@@ -1580,7 +1580,7 @@ final class AppModel: ObservableObject {
         beginWorkSessionIfNeeded(scannedProject)
         let instance = nextInstanceNumber(for: agent, in: scannedProject)
         let taskSessionID = requestedTaskSessionID ?? TaskSessionID()
-        let prefersAppServer = agent.preferredSessionBackend == .appServer
+        let hosted = hostedBackend(for: agent)
         let runtime = start(
             descriptor: SessionDescriptor(
                 projectPath: scannedProject.path,
@@ -1590,16 +1590,10 @@ final class AppModel: ObservableObject {
                 recordsIdentity: true
             ),
             project: scannedProject,
-            backendLabel: prefersAppServer
-                ? AgentSessionBackend.appServer.workSessionLabel
-                : (settings.restoreSessions ? "durable-requested" : "pty"),
+            backendLabel: hosted.label,
             entry: .started(
                 agentName: agent.name,
-                requestedBackend: prefersAppServer
-                    ? "codex app-server"
-                    : (settings.restoreSessions
-                        ? "durable tmux, with PTY fallback"
-                        : "direct PTY")
+                requestedBackend: hosted.requested
             )
         )
         if runtime != nil {
@@ -1675,7 +1669,7 @@ final class AppModel: ObservableObject {
         }
         if let project = project(for: task),
            let agent = agentProfile(named: task.metadata.agentName),
-           agent.preferredSessionBackend == .appServer {
+           agent.prefersStructuredHost {
             selectProject(project)
             beginWorkSessionIfNeeded(project)
             _ = start(
@@ -1686,10 +1680,10 @@ final class AppModel: ObservableObject {
                     recordsIdentity: true
                 ),
                 project: project,
-                backendLabel: AgentSessionBackend.appServer.workSessionLabel,
+                backendLabel: agent.preferredSessionBackend.workSessionLabel,
                 entry: .started(
                     agentName: agent.name,
-                    requestedBackend: "codex app-server resume"
+                    requestedBackend: "\(agent.preferredSessionBackend.requestedBackendDescription) resume"
                 )
             )
             return
@@ -1766,8 +1760,8 @@ final class AppModel: ObservableObject {
                 recordsIdentity: true
             ),
             project: project,
-            backendLabel: agent.preferredSessionBackend == .appServer
-                ? AgentSessionBackend.appServer.workSessionLabel
+            backendLabel: agent.prefersStructuredHost
+                ? agent.preferredSessionBackend.workSessionLabel
                 : (targetSessionName == nil && !settings.restoreSessions
                     ? AgentSessionBackend.pty.workSessionLabel
                     : "durable-reconcile"),
@@ -1935,7 +1929,7 @@ final class AppModel: ObservableObject {
             // a second operator-close event.
             removeSessionTab(stale)
         }
-        if agent.preferredSessionBackend == .appServer,
+        if agent.prefersStructuredHost,
            let existingTask = latestAppServerTask(agent: agent, project: project) {
             reconnectTask(existingTask.id)
             if let runtime = sessions.first(where: {
@@ -1947,7 +1941,7 @@ final class AppModel: ObservableObject {
             }
             return nil
         }
-        if agent.preferredSessionBackend != .appServer,
+        if !agent.prefersStructuredHost,
            let durable = discoveredSessions.first(where: { discovered in
             discovered.projectPath?.standardizedFileURL == project.path.standardizedFileURL
                 && discovered.agentName == agent.name
@@ -2125,11 +2119,9 @@ final class AppModel: ObservableObject {
     }
 
     private func hostedBackend(for agent: AgentProfile) -> (label: String, requested: String) {
-        if agent.preferredSessionBackend == .appServer {
-            return (
-                AgentSessionBackend.appServer.workSessionLabel,
-                "codex app-server"
-            )
+        let backend = agent.preferredSessionBackend
+        if backend.isStructured {
+            return (backend.workSessionLabel, backend.requestedBackendDescription)
         }
         if settings.restoreSessions {
             return ("durable-requested", "durable tmux, with PTY fallback")
@@ -2157,8 +2149,8 @@ final class AppModel: ObservableObject {
         requiresDurableSession: Bool = false
     ) -> TerminalRuntime? {
         var descriptor = descriptor
-        let useDurableSession = settings.restoreSessions
-            || requiresDurableSession
+        let useDurableSession = !descriptor.agent.prefersStructuredHost
+            && (settings.restoreSessions || requiresDurableSession)
         if useDurableSession && descriptor.tmuxSessionName == nil {
             descriptor.tmuxSessionName = TmuxSessionNaming.sessionName(
                 projectPath: descriptor.projectPath,
@@ -2238,38 +2230,41 @@ final class AppModel: ObservableObject {
         // After durable reattach, rebuild any incomplete turn projection from
         // the live pane (missed paint while Conduit was away).
         if case .resumed = entry,
-           descriptor.agent.preferredSessionBackend != .appServer {
+           !descriptor.agent.prefersStructuredHost {
             Task { @MainActor [weak runtime] in
                 try? await Task.sleep(nanoseconds: 450_000_000)
                 runtime?.controller.startIfNeeded()
                 runtime?.resyncConversationCapture()
             }
         }
-        // The terminal used to start only when its SwiftTerm view appeared.
-        // Conversation is now the default, so process ownership must not depend
-        // on mounting the Raw surface. Codex prefers app-server (D-038).
-        if descriptor.agent.preferredSessionBackend == .appServer {
+        // Process ownership is independent of the Raw tab. Structured hosts
+        // skip PTY/tmux unless fallback actually runs.
+        if descriptor.agent.prefersStructuredHost {
             let resumeThreadID = AdapterThreadStore(
                 directory: AdapterThreadStore.defaultDirectory()
             ).threadID(for: taskSessionID)
-            runtime.attachAppServer(
+            let backend = descriptor.agent.preferredSessionBackend
+            runtime.attachStructuredAdapter(
+                backend: backend,
                 cwd: descriptor.projectPath,
                 model: descriptor.agent.model,
-                resumeThreadID: resumeThreadID
+                resumeSessionID: resumeThreadID
             )
             Task { @MainActor [weak self, weak runtime] in
                 guard let self, let runtime else { return }
-                self.statusMessage = "Starting Codex on app-server…"
-                if let failure = await runtime.startAppServerIfNeeded() {
-                    runtime.stopAppServer()
+                self.statusMessage = "Starting \(descriptor.agent.name) on \(backend.displayName)…"
+                if let failure = await runtime.startStructuredAdapterIfNeeded() {
+                    runtime.stopStructuredAdapter()
                     self.statusMessage =
-                        "Codex app-server failed (\(failure)). Falling back to PTY."
+                        "\(descriptor.agent.name) \(backend.displayName) failed (\(failure)). Falling back to PTY."
+                    runtime.controller.preparePTYFallback()
                     runtime.controller.startIfNeeded()
                     if let issue = runtime.controller.launchIssue {
                         self.errorMessage = issue.localizedDescription
                     }
                 } else {
-                    self.statusMessage = "Codex is running on app-server."
+                    self.statusMessage =
+                        "\(descriptor.agent.name) is running on \(backend.displayName)."
                 }
             }
         } else {
@@ -2658,12 +2653,12 @@ final class AppModel: ObservableObject {
         // Slash/skills: complete in the Conduit composer, then on Return run as
         // a real CLI command (TUI inject). Paste delivery is treated as chat by
         // OpenCode/Claude and does not invoke builtins like `/cost`.
-        if runtime.usesAppServer, runtime.appServer?.isReady != true {
-            errorMessage = "Codex app-server is still starting. Wait for it to become ready before sending."
+        if runtime.usesStructuredHost, !runtime.structuredIsReady {
+            errorMessage = "\(runtime.descriptor.agent.name) is still starting. Wait for it to become ready before sending."
             return
         }
         if savedAttachments.isEmpty,
-           !runtime.usesAppServer,
+           !runtime.usesStructuredHost,
            AgentSlashCatalog.looksLikeSlashCommand(trimmedComposer) {
             sendSlashCommand(
                 trimmedComposer,
@@ -2693,8 +2688,8 @@ final class AppModel: ObservableObject {
                 : "Sent with \(attachmentCount) attachments."
         }
         let agentName = runtime.controller.descriptor.agent.name
-        if runtime.appServer?.isReady == true {
-            let delivered = runtime.sendAppServerPrompt(text: assembled)
+        if runtime.structuredIsReady {
+            let delivered = runtime.sendStructuredPrompt(text: assembled)
             runtime.updatePromptDelivery(
                 eventID: eventID,
                 to: delivered ? .delivered : .failed
@@ -2704,7 +2699,7 @@ final class AppModel: ObservableObject {
                     composerText = savedText
                     attachments = savedAttachments
                 }
-                errorMessage = "The prompt could not be delivered to Codex app-server. It has been kept in the composer."
+                errorMessage = "The prompt could not be delivered to \(runtime.descriptor.agent.name). It has been kept in the composer."
             }
             return
         }
@@ -2790,7 +2785,7 @@ final class AppModel: ObservableObject {
     ) -> String {
         let agent = runtime.descriptor.agent
         guard settings.injectHostEnvelope,
-              !runtime.usesAppServer,
+              !runtime.usesStructuredHost,
               HostEnvelope.shouldInject(for: agent) else { return assembled }
         let projectPath = runtime.descriptor.projectPath.path
         let taskID = selectedTaskSnapshot?.id.rawValue.uuidString
@@ -3407,6 +3402,8 @@ final class AppModel: ObservableObject {
                     sessionAPITaskPayload(for: task)
                 }
             ]
+        case .listAdapters:
+            return sessionAPIListAdapters()
         case .sessionStatus(let rawID):
             guard let uuid = UUID(uuidString: rawID),
                   let task = taskSessions.first(where: { $0.id.rawValue == uuid })
@@ -3472,6 +3469,32 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func sessionAPIListAdapters() -> [String: Any] {
+        let enabled = settings.agents.filter(\.enabled)
+        let profiles = enabled.map { profile -> [String: Any] in
+            let backend = profile.preferredSessionBackend
+            let catalog = StructuredAdapterCatalog.descriptor(matching: profile.commandBasename)
+                ?? StructuredAdapterCatalog.descriptor(matching: profile.name)
+            return [
+                "name": profile.name,
+                "command": profile.commandBasename,
+                "backend": backend.workSessionLabel,
+                "surface": backend.surfaceDescription,
+                "structured": backend.isStructured,
+                "pty_fallback": backend.isStructured,
+                "status": catalog?.status ?? (backend.isStructured ? "preferred" : "pty-only"),
+                "launch": catalog?.launch ?? profile.command,
+                "resume": catalog?.resume ?? "",
+                "notes": catalog?.notes ?? "",
+            ]
+        }
+        return [
+            "adapters": profiles,
+            "catalog": StructuredAdapterCatalog.entries.map(\.payload),
+            "authority": "declared launch surfaces; not a live health check",
+        ]
+    }
+
     private func sessionAPITaskID(_ rawID: String) -> TaskSessionID? {
         guard let uuid = UUID(uuidString: rawID) else { return nil }
         return TaskSessionID(rawValue: uuid)
@@ -3496,6 +3519,29 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func sessionAPIRuntimeAttemptID(
+        for task: TaskSessionSnapshot,
+        live: TerminalRuntime?
+    ) -> RuntimeAttemptID? {
+        if let live {
+            return live.runtimeAttemptID
+        }
+        switch task.operationalState {
+        case .runtimeProvisioning(let attemptID, _, _):
+            return attemptID
+        case .runtimeOpened(let attemptID):
+            return attemptID
+        case .runtimeProvisioningFailed(let attemptID, _, _, _):
+            return attemptID
+        case .runtimeDetached(let attemptID):
+            return attemptID
+        case .interrupted(let attemptID):
+            return attemptID
+        case .closed, nil:
+            return nil
+        }
+    }
+
     /// MCP-facing state projection. These fields deliberately keep durable
     /// registration, provisioning, runtime presence, and readiness separate.
     /// In particular, an absent runtime can never satisfy `ready` through an
@@ -3509,8 +3555,9 @@ final class AppModel: ObservableObject {
         let profile = agentProfile(named: task.metadata.agentName)
         let backend: String
         if let live {
-            backend = live.usesAppServer
-                ? AgentSessionBackend.appServer.workSessionLabel
+            backend = live.usesStructuredHost
+                ? (profile?.preferredSessionBackend.workSessionLabel
+                    ?? AgentSessionBackend.appServer.workSessionLabel)
                 : AgentSessionBackend.pty.workSessionLabel
         } else {
             backend = profile?.preferredSessionBackend.workSessionLabel ?? "unknown"
@@ -3529,7 +3576,7 @@ final class AppModel: ObservableObject {
             let controllerLifecycle = live.controller.lifecycle
             runtimeState = sessionAPIRuntimeLifecycle(controllerLifecycle)
             lifecycle = runtimeState
-            let adapterReady = live.appServer == nil || live.appServer?.isReady == true
+            let adapterReady = !live.usesStructuredHost || live.structuredIsReady
             provisioning = adapterReady ? "ready" : "starting"
             ready = isLive && adapterReady
             recoverable = false
@@ -3632,19 +3679,29 @@ final class AppModel: ObservableObject {
         let live = sessionAPILiveRuntime(for: task.id)
         let status = sessionAPITaskPayload(for: task)
         let backend: AgentSessionBackend = {
-            if live?.usesAppServer == true { return .appServer }
+            if live?.usesStructuredHost == true {
+                return agentProfile(named: task.metadata.agentName)?.preferredSessionBackend
+                    ?? .appServer
+            }
             let profile = agentProfile(named: task.metadata.agentName)
             return profile?.preferredSessionBackend ?? .pty
         }()
-        let adapter: ConduitSessionAdapterSnapshot? = live?.appServer.map { server in
-            ConduitSessionAdapterSnapshot(
-                threadID: server.threadID,
-                turnActive: server.isTurnActive,
-                lastTurnStatus: server.lastTurnStatus,
-                pendingApproval: server.pendingApproval != nil,
-                pendingApprovalSummary: server.pendingApproval?.summary
+        let adapter: ConduitSessionAdapterSnapshot? = {
+            guard let live, live.usesStructuredHost else { return nil }
+            return ConduitSessionAdapterSnapshot(
+                threadID: live.structuredSessionID,
+                turnActive: live.structuredTurnActive,
+                lastTurnStatus: live.structuredLastTurnStatus,
+                pendingApproval: live.structuredPendingApproval,
+                pendingApprovalSummary: live.structuredPendingApprovalSummary
             )
-        }
+        }()
+        let persistedThreadID: String? = {
+            guard live == nil, backend.isStructured else { return nil }
+            return AdapterThreadStore(
+                directory: AdapterThreadStore.defaultDirectory()
+            ).threadID(for: task.id)
+        }()
         let eventSource: [SessionPresentationEvent]
         if let live {
             eventSource = live.presentationEvents
@@ -3664,7 +3721,10 @@ final class AppModel: ObservableObject {
             live: status["live"] as? Bool ?? false,
             ready: status["ready"] as? Bool ?? false,
             events: eventSource,
-            adapter: adapter
+            adapter: adapter,
+            runtimeAttemptID: sessionAPIRuntimeAttemptID(for: task, live: live),
+            persistedThreadID: persistedThreadID,
+            observedAt: Date()
         )
         return ConduitSessionEventExport.page(
             source: source,
@@ -3813,7 +3873,7 @@ final class AppModel: ObservableObject {
         to runtime: TerminalRuntime,
         origin: ConduitSessionOrigin
     ) -> [String: Any] {
-        if runtime.usesAppServer, runtime.appServer?.isReady != true {
+        if runtime.usesStructuredHost, !runtime.structuredIsReady {
             return [
                 "error": "agent runtime is still starting; retry conduit_send_prompt",
                 "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
@@ -3829,8 +3889,8 @@ final class AppModel: ObservableObject {
             renderedPayload: text
         )
         runtime.selectedSurface = .conversation
-        if runtime.appServer?.isReady == true {
-            let delivered = runtime.sendAppServerPrompt(text: text)
+        if runtime.structuredIsReady {
+            let delivered = runtime.sendStructuredPrompt(text: text)
             runtime.updatePromptDelivery(
                 eventID: eventID,
                 to: delivered ? .delivered : .failed
@@ -3838,7 +3898,7 @@ final class AppModel: ObservableObject {
             return [
                 "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
                 "delivered": delivered,
-                "backend": AgentSessionBackend.appServer.workSessionLabel,
+                "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
                 "origin": origin.rawValue,
                 "authority": "prompt recorded; not verification",
             ]
@@ -3887,8 +3947,8 @@ final class AppModel: ObservableObject {
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to interrupt", "taskSessionID": rawID]
         }
-        if runtime.usesAppServer {
-            runtime.appServer?.interrupt()
+        if runtime.usesStructuredHost {
+            runtime.interruptStructuredAdapter()
         } else {
             runtime.controller.interrupt()
         }
@@ -3945,8 +4005,46 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     @Published private(set) var conversationCaptureNotice: String?
     @Published private(set) var appServer: CodexAppServerClient?
     @Published var pendingAppServerApproval: CodexAppServerApproval?
+    @Published private(set) var grokACP: GrokACPClient?
+    @Published private(set) var openCode: OpenCodeHTTPClient?
+    @Published private(set) var streamJSON: StreamJSONClient?
+    @Published var pendingStructuredApproval: (id: String, summary: String)?
 
     var usesAppServer: Bool { appServer != nil }
+    var usesStructuredHost: Bool {
+        appServer != nil || grokACP != nil || openCode != nil || streamJSON != nil
+    }
+    var structuredIsReady: Bool {
+        if let appServer { return appServer.isReady }
+        if let grokACP { return grokACP.isReady }
+        if let openCode { return openCode.isReady }
+        if let streamJSON { return streamJSON.isReady }
+        return false
+    }
+    var structuredSessionID: String? {
+        appServer?.threadID ?? grokACP?.sessionID ?? openCode?.sessionID ?? streamJSON?.sessionID
+    }
+    var structuredTurnActive: Bool {
+        appServer?.isTurnActive == true
+            || grokACP?.isTurnActive == true
+            || openCode?.isTurnActive == true
+            || streamJSON?.isTurnActive == true
+    }
+    var structuredLastTurnStatus: String? {
+        appServer?.lastTurnStatus
+            ?? grokACP?.lastTurnStatus
+            ?? openCode?.lastTurnStatus
+            ?? streamJSON?.lastTurnStatus
+    }
+    var structuredPendingApproval: Bool {
+        pendingAppServerApproval != nil || pendingStructuredApproval != nil
+    }
+    var structuredPendingApprovalSummary: String? {
+        pendingAppServerApproval?.summary
+            ?? pendingStructuredApproval?.summary
+            ?? grokACP?.pendingApprovalSummary
+            ?? openCode?.pendingApprovalSummary
+    }
 
     private struct ActiveOutputCapture {
         let id: UUID
@@ -4381,14 +4479,229 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     }
 
     func stopAppServer() {
+        stopStructuredAdapter()
+    }
+
+    func stopStructuredAdapter() {
         appServer?.stop()
         appServer = nil
+        grokACP?.stop()
+        grokACP = nil
+        openCode?.stop()
+        openCode = nil
+        streamJSON?.stop()
+        streamJSON = nil
         pendingAppServerApproval = nil
+        pendingStructuredApproval = nil
     }
 
     func respondToAppServerApproval(accept: Bool) {
-        appServer?.respondToApproval(accept: accept)
-        pendingAppServerApproval = nil
+        respondToStructuredApproval(accept: accept)
+    }
+
+    func respondToStructuredApproval(accept: Bool) {
+        if pendingAppServerApproval != nil {
+            appServer?.respondToApproval(accept: accept)
+            pendingAppServerApproval = nil
+            return
+        }
+        grokACP?.respondToApproval(accept: accept)
+        openCode?.respondToApproval(accept: accept)
+        streamJSON?.respondToApproval(accept: accept)
+        pendingStructuredApproval = nil
+    }
+
+    func sendStructuredPrompt(text: String) -> Bool {
+        if appServer != nil {
+            return sendAppServerPrompt(text: text)
+        }
+        do {
+            if let grokACP {
+                try grokACP.sendTurn(text: text)
+                return true
+            }
+            if let openCode {
+                try openCode.sendTurn(text: text)
+                return true
+            }
+            if let streamJSON {
+                try streamJSON.sendTurn(text: text)
+                return true
+            }
+            conversationCaptureNotice = "No structured adapter is attached."
+            return false
+        } catch {
+            conversationCaptureNotice = error.localizedDescription
+            return false
+        }
+    }
+
+    func interruptStructuredAdapter() {
+        if let appServer {
+            appServer.interrupt()
+            return
+        }
+        grokACP?.interrupt()
+        openCode?.interrupt()
+        streamJSON?.interrupt()
+    }
+
+    func attachStructuredAdapter(
+        backend: AgentSessionBackend,
+        cwd: URL,
+        model: String?,
+        resumeSessionID: String?
+    ) {
+        switch backend {
+        case .appServer:
+            controller.suppressProcessLaunch = true
+            attachAppServer(cwd: cwd, model: model, resumeThreadID: resumeSessionID)
+        case .acp:
+            controller.suppressProcessLaunch = true
+            controller.markAdapterLaunching()
+            let command = descriptor.agent.commandBasename
+            let client: GrokACPClient
+            if command == "gemini" {
+                var env = GrokACPClient.environmentFromDotEnv(relativePath: ".gemini/.env")
+                env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+                client = GrokACPClient(
+                    cwd: cwd,
+                    resumeSessionID: resumeSessionID,
+                    launchArguments: ["--acp"],
+                    authenticateMethodID: "gemini-api-key",
+                    extraEnvironment: env
+                )
+            } else {
+                client = GrokACPClient(cwd: cwd, resumeSessionID: resumeSessionID)
+            }
+            wireStructured(client)
+            grokACP = client
+        case .httpServer:
+            controller.suppressProcessLaunch = true
+            controller.markAdapterLaunching()
+            let client = OpenCodeHTTPClient(
+                cwd: cwd,
+                model: model,
+                resumeSessionID: resumeSessionID
+            )
+            wireStructured(client)
+            openCode = client
+        case .structuredCli:
+            controller.suppressProcessLaunch = true
+            controller.markAdapterLaunching()
+            let flavor = StreamJSONFlavor.from(profile: descriptor.agent) ?? .claude
+            let client = StreamJSONClient(
+                flavor: flavor,
+                cwd: cwd,
+                resumeSessionID: resumeSessionID
+            )
+            wireStructured(client)
+            streamJSON = client
+        case .pty:
+            break
+        }
+    }
+
+    func startStructuredAdapterIfNeeded() async -> String? {
+        if appServer != nil {
+            return await startAppServerIfNeeded()
+        }
+        controller.markAdapterLaunching()
+        let backend = descriptor.agent.preferredSessionBackend
+        let executableName: String
+        switch backend {
+        case .acp:
+            executableName = descriptor.agent.command
+        case .httpServer:
+            executableName = descriptor.agent.command
+        case .structuredCli:
+            executableName = descriptor.agent.command
+        default:
+            return "No structured adapter for this profile."
+        }
+        guard let executable = EnvironmentResolver.shared.resolve(executableName)
+                ?? EnvironmentResolver.shared.resolve(
+                    URL(fileURLWithPath: executableName).lastPathComponent
+                )
+        else {
+            return "\(executableName) is not on PATH."
+        }
+        do {
+            if let grokACP {
+                try await grokACP.start(executable: executable)
+            } else if let openCode {
+                try await openCode.start(executable: executable)
+            } else if let streamJSON {
+                try await streamJSON.start(executable: executable)
+            } else {
+                return "Structured adapter client is missing."
+            }
+            controller.markAdapterHosted(titleSuffix: backend.displayName)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private func wireStructured(_ client: GrokACPClient) {
+        client.onEffect = { [weak self] effect in
+            self?.applyStructuredEffect(effect, backend: .acp)
+        }
+        client.onFailed = { [weak self] message in
+            self?.conversationCaptureNotice = message
+        }
+        client.onExited = { [weak self] in
+            self?.controller.markAdapterExited()
+        }
+    }
+
+    private func wireStructured(_ client: OpenCodeHTTPClient) {
+        client.onEffect = { [weak self] effect in
+            self?.applyStructuredEffect(effect, backend: .httpServer)
+        }
+        client.onFailed = { [weak self] message in
+            self?.conversationCaptureNotice = message
+        }
+        client.onExited = { [weak self] in
+            self?.controller.markAdapterExited()
+        }
+    }
+
+    private func wireStructured(_ client: StreamJSONClient) {
+        client.onEffect = { [weak self] effect in
+            self?.applyStructuredEffect(effect, backend: .structuredCli)
+        }
+        client.onFailed = { [weak self] message in
+            self?.conversationCaptureNotice = message
+        }
+        client.onExited = { [weak self] in
+            self?.controller.markAdapterExited()
+        }
+    }
+
+    private func applyStructuredEffect(
+        _ effect: StructuredAdapterEffect,
+        backend: AgentSessionBackend
+    ) {
+        switch effect {
+        case .sessionStarted(let id):
+            if let taskID = descriptor.taskSessionID {
+                AdapterThreadStore(directory: AdapterThreadStore.defaultDirectory())
+                    .save(
+                        taskSessionID: taskID,
+                        backend: backend.workSessionLabel,
+                        threadID: id
+                    )
+            }
+        case .upsertOutput(let text, let state):
+            upsertAdapterOutput(text: text, state: state)
+        case .requestApproval(let id, let summary):
+            pendingStructuredApproval = (id, summary)
+        case .turnCompleted:
+            closeAgentOutputCapture()
+        case .failed(let message):
+            conversationCaptureNotice = message
+        }
     }
 
     private func applyAppServerEffect(_ effect: CodexAppServerEffect) {

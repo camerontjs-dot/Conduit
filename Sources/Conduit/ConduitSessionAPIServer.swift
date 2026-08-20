@@ -208,7 +208,7 @@ final class ConduitSessionAPIServer {
                 "result": [
                     "protocolVersion": "2024-11-05",
                     "capabilities": ["tools": [String: Any]()],
-                    "serverInfo": ["name": "conduit-session", "version": "1.1"],
+                    "serverInfo": ["name": "conduit-session", "version": "1.2"],
                 ],
             ]
         case "ping":
@@ -240,6 +240,8 @@ final class ConduitSessionAPIServer {
             command = .listProjects
         case "conduit_list_sessions":
             command = .listSessions
+        case "conduit_list_adapters":
+            command = .listAdapters
         case "conduit_session_status":
             if let id = arguments["taskSessionID"]?.stringValue {
                 command = .sessionStatus(taskSessionID: id)
@@ -366,6 +368,7 @@ final class ConduitSessionAPIServer {
             "backend",
             "session",
             "turn",
+            "observation",
             "events",
             "next_cursor",
             "has_more",
@@ -403,9 +406,56 @@ final class ConduitSessionAPIServer {
                     "honesty": ["type": "string"],
                     "ambiguity": ["type": "string"],
                     "thread_id": ["type": "string"],
+                    "thread_id_source": [
+                        "type": "string",
+                        "enum": ["live", "persisted", "unavailable"],
+                    ],
                     "pending_approval": ["type": "boolean"],
                 ],
             ],
+            "observation": [
+                "type": "object",
+                "required": [
+                    "observed_at",
+                    "last_output_state",
+                    "checkpoint",
+                    "provider_progress",
+                    "input_state",
+                    "checkpoint_authority",
+                ],
+                "properties": [
+                    "observed_at": ["type": "string"],
+                    "last_output_at": ["type": "string"],
+                    "last_output_state": [
+                        "type": "string",
+                        "enum": ["none", "live", "settled", "closed"],
+                    ],
+                    "checkpoint": [
+                        "type": "string",
+                        "enum": [
+                            "structured_active",
+                            "structured_approval",
+                            "structured_completed",
+                            "structured_idle",
+                            "output_live",
+                            "output_quiet",
+                            "output_unobserved",
+                            "capture_closed",
+                        ],
+                    ],
+                    "provider_progress": [
+                        "type": "string",
+                        "enum": ["structured", "unavailable"],
+                    ],
+                    "input_state": [
+                        "type": "string",
+                        "enum": ["approval", "unknown", "none"],
+                    ],
+                    "input_summary": ["type": "string"],
+                    "checkpoint_authority": ["type": "string"],
+                ],
+            ],
+            "runtime_attempt_id": ["type": "string"],
             "events": [
                 "type": "array",
                 "items": [
@@ -463,6 +513,12 @@ final class ConduitSessionAPIServer {
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
+            "name": "conduit_list_adapters",
+            "description": "List enabled Conduit agent profiles and their structured session backends (app-server, ACP, OpenCode HTTP, stream-json, or PTY). This is the declared launch surface, not a live health check.",
+            "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
             "name": "conduit_session_status",
             "description": "Observed status plus last redacted conversation events.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
@@ -476,7 +532,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_session_events",
-            "description": "Read incremental, bounded Conversation events and observed turn state for one existing Conduit task. Returns a cursor page, authority/source labels, truncation/redaction flags, artifact path refs without file contents, and enough state to distinguish session lifecycle from turn active/completed/awaiting-input. Codex app-server turns can report structured completion and complete bounded assistant messages. PTY output is observation only and stays explicitly ambiguous. This is not verification, not a raw transcript dump, and not MindGraph evidence.",
+            "description": "Read incremental, bounded Conversation events plus an additive supervisory observation snapshot for one existing Conduit task. Returns cursor state, authority/source labels, provider thread continuity source, runtime-attempt identity when available, bounded output/checkpoint freshness, and structured-approval versus PTY-unknown input state. Codex app-server turns can report structured completion; PTY checkpoints describe rendered output only and never claim turn completion. This is not verification, not a raw transcript dump, and not MindGraph evidence.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -518,7 +574,7 @@ final class ConduitSessionAPIServer {
     private static let writeTools: [[String: Any]] = [
         [
             "name": "conduit_create_task",
-            "description": "Start a Conduit agent session. agent is a profile name (Codex, Claude, Grok, …). project_slug is a 30_projects folder name. objective is sent as the first prompt when the runtime is ready. Approvals stay on the Mac.",
+            "description": "Start a Conduit agent session. agent is a profile name (Codex, Claude, Grok, OpenCode, Antigravity, …). project_slug is a 30_projects folder name. objective is sent as the first prompt when the runtime is ready. Structured backends (app-server, ACP, OpenCode HTTP, stream-json) are used when the profile prefers them; PTY is the fallback. Approvals stay on the Mac.",
             "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -557,7 +613,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_interrupt",
-            "description": "Interrupt the live runtime (SIGINT or app-server turn/interrupt).",
+            "description": "Interrupt the live runtime (SIGINT, app-server turn/interrupt, ACP session/cancel, OpenCode abort, or stream-json terminate).",
             "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -569,7 +625,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_close_session",
-            "description": "Leave the live runtime (detach durable tmux / stop app-server). Does not delete task history.",
+            "description": "Leave the live runtime (detach durable tmux / stop structured adapter). Does not delete task history.",
             "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
             "inputSchema": [
                 "type": "object",

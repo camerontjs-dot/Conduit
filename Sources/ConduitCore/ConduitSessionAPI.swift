@@ -46,6 +46,7 @@ public struct ConduitSessionSnapshot: Equatable, Sendable {
 public enum ConduitSessionCommand: Equatable, Sendable {
     case listProjects
     case listSessions
+    case listAdapters
     case sessionStatus(taskSessionID: String)
     case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
     case queryMindGraph(question: String, scope: String)
@@ -63,7 +64,7 @@ public enum ConduitSessionAPI {
 
     public static func isWrite(_ command: ConduitSessionCommand) -> Bool {
         switch command {
-        case .listProjects, .listSessions, .sessionStatus, .sessionEvents, .queryMindGraph:
+        case .listProjects, .listSessions, .listAdapters, .sessionStatus, .sessionEvents, .queryMindGraph:
             return false
         case .createTask, .reconcileTask, .sendPrompt, .interrupt, .closeSession:
             return true

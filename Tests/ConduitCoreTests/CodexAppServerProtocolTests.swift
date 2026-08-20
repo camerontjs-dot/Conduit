@@ -96,7 +96,7 @@ final class CodexAppServerProtocolTests: XCTestCase {
         )
         XCTAssertEqual(
             AgentProfile(name: "Claude", command: "claude").preferredSessionBackend,
-            .pty
+            .structuredCli
         )
     }
 

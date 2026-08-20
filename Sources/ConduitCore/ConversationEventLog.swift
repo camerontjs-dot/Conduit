@@ -46,6 +46,69 @@ public struct ConversationEventLogReadResult: Equatable, Sendable {
     }
 }
 
+/// One immutable append request. When `previousEvent` is a compatible live
+/// agent-output revision, the log may store a compact delta. Closed revisions
+/// are always stored in full so a terminal state is independently recoverable.
+public struct ConversationEventLogAppendRevision: Equatable, Sendable {
+    public let event: SessionPresentationEvent
+    public let previousEvent: SessionPresentationEvent?
+
+    public init(
+        event: SessionPresentationEvent,
+        previousEvent: SessionPresentationEvent? = nil
+    ) {
+        self.event = event
+        self.previousEvent = previousEvent
+    }
+}
+
+public struct ConversationEventLogPageMetrics: Equatable, Sendable {
+    public let sourceBytes: Int64
+    public let bytesRead: Int64
+    public let maximumBufferedBytes: Int
+    public let rebuiltProjection: Bool
+
+    public init(
+        sourceBytes: Int64,
+        bytesRead: Int64,
+        maximumBufferedBytes: Int,
+        rebuiltProjection: Bool
+    ) {
+        self.sourceBytes = sourceBytes
+        self.bytesRead = bytesRead
+        self.maximumBufferedBytes = maximumBufferedBytes
+        self.rebuiltProjection = rebuiltProjection
+    }
+}
+
+/// A cursor slice backed by a rebuildable projection sidecar. `events` contains
+/// only the requested timeline range. `tailEvents` contains the latest prompt
+/// and output needed to report turn observation without loading the full log.
+public struct ConversationEventLogPageResult: Equatable, Sendable {
+    public let events: [SessionPresentationEvent]
+    public let tailEvents: [SessionPresentationEvent]
+    public let timelineCount: Int
+    public let startIndex: Int
+    public let diagnostics: [ConversationEventLogDiagnostic]
+    public let metrics: ConversationEventLogPageMetrics
+
+    public init(
+        events: [SessionPresentationEvent],
+        tailEvents: [SessionPresentationEvent],
+        timelineCount: Int,
+        startIndex: Int,
+        diagnostics: [ConversationEventLogDiagnostic],
+        metrics: ConversationEventLogPageMetrics
+    ) {
+        self.events = events
+        self.tailEvents = tailEvents
+        self.timelineCount = timelineCount
+        self.startIndex = startIndex
+        self.diagnostics = diagnostics
+        self.metrics = metrics
+    }
+}
+
 /// One append-only conversation source for one durable task identity.
 ///
 /// Every JSONL line is a complete immutable revision of a presentation event.
@@ -53,7 +116,8 @@ public struct ConversationEventLogReadResult: Equatable, Sendable {
 /// while using its latest valid revision. The source file is never rewritten
 /// or truncated during append or recovery.
 public struct ConversationEventLog: Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
+    public static let legacySchemaVersion = 1
 
     public let directory: URL
     public let taskSessionID: TaskSessionID
@@ -63,12 +127,92 @@ public struct ConversationEventLog: Equatable, Sendable {
         let schemaVersion: Int
         let taskSessionID: TaskSessionID
         let recordedAt: Date
+        let event: SessionPresentationEvent?
+        let agentOutputDelta: AgentOutputDelta?
+
+        init(
+            schemaVersion: Int,
+            taskSessionID: TaskSessionID,
+            recordedAt: Date,
+            event: SessionPresentationEvent? = nil,
+            agentOutputDelta: AgentOutputDelta? = nil
+        ) {
+            self.schemaVersion = schemaVersion
+            self.taskSessionID = taskSessionID
+            self.recordedAt = recordedAt
+            self.event = event
+            self.agentOutputDelta = agentOutputDelta
+        }
+    }
+
+    private struct LegacyRecord: Codable {
+        let schemaVersion: Int
+        let taskSessionID: TaskSessionID
+        let recordedAt: Date
         let event: SessionPresentationEvent
+    }
+
+    private struct AgentOutputDelta: Codable {
+        let eventID: UUID
+        let occurredAt: Date
+        let authority: SessionEventAuthority
+        let promptEventID: UUID?
+        let extraction: AgentOutputExtraction
+        let prefixCharacterCount: Int
+        let suffix: String
+        let state: AgentOutputState
+        let truncated: Bool
     }
 
     private struct SchemaEnvelope: Decodable {
         let schemaVersion: Int
     }
+
+    private struct ProjectionIndex: Codable {
+        let schemaVersion: Int
+        let generation: UUID
+        let taskSessionID: TaskSessionID
+        let sourceDevice: UInt64
+        let sourceInode: UInt64
+        let sourceBytes: Int64
+        let sourceModifiedSeconds: Int64
+        let sourceModifiedNanoseconds: Int64
+        let recordOffsets: [Int64]
+        let recordLengths: [Int]
+        let tailPromptOrdinal: Int?
+        let tailOutputOrdinal: Int?
+    }
+
+    private struct ProjectionHeader: Codable {
+        let schemaVersion: Int
+        let generation: UUID
+        let taskSessionID: TaskSessionID
+    }
+
+    private struct ProjectionRecord: Codable {
+        let event: SessionPresentationEvent
+    }
+
+    private struct SourceFingerprint: Equatable {
+        let device: UInt64
+        let inode: UInt64
+        let bytes: Int64
+        let modifiedSeconds: Int64
+        let modifiedNanoseconds: Int64
+    }
+
+    private struct ProjectionBuild {
+        let index: ProjectionIndex
+        let bytesRead: Int64
+        let maximumBufferedBytes: Int
+        let malformedRecords: Int
+    }
+
+    private static let projectionSchemaVersion = 1
+    private static let maximumProjectionIndexBytes = 8 * 1_024 * 1_024
+    private static let maximumProjectionEvents = 100_000
+    private static let maximumProjectedPayloadBytes = 64 * 1_024 * 1_024
+    private static let maximumConversationRecordBytes = 4 * 1_024 * 1_024
 
     private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
@@ -96,17 +240,34 @@ public struct ConversationEventLog: Equatable, Sendable {
     /// If an earlier writer stopped mid-line, append inserts a separating
     /// newline. The torn bytes remain in the file and are diagnosed on read.
     public func append(_ event: SessionPresentationEvent) throws {
-        guard Self.hasValidAuthority(event) else {
-            throw ConversationEventLogError.invalidAuthority(eventID: event.id)
+        try appendBatch([
+            ConversationEventLogAppendRevision(event: event)
+        ])
+    }
+
+    /// Appends a bounded batch under one file lock and one durability sync.
+    /// The source remains append-only; batching changes only synchronization
+    /// frequency, never record ordering or recovery behavior.
+    public func appendBatch(
+        _ revisions: [ConversationEventLogAppendRevision]
+    ) throws {
+        guard !revisions.isEmpty else { return }
+        for revision in revisions where !Self.hasValidAuthority(revision.event) {
+            throw ConversationEventLogError.invalidAuthority(
+                eventID: revision.event.id
+            )
         }
 
-        let record = Record(
-            schemaVersion: Self.currentSchemaVersion,
-            taskSessionID: taskSessionID,
-            recordedAt: Date(),
-            event: event
-        )
-        let line = try Self.makeEncoder().encode(record) + Data("\n".utf8)
+        let encoder = Self.makeEncoder()
+        var encodedLines = Data()
+        for revision in revisions {
+            let record = Self.record(
+                taskSessionID: taskSessionID,
+                revision: revision
+            )
+            encodedLines.append(try encoder.encode(record))
+            encodedLines.append(UInt8(ascii: "\n"))
+        }
 
         try Self.withPrivateDirectoryDescriptor(
             directory,
@@ -136,7 +297,7 @@ public struct ConversationEventLog: Equatable, Sendable {
                         payload.append(UInt8(ascii: "\n"))
                     }
                 }
-                payload.append(line)
+                payload.append(encodedLines)
                 try Self.writeAll(payload, descriptor: descriptor, url: url)
                 try Self.synchronize(descriptor: descriptor, url: url)
 
@@ -155,6 +316,68 @@ public struct ConversationEventLog: Equatable, Sendable {
                 try Self.synchronizeParentDirectory(of: directory)
             }
         }
+    }
+
+    private static func record(
+        taskSessionID: TaskSessionID,
+        revision: ConversationEventLogAppendRevision
+    ) -> Record {
+        let event = revision.event
+        if let previous = revision.previousEvent,
+           case .agentOutput(let previousOutput) = previous.kind,
+           case .agentOutput(let candidateOutput) = event.kind,
+           previous.id == event.id,
+           previous.occurredAt == event.occurredAt,
+           previous.authority == event.authority,
+           previousOutput.promptEventID == candidateOutput.promptEventID,
+           previousOutput.extraction == candidateOutput.extraction,
+           previousOutput.state != .closed,
+           candidateOutput.state != .closed
+        {
+            let commonCount = commonCharacterPrefixCount(
+                previousOutput.text,
+                candidateOutput.text
+            )
+            let suffix = String(candidateOutput.text.dropFirst(commonCount))
+            let delta = AgentOutputDelta(
+                eventID: event.id,
+                occurredAt: event.occurredAt,
+                authority: event.authority,
+                promptEventID: candidateOutput.promptEventID,
+                extraction: candidateOutput.extraction,
+                prefixCharacterCount: commonCount,
+                suffix: suffix,
+                state: candidateOutput.state,
+                truncated: candidateOutput.truncated
+            )
+            return Record(
+                schemaVersion: currentSchemaVersion,
+                taskSessionID: taskSessionID,
+                recordedAt: Date(),
+                agentOutputDelta: delta
+            )
+        }
+        return Record(
+            schemaVersion: currentSchemaVersion,
+            taskSessionID: taskSessionID,
+            recordedAt: Date(),
+            event: event
+        )
+    }
+
+    private static func commonCharacterPrefixCount(
+        _ lhs: String,
+        _ rhs: String
+    ) -> Int {
+        var count = 0
+        var left = lhs.makeIterator()
+        var right = rhs.makeIterator()
+        while let leftCharacter = left.next(),
+              let rightCharacter = right.next(),
+              leftCharacter == rightCharacter {
+            count += 1
+        }
+        return count
     }
 
     /// Reads valid records without mutating the source.
@@ -233,7 +456,9 @@ public struct ConversationEventLog: Equatable, Sendable {
                 continue
             }
 
-            guard envelope.schemaVersion == Self.currentSchemaVersion else {
+            guard envelope.schemaVersion == Self.currentSchemaVersion
+                    || envelope.schemaVersion == Self.legacySchemaVersion
+            else {
                 diagnostics.append(
                     diagnostic(
                         .unsupportedSchemaVersion,
@@ -244,9 +469,36 @@ public struct ConversationEventLog: Equatable, Sendable {
                 continue
             }
 
-            let record: Record
+            let recordTaskSessionID: TaskSessionID
+            let candidate: SessionPresentationEvent
             do {
-                record = try decoder.decode(Record.self, from: line)
+                if envelope.schemaVersion == Self.legacySchemaVersion {
+                    let record = try decoder.decode(LegacyRecord.self, from: line)
+                    recordTaskSessionID = record.taskSessionID
+                    candidate = record.event
+                } else {
+                    let record = try decoder.decode(Record.self, from: line)
+                    recordTaskSessionID = record.taskSessionID
+                    if let event = record.event,
+                       record.agentOutputDelta == nil {
+                        candidate = event
+                    } else if let delta = record.agentOutputDelta,
+                              record.event == nil,
+                              let previous = latestEvents[delta.eventID],
+                              let reconstructed = Self.applying(
+                                delta,
+                                to: previous
+                              ) {
+                        candidate = reconstructed
+                    } else {
+                        throw DecodingError.dataCorrupted(
+                            DecodingError.Context(
+                                codingPath: [],
+                                debugDescription: "Record must contain exactly one full event or a valid output delta."
+                            )
+                        )
+                    }
+                }
             } catch {
                 diagnostics.append(
                     diagnostic(
@@ -258,17 +510,17 @@ public struct ConversationEventLog: Equatable, Sendable {
                 continue
             }
 
-            guard record.taskSessionID == taskSessionID else {
+            guard recordTaskSessionID == taskSessionID else {
                 diagnostics.append(
                     diagnostic(
                         .mismatchedTaskSessionID,
                         lineNumber: lineNumber,
-                        detail: "Record belongs to \(Self.stableKey(record.taskSessionID))."
+                        detail: "Record belongs to \(Self.stableKey(recordTaskSessionID))."
                     )
                 )
                 continue
             }
-            guard Self.hasValidAuthority(record.event) else {
+            guard Self.hasValidAuthority(candidate) else {
                 diagnostics.append(
                     diagnostic(
                         .invalidAuthority,
@@ -279,10 +531,10 @@ public struct ConversationEventLog: Equatable, Sendable {
                 continue
             }
 
-            if let previous = latestEvents[record.event.id] {
+            if let previous = latestEvents[candidate.id] {
                 guard Self.isValidRevision(
                     previous: previous,
-                    candidate: record.event
+                    candidate: candidate
                 ) else {
                     diagnostics.append(
                         diagnostic(
@@ -294,14 +546,47 @@ public struct ConversationEventLog: Equatable, Sendable {
                     continue
                 }
             } else {
-                firstSeenOrder.append(record.event.id)
+                firstSeenOrder.append(candidate.id)
             }
-            latestEvents[record.event.id] = record.event
+            latestEvents[candidate.id] = candidate
         }
 
         return ConversationEventLogReadResult(
             events: firstSeenOrder.compactMap { latestEvents[$0] },
             diagnostics: diagnostics
+        )
+    }
+
+    private static func applying(
+        _ delta: AgentOutputDelta,
+        to previous: SessionPresentationEvent
+    ) -> SessionPresentationEvent? {
+        guard previous.id == delta.eventID,
+              previous.occurredAt == delta.occurredAt,
+              previous.authority == delta.authority,
+              case .agentOutput(let previousOutput) = previous.kind,
+              previousOutput.state != .closed,
+              previousOutput.promptEventID == delta.promptEventID,
+              previousOutput.extraction == delta.extraction,
+              delta.prefixCharacterCount >= 0,
+              delta.prefixCharacterCount <= previousOutput.text.count
+        else { return nil }
+        let text = String(
+            previousOutput.text.prefix(delta.prefixCharacterCount)
+        ) + delta.suffix
+        return SessionPresentationEvent(
+            id: delta.eventID,
+            occurredAt: delta.occurredAt,
+            authority: delta.authority,
+            kind: .agentOutput(
+                AgentVisibleOutput(
+                    promptEventID: delta.promptEventID,
+                    text: text,
+                    state: delta.state,
+                    extraction: delta.extraction,
+                    truncated: delta.truncated
+                )
+            )
         )
     }
 

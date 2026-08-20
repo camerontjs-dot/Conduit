@@ -51,7 +51,9 @@ A bad harness:
 
 `AgentOutputExtraction.structuredAdapter` and
 `SessionEventAuthority.toolReported` already exist. Codex `app-server` is the
-first producer (D-038). Other agents still degrade to Derived-from-Raw.
+first producer (D-038). Grok ACP, OpenCode HTTP, and Claude/Antigravity
+stream-json are additional producers (D-040). Remaining PTY profiles still
+degrade to Derived-from-Raw.
 
 ## Verification required before calling this daily-driver
 

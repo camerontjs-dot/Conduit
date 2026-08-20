@@ -1067,6 +1067,66 @@ It remains observation, not verification. PTY-derived output stays
 stay `toolReported`. The tool does not export raw transcripts, credentials,
 or chain-of-thought, and does not read artifact file contents.
 
+**Refined 2026-08-18:** The same tool now also exports an additive
+supervisory observation snapshot: `turn.thread_id_source` (`live` |
+`persisted` | `unavailable`), optional `runtime_attempt_id`, `observed_at`,
+last-output/checkpoint state, `provider_progress` (`structured` when a live
+adapter is present, otherwise `unavailable`), and `input_state`
+(`approval` | `unknown` | `none`). PTY checkpoints (`output_live`,
+`output_quiet`, `output_unobserved`, `capture_closed`) remain observational
+and never mean turn completion. Event identity, cursor advancement,
+truncation, interrupt acknowledgement, and create-task readiness stay
+unchanged. No new MCP tool is added.
+
+---
+
+## D-040: Per-agent first-party structured hosts
+
+**Status:** Accepted (2026-08-19)
+
+**Context:** D-038 made `codex app-server` the Codex session host and left
+every other agent PTY-primary until it exposed an equally explicit protocol.
+Probes on this machine found those protocols: Grok ACP stdio, OpenCode HTTP +
+SSE, Claude and Antigravity `stream-json`. Gemini CLI `--acp` with
+oauth-personal Code Assist is ineligible; with `GEMINI_API_KEY` it completes
+`session/prompt`. Gemini models also remain an OpenCode backend.
+
+**Decision:**
+
+1. Prefer the richest first-party surface per profile, with explicit PTY
+   fallback if that host fails to start:
+   - Codex → `app-server` (unchanged, D-038)
+   - Grok → ACP `grok agent --no-leader stdio`
+   - OpenCode → one Conduit-leased `opencode serve` (HTTP + SSE)
+   - Claude → `claude -p --output-format stream-json --verbose`
+   - Antigravity → `agy -p --output-format stream-json`
+   - Gemini CLI → ACP `gemini --acp` (API key; not Code Assist oauth)
+   - Shell and other profiles stay PTY
+2. Do not flatten those protocols into one RPC. Conduit owns task identity,
+   approvals, receipts, and process leases; each adapter keeps its native
+   session/turn/completion events.
+3. Do not auto-approve. Do not pass Grok `--always-approve`. Do not extract
+   subscription tokens or impersonate vendor APIs.
+4. OpenCode's leased server is not a session. Many Conduit tasks may share
+   one serve. Gemini and local Ollama models are OpenCode *backends*, not
+   Conduit agent profiles.
+5. MCP `conduit_list_adapters` reports declared launch surfaces. Create/send
+   already use the preferred host once the profile is selected.
+6. Adapter turn completion is still not verified success (D-011 / D-022).
+
+**Rejected alternatives:** One ACP shim for every vendor; keeping PTY as the
+only host after the probes passed; treating Code Assist oauth as Gemini ACP
+eligibility; multiple uncoordinated `opencode serve` processes.
+
+**Consequences:** D-038 item 3 (other agents stay PTY-primary) is superseded
+for Grok, OpenCode, Claude, Antigravity, and Gemini CLI. Do not run Gemini
+CLI ACP and Antigravity as two Google workers on the same task. Raw remains
+for TUI debugging and for profiles that have no structured host.
+
+**Refined 2026-08-19:** Gemini CLI ACP is preferred only with an API key.
+oauth-personal still returns Code Assist `IneligibleTierError`. OpenCode
+`google/*` stays a valid model backend on the OpenCode host.
+
 ---
 
 ## Deferred deliberately (not rejected forever)

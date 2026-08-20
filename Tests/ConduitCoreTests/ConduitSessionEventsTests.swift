@@ -288,6 +288,343 @@ final class ConduitSessionEventsTests: XCTestCase {
         XCTAssertEqual(page.turn.state, "awaiting_input")
         XCTAssertTrue(page.turn.pendingApproval)
         XCTAssertTrue(page.turn.honesty.contains("approval"))
+        XCTAssertEqual(page.turn.threadIDSource, .live)
+        XCTAssertEqual(page.observation.checkpoint, .structuredApproval)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertEqual(page.observation.inputState, .approval)
+        XCTAssertEqual(page.observation.inputSummary, "git status")
+        let observation = page.jsonObject()["observation"] as? [String: Any]
+        XCTAssertEqual(observation?["checkpoint"] as? String, "structured_approval")
+        XCTAssertEqual(observation?["input_state"] as? String, "approval")
+        XCTAssertEqual(observation?["input_summary"] as? String, "git status")
+    }
+
+    func testSupervisorySnapshotExposesLiveContinuityAndStructuredObservation() {
+        let prompt = deliveredPrompt("Reply pong", at: t0)
+        let output = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "Pong.",
+            state: .closed,
+            extraction: .structuredAdapter,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(2)
+        )
+        let attemptID = RuntimeAttemptID(
+            rawValue: UUID(uuidString: "AAAAAAAA-1111-2222-3333-444444444444")!
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, output],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_live",
+                    lastTurnStatus: "completed"
+                ),
+                runtimeAttemptID: attemptID,
+                observedAt: t0.addingTimeInterval(10)
+            )
+        )
+
+        XCTAssertEqual(page.runtimeAttemptID, attemptID)
+        XCTAssertEqual(page.turn.threadID, "thr_live")
+        XCTAssertEqual(page.turn.threadIDSource, .live)
+        XCTAssertEqual(page.observation.observedAt, t0.addingTimeInterval(10))
+        XCTAssertEqual(page.observation.lastOutputAt, t0.addingTimeInterval(2))
+        XCTAssertEqual(page.observation.lastOutputState, "closed")
+        XCTAssertEqual(page.observation.checkpoint, .structuredCompleted)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertEqual(page.observation.inputState, .none)
+
+        let json = page.jsonObject()
+        XCTAssertEqual(
+            json["runtime_attempt_id"] as? String,
+            attemptID.rawValue.uuidString
+        )
+        let turn = json["turn"] as? [String: Any]
+        XCTAssertEqual(turn?["thread_id_source"] as? String, "live")
+        let observation = json["observation"] as? [String: Any]
+        XCTAssertEqual(
+            observation?["observed_at"] as? String,
+            ConduitSessionEventExport.iso8601(t0.addingTimeInterval(10))
+        )
+        XCTAssertEqual(
+            observation?["last_output_at"] as? String,
+            ConduitSessionEventExport.iso8601(t0.addingTimeInterval(2))
+        )
+        XCTAssertEqual(observation?["last_output_state"] as? String, "closed")
+        XCTAssertEqual(observation?["checkpoint"] as? String, "structured_completed")
+        XCTAssertEqual(observation?["provider_progress"] as? String, "structured")
+        XCTAssertEqual(observation?["input_state"] as? String, "none")
+    }
+
+    func testSupervisorySnapshotUsesPersistedThreadWhenRuntimeIsAbsent() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("continue", at: t0)],
+                backend: .appServer,
+                lifecycle: "runtime_missing",
+                runtimeState: "absent",
+                live: false,
+                ready: false,
+                persistedThreadID: "thr_persisted",
+                observedAt: t0.addingTimeInterval(3)
+            )
+        )
+
+        XCTAssertEqual(page.turn.state, "active")
+        XCTAssertEqual(page.turn.threadID, "thr_persisted")
+        XCTAssertEqual(page.turn.threadIDSource, .persisted)
+        XCTAssertEqual(page.observation.checkpoint, .structuredActive)
+        XCTAssertEqual(page.observation.providerProgress, .unavailable)
+        XCTAssertEqual(page.observation.inputState, .none)
+        XCTAssertFalse(page.session.live)
+        XCTAssertFalse(page.session.ready)
+        XCTAssertNil(page.runtimeAttemptID)
+        XCTAssertNil(page.jsonObject()["runtime_attempt_id"])
+    }
+
+    func testSupervisorySnapshotPrefersLiveThreadOverPersisted() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("continue", at: t0)],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_live",
+                    turnActive: true
+                ),
+                persistedThreadID: "thr_persisted"
+            )
+        )
+        XCTAssertEqual(page.turn.threadID, "thr_live")
+        XCTAssertEqual(page.turn.threadIDSource, .live)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertNotEqual(page.turn.threadID, "thr_persisted")
+    }
+
+    func testSupervisorySnapshotMarksThreadUnavailableWithoutIdentity() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("continue", at: t0)],
+                backend: .appServer
+            )
+        )
+        XCTAssertNil(page.turn.threadID)
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        XCTAssertEqual(page.observation.providerProgress, .unavailable)
+        XCTAssertEqual(page.observation.checkpoint, .structuredActive)
+        let turn = page.jsonObject()["turn"] as? [String: Any]
+        XCTAssertEqual(turn?["thread_id_source"] as? String, "unavailable")
+        XCTAssertNil(turn?["thread_id"])
+    }
+
+    func testSupervisorySnapshotKeepsPTYCheckpointObservational() {
+        let prompt = deliveredPrompt("inspect", at: t0)
+        let settled = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "quiet pane",
+            state: .settled,
+            extraction: .tmuxPane,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, settled],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(2)
+            )
+        )
+
+        XCTAssertEqual(page.turn.state, "ambiguous")
+        XCTAssertEqual(page.turn.ambiguity, "pty_output_quiet")
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        XCTAssertEqual(page.observation.lastOutputState, "settled")
+        XCTAssertEqual(page.observation.checkpoint, .outputQuiet)
+        XCTAssertEqual(page.observation.providerProgress, .unavailable)
+        XCTAssertEqual(page.observation.inputState, .unknown)
+        XCTAssertNotEqual(page.observation.checkpoint, .structuredCompleted)
+
+        let noOutput = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("inspect", at: t0)],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(3)
+            )
+        )
+        XCTAssertEqual(noOutput.observation.checkpoint, .outputUnobserved)
+
+        let live = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "changing pane",
+            state: .live,
+            extraction: .tmuxPane,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(4)
+        )
+        let livePage = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, live],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(5)
+            )
+        )
+        XCTAssertEqual(livePage.observation.checkpoint, .outputLive)
+
+        let closed = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "capture closed",
+            state: .closed,
+            extraction: .tmuxPane,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(6)
+        )
+        let closedPage = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, closed],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(7)
+            )
+        )
+        XCTAssertEqual(closedPage.observation.checkpoint, .captureClosed)
+        XCTAssertEqual(closedPage.observation.inputState, .unknown)
+        XCTAssertNil(closedPage.runtimeAttemptID)
+        XCTAssertFalse(
+            [
+                ConduitSessionObservationCheckpoint.structuredActive,
+                .structuredApproval,
+                .structuredCompleted,
+                .structuredIdle,
+            ].contains(closedPage.observation.checkpoint)
+        )
+    }
+
+    func testSupervisorySnapshotJSONIsAdditiveAndOmitsUnavailableRuntimeAttempt() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("hello", at: t0)],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(4)
+            )
+        )
+        let json = page.jsonObject()
+        for key in [
+            "taskSessionID",
+            "backend",
+            "session",
+            "turn",
+            "events",
+            "next_cursor",
+            "has_more",
+            "cursor_state",
+            "timeline_count",
+            "truncated",
+            "authority",
+        ] {
+            XCTAssertNotNil(json[key], "missing compatibility key \(key)")
+        }
+        XCTAssertNil(json["runtime_attempt_id"])
+        XCTAssertEqual(page.nextCursor, "v1:1")
+        XCTAssertEqual(page.cursorState, .ok)
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        let turn = json["turn"] as? [String: Any]
+        XCTAssertEqual(turn?["thread_id_source"] as? String, "unavailable")
+        XCTAssertNil(turn?["thread_id"])
+        let observation = json["observation"] as? [String: Any]
+        XCTAssertEqual(
+            observation?["observed_at"] as? String,
+            ConduitSessionEventExport.iso8601(t0.addingTimeInterval(4))
+        )
+        XCTAssertEqual(observation?["last_output_state"] as? String, "none")
+        XCTAssertEqual(observation?["checkpoint"] as? String, "output_unobserved")
+        XCTAssertEqual(observation?["provider_progress"] as? String, "unavailable")
+        XCTAssertEqual(observation?["input_state"] as? String, "unknown")
+        XCTAssertEqual(observation?["checkpoint_authority"] as? String, "conduitRecorded")
+        XCTAssertNil(observation?["last_output_at"])
+        XCTAssertNil(observation?["input_summary"])
+    }
+
+    func testSupervisorySnapshotMarksUnavailableThreadWithoutLiveOrPersistedIdentity() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(),
+                observedAt: t0
+            )
+        )
+        XCTAssertNil(page.turn.threadID)
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        XCTAssertEqual(page.turn.state, "idle")
+        XCTAssertEqual(page.observation.checkpoint, .structuredIdle)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertEqual(page.observation.inputState, .none)
+        XCTAssertNil(page.runtimeAttemptID)
+    }
+
+    func testSupervisoryObservationFollowsInPlaceRevisionWithoutAdvancingCursor() {
+        let promptID = UUID(uuidString: "DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD")!
+        let outputID = UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE")!
+        let prompt = deliveredPrompt("go", id: promptID, at: t0)
+        let live = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Hel",
+            state: .live,
+            extraction: .structuredAdapter,
+            truncated: false,
+            id: outputID,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let first = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, live],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_rev",
+                    turnActive: true
+                ),
+                observedAt: t0.addingTimeInterval(2)
+            ),
+            cursor: "v1:1",
+            limit: 1
+        )
+        XCTAssertEqual(first.events.first?.eventID, outputID.uuidString)
+        XCTAssertEqual(first.events.first?.cursor, "v1:1")
+        XCTAssertEqual(first.nextCursor, "v1:2")
+        XCTAssertEqual(first.observation.lastOutputState, "live")
+        XCTAssertEqual(first.observation.checkpoint, .structuredActive)
+
+        let closed = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Hello",
+            state: .closed,
+            extraction: .structuredAdapter,
+            truncated: false,
+            id: outputID,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let second = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, closed],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_rev",
+                    turnActive: false,
+                    lastTurnStatus: "completed"
+                ),
+                observedAt: t0.addingTimeInterval(3)
+            ),
+            cursor: "v1:1",
+            limit: 1
+        )
+        XCTAssertEqual(second.events.first?.eventID, outputID.uuidString)
+        XCTAssertEqual(second.events.first?.cursor, "v1:1")
+        XCTAssertEqual(second.nextCursor, "v1:2")
+        XCTAssertEqual(second.observation.lastOutputState, "closed")
+        XCTAssertEqual(second.observation.checkpoint, .structuredCompleted)
+        XCTAssertNotEqual(
+            first.events.first?.contentDigest,
+            second.events.first?.contentDigest
+        )
     }
 
     func testMapperRetainsTurnCompletionStatus() {
@@ -317,7 +654,10 @@ final class ConduitSessionEventsTests: XCTestCase {
         runtimeState: String = "running",
         live: Bool = true,
         ready: Bool = true,
-        adapter: ConduitSessionAdapterSnapshot? = nil
+        adapter: ConduitSessionAdapterSnapshot? = nil,
+        runtimeAttemptID: RuntimeAttemptID? = nil,
+        persistedThreadID: String? = nil,
+        observedAt: Date = Date(timeIntervalSince1970: 1_787_000_000)
     ) -> ConduitSessionEventSource {
         ConduitSessionEventSource(
             taskSessionID: "11111111-1111-1111-1111-111111111111",
@@ -327,7 +667,10 @@ final class ConduitSessionEventsTests: XCTestCase {
             live: live,
             ready: ready,
             events: events,
-            adapter: adapter
+            adapter: adapter,
+            runtimeAttemptID: runtimeAttemptID,
+            persistedThreadID: persistedThreadID,
+            observedAt: observedAt
         )
     }
 

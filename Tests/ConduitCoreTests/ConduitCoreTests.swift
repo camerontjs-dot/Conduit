@@ -364,7 +364,7 @@ final class HostEnvelopeTests: XCTestCase {
         let cli = AgentProfile(name: "Grok", command: "grok", kind: .cli)
         let codex = AgentProfile(name: "Codex", command: "codex", kind: .cli)
         XCTAssertFalse(HostEnvelope.shouldInject(for: shell))
-        XCTAssertTrue(HostEnvelope.shouldInject(for: cli))
+        XCTAssertFalse(HostEnvelope.shouldInject(for: cli))
         XCTAssertFalse(HostEnvelope.shouldInject(for: codex))
     }
 }

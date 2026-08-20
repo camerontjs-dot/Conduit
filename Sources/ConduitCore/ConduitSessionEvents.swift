@@ -26,6 +26,85 @@ public struct ConduitSessionAdapterSnapshot: Equatable, Sendable {
     }
 }
 
+public enum ConduitSessionProviderThreadSource: String, Equatable, Sendable {
+    case live
+    case persisted
+    case unavailable
+}
+
+public enum ConduitSessionProviderProgress: String, Equatable, Sendable {
+    case structured
+    case unavailable
+}
+
+public enum ConduitSessionInputState: String, Equatable, Sendable {
+    case approval
+    case unknown
+    case none
+}
+
+/// A bounded checkpoint derived from the current backend observation. PTY
+/// values describe rendered-output capture only; they are never turn results.
+public enum ConduitSessionObservationCheckpoint: String, Equatable, Sendable {
+    case structuredActive = "structured_active"
+    case structuredApproval = "structured_approval"
+    case structuredCompleted = "structured_completed"
+    case structuredIdle = "structured_idle"
+    case outputLive = "output_live"
+    case outputQuiet = "output_quiet"
+    case outputUnobserved = "output_unobserved"
+    case captureClosed = "capture_closed"
+}
+
+public struct ConduitSessionObservationSnapshot: Equatable, Sendable {
+    public var observedAt: Date
+    public var lastOutputAt: Date?
+    public var lastOutputState: String
+    public var checkpoint: ConduitSessionObservationCheckpoint
+    public var providerProgress: ConduitSessionProviderProgress
+    public var inputState: ConduitSessionInputState
+    public var inputSummary: String?
+    public var checkpointAuthority: String
+
+    public init(
+        observedAt: Date = Date(),
+        lastOutputAt: Date? = nil,
+        lastOutputState: String = "none",
+        checkpoint: ConduitSessionObservationCheckpoint = .outputUnobserved,
+        providerProgress: ConduitSessionProviderProgress = .unavailable,
+        inputState: ConduitSessionInputState = .unknown,
+        inputSummary: String? = nil,
+        checkpointAuthority: String = "conduitRecorded"
+    ) {
+        self.observedAt = observedAt
+        self.lastOutputAt = lastOutputAt
+        self.lastOutputState = lastOutputState
+        self.checkpoint = checkpoint
+        self.providerProgress = providerProgress
+        self.inputState = inputState
+        self.inputSummary = inputSummary
+        self.checkpointAuthority = checkpointAuthority
+    }
+
+    public func jsonObject() -> [String: Any] {
+        var payload: [String: Any] = [
+            "observed_at": ConduitSessionEventExport.iso8601(observedAt),
+            "last_output_state": lastOutputState,
+            "checkpoint": checkpoint.rawValue,
+            "provider_progress": providerProgress.rawValue,
+            "input_state": inputState.rawValue,
+            "checkpoint_authority": checkpointAuthority,
+        ]
+        if let lastOutputAt {
+            payload["last_output_at"] = ConduitSessionEventExport.iso8601(lastOutputAt)
+        }
+        if let inputSummary {
+            payload["input_summary"] = inputSummary
+        }
+        return payload
+    }
+}
+
 /// Observed session fields copied into an events page. These are the same
 /// lifecycle facts `conduit_session_status` already exposes.
 public struct ConduitSessionEventSource: Equatable, Sendable {
@@ -37,6 +116,9 @@ public struct ConduitSessionEventSource: Equatable, Sendable {
     public var ready: Bool
     public var events: [SessionPresentationEvent]
     public var adapter: ConduitSessionAdapterSnapshot?
+    public var runtimeAttemptID: RuntimeAttemptID?
+    public var persistedThreadID: String?
+    public var observedAt: Date
 
     public init(
         taskSessionID: String,
@@ -46,7 +128,10 @@ public struct ConduitSessionEventSource: Equatable, Sendable {
         live: Bool,
         ready: Bool,
         events: [SessionPresentationEvent],
-        adapter: ConduitSessionAdapterSnapshot? = nil
+        adapter: ConduitSessionAdapterSnapshot? = nil,
+        runtimeAttemptID: RuntimeAttemptID? = nil,
+        persistedThreadID: String? = nil,
+        observedAt: Date = Date()
     ) {
         self.taskSessionID = taskSessionID
         self.backend = backend
@@ -56,6 +141,9 @@ public struct ConduitSessionEventSource: Equatable, Sendable {
         self.ready = ready
         self.events = events
         self.adapter = adapter
+        self.runtimeAttemptID = runtimeAttemptID
+        self.persistedThreadID = persistedThreadID
+        self.observedAt = observedAt
     }
 }
 
@@ -73,6 +161,7 @@ public struct ConduitSessionTurnSnapshot: Equatable, Sendable {
     public var honesty: String
     public var ambiguity: String?
     public var threadID: String?
+    public var threadIDSource: ConduitSessionProviderThreadSource
     public var pendingApproval: Bool
 
     public init(
@@ -81,6 +170,7 @@ public struct ConduitSessionTurnSnapshot: Equatable, Sendable {
         honesty: String,
         ambiguity: String? = nil,
         threadID: String? = nil,
+        threadIDSource: ConduitSessionProviderThreadSource = .unavailable,
         pendingApproval: Bool = false
     ) {
         self.state = state
@@ -88,6 +178,7 @@ public struct ConduitSessionTurnSnapshot: Equatable, Sendable {
         self.honesty = honesty
         self.ambiguity = ambiguity
         self.threadID = threadID
+        self.threadIDSource = threadIDSource
         self.pendingApproval = pendingApproval
     }
 
@@ -95,6 +186,7 @@ public struct ConduitSessionTurnSnapshot: Equatable, Sendable {
         var payload: [String: Any] = [
             "state": state,
             "honesty": honesty,
+            "thread_id_source": threadIDSource.rawValue,
             "pending_approval": pendingApproval,
         ]
         if let status { payload["status"] = status }
@@ -232,6 +324,8 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
     public var cursorState: ConduitSessionEventCursorState
     public var timelineCount: Int
     public var truncated: Bool
+    public var runtimeAttemptID: RuntimeAttemptID?
+    public var observation: ConduitSessionObservationSnapshot
     public var authority: String
 
     public init(
@@ -245,6 +339,8 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
         cursorState: ConduitSessionEventCursorState,
         timelineCount: Int,
         truncated: Bool,
+        runtimeAttemptID: RuntimeAttemptID? = nil,
+        observation: ConduitSessionObservationSnapshot = ConduitSessionObservationSnapshot(),
         authority: String = ConduitSessionEventPage.authorityNote
     ) {
         self.taskSessionID = taskSessionID
@@ -257,15 +353,18 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
         self.cursorState = cursorState
         self.timelineCount = timelineCount
         self.truncated = truncated
+        self.runtimeAttemptID = runtimeAttemptID
+        self.observation = observation
         self.authority = authority
     }
 
     public func jsonObject() -> [String: Any] {
-        [
+        var payload: [String: Any] = [
             "taskSessionID": taskSessionID,
             "backend": backend,
             "session": session.jsonObject(),
             "turn": turn.jsonObject(),
+            "observation": observation.jsonObject(),
             "events": events.map { $0.jsonObject() },
             "next_cursor": nextCursor,
             "has_more": hasMore,
@@ -274,6 +373,10 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
             "truncated": truncated,
             "authority": authority,
         ]
+        if let runtimeAttemptID {
+            payload["runtime_attempt_id"] = runtimeAttemptID.rawValue.uuidString
+        }
+        return payload
     }
 }
 
@@ -337,6 +440,7 @@ public enum ConduitSessionEventExport {
             )
         }
 
+        let turn = turnSnapshot(source: source)
         return ConduitSessionEventPage(
             taskSessionID: source.taskSessionID,
             backend: source.backend.workSessionLabel,
@@ -346,13 +450,15 @@ public enum ConduitSessionEventExport {
                 live: source.live,
                 ready: source.ready
             ),
-            turn: turnSnapshot(source: source),
+            turn: turn,
             events: records,
             nextCursor: encodeCursor(end),
             hasMore: end < count,
             cursorState: cursorState,
             timelineCount: count,
-            truncated: records.contains(where: \.truncated)
+            truncated: records.contains(where: \.truncated),
+            runtimeAttemptID: source.runtimeAttemptID,
+            observation: observationSnapshot(source: source, turn: turn)
         )
     }
 
@@ -360,13 +466,15 @@ public enum ConduitSessionEventExport {
         source: ConduitSessionEventSource
     ) -> ConduitSessionTurnSnapshot {
         let adapter = source.adapter
-        if source.backend == .appServer {
+        let thread = providerThreadSnapshot(source: source)
+        if source.backend.isStructured {
             if adapter?.pendingApproval == true {
                 return ConduitSessionTurnSnapshot(
                     state: "awaiting_input",
                     status: adapter?.lastTurnStatus,
                     honesty: "structured adapter requested approval; operator decision stays on the Mac. Not verification.",
-                    threadID: adapter?.threadID,
+                    threadID: thread.id,
+                    threadIDSource: thread.source,
                     pendingApproval: true
                 )
             }
@@ -375,7 +483,8 @@ public enum ConduitSessionEventExport {
                     state: "active",
                     status: adapter?.lastTurnStatus,
                     honesty: "structured adapter turn is active. Not verification.",
-                    threadID: adapter?.threadID
+                    threadID: thread.id,
+                    threadIDSource: thread.source
                 )
             }
             if adapter?.lastTurnStatus != nil
@@ -385,24 +494,113 @@ public enum ConduitSessionEventExport {
                     state: "completed",
                     status: adapter?.lastTurnStatus ?? "completed",
                     honesty: "structured adapter reported turn completion. Not verified success.",
-                    threadID: adapter?.threadID
+                    threadID: thread.id,
+                    threadIDSource: thread.source
                 )
             }
             if hasDeliveredPrompt(in: source.events) {
                 return ConduitSessionTurnSnapshot(
                     state: "active",
                     honesty: "prompt was recorded for an app-server task; turn completion has not been observed.",
-                    threadID: adapter?.threadID
+                    threadID: thread.id,
+                    threadIDSource: thread.source
                 )
             }
             return ConduitSessionTurnSnapshot(
                 state: "idle",
                 honesty: "no structured turn has been observed yet.",
-                threadID: adapter?.threadID
+                threadID: thread.id,
+                threadIDSource: thread.source
             )
         }
 
         return ptyTurnSnapshot(events: source.events)
+    }
+
+    /// Additive supervisory snapshot from the full source timeline, not the
+    /// current page slice. In-place structured revisions therefore remain
+    /// visible here even if a client advanced past the live cursor. Event
+    /// identity, cursor advancement, truncation, interrupt acknowledgement,
+    /// and create-task readiness are unchanged.
+    public static func observationSnapshot(
+        source: ConduitSessionEventSource,
+        turn: ConduitSessionTurnSnapshot? = nil
+    ) -> ConduitSessionObservationSnapshot {
+        let resolvedTurn = turn ?? turnSnapshot(source: source)
+        let outputEvent = lastOutputEvent(in: source.events)
+        let lastOutputState: String
+        let outputAt: Date?
+        if let outputEvent,
+           case .agentOutput(let output) = outputEvent.kind {
+            lastOutputState = output.state.rawValue
+            outputAt = outputEvent.occurredAt
+        } else {
+            lastOutputState = "none"
+            outputAt = nil
+        }
+
+        if source.backend.isStructured {
+            let checkpoint: ConduitSessionObservationCheckpoint
+            let inputState: ConduitSessionInputState
+            let inputSummary: String?
+            switch resolvedTurn.state {
+            case "awaiting_input":
+                checkpoint = .structuredApproval
+                inputState = .approval
+                inputSummary = source.adapter?.pendingApprovalSummary
+            case "active":
+                checkpoint = .structuredActive
+                inputState = .none
+                inputSummary = nil
+            case "completed":
+                checkpoint = .structuredCompleted
+                inputState = .none
+                inputSummary = nil
+            default:
+                checkpoint = .structuredIdle
+                inputState = .none
+                inputSummary = nil
+            }
+            return ConduitSessionObservationSnapshot(
+                observedAt: source.observedAt,
+                lastOutputAt: outputAt,
+                lastOutputState: lastOutputState,
+                checkpoint: checkpoint,
+                providerProgress: source.adapter == nil ? .unavailable : .structured,
+                inputState: inputState,
+                inputSummary: inputSummary,
+                checkpointAuthority: observationAuthority(
+                    source: source,
+                    outputEvent: outputEvent
+                )
+            )
+        }
+
+        // PTY checkpoints describe captured output only. Quiet, closed, and
+        // unobserved never map onto structured completion or approval.
+        let checkpoint: ConduitSessionObservationCheckpoint
+        switch outputState(from: outputEvent) {
+        case .live:
+            checkpoint = .outputLive
+        case .settled:
+            checkpoint = .outputQuiet
+        case .closed:
+            checkpoint = .captureClosed
+        case nil:
+            checkpoint = .outputUnobserved
+        }
+        return ConduitSessionObservationSnapshot(
+            observedAt: source.observedAt,
+            lastOutputAt: outputAt,
+            lastOutputState: lastOutputState,
+            checkpoint: checkpoint,
+            providerProgress: .unavailable,
+            inputState: .unknown,
+            checkpointAuthority: observationAuthority(
+                source: source,
+                outputEvent: outputEvent
+            )
+        )
     }
 
     public static func sanitizeText(
@@ -624,15 +822,64 @@ public enum ConduitSessionEventExport {
         return nil
     }
 
-    private static func lastOutput(
+    private static func lastOutputEvent(
         in events: [SessionPresentationEvent]
-    ) -> AgentVisibleOutput? {
+    ) -> SessionPresentationEvent? {
         for event in events.reversed() {
-            if case .agentOutput(let output) = event.kind {
-                return output
+            if case .agentOutput = event.kind {
+                return event
             }
         }
         return nil
+    }
+
+    private static func lastOutput(
+        in events: [SessionPresentationEvent]
+    ) -> AgentVisibleOutput? {
+        guard let event = lastOutputEvent(in: events),
+              case .agentOutput(let output) = event.kind
+        else { return nil }
+        return output
+    }
+
+    private static func outputState(
+        from event: SessionPresentationEvent?
+    ) -> AgentOutputState? {
+        guard let event,
+              case .agentOutput(let output) = event.kind
+        else { return nil }
+        return output.state
+    }
+
+    private static func providerThreadSnapshot(
+        source: ConduitSessionEventSource
+    ) -> (id: String?, source: ConduitSessionProviderThreadSource) {
+        guard source.backend.isStructured else {
+            return (nil, .unavailable)
+        }
+        if let liveThreadID = source.adapter?.threadID,
+           !liveThreadID.isEmpty {
+            return (liveThreadID, .live)
+        }
+        if source.adapter == nil,
+           let persistedThreadID = source.persistedThreadID,
+           !persistedThreadID.isEmpty {
+            return (persistedThreadID, .persisted)
+        }
+        return (nil, .unavailable)
+    }
+
+    private static func observationAuthority(
+        source: ConduitSessionEventSource,
+        outputEvent: SessionPresentationEvent?
+    ) -> String {
+        if let outputEvent {
+            return outputEvent.authority.rawValue
+        }
+        if source.backend.isStructured, source.adapter != nil {
+            return "toolReported"
+        }
+        return "conduitRecorded"
     }
 
     private static func lastPrompt(
@@ -717,7 +964,7 @@ public enum ConduitSessionEventExport {
         return String(hash, radix: 16)
     }
 
-    private static func iso8601(_ date: Date) -> String {
+    static func iso8601(_ date: Date) -> String {
         isoFormatter.string(from: date)
     }
 

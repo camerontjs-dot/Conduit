@@ -188,7 +188,11 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         terminalView.nativeBackgroundColor = NSColor.windowBackgroundColor
     }
 
+    /// Structured hosts must not auto-start tmux/PTY from SwiftTerm mount.
+    var suppressProcessLaunch = false
+
     func startIfNeeded() {
+        guard !suppressProcessLaunch else { return }
         guard lifecycle == .idle else { return }
         launchIssue = nil
         lifecycle.transition(to: .launching)
@@ -463,6 +467,18 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         let decoded = exitCode.map { POSIXExitStatus.decode($0) }
         lifecycle.transition(to: .exited(code: decoded))
         failPendingPrompts()
+    }
+
+    /// Allow PTY start after a failed structured host. `markAdapterLaunching`
+    /// leaves lifecycle off `.idle`, which would otherwise no-op `startIfNeeded`.
+    func preparePTYFallback() {
+        suppressProcessLaunch = false
+        switch lifecycle {
+        case .launching, .running:
+            lifecycle = .idle
+        default:
+            break
+        }
     }
 
     /// Show launching before handshake so composer stays up and we never flash

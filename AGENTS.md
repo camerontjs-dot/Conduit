@@ -9,7 +9,7 @@ Conduit is a personal native macOS interface for operating MainFrame projects th
 1. MainFrame files remain the source of truth. Do not introduce a shadow project database.
 2. Do not wire private project names, paths, or corpora into the repository.
 3. Capture operations create new files; never silently overwrite MainFrame history.
-4. Agent CLIs remain independent tools. Conduit launches and communicates with them but does not impersonate their APIs. Codex may use `codex app-server` as the session host (D-038); other agents stay PTY-primary.
+4. Agent CLIs remain independent tools. Conduit launches and communicates with them but does not impersonate their APIs. Codex uses `codex app-server` (D-038). Grok, OpenCode, Claude, Antigravity, and Gemini CLI use their first-party structured hosts (D-040) with PTY fallback. Shell stays PTY. Gemini CLI ACP needs an API key; do not pair it with Antigravity on the same task.
 5. Terminal work that still lives in a TUI requires a real PTY. Do not replace SwiftTerm with a text-output imitation. Codex Raw may attach to the same app-server instead of scraping a TUI.
 6. Attachments are referenced by local path. Never upload files without an explicit future feature and consent boundary.
 7. Speech output enters the editable composer before submission.

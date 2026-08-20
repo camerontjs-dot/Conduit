@@ -27,6 +27,26 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Gemini CLI prefers ACP (`gemini --acp`) when a Gemini API key is present.
+  Consumer Code Assist oauth stays ineligible; PTY remains the fallback.
+  Do not run Gemini CLI and Antigravity as two Google workers on one task.
+- Grok, OpenCode, Claude, Antigravity, and Gemini CLI now prefer first-party
+  structured hosts (D-040): ACP stdio, one leased `opencode serve` (HTTP +
+  SSE), and `stream-json` print mode. Conversation is fed by labelled adapter
+  events. PTY remains the explicit fallback if the host fails. Gemini models
+  remain an OpenCode backend as well as a Gemini CLI ACP host.
+- Session API `conduit_list_adapters` lists enabled profiles and their
+  declared backends. Create/send/interrupt/close use the structured host
+  when the profile prefers one.
+- `conduit_session_events` now includes an additive supervisory observation
+  snapshot. Clients receive provider thread identity plus
+  `thread_id_source` (`live` | `persisted` | `unavailable`),
+  `runtime_attempt_id` when known, `observed_at` and last-output/checkpoint
+  state, `provider_progress` (`structured` | `unavailable`), and input state
+  that distinguishes structured `approval` from PTY `unknown`. PTY
+  checkpoints remain observational (`output_live`, `output_quiet`,
+  `output_unobserved`, `capture_closed`) and never mean turn completion.
+  Existing event identity and cursor semantics are unchanged.
 - ChatGPT and other Session API clients can now page incremental Conversation
   events through `conduit_session_events`. The tool is read-only, cursor-bounded,
   and returns authority/source labels, truncation/redaction state, artifact path

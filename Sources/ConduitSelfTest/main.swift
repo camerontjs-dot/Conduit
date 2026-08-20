@@ -1481,9 +1481,13 @@ withTempDir { root in
           HostEnvelope.shouldInject(
               for: AgentProfile(name: "Codex", command: "codex")
           ) == false)
-    check("host envelope still wraps PTY CLIs",
+    check("host envelope skips Grok ACP",
           HostEnvelope.shouldInject(
               for: AgentProfile(name: "Grok", command: "grok")
+          ) == false)
+    check("host envelope still wraps PTY CLIs",
+          HostEnvelope.shouldInject(
+              for: AgentProfile(name: "Aider", command: "aider")
           ) == true)
     check("display text compacts blank runs",
           ConversationDisplayText.compactDerived("a\n\n\n\nb\n") == "a\n\nb")
@@ -2216,8 +2220,24 @@ check(
     AgentProfile(name: "Codex", command: "codex").preferredSessionBackend == .appServer
 )
 check(
-    "Claude profile stays PTY-primary",
-    AgentProfile(name: "Claude", command: "claude").preferredSessionBackend == .pty
+    "Claude profile prefers stream-json",
+    AgentProfile(name: "Claude", command: "claude").preferredSessionBackend == .structuredCli
+)
+check(
+    "Grok profile prefers ACP",
+    AgentProfile(name: "Grok", command: "grok").preferredSessionBackend == .acp
+)
+check(
+    "OpenCode profile prefers HTTP",
+    AgentProfile(name: "OpenCode", command: "opencode").preferredSessionBackend == .httpServer
+)
+check(
+    "Gemini CLI prefers ACP",
+    AgentProfile(name: "Gemini CLI", command: "gemini").preferredSessionBackend == .acp
+)
+check(
+    "session API list_adapters is read-only",
+    !ConduitSessionAPI.isWrite(.listAdapters)
 )
 check(
     "session API rejects blended MindGraph scope",
@@ -2242,6 +2262,9 @@ check(
 )
 do {
     let stamp = Date(timeIntervalSince1970: 1_787_000_000)
+    let supervisoryAttemptID = RuntimeAttemptID(
+        rawValue: UUID(uuidString: "AAAAAAAA-1111-2222-3333-444444444444")!
+    )
     let prompt = SessionPresentation.promptEvent(
         origin: .chatgpt,
         text: "Use Bearer sk-test-secret-abcdefg",
@@ -2334,7 +2357,9 @@ do {
             adapter: ConduitSessionAdapterSnapshot(
                 threadID: "thr",
                 lastTurnStatus: "completed"
-            )
+            ),
+            runtimeAttemptID: supervisoryAttemptID,
+            observedAt: stamp.addingTimeInterval(2)
         )
     )
     let ptyPage = ConduitSessionEventExport.page(
@@ -2348,6 +2373,36 @@ do {
             events: [prompt, ptyOutput]
         )
     )
+    let persistedPage = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .appServer,
+            sessionLifecycle: "runtime_missing",
+            runtimeState: "absent",
+            live: false,
+            ready: false,
+            events: [prompt],
+            persistedThreadID: "thr_persisted",
+            observedAt: stamp.addingTimeInterval(3)
+        )
+    )
+    let approvalPage = ConduitSessionEventExport.page(
+        source: ConduitSessionEventSource(
+            taskSessionID: "task",
+            backend: .appServer,
+            sessionLifecycle: "running",
+            runtimeState: "running",
+            live: true,
+            ready: true,
+            events: [prompt],
+            adapter: ConduitSessionAdapterSnapshot(
+                threadID: "thr",
+                turnActive: true,
+                pendingApproval: true,
+                pendingApprovalSummary: "git status"
+            )
+        )
+    )
     check("session events paginate with next cursor", firstPage.nextCursor == "v1:2" && firstPage.hasMore)
     check(
         "session events surface late items after cursor",
@@ -2359,6 +2414,39 @@ do {
     check("session events keep Codex turn completed distinct from running session", codexPage.turn.state == "completed" && codexPage.session.lifecycle == "running")
     check("session events keep PTY quiet ambiguous", ptyPage.turn.state == "ambiguous" && ptyPage.turn.ambiguity == "pty_output_quiet")
     check("session events label structured Codex output", codexPage.events.last?.authority == "toolReported" && codexPage.events.last?.turnStatus == "completed")
+    check("session events expose runtime attempt", codexPage.runtimeAttemptID == supervisoryAttemptID)
+    check(
+        "session events expose live provider thread",
+        codexPage.turn.threadIDSource == ConduitSessionProviderThreadSource.live
+    )
+    check(
+        "session events expose structured checkpoint",
+        codexPage.observation.checkpoint == ConduitSessionObservationCheckpoint.structuredCompleted
+            && codexPage.observation.providerProgress == ConduitSessionProviderProgress.structured
+    )
+    check(
+        "session events keep PTY checkpoint observational",
+        ptyPage.observation.checkpoint == ConduitSessionObservationCheckpoint.outputQuiet
+            && ptyPage.observation.providerProgress == ConduitSessionProviderProgress.unavailable
+            && ptyPage.observation.inputState == ConduitSessionInputState.unknown
+    )
+    check(
+        "session events expose persisted provider thread",
+        persistedPage.turn.threadID == "thr_persisted"
+            && persistedPage.turn.threadIDSource == ConduitSessionProviderThreadSource.persisted
+            && persistedPage.observation.providerProgress == ConduitSessionProviderProgress.unavailable
+    )
+    check(
+        "session events distinguish structured approval from PTY unknown",
+        approvalPage.observation.checkpoint == ConduitSessionObservationCheckpoint.structuredApproval
+            && approvalPage.observation.inputState == ConduitSessionInputState.approval
+            && approvalPage.observation.inputSummary == "git status"
+            && ptyPage.observation.inputState == ConduitSessionInputState.unknown
+    )
+    check(
+        "session events omit missing runtime attempt",
+        ptyPage.jsonObject()["runtime_attempt_id"] == nil
+    )
 }
 let adapterEvent = SessionPresentation.agentOutputEvent(
     promptEventID: nil,
