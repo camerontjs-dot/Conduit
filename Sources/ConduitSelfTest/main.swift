@@ -3100,6 +3100,48 @@ do {
         "projection is an allowlist, so an unknown field cannot leak",
         MindGraphOutput.projectResult(["some_future_absolute_path": "/Users/someone/x"]).isEmpty
     )
+
+    // Trust partition. Ranking is trust-blind: on 2026-08-20 a quarantined
+    // document from the fabricated-citations incident was the highest-scoring
+    // hit for a research question, carrying only a prose warning.
+    let ranked: [[String: Any]] = [
+        ["path": "a.md", "citation_class": "not_citable", "rrf_score": 0.0325],
+        ["path": "b.md", "citation_class": "citable", "rrf_score": 0.0283],
+        ["path": "c.md", "citation_class": "unverified", "rrf_score": 0.0266],
+        ["path": "d.md", "citation_class": "not_citable", "rrf_score": 0.0161],
+    ]
+    let split = MindGraphOutput.partitionByCitation(ranked)
+    check(
+        "a top-ranked non-citable hit does not lead the usable results",
+        (split.citable.first?["path"] as? String) == "b.md"
+    )
+    check(
+        "non-citable results are separated, not dropped",
+        split.citable.count == 2 && split.notCitable.count == 2
+    )
+    check(
+        "unverified stays usable, because it is a nomination not a bar",
+        split.citable.contains { ($0["path"] as? String) == "c.md" }
+    )
+    check(
+        "partition preserves rank order inside each bucket",
+        (split.notCitable.first?["path"] as? String) == "a.md"
+    )
+    check(
+        "counts report all three classes",
+        MindGraphOutput.citationCounts(ranked)
+            == ["citable": 1, "unverified": 1, "not_citable": 2]
+    )
+    check(
+        "a row with no citation_class counts as citable",
+        MindGraphOutput.citationCounts([["path": "x.md"]])["citable"] == 1
+    )
+    check(
+        "citation_class survives the projection allowlist",
+        MindGraphOutput.projectResult(
+            ["path": "a.md", "citation_class": "not_citable"]
+        )["citation_class"] as? String == "not_citable"
+    )
 }
 
 // MARK: - Summary

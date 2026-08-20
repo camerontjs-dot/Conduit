@@ -25,6 +25,17 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Added
+
+- `conduit_query_mindgraph` separates sources a caller must not cite from the
+  ones it may (D-043). Every result now carries a `citation_class`, documents
+  that are quarantined, retracted, superseded, or flagged as a fabricated
+  citation come back under `not_citable` rather than mixed into `results`, and
+  `citation_counts` reports the split. Retrieval ranking is trust-blind — on two
+  live queries a quarantined document from the 2026-08-09 fabricated-citations
+  incident was the **highest-scoring hit**, carrying only a prose warning that
+  the caller had to read and choose to obey. Nothing is dropped or re-ranked.
+
 ### Fixed
 
 - A structured adapter no longer reports the operator's own prompt, the model's

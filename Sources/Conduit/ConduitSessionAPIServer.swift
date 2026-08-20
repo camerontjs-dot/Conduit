@@ -613,7 +613,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_query_mindgraph",
-            "description": "Semantic search over the operator's local MindGraph index. scope selects which index: knowledge searches the 10_knowledge notes, projects searches 30_projects working files. Returns ranked passage nominations, each with the repo-relative path, title, matched text, and an rrf_score, plus any weak-fit or provenance warning the index attached. These are retrieval candidates for orienting yourself, not evidence that a claim is true, and never a substitute for reading the file.",
+            "description": "Semantic search over the operator's local MindGraph index. scope selects which index: knowledge searches the 10_knowledge notes, projects searches 30_projects working files. Returns ranked passage nominations, each with the repo-relative path, title, matched text, an rrf_score, and a citation_class. Documents that must not be cited — quarantined, retracted, superseded, or flagged as a fabricated citation — are returned separately under not_citable and never mixed into results, because ranking is trust-blind and such a document can outscore a real one. citation_counts reports the split. These are retrieval candidates for orienting yourself, not evidence that a claim is true, and never a substitute for reading the file.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": [
                 "type": "object",

@@ -3572,8 +3572,13 @@ final class AppModel: ObservableObject {
                let data = json.data(using: .utf8),
                let parsed = try? JSONSerialization.jsonObject(with: data),
                let rows = parsed as? [[String: Any]] {
-                payload["results"] = rows.map { MindGraphOutput.projectResult($0) }
-                payload["result_count"] = rows.count
+                let split = MindGraphOutput.partitionByCitation(rows)
+                payload["results"] = split.citable.map { MindGraphOutput.projectResult($0) }
+                payload["result_count"] = split.citable.count
+                payload["not_citable"] = split.notCitable.map {
+                    MindGraphOutput.projectResult($0)
+                }
+                payload["citation_counts"] = MindGraphOutput.citationCounts(rows)
             } else {
                 payload["output"] = String(result.output.prefix(8_000))
                 payload["parse_error"] =

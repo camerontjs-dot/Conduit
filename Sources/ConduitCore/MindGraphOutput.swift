@@ -43,10 +43,50 @@ public enum MindGraphOutput {
         "domain",
         "status",
         "trust_profile",
+        "citation_class",
         "weak_fit",
         "provenance_warning",
         "query_scope_warning",
     ]
+
+    /// Splits nominations into ones a caller may cite and ones it must not.
+    ///
+    /// Retrieval ranking is trust-blind. A fabricated source is written to be
+    /// on topic, so it scores like any other and can take the top rank —
+    /// observed live on 2026-08-20, where a quarantined document from the
+    /// fabricated-citations incident was the highest-scoring hit for a
+    /// research question. Forwarding one ranked list with a prose warning
+    /// attached leaves the whole control resting on the caller reading English
+    /// and choosing to obey it.
+    ///
+    /// Order is preserved inside each bucket and nothing is dropped, so this
+    /// separates without re-ranking or hiding. `unverified` stays with the
+    /// usable results: it means "nomination, not evidence", which is a caveat
+    /// on use rather than a bar on it.
+    public static func partitionByCitation(
+        _ rows: [[String: Any]]
+    ) -> (citable: [[String: Any]], notCitable: [[String: Any]]) {
+        var citable: [[String: Any]] = []
+        var notCitable: [[String: Any]] = []
+        for row in rows {
+            if (row["citation_class"] as? String) == "not_citable" {
+                notCitable.append(row)
+            } else {
+                citable.append(row)
+            }
+        }
+        return (citable, notCitable)
+    }
+
+    /// Counts by citation class, always reporting all three keys.
+    public static func citationCounts(_ rows: [[String: Any]]) -> [String: Int] {
+        var counts = ["citable": 0, "unverified": 0, "not_citable": 0]
+        for row in rows {
+            let key = (row["citation_class"] as? String) ?? "citable"
+            counts[key, default: 0] += 1
+        }
+        return counts
+    }
 
     /// One result reduced to what a caller can act on, with the matched text
     /// bounded. Absent and null fields are omitted rather than sent as nulls.

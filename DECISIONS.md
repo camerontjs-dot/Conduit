@@ -1292,3 +1292,49 @@ a stream. Emitting reasoning into agent output behind a marker string, which
 would leave callers parsing prose to find the answer. Deferring the fix to the
 caller, which would require every orchestrator to know each host's stream
 taxonomy.
+
+## D-043: Trust is a partition, not a warning string
+
+**Status:** Accepted (2026-08-20)
+
+**Context:** After the 2026-08-09 fabricated-citations incident — 103 captures
+with invented sources in the knowledge base — MindGraph learned to attach a
+`provenance_warning` to every chunk of a quarantined document. Travelling on
+every chunk was the right lesson: a body banner only appears in chunk 0 and a
+frontmatter tag never appears in chunk text at all.
+
+But the warning was prose, and prose is advisory. Retrieval ranking is
+trust-blind, and a fabricated document is written to be on topic, so it scores
+like a real one. Driven from the ChatGPT seat on 2026-08-20, two live queries
+returned quarantined documents at **rank 1**, with `rrf_score` in the same class
+as the citable results beneath them. Six of eight results on one query were
+quarantined. The entire control was that the caller would read an English
+sentence and choose to obey it.
+
+**Decision:**
+
+1. Citability is a machine-readable class on every result, not an inference from
+   the presence of a warning string. `citable`, `unverified`, `not_citable`.
+2. `not_citable` results are returned in their own array and never mixed into
+   the ranked result set a caller reads first. `conduit_query_mindgraph` returns
+   `results`, `not_citable`, and `citation_counts`.
+3. `unverified` stays with the usable results. A needs-audit capture is a
+   nomination, not a barred source; collapsing the two would either hide real
+   candidates or launder fabricated ones into the same bucket.
+4. The partition separates, it does not drop and it does not re-rank. Order is
+   preserved inside each bucket and the counts reconcile, so a caller that
+   genuinely wants everything can still see everything.
+5. A row that declares no class is treated as citable. The class is a signal
+   added by the index; its absence is not evidence of a problem.
+
+**Consequences:** A caller doing the obvious thing — reading `results` in order
+— can no longer cite a quarantined source by accident. That is the point. The
+top-scoring hit for a research question may now sit in `not_citable`, which will
+look like worse retrieval and is in fact the same retrieval, told honestly.
+
+**Rejected alternatives:** Ranking non-citable results lower, which still puts
+them in the same list and makes the boundary a matter of degree. Dropping them
+entirely, which hides that the index holds contradicting material and would make
+the counts unreconcilable. Leaving it to the caller, which is the arrangement
+that just failed. Deriving citability from `provenance_warning != null`, which
+would wrongly bar `unverified` captures.
