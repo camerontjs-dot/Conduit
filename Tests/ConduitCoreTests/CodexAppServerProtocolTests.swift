@@ -105,7 +105,7 @@ final class CodexAppServerProtocolTests: XCTestCase {
         XCTAssertTrue(ConduitSessionAPI.allowsMindGraphScope("projects"))
         XCTAssertFalse(ConduitSessionAPI.allowsMindGraphScope("both"))
         XCTAssertFalse(
-            ConduitSessionAPI.isWrite(.listSessions)
+            ConduitSessionAPI.isWrite(.listSessions(cursor: nil, limit: nil))
         )
         XCTAssertFalse(
             ConduitSessionAPI.isWrite(

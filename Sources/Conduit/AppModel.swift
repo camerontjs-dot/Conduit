@@ -3492,11 +3492,28 @@ final class AppModel: ObservableObject {
                     ]
                 }
             ]
-        case .listSessions:
+        case .listSessions(let cursor, let limit):
+            // Newest activity first. The old first-40 slice dropped whichever
+            // tasks sorted late by identifier, which is arbitrary from the
+            // caller's side and indistinguishable from a complete inventory.
+            let ordered = taskSessions.sorted { $0.lastActivityAt > $1.lastActivityAt }
+            let window = ConduitSessionListPage.window(
+                total: ordered.count,
+                cursor: cursor,
+                limit: limit
+            )
             return [
-                "sessions": taskSessions.prefix(40).map { task -> [String: Any] in
+                "sessions": ordered[window.startIndex..<window.endIndex].map {
+                    task -> [String: Any] in
                     sessionAPITaskPayload(for: task)
-                }
+                },
+                "total": ordered.count,
+                "returned": window.count,
+                "has_more": window.hasMore,
+                "next_cursor": window.nextCursor,
+                "cursor_state": window.cursorState.rawValue,
+                "order": "last_activity_desc",
+                "authority": ConduitSessionListPage.authorityNote,
             ]
         case .listAdapters:
             return sessionAPIListAdapters()
@@ -3518,6 +3535,10 @@ final class AppModel: ObservableObject {
                 limit: limit
             )
         case .queryMindGraph(let question, let scope):
+            let askedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !askedQuestion.isEmpty else {
+                return ["error": "question is empty"]
+            }
             guard ConduitSessionAPI.allowsMindGraphScope(scope) else {
                 return ["error": "scope must be knowledge or projects"]
             }
@@ -3533,17 +3554,32 @@ final class AppModel: ObservableObject {
             let result = SubprocessRunner.run(
                 binary.path,
                 [
-                    "query", question, "--db", db.path,
+                    "query", askedQuestion, "--db", db.path,
                     "--top-k", "8", "--json", "--no-intent",
                 ],
                 timeout: 45
             )
-            return [
+            // `status` used to carry the process exit code under a name that
+            // reads like a result status. Separate the two, and hand back
+            // parsed results instead of a log preamble glued to JSON.
+            var payload: [String: Any] = [
                 "scope": scope,
-                "output": String(result.output.prefix(8_000)),
-                "status": result.status,
+                "exit_code": result.status,
                 "trust": "nomination only",
+                "authority": "retrieval nominations; not evidence that a claim holds",
             ]
+            if let json = MindGraphOutput.jsonPayload(in: result.output),
+               let data = json.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: data),
+               let rows = parsed as? [[String: Any]] {
+                payload["results"] = rows.map { MindGraphOutput.projectResult($0) }
+                payload["result_count"] = rows.count
+            } else {
+                payload["output"] = String(result.output.prefix(8_000))
+                payload["parse_error"] =
+                    "MindGraph output was not a JSON array; raw output retained"
+            }
+            return payload
         case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
             return sessionAPICreateTask(
                 agentName: agentName,
@@ -3589,7 +3625,6 @@ final class AppModel: ObservableObject {
         }
         return [
             "adapters": profiles,
-            "catalog": StructuredAdapterCatalog.entries.map(\.payload),
             "authority": "declared launch surfaces; not a live health check",
         ]
     }
@@ -3746,9 +3781,16 @@ final class AppModel: ObservableObject {
             payload["runtime_target"] = targetSessionName
         }
         if includeEvents {
+            // Fall back to the durable log the way sessionAPISessionEvents
+            // already does. Reading only live or cached state meant every task
+            // reported an empty history after a restart, while advertising
+            // that it returns recent conversation events.
             let eventSource = live?.presentationEvents
                 ?? conversationHistoryByTask[task.id]
-                ?? []
+                ?? ConversationEventLog(
+                    directory: conversationDirectory,
+                    taskSessionID: task.id
+                ).read().events
             let events = eventSource.suffix(6).map { event in
                 switch event.kind {
                 case .userPrompt(let prompt):

@@ -2949,6 +2949,159 @@ do {
     }
 }
 
+
+// MARK: - Session list paging and MindGraph output
+//
+// conduit_list_sessions used to return a bare first-40 slice with no total and
+// no cursor, so a truncated inventory was indistinguishable from a complete
+// one. These pin the window maths that replaced it.
+
+do {
+    let full = ConduitSessionListPage.window(total: 12, cursor: nil, limit: 40)
+    check(
+        "a short inventory returns whole and says so",
+        full.startIndex == 0 && full.endIndex == 12 && !full.hasMore
+            && full.cursorState == .ok
+    )
+    let first = ConduitSessionListPage.window(total: 64, cursor: nil, limit: 40)
+    check(
+        "a long inventory pages and admits there is more",
+        first.count == 40 && first.hasMore && first.nextCursor == "v1:40"
+    )
+    let second = ConduitSessionListPage.window(
+        total: 64,
+        cursor: first.nextCursor,
+        limit: 40
+    )
+    check(
+        "the next cursor reaches the remainder exactly",
+        second.startIndex == 40 && second.count == 24 && !second.hasMore
+    )
+    check(
+        "paging covers the inventory with no gap or overlap",
+        first.count + second.count == 64 && first.endIndex == second.startIndex
+    )
+    check(
+        "a cursor past the end is stale, not an error",
+        ConduitSessionListPage.window(total: 64, cursor: "v1:999").cursorState == .ahead
+    )
+    check(
+        "a stale cursor returns nothing rather than wrapping around",
+        ConduitSessionListPage.window(total: 64, cursor: "v1:999").count == 0
+    )
+    check(
+        "an unparseable cursor restarts and says it was invalid",
+        ConduitSessionListPage.window(total: 64, cursor: "nonsense").cursorState == .invalid
+            && ConduitSessionListPage.window(total: 64, cursor: "nonsense").startIndex == 0
+    )
+    check(
+        "an empty inventory is not an error",
+        ConduitSessionListPage.window(total: 0).count == 0
+            && !ConduitSessionListPage.window(total: 0).hasMore
+    )
+    check(
+        "list limits clamp instead of failing",
+        ConduitSessionListPage.clampLimit(nil) == 40
+            && ConduitSessionListPage.clampLimit(0) == 40
+            && ConduitSessionListPage.clampLimit(-5) == 40
+            && ConduitSessionListPage.clampLimit(5) == 5
+            && ConduitSessionListPage.clampLimit(9_999) == 200
+    )
+}
+
+do {
+    let noisy = """
+    08:29:04 INFO    mindgraph | Loading embedding model (all-MiniLM-L6-v2)...
+    08:29:06 INFO    mindgraph | Ready
+    [
+      {"doc_id": "abc", "score": 0.4}
+    ]
+    """
+    check(
+        "MindGraph results are separated from the progress log",
+        MindGraphOutput.jsonPayload(in: noisy)?.hasPrefix("[") == true
+    )
+    check(
+        "the progress log is kept, not glued to the results",
+        MindGraphOutput.logPreamble(in: noisy).contains("Loading embedding model")
+            && MindGraphOutput.logPreamble(in: noisy).contains("[") == false
+    )
+    check(
+        "a bracket inside a log message does not look like the payload",
+        MindGraphOutput.jsonPayload(in: """
+        08:29:04 INFO mindgraph | scanning [30_projects] now
+        [{"doc_id": "x"}]
+        """)?.hasPrefix("[{") == true
+    )
+    check(
+        "output with no payload reports none rather than guessing",
+        MindGraphOutput.jsonPayload(in: "08:29:04 INFO mindgraph | no results") == nil
+    )
+    check(
+        "a bare payload with no log still parses",
+        MindGraphOutput.jsonPayload(in: "[{\"doc_id\":\"x\"}]")?.hasPrefix("[") == true
+    )
+}
+
+
+do {
+    // A row shaped like MindGraph's real output, including the absolute host
+    // path that must never reach an external orchestrator.
+    let row: [String: Any] = [
+        "path": "30_projects/conduit/log.md",
+        "title": "Conduit log",
+        "chunk_text": String(repeating: "x", count: 900),
+        "rrf_score": 0.031754,
+        "doc_type": "project",
+        "domain": "agent-operations",
+        "status": "active",
+        "trust_profile": "project_status",
+        "weak_fit": false,
+        "provenance_warning": NSNull(),
+        "source_root": "/Users/someone/Desktop/MainFrame/30_projects/conduit",
+        "content_hash": "40e9aa82",
+        "doc_id": "829fd037c29e0ecd",
+        "semantic_distance": 0.98747,
+        "index_id": "mainframe-projects",
+    ]
+    let projected = MindGraphOutput.projectResult(row)
+    check(
+        "the absolute host path never reaches the caller",
+        projected["source_root"] == nil
+    )
+    check(
+        "retrieval mechanics are dropped",
+        projected["content_hash"] == nil && projected["doc_id"] == nil
+            && projected["semantic_distance"] == nil && projected["index_id"] == nil
+    )
+    check(
+        "a caller still gets what it can act on",
+        projected["path"] != nil && projected["title"] != nil
+            && projected["chunk_text"] != nil && projected["rrf_score"] != nil
+    )
+    check(
+        "weak-fit and trust signals survive projection",
+        projected["weak_fit"] != nil && projected["trust_profile"] != nil
+    )
+    check(
+        "null warnings are omitted rather than sent as nulls",
+        projected["provenance_warning"] == nil
+    )
+    check(
+        "matched text is bounded and admits truncation",
+        (projected["chunk_text"] as? String)?.count == 600
+            && projected["chunk_text_truncated"] as? Bool == true
+    )
+    check(
+        "short text is not marked truncated",
+        MindGraphOutput.projectResult(["chunk_text": "short"])["chunk_text_truncated"] == nil
+    )
+    check(
+        "projection is an allowlist, so an unknown field cannot leak",
+        MindGraphOutput.projectResult(["some_future_absolute_path": "/Users/someone/x"]).isEmpty
+    )
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

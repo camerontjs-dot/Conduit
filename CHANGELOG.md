@@ -92,6 +92,26 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- `conduit_list_sessions` no longer hides part of the task inventory. It
+  returned the first 40 tasks with no total, no cursor, and no ordering
+  guarantee, so a caller could not tell a truncated list from a complete one and
+  the tasks it dropped were whichever identifiers sorted late. It now orders by
+  last activity, newest first, and returns `total`, `returned`, `has_more`,
+  `next_cursor`, and `cursor_state`, with `cursor` and `limit` arguments
+  (default 40, cap 200) that reuse the `conduit_session_events` convention.
+- `conduit_session_status` returns the conversation events it advertises. It
+  read only live in-memory state or a warm cache, so after a restart every task
+  reported an empty history; it now falls back to the durable log the way
+  `conduit_session_events` already did.
+- `conduit_query_mindgraph` returns parsed results instead of raw CLI stdout.
+  The payload was the query process's stdout with a progress log glued to the
+  front of the JSON, and its `status` field was the process exit code under a
+  name that reads like a result status. Results are now structured, the exit
+  code is `exit_code`, and an empty question is rejected instead of running a
+  full embedding query.
+- Tool descriptions state what each tool returns and where a `taskSessionID`
+  comes from. They ranged from ninety words to six, and nothing said how to
+  obtain the identifier every task tool requires.
 - The sprite integrity manifest now covers every bundled image. Since the
   structured-adapter pass the app has shipped and rendered eight per-identity
   companion masters that `SHA256SUMS` did not list, so that art could drift
@@ -154,6 +174,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Security
 
+- `conduit_query_mindgraph` no longer forwards absolute host paths. Each result
+  carried `source_root`, a full filesystem path on the operator's machine, to
+  whatever external client asked. Results are now projected through an
+  allowlist, so retrieval mechanics stay local and a future path-bearing field
+  cannot leak by default. Weak-fit and provenance warnings are deliberately kept.
 - Session API writes fail closed when the caller cannot be identified. A
   listener that has not seen an MCP `initialize` refuses every write with
   `caller_identity_required` instead of executing it anonymously.

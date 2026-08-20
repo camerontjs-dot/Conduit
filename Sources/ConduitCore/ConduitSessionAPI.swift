@@ -67,7 +67,7 @@ public struct ConduitSessionCaller: Equatable, Sendable {
 
 public enum ConduitSessionCommand: Equatable, Sendable {
     case listProjects
-    case listSessions
+    case listSessions(cursor: String?, limit: Int?)
     case listAdapters
     case sessionStatus(taskSessionID: String)
     case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)

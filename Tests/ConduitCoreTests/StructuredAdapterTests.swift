@@ -52,7 +52,7 @@ final class StructuredAdapterTests: XCTestCase {
 
     func testSessionAPIListAdaptersIsReadOnly() {
         XCTAssertFalse(ConduitSessionAPI.isWrite(.listAdapters))
-        XCTAssertFalse(ConduitSessionAPI.isWrite(.listSessions))
+        XCTAssertFalse(ConduitSessionAPI.isWrite(.listSessions(cursor: nil, limit: nil)))
     }
 
     func testACPPromptCompletion() {

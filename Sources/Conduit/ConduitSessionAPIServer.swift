@@ -252,13 +252,23 @@ final class ConduitSessionAPIServer {
         }
     }
 
+    private static func intArgument(_ value: CodexJSON?) -> Int? {
+        guard let value else { return nil }
+        if case .number(let number) = value { return Int(number) }
+        if let raw = value.stringValue { return Int(raw) }
+        return nil
+    }
+
     private func callTool(name: String, arguments: CodexJSON) -> [String: Any] {
         let command: ConduitSessionCommand?
         switch name {
         case "conduit_list_projects":
             command = .listProjects
         case "conduit_list_sessions":
-            command = .listSessions
+            command = .listSessions(
+                cursor: arguments["cursor"]?.stringValue,
+                limit: Self.intArgument(arguments["limit"])
+            )
         case "conduit_list_adapters":
             command = .listAdapters
         case "conduit_session_status":
@@ -270,11 +280,7 @@ final class ConduitSessionAPIServer {
         case "conduit_session_events":
             if let id = arguments["taskSessionID"]?.stringValue {
                 let cursor = arguments["cursor"]?.stringValue
-                let limit = arguments["limit"].flatMap { value -> Int? in
-                    if case .number(let number) = value { return Int(number) }
-                    if let raw = value.stringValue { return Int(raw) }
-                    return nil
-                }
+                let limit = Self.intArgument(arguments["limit"])
                 command = .sessionEvents(
                     taskSessionID: id,
                     cursor: cursor,
@@ -534,25 +540,39 @@ final class ConduitSessionAPIServer {
     private static let readTools: [[String: Any]] = [
         [
             "name": "conduit_list_projects",
-            "description": "List scanned MainFrame projects from README frontmatter.",
+            "description": "List MainFrame projects Conduit can start work in. Each entry has slug, title, and lifecycle state (active, paused, planned, suspended, shipped, or empty when the project README declares none). The slug is what conduit_create_task takes as project_slug.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "conduit_list_sessions",
-            "description": "List Conduit tasks and live runtimes.",
+            "description": "List Conduit tasks, newest activity first, with the durable task UUID used by every other task tool. Paged: the response carries total, returned, has_more, and next_cursor, so a truncated page is always visible as one. Default page is 40 and the hard cap is 200. live and ready describe an observed runtime, not agent progress.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
-            "inputSchema": ["type": "object", "properties": [String: Any]()],
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "cursor": [
+                        "type": "string",
+                        "description": "Monotonic cursor from a previous next_cursor. Omit or pass empty to start at the newest task. Format v1:<index>.",
+                    ],
+                    "limit": [
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200,
+                        "description": "Maximum tasks to return. Default 40, hard cap 200.",
+                    ],
+                ],
+            ],
         ],
         [
             "name": "conduit_list_adapters",
-            "description": "List enabled Conduit agent profiles and their structured session backends (app-server, ACP, OpenCode HTTP, stream-json, or PTY). This is the declared launch surface, not a live health check.",
+            "description": "List the agent profiles this operator has enabled and the session backend each one prefers (app-server, ACP, OpenCode HTTP, stream-json, or PTY). Use name as the agent argument to conduit_create_task. This is the declared launch surface, not a live health check: a profile listed here can still fail to start.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "conduit_session_status",
-            "description": "Observed status plus last redacted conversation events.",
+            "description": "Observed status for one existing Conduit task, plus a short redacted tail of its conversation, read from the durable log when no runtime is live. taskSessionID comes from conduit_list_sessions or from a conduit_create_task result. For a full cursor-paged timeline use conduit_session_events. Status is observation, never verification of what an agent did.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -590,7 +610,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_query_mindgraph",
-            "description": "Query MindGraph. scope must be knowledge or projects.",
+            "description": "Semantic search over the operator's local MindGraph index. scope selects which index: knowledge searches the 10_knowledge notes, projects searches 30_projects working files. Returns ranked passage nominations, each with the repo-relative path, title, matched text, and an rrf_score, plus any weak-fit or provenance warning the index attached. These are retrieval candidates for orienting yourself, not evidence that a claim is true, and never a substitute for reading the file.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": [
                 "type": "object",
