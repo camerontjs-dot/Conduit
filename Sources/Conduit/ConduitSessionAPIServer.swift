@@ -236,7 +236,7 @@ final class ConduitSessionAPIServer {
             return [
                 "jsonrpc": "2.0",
                 "id": id,
-                "result": ["tools": allowWrites ? Self.readTools + Self.writeTools : Self.readTools],
+                "result": ["tools": ConduitSessionToolCatalog.tools()],
             ]
         case "tools/call":
             let name = payload["params"]?["name"]?.stringValue ?? ""

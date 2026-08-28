@@ -47,6 +47,17 @@ struct RootView: View {
         .conduitSurfaceChrome(finish: themeStore.surfaceFinish, colorScheme: colorScheme)
         .toolbar {
             ToolbarItem(placement: .automatic) {
+                Picker("Workspace", selection: $model.workspace) {
+                    ForEach(ConduitWorkspace.allCases, id: \.self) { workspace in
+                        Label(workspace.displayName, systemImage: workspace.symbolName)
+                            .tag(workspace)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Conduit workspace")
+                .accessibilityValue(model.workspace.displayName)
+            }
+            ToolbarItem(placement: .automatic) {
                 paletteMenu
             }
         }
@@ -453,6 +464,10 @@ struct RootView: View {
                 onboarding
             } else if model.rootAccessNeedsAuthorization {
                 rootAuthorization
+            } else if model.workspace == .orchestrate {
+                OrchestrateWorkspaceView()
+                    .environmentObject(model)
+                    .environmentObject(themeStore)
             } else if let project = model.selectedTaskProject ?? model.selectedProject {
                 ProjectWorkspaceView(
                     project: project,

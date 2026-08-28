@@ -100,6 +100,19 @@ final class SessionPresentationTests: XCTestCase {
         )
     }
 
+    func testInterruptRequestRoundTripsAndCreatesATurnBoundary() throws {
+        let event = SessionPresentation.interruptRequestEvent(
+            id: UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!,
+            occurredAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let decoded = try JSONDecoder().decode(
+            SessionPresentationEvent.self,
+            from: JSONEncoder().encode(event)
+        )
+        XCTAssertEqual(decoded, event)
+        XCTAssertEqual(SessionPresentation.conversationTurns(from: [event]).count, 1)
+    }
+
     func testOpeningEventIsConduitRecordedAndRoundTrips() throws {
         let id = UUID()
         let date = Date(timeIntervalSince1970: 1_800_000_000)

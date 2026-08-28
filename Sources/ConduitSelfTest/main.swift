@@ -51,6 +51,20 @@ check("frontmatter parses tags", frontmatter.tags == ["images", "agents"])
 check("frontmatter falls back to heading",
       FrontmatterParser.parse("# Plain\n", fallbackTitle: "F").title == "Plain")
 
+let orchestrationRoot = MainframeProject(
+    slug: "mainframe",
+    path: URL(fileURLWithPath: "/tmp/MainFrame"),
+    readmePath: nil,
+    metadata: ProjectMetadata(title: "MainFrame"),
+    isMainframeRoot: true
+)
+check("orchestration selector keeps MainFrame root selectable",
+      OrchestrationScopeSelection.selectedProject(
+        explicitID: orchestrationRoot.id,
+        currentSelection: nil,
+        from: OrchestrationScopeSelection.selectableProjects(from: [orchestrationRoot])
+      ) == orchestrationRoot)
+
 let navigationProject = MainframeProject(
     slug: "conduit",
     path: URL(fileURLWithPath: "/tmp/MainFrame/30_projects/conduit"),
@@ -307,6 +321,16 @@ check("session opening event round-trips",
         SessionPresentationEvent.self,
         from: JSONEncoder().encode(openingEvent)
       )) == openingEvent)
+let interruptRequestEvent = SessionPresentation.interruptRequestEvent(
+    id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+    occurredAt: presentationDate
+)
+check("interrupt request is Conduit-recorded and round-trips",
+      interruptRequestEvent.authority == .conduitRecorded
+        && (try? JSONDecoder().decode(
+            SessionPresentationEvent.self,
+            from: JSONEncoder().encode(interruptRequestEvent)
+        )) == interruptRequestEvent)
 
 let firstPromptEvent = SessionPresentation.promptEvent(
     text: "Review this change",
@@ -3141,6 +3165,115 @@ do {
         MindGraphOutput.projectResult(
             ["path": "a.md", "citation_class": "not_citable"]
         )["citation_class"] as? String == "not_citable"
+    )
+}
+
+do {
+    let plannerContext = OrchestrationContextPacket(
+        projectID: "conduit",
+        generatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+        entries: [
+            OrchestrationContextEntry(
+                id: "knowledge-planner",
+                scope: .knowledge,
+                displayPath: "10_knowledge/agents/planner.md",
+                citationClass: .citable,
+                excerpt: "Nominations are not proof.",
+                tokenEstimate: 30,
+                selectedByOperator: true
+            ),
+            OrchestrationContextEntry(
+                id: "project-conduit",
+                scope: .projects,
+                displayPath: "30_projects/conduit/README.md",
+                citationClass: .citable,
+                excerpt: "Conduit owns execution state.",
+                tokenEstimate: 30,
+                selectedByOperator: true
+            )
+        ]
+    )
+    let plannerProposal = OrchestrationProposal(
+        objective: "Add one bounded proposal contract.",
+        projectID: "conduit",
+        suggestedAgent: "OpenCode Local Planner",
+        scopeAllowlist: ["Sources/ConduitCore/"],
+        deliverables: ["Core types and tests"],
+        verificationSteps: ["Run the focused XCTest suite."],
+        risks: ["Planner prose is not verification."],
+        nonGoals: ["No worker fan-out."]
+    )
+    let plannerPolicy = OrchestrationProposalPolicy(
+        allowedAgentNames: ["OpenCode Local Planner"]
+    )
+    check(
+        "planner context preserves scope labels and its token budget",
+        plannerContext.validationReasons(maximumTokens: 100).isEmpty
+            && plannerContext.entries.map(\.scope) == [.knowledge, .projects]
+    )
+    check(
+        "planner proposal is valid only as an approval candidate",
+        plannerPolicy.validate(
+            proposal: plannerProposal,
+            selectedProjectID: "conduit",
+            contextPacket: plannerContext,
+            workerAlreadyActive: false
+        ) == .valid
+    )
+    check(
+        "planner refuses an absolute scope before approval",
+        {
+            let absoluteScope = OrchestrationProposal(
+                objective: plannerProposal.objective,
+                projectID: plannerProposal.projectID,
+                suggestedAgent: plannerProposal.suggestedAgent,
+                scopeAllowlist: ["/policies/local_planner.yaml"],
+                deliverables: plannerProposal.deliverables,
+                verificationSteps: plannerProposal.verificationSteps,
+                risks: plannerProposal.risks,
+                nonGoals: plannerProposal.nonGoals
+            )
+            guard case .refused = plannerPolicy.validate(
+                proposal: absoluteScope,
+                selectedProjectID: "conduit",
+                contextPacket: plannerContext,
+                workerAlreadyActive: false
+            ) else { return false }
+            return true
+        }()
+    )
+    let plannerApproval = OrchestrationApprovalToken(proposal: plannerProposal)
+    let approvalState = OrchestrationRunReducer.reduce(
+        .proposalReady(plannerProposal),
+        event: .requestApproval
+    )
+    let launchState = OrchestrationRunReducer.reduce(
+        approvalState,
+        event: .beginLaunch(plannerApproval, selectedProjectID: "conduit")
+    )
+    check(
+        "planner approval needs an exact current proposal before launch",
+        launchState == .launching(plannerProposal, plannerApproval)
+            && !plannerApproval.matches(
+                OrchestrationProposal(
+                    objective: "A changed proposal.",
+                    projectID: "conduit",
+                    suggestedAgent: "OpenCode Local Planner",
+                    scopeAllowlist: ["Sources/ConduitCore/"],
+                    deliverables: ["Core types and tests"],
+                    verificationSteps: ["Run the focused XCTest suite."],
+                    risks: ["Planner prose is not verification."],
+                    nonGoals: ["No worker fan-out."]
+                ),
+                selectedProjectID: "conduit"
+            )
+    )
+    check(
+        "launched identifies task creation rather than completion",
+        OrchestrationRunReducer.reduce(
+            launchState,
+            event: .recordLaunch(taskSessionID: "task-proposal-test")
+        ) == .launched(taskSessionID: "task-proposal-test")
     )
 }
 

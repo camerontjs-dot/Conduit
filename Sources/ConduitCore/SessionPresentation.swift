@@ -186,6 +186,9 @@ public enum SessionPresentationEventKind: Codable, Equatable, Sendable {
     case sessionOpened(SessionEntry)
     case userPrompt(SubmittedPrompt)
     case agentOutput(AgentVisibleOutput)
+    /// Conduit issued an interrupt request to a live runtime. This is not an
+    /// assertion that the provider received it or that its turn stopped.
+    case interruptRequested
 }
 
 /// One append-first item in Conduit's derived session view.
@@ -277,6 +280,21 @@ public enum SessionPresentation {
         )
     }
 
+    /// Records the local, durable boundary between requesting an interrupt and
+    /// later observing a provider turn state. It intentionally carries no
+    /// output text and cannot be confused with text-cap truncation.
+    public static func interruptRequestEvent(
+        id: UUID = UUID(),
+        occurredAt: Date = Date()
+    ) -> SessionPresentationEvent {
+        SessionPresentationEvent(
+            id: id,
+            occurredAt: occurredAt,
+            authority: .conduitRecorded,
+            kind: .interruptRequested
+        )
+    }
+
     /// Updates only the matching prompt event. Opening and unrelated prompt
     /// events retain their identity and contents.
     public static func updatingPromptDelivery(
@@ -344,7 +362,7 @@ public enum SessionPresentation {
 
         for event in events {
             switch event.kind {
-            case .sessionOpened:
+            case .sessionOpened, .interruptRequested:
                 flushOpen()
                 turns.append(ConversationTurn(id: event.id, kind: .boundary(event)))
             case .userPrompt:

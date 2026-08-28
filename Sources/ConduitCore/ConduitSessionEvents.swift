@@ -714,6 +714,18 @@ public enum ConduitSessionEventExport {
                 turnStatus: turnStatus,
                 textLimit: textLimit
             )
+
+        case .interruptRequested:
+            return makeRecord(
+                event: event,
+                index: index,
+                kind: "interrupt_request",
+                source: "conduit",
+                text: "Conduit issued an interrupt request. Provider cancellation has not been observed.",
+                state: "requested",
+                sourceTruncated: false,
+                textLimit: textLimit
+            )
         }
     }
 

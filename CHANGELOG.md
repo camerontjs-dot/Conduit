@@ -25,8 +25,28 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Changed
+
+- Orchestrate can now explicitly prepare a proposal for the configured
+  MainFrame root as well as a scanned project. This remains proposal-only;
+  worker launch is still disabled.
+- Local Ollama planner requests now ask Ollama to unload Conduit's Qwen model
+  immediately after a response. Conduit does not stop or reconfigure the
+  shared Ollama service or other loaded models.
+
 ### Added
 
+- A top-level **Orchestrate** workspace now separates task planning from a
+  worker's Conversation/Raw surfaces. It sends an explicit request only to a
+  fixed loopback Ollama planner with no tool interface, carries
+  scope/citation-labelled context packet and typed proposal contracts, rejects
+  unsafe or multi-worker proposals, and keeps task start disabled pending a
+  separate explicit handoff (D-046).
+- `conduit_session_events` now carries a durable `interrupt_request` marker
+  when Conduit issues `conduit_interrupt`. The marker says only that the local
+  request was issued; it does not turn acknowledgement into provider-observed
+  cancellation or completion, and it is distinct from the existing text-cap
+  `truncated` flag (D-044).
 - `conduit_query_mindgraph` separates sources a caller must not cite from the
   ones it may (D-043). Every result now carries a `citation_class`, documents
   that are quarantined, retracted, superseded, or flagged as a fabricated
@@ -59,6 +79,16 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Changed
 
+- The Session API now publishes a stable eleven-action MCP catalog even while
+  local writes are disabled. Discovery is not authorization: every lifecycle
+  call is still rejected before dispatch unless the operator enables Session
+  API writes locally. This prevents snapshotting clients from permanently
+  missing `conduit_create_task` after a later, explicitly approved write gate
+  change (D-045).
+- The Session API tool catalog now lives in ConduitCore and has durable unit
+  coverage. The loopback server remains responsible for dispatch and write
+  admission, while tests now pin the read/write gate, required arguments,
+  interruption wording, and the distinct text-truncation contract (D-044).
 - Every Session API tool parameter now carries a description. Nine were empty,
   including every required argument of all five write tools, so a caller reading
   `tools/list` could not tell whether `agent` wanted a profile name or a command,

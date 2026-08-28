@@ -108,10 +108,23 @@ final class AppModel: ObservableObject {
     static let companionChromeEnabledKey = "conduit.companionChrome.enabled"
 
     @Published var settings = ConduitSettings()
+    /// App-level navigation. Orchestrate is intentionally not a third surface
+    /// over a worker terminal; Conversation and Raw remain session-only.
+    @Published var workspace: ConduitWorkspace = .sessions
     @Published var projects: [MainframeProject] = []
     @Published var rootAccessNeedsAuthorization = false
     @Published var isScanningProjects = false
     @Published var selectedProjectID: String?
+    @Published var orchestrationProjectID: String?
+    @Published var orchestrationRequest = ""
+    @Published private(set) var orchestrationContextPacket: OrchestrationContextPacket?
+    @Published private(set) var orchestrationResponse: OrchestrationPlannerResponse?
+    @Published private(set) var orchestrationValidation: OrchestrationProposalValidation?
+    @Published private(set) var orchestrationRunState: OrchestrationRunState = .idle
+    @Published private(set) var isOrchestrationPlannerRunning = false
+    /// Explicit planner requests use only Ollama's fixed loopback API. The
+    /// planner has no worker, filesystem, shell, MCP, or approval interface.
+    let orchestrationBackendLabel = LocalOllamaPlanner.backendLabel
     @Published var sessions: [TerminalRuntime] = []
     @Published var activeSessionID: UUID?
     /// Durable, metadata-only task histories. MainFrame's current project scan
@@ -604,6 +617,142 @@ final class AppModel: ObservableObject {
 
     var selectedProject: MainframeProject? {
         projects.first { $0.id == selectedProjectID }
+    }
+
+    var orchestrationProjects: [MainframeProject] {
+        OrchestrationScopeSelection.selectableProjects(from: projects)
+    }
+
+    var orchestrationProject: MainframeProject? {
+        OrchestrationScopeSelection.selectedProject(
+            explicitID: orchestrationProjectID,
+            currentSelection: selectedProject,
+            from: orchestrationProjects
+        )
+    }
+
+    func selectOrchestrationProject(_ projectID: String?) {
+        orchestrationProjectID = projectID
+        resetOrchestrationPreview()
+    }
+
+    /// A deterministic presentation fixture for the Orchestrate workspace.
+    /// It intentionally has no adapter, process, network, or task-start call.
+    func previewOrchestrationProposal() {
+        guard let project = orchestrationProject else {
+            errorMessage = "Choose a scanned MainFrame project before preparing a proposal."
+            return
+        }
+        let request = orchestrationRequest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !request.isEmpty else {
+            errorMessage = "Describe the bounded planning request first."
+            return
+        }
+        guard let suggestedAgent = enabledAgents.first(where: {
+            $0.name.localizedCaseInsensitiveContains("OpenCode")
+        }) ?? enabledAgents.first(where: { $0.kind != .shell }) else {
+            errorMessage = "Enable a non-shell agent before preparing a proposal."
+            return
+        }
+
+        let context = OrchestrationContextPacket(projectID: project.id, entries: [])
+        let proposal = OrchestrationProposal(
+            objective: request,
+            projectID: project.id,
+            suggestedAgent: suggestedAgent.name,
+            scopeAllowlist: ["(select bounded paths before a real launch)"],
+            deliverables: ["Operator-reviewed task brief"],
+            verificationSteps: ["Choose a deterministic check before launch."],
+            risks: ["Fixture output is not a model response or task verification."],
+            nonGoals: ["Do not launch a worker from fixture mode."]
+        )
+        let response = OrchestrationPlannerResponse(
+            text: "Fixture proposal prepared locally. It demonstrates the review boundary only; no model, tool, or worker was invoked.",
+            proposal: proposal,
+            backendLabel: orchestrationBackendLabel
+        )
+        let policy = OrchestrationProposalPolicy(allowedAgentNames: [suggestedAgent.name])
+
+        orchestrationRunState = OrchestrationRunReducer.reduce(.idle, event: .beginContext)
+        orchestrationRunState = OrchestrationRunReducer.reduce(orchestrationRunState, event: .requestPlanner)
+        orchestrationRunState = OrchestrationRunReducer.reduce(orchestrationRunState, event: .receiveProposal(proposal))
+        orchestrationContextPacket = context
+        orchestrationResponse = response
+        orchestrationValidation = policy.validate(
+            proposal: proposal,
+            selectedProjectID: project.id,
+            contextPacket: context,
+            workerAlreadyActive: sessions.contains { !$0.controller.lifecycle.isTerminal }
+        )
+    }
+
+    /// Calls the isolated local planner only after an explicit UI action. This
+    /// cannot create or steer a worker task; it may only return visible text
+    /// and, when declared JSON is valid, a reviewable proposal.
+    func requestLocalOrchestrationProposal() {
+        guard !isOrchestrationPlannerRunning else { return }
+        guard let project = orchestrationProject else {
+            errorMessage = "Choose a scanned MainFrame project before asking the local planner."
+            return
+        }
+        let request = orchestrationRequest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !request.isEmpty else {
+            errorMessage = "Describe the bounded planning request first."
+            return
+        }
+        guard let openCodeAgent = enabledAgents.first(where: {
+            $0.name.localizedCaseInsensitiveContains("OpenCode")
+        }) else {
+            errorMessage = "Enable the OpenCode profile before asking the local planner."
+            return
+        }
+
+        let context = OrchestrationContextPacket(projectID: project.id, entries: [])
+        orchestrationContextPacket = context
+        orchestrationResponse = nil
+        orchestrationValidation = nil
+        orchestrationRunState = OrchestrationRunReducer.reduce(.idle, event: .beginContext)
+        orchestrationRunState = OrchestrationRunReducer.reduce(orchestrationRunState, event: .requestPlanner)
+        isOrchestrationPlannerRunning = true
+
+        Task { [weak self] in
+            defer { self?.isOrchestrationPlannerRunning = false }
+            do {
+                let response = try await LocalOllamaPlanner().propose(
+                    request: request,
+                    context: context
+                )
+                self?.orchestrationResponse = response
+                if let proposal = response.proposal {
+                    let policy = OrchestrationProposalPolicy(allowedAgentNames: [openCodeAgent.name])
+                    self?.orchestrationRunState = OrchestrationRunReducer.reduce(
+                        self?.orchestrationRunState ?? .idle,
+                        event: .receiveProposal(proposal)
+                    )
+                    self?.orchestrationValidation = policy.validate(
+                        proposal: proposal,
+                        selectedProjectID: project.id,
+                        contextPacket: context,
+                        workerAlreadyActive: self?.sessions.contains { !$0.controller.lifecycle.isTerminal } ?? true
+                    )
+                } else {
+                    self?.orchestrationRunState = .failed(
+                        reason: "Planner text was visible but did not contain a declared typed proposal."
+                    )
+                }
+            } catch {
+                self?.orchestrationRunState = .failed(reason: error.localizedDescription)
+                self?.errorMessage = "Local planner failed before any worker was created: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func resetOrchestrationPreview() {
+        orchestrationContextPacket = nil
+        orchestrationResponse = nil
+        orchestrationValidation = nil
+        orchestrationRunState = .idle
+        isOrchestrationPlannerRunning = false
     }
 
     /// The active session only when it belongs to the project currently on
@@ -1411,6 +1560,8 @@ final class AppModel: ObservableObject {
             return
         case .userPrompt:
             phase = "prompt"
+        case .interruptRequested:
+            phase = "interrupt-requested"
         case .agentOutput(let output):
             switch output.state {
             case .live: phase = "output-first"
@@ -3804,6 +3955,8 @@ final class AppModel: ObservableObject {
                     return "agent[\(output.extraction.displayName)]: \(output.text.prefix(240))"
                 case .sessionOpened:
                     return "opened[\(event.authority.displayName)]"
+                case .interruptRequested:
+                    return "interrupt requested[\(event.authority.displayName)]"
                 }
             }
             payload["events"] = Array(events)
@@ -4191,6 +4344,7 @@ final class AppModel: ObservableObject {
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to interrupt", "taskSessionID": rawID]
         }
+        let interruptionEventID = runtime.recordInterruptRequest()
         if runtime.usesStructuredHost {
             runtime.interruptStructuredAdapter()
         } else {
@@ -4198,8 +4352,10 @@ final class AppModel: ObservableObject {
         }
         return [
             "taskSessionID": rawID,
+            "interrupt": "requested",
+            "interrupt_event_id": interruptionEventID.uuidString,
             "interrupted": true,
-            "authority": "interrupt sent; not verification",
+            "authority": "Conduit issued and recorded an interrupt request; provider cancellation has not been observed. Read conduit_session_events for later observation.",
         ]
     }
 
@@ -4465,6 +4621,14 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         if delivery == .failed {
             closeAgentOutputCapture()
         }
+    }
+
+    @discardableResult
+    func recordInterruptRequest() -> UUID {
+        let event = SessionPresentation.interruptRequestEvent()
+        presentationEvents.append(event)
+        recordEventRevision?(event)
+        return event.id
     }
 
     /// Opens a best-effort raw-derived block at the exact point Conduit hands

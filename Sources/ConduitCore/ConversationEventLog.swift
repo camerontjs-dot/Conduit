@@ -607,7 +607,7 @@ public struct ConversationEventLog: Equatable, Sendable {
         _ event: SessionPresentationEvent
     ) -> Bool {
         switch event.kind {
-        case .sessionOpened, .userPrompt:
+        case .sessionOpened, .userPrompt, .interruptRequested:
             return event.authority == .conduitRecorded
         case .agentOutput(let output):
             switch output.extraction {
@@ -660,12 +660,21 @@ public struct ConversationEventLog: Equatable, Sendable {
             }
             return true
 
+        case (.interruptRequested, .interruptRequested):
+            return true
+
         case (.sessionOpened, .userPrompt),
              (.sessionOpened, .agentOutput),
+             (.sessionOpened, .interruptRequested),
              (.userPrompt, .sessionOpened),
              (.userPrompt, .agentOutput),
+             (.userPrompt, .interruptRequested),
              (.agentOutput, .sessionOpened),
-             (.agentOutput, .userPrompt):
+             (.agentOutput, .userPrompt),
+             (.agentOutput, .interruptRequested),
+             (.interruptRequested, .sessionOpened),
+             (.interruptRequested, .userPrompt),
+             (.interruptRequested, .agentOutput):
             return false
         }
     }

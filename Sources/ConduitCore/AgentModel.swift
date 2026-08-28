@@ -65,7 +65,7 @@ public enum VisibleContextEstimator {
         var visibleText = composerText
         for event in events {
             switch event.kind {
-            case .sessionOpened:
+            case .sessionOpened, .interruptRequested:
                 break
             case .userPrompt(let prompt):
                 visibleText.append("\n")

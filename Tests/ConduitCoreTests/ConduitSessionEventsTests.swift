@@ -79,6 +79,25 @@ final class ConduitSessionEventsTests: XCTestCase {
         XCTAssertEqual(page.events[1].authority, "derivedFromRaw")
     }
 
+    func testInterruptRequestIsADistinctDurableMarkerNotTextTruncation() {
+        let event = SessionPresentation.interruptRequestEvent(
+            id: UUID(uuidString: "ABABABAB-ABAB-ABAB-ABAB-ABABABABABAB")!,
+            occurredAt: t0
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(events: [event], backend: .appServer)
+        )
+
+        XCTAssertEqual(page.events.count, 1)
+        XCTAssertEqual(page.events[0].kind, "interrupt_request")
+        XCTAssertEqual(page.events[0].source, "conduit")
+        XCTAssertEqual(page.events[0].state, "requested")
+        XCTAssertEqual(page.events[0].authority, "conduitRecorded")
+        XCTAssertFalse(page.events[0].truncated)
+        XCTAssertFalse(page.truncated)
+        XCTAssertTrue(page.events[0].text?.contains("has not been observed") == true)
+    }
+
     func testCodexTurnCompletedWhileSessionStillRunning() {
         let prompt = deliveredPrompt("Reply pong", at: t0)
         let output = SessionPresentation.agentOutputEvent(

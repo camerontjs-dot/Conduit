@@ -1338,3 +1338,113 @@ entirely, which hides that the index holds contradicting material and would make
 the counts unreconcilable. Leaving it to the caller, which is the arrangement
 that just failed. Deriving citability from `provenance_warning != null`, which
 would wrongly bar `unverified` captures.
+
+## D-044: Separate interrupt requests from observed interruption
+
+**Status:** Accepted (2026-08-21)
+
+**Context:** `conduit_interrupt` previously returned `interrupted: true` after
+asking the backend to cancel. That was only local acknowledgement. The durable
+Conversation timeline had no marker, and a closed output looked the same whether
+it completed naturally or followed an interrupt request. Reusing `truncated`
+would be false: that field means Conduit's export text cap, not a provider turn
+being cut short. The MCP catalog that described this behavior was also private
+to the AppKit target, so the caller-facing contract could not receive Core test
+coverage.
+
+**Decision:**
+
+1. An admitted interrupt appends a durable, Conduit-recorded
+   `interrupt_request` event before the backend request is sent. It is exported
+   with `state: requested`, `source: conduit`, and `truncated: false`.
+2. `conduit_interrupt` returns the event id and `interrupt: requested`. The
+   compatibility `interrupted: true` remains acknowledgement only; its authority
+   text explicitly directs the caller to later session events.
+3. A provider cancellation or a completed/failed turn remains a separate
+   observation. No interrupt request changes `turn.state`, fabricates a result,
+   or makes output truncation true.
+4. The active `tools/list` catalog moves to ConduitCore. Dispatch, authentication,
+   and admission remain in the app target; catalog shape and wording are tested
+   by ConduitCore tests and self-test assertions.
+
+**Consequences:** An orchestrator can now see that Conduit sent a request and
+can continue polling without treating it as proof that the provider stopped.
+Provider-specific observed-interruption support remains future adapter work.
+The `create_task` model parameter remains deliberately absent: a request-scoped
+model override needs an explicit policy for allowed models, persistence, launch
+precedence, and receipt/status projection.
+
+**Rejected alternatives:** Calling the request itself an interruption result;
+overloading `truncated`; inferring interruption from quiet PTY output; and
+keeping the active catalog private to the app target.
+
+## D-045: Publish a stable Session API catalog; authorize writes at call time
+
+**Status:** Accepted (2026-08-23)
+
+**Context:** The Session API originally omitted lifecycle tools from
+`tools/list` while its local write setting was off. That makes an ordinary
+loopback client look safely read-only, but clients that snapshot an MCP app's
+actions cannot discover `conduit_create_task` later when an operator enables
+writes. A hosted canary reached a write-enabled server but retained the
+earlier read-only action snapshot.
+
+**Decision:** `tools/list` always publishes the eleven-action catalog from
+ConduitCore. Each lifecycle description says that its publication is not local
+authorization. The loopback server continues to reject lifecycle commands
+before dispatch when `allowWrites` is false, and AppModel retains its handler
+guards. The static catalog is covered by Core tests; runtime authorization is
+not represented by the listing.
+
+**Consequences:** A caller can understand the complete surface without a
+configuration-dependent discovery race. Seeing a lifecycle action grants no
+capability: the caller still receives the explicit disabled-write error until
+the operator changes the local setting. Hosted app refresh, app recreation,
+and workspace entitlement are deployment conditions outside this product
+decision.
+
+**Rejected alternatives:** Asking callers to reconnect after every write-gate
+change; exposing a write action only after a previous read call; treating a
+static catalog as authorization; or removing the server and handler write
+guards.
+
+---
+
+## D-046: Local planner proposals are not execution authority
+
+**Status:** Proposed (2026-08-23)
+
+**Context:** ChatGPT's available connector surface remains read-only, while a
+local model could make the Conduit cockpit less dependent on cloud agent use.
+That convenience cannot turn a planner response into authority to mutate a
+project or start a worker. Existing OpenCode service instances may also carry
+broader permissions than a planning assistant needs.
+
+**Proposed decision:** Add a top-level Orchestrate workspace, separate from a
+worker session's Conversation and Raw views. A local planner receives only a
+bounded, scope-labelled context packet and returns a typed proposal. It has no
+direct Conduit lifecycle capability. A proposal is validated deterministically;
+only a current, explicit operator approval can later invoke the existing task
+creation path. Planning response, task delivery, observed output, lifecycle,
+and independent verification remain distinct state axes.
+
+**Initial boundary:** The first usable planner transport is a fixed loopback
+Ollama request to the locally installed `qwen3.5:9b` model with reasoning
+disabled and a bounded response budget. It exposes no filesystem, shell, MCP,
+task, or approval interface. The initial OpenCode CLI probe is retained as a
+separate adapter lane: it could emit a marker but did not finish the structured
+proposal request within the 150-second bound, so the app does not attach to an
+existing OpenCode service or reuse it for planning. The Start action remains
+disabled; a local proposal response is not task creation.
+
+**Resource boundary:** A planner request sends `keep_alive: 0` to release only
+Conduit's requested model after it responds. Ollama is a shared external
+loopback service: Conduit neither starts nor stops the daemon, and it does not
+unload models loaded by another client. The configured MainFrame root may be a
+proposal target, but root selection does not grant the planner filesystem
+access or relax the bounded project-relative path policy.
+
+**Rejected alternatives:** Adding a third worker-session surface; reusing a
+normal OpenCode worker service for planning; parsing arbitrary model prose into
+a task; using a hidden task queue; treating a plan as verification; or falling
+back to a cloud model when a local planner is unavailable.

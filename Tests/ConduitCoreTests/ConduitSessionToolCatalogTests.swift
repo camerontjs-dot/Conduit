@@ -1,0 +1,48 @@
+import XCTest
+@testable import ConduitCore
+
+final class ConduitSessionToolCatalogTests: XCTestCase {
+    func testPublishedCatalogIncludesEveryLifecycleToolExactlyOnce() {
+        let names = ConduitSessionToolCatalog.tools()
+            .compactMap { $0["name"] as? String }
+        XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
+        XCTAssertEqual(Set(names).count, names.count)
+        XCTAssertEqual(names.count, 11)
+        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 5)
+    }
+
+    func testRequiredArgumentsAndDescriptionsRemainActionable() throws {
+        let create = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_create_task"))
+        let createSchema = try XCTUnwrap(create["inputSchema"] as? [String: Any])
+        XCTAssertEqual(createSchema["required"] as? [String], ["agent", "project_slug"])
+        XCTAssertTrue((create["description"] as? String)?.contains("no model override") == true)
+        XCTAssertTrue((create["description"] as? String)?.contains("always advertised") == true)
+        XCTAssertTrue((create["description"] as? String)?.contains("enables Session API writes locally") == true)
+
+        let interrupt = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_interrupt"))
+        let description = try XCTUnwrap(interrupt["description"] as? String)
+        XCTAssertTrue(description.contains("interrupt_request"))
+        XCTAssertTrue(description.contains("not observed cancellation"))
+        XCTAssertTrue(description.contains("truncated remains"))
+    }
+
+    func testEventsSchemaSeparatesInterruptKindFromTextTruncation() throws {
+        let events = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_session_events"))
+        let schema = try XCTUnwrap(events["outputSchema"] as? [String: Any])
+        let required = try XCTUnwrap(schema["required"] as? [String])
+        XCTAssertTrue(required.contains("events"))
+        XCTAssertTrue(required.contains("truncated"))
+        let observation = try XCTUnwrap(
+            (schema["properties"] as? [String: Any])?["observation"] as? [String: Any]
+        )
+        XCTAssertTrue((observation["required"] as? [String])?.contains("checkpoint") == true)
+        let eventsSchema = try XCTUnwrap(
+            (schema["properties"] as? [String: Any])?["events"] as? [String: Any]
+        )
+        let eventProperties = try XCTUnwrap(
+            ((eventsSchema["items"] as? [String: Any])?["properties"] as? [String: Any])
+        )
+        XCTAssertNotNil(eventProperties["artifact_refs"])
+        XCTAssertTrue((events["description"] as? String)?.contains("interrupt_request") == true)
+    }
+}
