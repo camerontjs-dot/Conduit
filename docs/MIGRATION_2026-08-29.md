@@ -36,7 +36,7 @@ Baseline checks on the current product source:
   `273 tests, 0 failures`. Existing compiler warnings remain non-blocking.
 * `./scripts/build-app.sh` passed and produced an ad-hoc code-signed app.
   The built binary SHA-256 was
-  `7e1630960e1f0b2f5295fff90d1d21f39e506ca4c737f7df787f382369157aee`.
+  `6b0a719e850283c7e5480b9b72c72c401324aa6f5c820234686f2c52ee77fca5`.
 * The strict leak scan found only synthetic path/redaction fixtures; the
   committed allowlist scopes those exact path-and-substring pairs.
 * The public-surface lint found only intentional MainFrame contract references
