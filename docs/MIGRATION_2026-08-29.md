@@ -37,8 +37,9 @@ Baseline checks on the current product source:
 * `./scripts/build-app.sh` passed and produced an ad-hoc code-signed app.
   The built binary SHA-256 was
   `6b0a719e850283c7e5480b9b72c72c401324aa6f5c820234686f2c52ee77fca5`.
-* The strict leak scan found only synthetic path/redaction fixtures; the
-  committed allowlist scopes those exact path-and-substring pairs.
+* The final strict leak scan completed clean across 79 reachable commits; its
+  six committed allowlist rules scope only the synthetic path/redaction
+  fixtures found during initial inspection.
 * The public-surface lint found only intentional MainFrame contract references
   and synthetic path fixtures; the committed allowlist scopes those exact
   references.
