@@ -42,6 +42,8 @@ Baseline checks on the current product source:
 * The public-surface lint found only intentional MainFrame contract references
   and synthetic path fixtures; the committed allowlist scopes those exact
   references.
+* The GitHub workflow now fetches full history and runs both boundary scans
+  before the deterministic macOS tests and release build.
 * `git diff --check` was clean before publication.
 
 Machine-bound checks not executed here include installed-app parity and GUI
@@ -55,8 +57,9 @@ account-usage checks.
 This receipt does not claim production readiness, universal agent or adapter
 support, complete MCP integration, reliable session recovery, cross-machine
 portability, or general MainFrame reproducibility. Existing CI covers the
-deterministic macOS build/test path only. GitHub branch-protection and ruleset
-settings were not readable from the current account (API returned 403).
+repository-boundary checks and deterministic macOS build/test path only.
+GitHub branch-protection and ruleset settings were not readable from the
+current account (API returned 403).
 
 Review and CI for the reconciliation PR are the next authority. Merge, release,
 and tag operations remain separately authorized. The old draft PR is preserved
