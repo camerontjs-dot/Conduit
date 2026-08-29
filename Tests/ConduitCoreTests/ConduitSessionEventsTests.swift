@@ -1,0 +1,733 @@
+import XCTest
+@testable import ConduitCore
+
+final class ConduitSessionEventsTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_787_000_000)
+
+    func testPaginationIsMonotonicAndStable() {
+        let events = (0..<5).map { index in
+            promptEvent("p\(index)", at: t0.addingTimeInterval(Double(index)))
+        }
+        let source = source(events: events, backend: .pty)
+        let first = ConduitSessionEventExport.page(source: source, limit: 2)
+        let second = ConduitSessionEventExport.page(
+            source: source,
+            cursor: first.nextCursor,
+            limit: 2
+        )
+        let third = ConduitSessionEventExport.page(
+            source: source,
+            cursor: second.nextCursor,
+            limit: 2
+        )
+
+        XCTAssertEqual(first.events.map(\.text), ["p0", "p1"])
+        XCTAssertEqual(first.nextCursor, "v1:2")
+        XCTAssertTrue(first.hasMore)
+        XCTAssertEqual(first.cursorState, .ok)
+        XCTAssertEqual(second.events.map(\.text), ["p2", "p3"])
+        XCTAssertEqual(second.nextCursor, "v1:4")
+        XCTAssertEqual(third.events.map(\.text), ["p4"])
+        XCTAssertEqual(third.nextCursor, "v1:5")
+        XCTAssertFalse(third.hasMore)
+        XCTAssertEqual(
+            first.events.map(\.cursor),
+            ["v1:0", "v1:1"]
+        )
+        XCTAssertEqual(ConduitSessionEventExport.clampLimit(999), 50)
+        XCTAssertFalse(
+            ConduitSessionAPI.isWrite(
+                .sessionEvents(taskSessionID: "t", cursor: nil, limit: 2)
+            )
+        )
+    }
+
+    func testRedactionAndTruncation() {
+        let secret = SessionPresentation.promptEvent(
+            origin: .chatgpt,
+            text: "Use Bearer sk-live-secret-value-123456 and api_key=supersecret then continue.",
+            attachmentPaths: ["/tmp/notes.md"],
+            renderedPayload: "hidden",
+            id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+            occurredAt: t0
+        )
+        let long = SessionPresentation.agentOutputEvent(
+            promptEventID: secret.id,
+            text: String(repeating: "x", count: 80) + "\nThought: I should hide this chain of thought.\n",
+            state: .settled,
+            extraction: .tmuxPane,
+            truncated: true,
+            id: UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(events: [secret, long], backend: .pty),
+            textLimit: 40
+        )
+
+        XCTAssertEqual(page.events.count, 2)
+        XCTAssertTrue(page.events[0].redacted)
+        XCTAssertFalse(page.events[0].text?.contains("sk-live-secret") == true)
+        XCTAssertFalse(page.events[0].text?.contains("supersecret") == true)
+        XCTAssertTrue(page.events[0].text?.contains("[redacted]") == true)
+        XCTAssertEqual(page.events[0].artifactRefs.map(\.path), ["/tmp/notes.md"])
+        XCTAssertTrue(page.events[1].truncated)
+        XCTAssertTrue(page.events[1].redacted)
+        XCTAssertFalse(page.events[1].text?.contains("chain of thought") == true)
+        XCTAssertTrue(page.truncated)
+        XCTAssertEqual(page.events[0].authority, "conduitRecorded")
+        XCTAssertEqual(page.events[1].authority, "derivedFromRaw")
+    }
+
+    func testInterruptRequestIsADistinctDurableMarkerNotTextTruncation() {
+        let event = SessionPresentation.interruptRequestEvent(
+            id: UUID(uuidString: "ABABABAB-ABAB-ABAB-ABAB-ABABABABABAB")!,
+            occurredAt: t0
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(events: [event], backend: .appServer)
+        )
+
+        XCTAssertEqual(page.events.count, 1)
+        XCTAssertEqual(page.events[0].kind, "interrupt_request")
+        XCTAssertEqual(page.events[0].source, "conduit")
+        XCTAssertEqual(page.events[0].state, "requested")
+        XCTAssertEqual(page.events[0].authority, "conduitRecorded")
+        XCTAssertFalse(page.events[0].truncated)
+        XCTAssertFalse(page.truncated)
+        XCTAssertTrue(page.events[0].text?.contains("has not been observed") == true)
+    }
+
+    func testCodexTurnCompletedWhileSessionStillRunning() {
+        let prompt = deliveredPrompt("Reply pong", at: t0)
+        let output = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "[fileChange] /tmp/hello.swift\nPong.",
+            state: .closed,
+            extraction: .structuredAdapter,
+            truncated: false,
+            id: UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!,
+            occurredAt: t0.addingTimeInterval(2)
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [opened(), prompt, output],
+                backend: .appServer,
+                lifecycle: "running",
+                runtimeState: "running",
+                live: true,
+                ready: true,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_1",
+                    turnActive: false,
+                    lastTurnStatus: "completed"
+                )
+            )
+        )
+
+        XCTAssertEqual(page.session.lifecycle, "running")
+        XCTAssertEqual(page.session.runtimeState, "running")
+        XCTAssertEqual(page.session.live, true)
+        XCTAssertEqual(page.turn.state, "completed")
+        XCTAssertEqual(page.turn.status, "completed")
+        XCTAssertEqual(page.turn.threadID, "thr_1")
+        XCTAssertTrue(page.turn.honesty.contains("Not verified success"))
+        XCTAssertNil(page.turn.ambiguity)
+        XCTAssertEqual(page.events.last?.authority, "toolReported")
+        XCTAssertEqual(page.events.last?.source, "structuredAdapter")
+        XCTAssertEqual(page.events.last?.state, "closed")
+        XCTAssertEqual(page.events.last?.turnStatus, "completed")
+        XCTAssertEqual(page.events.last?.text, "[fileChange] /tmp/hello.swift\nPong.")
+        XCTAssertEqual(
+            page.events.last?.artifactRefs.map(\.path),
+            ["/tmp/hello.swift"]
+        )
+    }
+
+    func testPTYQuietIsAmbiguousAndNotCompleted() {
+        let prompt = deliveredPrompt("hello", at: t0)
+        let output = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "looks done",
+            state: .settled,
+            extraction: .tmuxPane,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, output],
+                backend: .pty,
+                lifecycle: "running",
+                runtimeState: "running",
+                live: true,
+                ready: true
+            )
+        )
+
+        XCTAssertEqual(page.session.lifecycle, "running")
+        XCTAssertEqual(page.turn.state, "ambiguous")
+        XCTAssertEqual(page.turn.ambiguity, "pty_output_quiet")
+        XCTAssertTrue(page.turn.honesty.contains("not turn completion"))
+        XCTAssertEqual(page.events.last?.authority, "derivedFromRaw")
+        XCTAssertNil(page.events.last?.turnStatus)
+    }
+
+    func testStaleCursorAheadOfTimeline() {
+        let source = source(events: [promptEvent("one", at: t0)], backend: .pty)
+        let page = ConduitSessionEventExport.page(
+            source: source,
+            cursor: "v1:9",
+            limit: 10
+        )
+        XCTAssertEqual(page.cursorState, .ahead)
+        XCTAssertTrue(page.events.isEmpty)
+        XCTAssertEqual(page.nextCursor, "v1:1")
+        XCTAssertFalse(page.hasMore)
+        XCTAssertEqual(page.timelineCount, 1)
+    }
+
+    func testInvalidCursorResetsToStart() {
+        let source = source(events: [promptEvent("one", at: t0)], backend: .pty)
+        let page = ConduitSessionEventExport.page(
+            source: source,
+            cursor: "not-a-cursor"
+        )
+        XCTAssertEqual(page.cursorState, .invalid)
+        XCTAssertEqual(page.events.map(\.text), ["one"])
+        XCTAssertEqual(page.nextCursor, "v1:1")
+    }
+
+    func testLateEventsAppearAfterPreviousCursor() {
+        let firstEvents = [
+            promptEvent("one", at: t0),
+            promptEvent("two", at: t0.addingTimeInterval(1)),
+        ]
+        let first = ConduitSessionEventExport.page(
+            source: source(events: firstEvents, backend: .pty),
+            limit: 2
+        )
+        XCTAssertEqual(first.nextCursor, "v1:2")
+        XCTAssertFalse(first.hasMore)
+
+        let later = firstEvents + [
+            promptEvent("three", at: t0.addingTimeInterval(2)),
+            SessionPresentation.agentOutputEvent(
+                promptEventID: firstEvents[1].id,
+                text: "late output",
+                state: .live,
+                extraction: .renderedBuffer,
+                truncated: false,
+                occurredAt: t0.addingTimeInterval(3)
+            ),
+        ]
+        let second = ConduitSessionEventExport.page(
+            source: source(events: later, backend: .pty),
+            cursor: first.nextCursor,
+            limit: 10
+        )
+        XCTAssertEqual(second.cursorState, .ok)
+        XCTAssertEqual(second.events.map(\.text), ["three", "late output"])
+        XCTAssertEqual(second.events.map(\.kind), ["user_prompt", "agent_output"])
+        XCTAssertEqual(second.nextCursor, "v1:4")
+    }
+
+    func testLateRevisionStaysAtOriginalIndex() {
+        let promptID = UUID(uuidString: "DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD")!
+        let outputID = UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE")!
+        let prompt = deliveredPrompt("go", id: promptID, at: t0)
+        let live = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Hel",
+            state: .live,
+            extraction: .structuredAdapter,
+            truncated: false,
+            id: outputID,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let first = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, live],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(turnActive: true)
+            ),
+            cursor: "v1:1",
+            limit: 1
+        )
+        XCTAssertEqual(first.events.first?.text, "Hel")
+        XCTAssertEqual(first.events.first?.eventID, outputID.uuidString)
+        XCTAssertEqual(first.turn.state, "active")
+
+        let closed = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Hello",
+            state: .closed,
+            extraction: .structuredAdapter,
+            truncated: false,
+            id: outputID,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let second = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, closed],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    turnActive: false,
+                    lastTurnStatus: "completed"
+                )
+            ),
+            cursor: "v1:1",
+            limit: 1
+        )
+        XCTAssertEqual(second.events.first?.eventID, outputID.uuidString)
+        XCTAssertEqual(second.events.first?.cursor, "v1:1")
+        XCTAssertEqual(second.events.first?.text, "Hello")
+        XCTAssertEqual(second.events.first?.state, "closed")
+        XCTAssertEqual(second.events.first?.turnStatus, "completed")
+        XCTAssertEqual(second.turn.state, "completed")
+        XCTAssertNotEqual(
+            first.events.first?.contentDigest,
+            second.events.first?.contentDigest
+        )
+    }
+
+    func testAwaitingInputUsesStructuredApproval() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("edit", at: t0)],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_2",
+                    turnActive: true,
+                    pendingApproval: true,
+                    pendingApprovalSummary: "git status"
+                )
+            )
+        )
+        XCTAssertEqual(page.turn.state, "awaiting_input")
+        XCTAssertTrue(page.turn.pendingApproval)
+        XCTAssertTrue(page.turn.honesty.contains("approval"))
+        XCTAssertEqual(page.turn.threadIDSource, .live)
+        XCTAssertEqual(page.observation.checkpoint, .structuredApproval)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertEqual(page.observation.inputState, .approval)
+        XCTAssertEqual(page.observation.inputSummary, "git status")
+        let observation = page.jsonObject()["observation"] as? [String: Any]
+        XCTAssertEqual(observation?["checkpoint"] as? String, "structured_approval")
+        XCTAssertEqual(observation?["input_state"] as? String, "approval")
+        XCTAssertEqual(observation?["input_summary"] as? String, "git status")
+    }
+
+    func testSupervisorySnapshotExposesLiveContinuityAndStructuredObservation() {
+        let prompt = deliveredPrompt("Reply pong", at: t0)
+        let output = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "Pong.",
+            state: .closed,
+            extraction: .structuredAdapter,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(2)
+        )
+        let attemptID = RuntimeAttemptID(
+            rawValue: UUID(uuidString: "AAAAAAAA-1111-2222-3333-444444444444")!
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, output],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_live",
+                    lastTurnStatus: "completed"
+                ),
+                runtimeAttemptID: attemptID,
+                observedAt: t0.addingTimeInterval(10)
+            )
+        )
+
+        XCTAssertEqual(page.runtimeAttemptID, attemptID)
+        XCTAssertEqual(page.turn.threadID, "thr_live")
+        XCTAssertEqual(page.turn.threadIDSource, .live)
+        XCTAssertEqual(page.observation.observedAt, t0.addingTimeInterval(10))
+        XCTAssertEqual(page.observation.lastOutputAt, t0.addingTimeInterval(2))
+        XCTAssertEqual(page.observation.lastOutputState, "closed")
+        XCTAssertEqual(page.observation.checkpoint, .structuredCompleted)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertEqual(page.observation.inputState, .none)
+
+        let json = page.jsonObject()
+        XCTAssertEqual(
+            json["runtime_attempt_id"] as? String,
+            attemptID.rawValue.uuidString
+        )
+        let turn = json["turn"] as? [String: Any]
+        XCTAssertEqual(turn?["thread_id_source"] as? String, "live")
+        let observation = json["observation"] as? [String: Any]
+        XCTAssertEqual(
+            observation?["observed_at"] as? String,
+            ConduitSessionEventExport.iso8601(t0.addingTimeInterval(10))
+        )
+        XCTAssertEqual(
+            observation?["last_output_at"] as? String,
+            ConduitSessionEventExport.iso8601(t0.addingTimeInterval(2))
+        )
+        XCTAssertEqual(observation?["last_output_state"] as? String, "closed")
+        XCTAssertEqual(observation?["checkpoint"] as? String, "structured_completed")
+        XCTAssertEqual(observation?["provider_progress"] as? String, "structured")
+        XCTAssertEqual(observation?["input_state"] as? String, "none")
+    }
+
+    func testSupervisorySnapshotUsesPersistedThreadWhenRuntimeIsAbsent() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("continue", at: t0)],
+                backend: .appServer,
+                lifecycle: "runtime_missing",
+                runtimeState: "absent",
+                live: false,
+                ready: false,
+                persistedThreadID: "thr_persisted",
+                observedAt: t0.addingTimeInterval(3)
+            )
+        )
+
+        XCTAssertEqual(page.turn.state, "active")
+        XCTAssertEqual(page.turn.threadID, "thr_persisted")
+        XCTAssertEqual(page.turn.threadIDSource, .persisted)
+        XCTAssertEqual(page.observation.checkpoint, .structuredActive)
+        XCTAssertEqual(page.observation.providerProgress, .unavailable)
+        XCTAssertEqual(page.observation.inputState, .none)
+        XCTAssertFalse(page.session.live)
+        XCTAssertFalse(page.session.ready)
+        XCTAssertNil(page.runtimeAttemptID)
+        XCTAssertNil(page.jsonObject()["runtime_attempt_id"])
+    }
+
+    func testSupervisorySnapshotPrefersLiveThreadOverPersisted() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("continue", at: t0)],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_live",
+                    turnActive: true
+                ),
+                persistedThreadID: "thr_persisted"
+            )
+        )
+        XCTAssertEqual(page.turn.threadID, "thr_live")
+        XCTAssertEqual(page.turn.threadIDSource, .live)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertNotEqual(page.turn.threadID, "thr_persisted")
+    }
+
+    func testSupervisorySnapshotMarksThreadUnavailableWithoutIdentity() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("continue", at: t0)],
+                backend: .appServer
+            )
+        )
+        XCTAssertNil(page.turn.threadID)
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        XCTAssertEqual(page.observation.providerProgress, .unavailable)
+        XCTAssertEqual(page.observation.checkpoint, .structuredActive)
+        let turn = page.jsonObject()["turn"] as? [String: Any]
+        XCTAssertEqual(turn?["thread_id_source"] as? String, "unavailable")
+        XCTAssertNil(turn?["thread_id"])
+    }
+
+    func testSupervisorySnapshotKeepsPTYCheckpointObservational() {
+        let prompt = deliveredPrompt("inspect", at: t0)
+        let settled = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "quiet pane",
+            state: .settled,
+            extraction: .tmuxPane,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, settled],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(2)
+            )
+        )
+
+        XCTAssertEqual(page.turn.state, "ambiguous")
+        XCTAssertEqual(page.turn.ambiguity, "pty_output_quiet")
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        XCTAssertEqual(page.observation.lastOutputState, "settled")
+        XCTAssertEqual(page.observation.checkpoint, .outputQuiet)
+        XCTAssertEqual(page.observation.providerProgress, .unavailable)
+        XCTAssertEqual(page.observation.inputState, .unknown)
+        XCTAssertNotEqual(page.observation.checkpoint, .structuredCompleted)
+
+        let noOutput = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("inspect", at: t0)],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(3)
+            )
+        )
+        XCTAssertEqual(noOutput.observation.checkpoint, .outputUnobserved)
+
+        let live = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "changing pane",
+            state: .live,
+            extraction: .tmuxPane,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(4)
+        )
+        let livePage = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, live],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(5)
+            )
+        )
+        XCTAssertEqual(livePage.observation.checkpoint, .outputLive)
+
+        let closed = SessionPresentation.agentOutputEvent(
+            promptEventID: prompt.id,
+            text: "capture closed",
+            state: .closed,
+            extraction: .tmuxPane,
+            truncated: false,
+            occurredAt: t0.addingTimeInterval(6)
+        )
+        let closedPage = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, closed],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(7)
+            )
+        )
+        XCTAssertEqual(closedPage.observation.checkpoint, .captureClosed)
+        XCTAssertEqual(closedPage.observation.inputState, .unknown)
+        XCTAssertNil(closedPage.runtimeAttemptID)
+        XCTAssertFalse(
+            [
+                ConduitSessionObservationCheckpoint.structuredActive,
+                .structuredApproval,
+                .structuredCompleted,
+                .structuredIdle,
+            ].contains(closedPage.observation.checkpoint)
+        )
+    }
+
+    func testSupervisorySnapshotJSONIsAdditiveAndOmitsUnavailableRuntimeAttempt() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [deliveredPrompt("hello", at: t0)],
+                backend: .pty,
+                observedAt: t0.addingTimeInterval(4)
+            )
+        )
+        let json = page.jsonObject()
+        for key in [
+            "taskSessionID",
+            "backend",
+            "session",
+            "turn",
+            "events",
+            "next_cursor",
+            "has_more",
+            "cursor_state",
+            "timeline_count",
+            "truncated",
+            "authority",
+        ] {
+            XCTAssertNotNil(json[key], "missing compatibility key \(key)")
+        }
+        XCTAssertNil(json["runtime_attempt_id"])
+        XCTAssertEqual(page.nextCursor, "v1:1")
+        XCTAssertEqual(page.cursorState, .ok)
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        let turn = json["turn"] as? [String: Any]
+        XCTAssertEqual(turn?["thread_id_source"] as? String, "unavailable")
+        XCTAssertNil(turn?["thread_id"])
+        let observation = json["observation"] as? [String: Any]
+        XCTAssertEqual(
+            observation?["observed_at"] as? String,
+            ConduitSessionEventExport.iso8601(t0.addingTimeInterval(4))
+        )
+        XCTAssertEqual(observation?["last_output_state"] as? String, "none")
+        XCTAssertEqual(observation?["checkpoint"] as? String, "output_unobserved")
+        XCTAssertEqual(observation?["provider_progress"] as? String, "unavailable")
+        XCTAssertEqual(observation?["input_state"] as? String, "unknown")
+        XCTAssertEqual(observation?["checkpoint_authority"] as? String, "conduitRecorded")
+        XCTAssertNil(observation?["last_output_at"])
+        XCTAssertNil(observation?["input_summary"])
+    }
+
+    func testSupervisorySnapshotMarksUnavailableThreadWithoutLiveOrPersistedIdentity() {
+        let page = ConduitSessionEventExport.page(
+            source: source(
+                events: [],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(),
+                observedAt: t0
+            )
+        )
+        XCTAssertNil(page.turn.threadID)
+        XCTAssertEqual(page.turn.threadIDSource, .unavailable)
+        XCTAssertEqual(page.turn.state, "idle")
+        XCTAssertEqual(page.observation.checkpoint, .structuredIdle)
+        XCTAssertEqual(page.observation.providerProgress, .structured)
+        XCTAssertEqual(page.observation.inputState, .none)
+        XCTAssertNil(page.runtimeAttemptID)
+    }
+
+    func testSupervisoryObservationFollowsInPlaceRevisionWithoutAdvancingCursor() {
+        let promptID = UUID(uuidString: "DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD")!
+        let outputID = UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE")!
+        let prompt = deliveredPrompt("go", id: promptID, at: t0)
+        let live = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Hel",
+            state: .live,
+            extraction: .structuredAdapter,
+            truncated: false,
+            id: outputID,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let first = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, live],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_rev",
+                    turnActive: true
+                ),
+                observedAt: t0.addingTimeInterval(2)
+            ),
+            cursor: "v1:1",
+            limit: 1
+        )
+        XCTAssertEqual(first.events.first?.eventID, outputID.uuidString)
+        XCTAssertEqual(first.events.first?.cursor, "v1:1")
+        XCTAssertEqual(first.nextCursor, "v1:2")
+        XCTAssertEqual(first.observation.lastOutputState, "live")
+        XCTAssertEqual(first.observation.checkpoint, .structuredActive)
+
+        let closed = SessionPresentation.agentOutputEvent(
+            promptEventID: promptID,
+            text: "Hello",
+            state: .closed,
+            extraction: .structuredAdapter,
+            truncated: false,
+            id: outputID,
+            occurredAt: t0.addingTimeInterval(1)
+        )
+        let second = ConduitSessionEventExport.page(
+            source: source(
+                events: [prompt, closed],
+                backend: .appServer,
+                adapter: ConduitSessionAdapterSnapshot(
+                    threadID: "thr_rev",
+                    turnActive: false,
+                    lastTurnStatus: "completed"
+                ),
+                observedAt: t0.addingTimeInterval(3)
+            ),
+            cursor: "v1:1",
+            limit: 1
+        )
+        XCTAssertEqual(second.events.first?.eventID, outputID.uuidString)
+        XCTAssertEqual(second.events.first?.cursor, "v1:1")
+        XCTAssertEqual(second.nextCursor, "v1:2")
+        XCTAssertEqual(second.observation.lastOutputState, "closed")
+        XCTAssertEqual(second.observation.checkpoint, .structuredCompleted)
+        XCTAssertNotEqual(
+            first.events.first?.contentDigest,
+            second.events.first?.contentDigest
+        )
+    }
+
+    func testMapperRetainsTurnCompletionStatus() {
+        var mapper = CodexAppServerMapper()
+        _ = mapper.apply(
+            .notification(
+                method: "item/agentMessage/delta",
+                params: .object(["delta": .string("Hi")])
+            )
+        )
+        _ = mapper.apply(
+            .notification(
+                method: "turn/completed",
+                params: .object(["status": .string("completed")])
+            )
+        )
+        XCTAssertFalse(mapper.turnActive)
+        XCTAssertEqual(mapper.lastTurnStatus, "completed")
+        mapper.resetTurn()
+        XCTAssertNil(mapper.lastTurnStatus)
+    }
+
+    private func source(
+        events: [SessionPresentationEvent],
+        backend: AgentSessionBackend,
+        lifecycle: String = "running",
+        runtimeState: String = "running",
+        live: Bool = true,
+        ready: Bool = true,
+        adapter: ConduitSessionAdapterSnapshot? = nil,
+        runtimeAttemptID: RuntimeAttemptID? = nil,
+        persistedThreadID: String? = nil,
+        observedAt: Date = Date(timeIntervalSince1970: 1_787_000_000)
+    ) -> ConduitSessionEventSource {
+        ConduitSessionEventSource(
+            taskSessionID: "11111111-1111-1111-1111-111111111111",
+            backend: backend,
+            sessionLifecycle: lifecycle,
+            runtimeState: runtimeState,
+            live: live,
+            ready: ready,
+            events: events,
+            adapter: adapter,
+            runtimeAttemptID: runtimeAttemptID,
+            persistedThreadID: persistedThreadID,
+            observedAt: observedAt
+        )
+    }
+
+    private func opened() -> SessionPresentationEvent {
+        SessionPresentation.openingEvent(
+            .started(agentName: "Codex", requestedBackend: "app-server"),
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            occurredAt: t0.addingTimeInterval(-1)
+        )
+    }
+
+    private func promptEvent(_ text: String, at date: Date) -> SessionPresentationEvent {
+        SessionPresentation.promptEvent(
+            origin: .chatgpt,
+            text: text,
+            attachmentPaths: [],
+            renderedPayload: text,
+            occurredAt: date
+        )
+    }
+
+    private func deliveredPrompt(
+        _ text: String,
+        id: UUID = UUID(),
+        at date: Date
+    ) -> SessionPresentationEvent {
+        let queued = SessionPresentation.promptEvent(
+            origin: .chatgpt,
+            text: text,
+            attachmentPaths: [],
+            renderedPayload: text,
+            id: id,
+            occurredAt: date
+        )
+        return SessionPresentation.updatingPromptDelivery(
+            in: [queued],
+            eventID: id,
+            to: .delivered
+        )[0]
+    }
+}

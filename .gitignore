@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+dist/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+.env
+
+# Local agent/editor settings and environment overlays
+.claude/settings.local.json
+.env.*
+!.env.example

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Conduit</string>
+    <key>CFBundleIconFile</key>
+    <string>Conduit</string>
+    <key>CFBundleIconName</key>
+    <string>Conduit</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.camerontjs.conduit</string>
+    <key>CFBundleName</key>
+    <string>Conduit</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.2.0</string>
+    <key>CFBundleVersion</key>
+    <string>2</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Conduit uses the microphone to turn your speech into editable prompts.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Conduit uses speech recognition to transcribe prompts locally through macOS.</string>
+</dict>
+</plist>

@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Wire OpenAI tunnel-client to the local Conduit Session API (D-039).
+#
+# Needs:
+#   - Conduit running with Session API enabled (127.0.0.1:8750/mcp)
+#   - tunnel-client on PATH (brew install openai/tools/tunnel-client)
+#   - a control-plane key from Platform Runtime API keys (Tunnels Read+Use),
+#     either stored at ~/.conduit/control-plane-api-key or exported once as
+#     CONTROL_PLANE_API_KEY, which this script then stores for you
+#   - a tunnel_id (argument, CONTROL_PLANE_TUNNEL_ID, or ~/.conduit/chatgpt-tunnel-id)
+#
+# ChatGPT chat is the orchestrator; keep Work off.
+# Write tools require Conduit Settings → Session API writes.
+set -euo pipefail
+
+CONDUIT_DIR="${CONDUIT_DIR:-$HOME/.conduit}"
+PROFILE_DIR="${TUNNEL_CLIENT_PROFILE_DIR:-$HOME/.config/tunnel-client}"
+PROFILE_NAME="${CONDUIT_TUNNEL_PROFILE:-conduit}"
+MCP_URL="${CONDUIT_SESSION_API_URL:-http://127.0.0.1:8750/mcp}"
+HEALTH_ADDR="${CONDUIT_TUNNEL_HEALTH_ADDR:-127.0.0.1:8760}"
+TUNNEL_ID="${1:-${CONTROL_PLANE_TUNNEL_ID:-}}"
+
+mkdir -p "$CONDUIT_DIR" "$PROFILE_DIR"
+
+if [[ -z "$TUNNEL_ID" && -f "$CONDUIT_DIR/chatgpt-tunnel-id" ]]; then
+  TUNNEL_ID="$(tr -d '[:space:]' < "$CONDUIT_DIR/chatgpt-tunnel-id")"
+fi
+
+if [[ -z "$TUNNEL_ID" ]]; then
+  echo "usage: $0 [tunnel_id]" >&2
+  echo "or set CONTROL_PLANE_TUNNEL_ID / write $CONDUIT_DIR/chatgpt-tunnel-id" >&2
+  exit 2
+fi
+
+if [[ ! "$TUNNEL_ID" =~ ^tunnel_[0-9a-f]{32}$ ]]; then
+  echo "tunnel id looks wrong: $TUNNEL_ID" >&2
+  exit 2
+fi
+
+printf '%s\n' "$TUNNEL_ID" > "$CONDUIT_DIR/chatgpt-tunnel-id"
+
+KEY_FILE="${CONTROL_PLANE_API_KEY_FILE:-$CONDUIT_DIR/control-plane-api-key}"
+
+# The control-plane key used to live only in whichever shell exported it, so it
+# died with that terminal and the tunnel looked un-set-up on the next session.
+# Persist it once, owner-read-only, next to the Session API bearer.
+if [[ -n "${CONTROL_PLANE_API_KEY:-}" && ! -s "$KEY_FILE" ]]; then
+  ( umask 077; printf '%s\n' "$CONTROL_PLANE_API_KEY" > "$KEY_FILE" )
+  chmod 600 "$KEY_FILE"
+  echo "stored control-plane key: $KEY_FILE (chmod 600)"
+fi
+
+TOKEN_FILE="$CONDUIT_DIR/session-api-token"
+AUTH_FILE="$CONDUIT_DIR/session-api-authorization"
+if [[ ! -s "$TOKEN_FILE" ]]; then
+  echo "missing $TOKEN_FILE — start Conduit with Session API enabled first." >&2
+  exit 2
+fi
+TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE")"
+printf 'Bearer %s\n' "$TOKEN" > "$AUTH_FILE"
+chmod 600 "$AUTH_FILE" "$CONDUIT_DIR/chatgpt-tunnel-id"
+
+if [[ -s "$KEY_FILE" ]]; then
+  chmod 600 "$KEY_FILE"
+  API_KEY_SOURCE="file:${KEY_FILE}"
+else
+  API_KEY_SOURCE="env:CONTROL_PLANE_API_KEY"
+fi
+
+PROFILE="$PROFILE_DIR/${PROFILE_NAME}.yaml"
+cat > "$PROFILE" <<EOF
+config_version: 1
+control_plane:
+  tunnel_id: ${TUNNEL_ID}
+  api_key: ${API_KEY_SOURCE}
+health:
+  listen_addr: ${HEALTH_ADDR}
+admin_ui:
+  open_browser: false
+mcp:
+  server_urls:
+    - channel: main
+      url: ${MCP_URL}
+  extra_headers:
+    Authorization: file:${AUTH_FILE}
+EOF
+
+if ! command -v tunnel-client >/dev/null 2>&1; then
+  echo "tunnel-client is not on PATH. Install with:" >&2
+  echo "  brew install openai/tools/tunnel-client" >&2
+  exit 127
+fi
+
+if [[ -z "${CONTROL_PLANE_API_KEY:-}" && -n "${OPENAI_API_KEY:-}" ]]; then
+  export CONTROL_PLANE_API_KEY="$OPENAI_API_KEY"
+fi
+
+echo "profile: $PROFILE"
+echo "tunnel:  $TUNNEL_ID"
+echo "mcp:     $MCP_URL"
+echo "health:  http://${HEALTH_ADDR}/ui"
+echo "key:     $API_KEY_SOURCE"
+echo "chatgpt: Settings → Connectors → Developer Mode → Connection: Tunnel"
+
+if [[ ! -s "$KEY_FILE" && -z "${CONTROL_PLANE_API_KEY:-}" ]]; then
+  echo
+  echo "Profile written. Still needed: the control-plane key."
+  echo "Create a restricted Platform runtime key with Tunnels Read + Use:"
+  echo "  https://platform.openai.com/settings/organization/api-keys"
+  echo "Store it once, and every later run reuses it:"
+  echo "  umask 077; printf '%s\\n' 'sk-...' > $KEY_FILE"
+  echo "  $0"
+  echo "Or export it once and let this script store it:"
+  echo "  export CONTROL_PLANE_API_KEY=sk-...; $0"
+  exit 3
+fi
+
+tunnel-client doctor --profile "$PROFILE_NAME" --explain
+exec tunnel-client run --profile "$PROFILE_NAME"

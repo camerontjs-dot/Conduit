@@ -1,0 +1,793 @@
+#if os(macOS)
+import ConduitCore
+import Foundation
+
+/// Bridges blocking work onto a GCD global queue instead of the Swift
+/// concurrency cooperative pool. Subprocess calls can block a thread for the
+/// full timeout; parking those on cooperative threads (which are capped at the
+/// core count and assume forward progress) can starve all other async work, so
+/// every long-running subprocess offload routes through here.
+enum BlockingWork {
+    static func run<T: Sendable>(qos: DispatchQoS.QoSClass = .userInitiated, _ body: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: qos).async {
+                continuation.resume(returning: body())
+            }
+        }
+    }
+
+    /// Returns nil when blocking filesystem work has not completed by the
+    /// deadline. The underlying system call may still be waiting for macOS
+    /// privacy authorization, but it can no longer stall app startup or hide
+    /// the recovery control from the operator.
+    static func run<T: Sendable>(
+        qos: DispatchQoS.QoSClass = .userInitiated,
+        timeout: TimeInterval,
+        _ body: @escaping @Sendable () -> T
+    ) async -> T? {
+        await withCheckedContinuation { continuation in
+            let gate = BlockingContinuationGate(continuation)
+            DispatchQueue.global(qos: qos).async {
+                gate.resume(returning: body())
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
+                gate.resume(returning: nil)
+            }
+        }
+    }
+}
+
+private final class BlockingContinuationGate<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Value?, Never>?
+
+    init(_ continuation: CheckedContinuation<Value?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: Value?) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
+    }
+}
+
+/// Runs a subprocess with argv directly (no shell), draining output
+/// concurrently so large output cannot deadlock the pipe, and enforcing a
+/// timeout so a hung child cannot hang Conduit.
+enum SubprocessRunner {
+    struct Result: Sendable {
+        let status: Int32
+        let output: String
+        let timedOut: Bool
+    }
+
+    /// Writing to a pipe whose read end is gone raises SIGPIPE, which is
+    /// process-fatal by default. The timeout path kills a hung child and
+    /// closes its read end while the stdin writer may still be mid-write, so
+    /// the app must ignore SIGPIPE and let the writer see EPIPE instead.
+    static let ignoreSIGPIPE: Void = {
+        signal(SIGPIPE, SIG_IGN)
+    }()
+
+    static func run(
+        _ executable: String,
+        _ arguments: [String],
+        stdin: Data? = nil,
+        currentDirectory: String? = nil,
+        timeout: TimeInterval = 10
+    ) -> Result {
+        _ = ignoreSIGPIPE
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        if let currentDirectory {
+            process.currentDirectoryURL = URL(fileURLWithPath: currentDirectory)
+        }
+
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+
+        let inputPipe: Pipe? = stdin != nil ? Pipe() : nil
+        if let inputPipe {
+            process.standardInput = inputPipe
+        }
+
+        let bufferLock = NSLock()
+        var buffer = Data()
+        let readDone = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            let handle = output.fileHandleForReading
+            while true {
+                let chunk = handle.availableData
+                if chunk.isEmpty { break }
+                bufferLock.lock()
+                buffer.append(chunk)
+                bufferLock.unlock()
+            }
+            readDone.signal()
+        }
+
+        let terminated = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in terminated.signal() }
+
+        do {
+            try process.run()
+        } catch {
+            try? output.fileHandleForWriting.close()
+            return Result(status: -1, output: error.localizedDescription, timedOut: false)
+        }
+        // Close the parent's copy of the write end so EOF can arrive.
+        try? output.fileHandleForWriting.close()
+
+        if let inputPipe, let stdin {
+            DispatchQueue.global(qos: .utility).async {
+                try? inputPipe.fileHandleForWriting.write(contentsOf: stdin)
+                try? inputPipe.fileHandleForWriting.close()
+            }
+        }
+
+        var timedOut = false
+        if terminated.wait(timeout: .now() + timeout) == .timedOut {
+            timedOut = true
+            process.terminate()
+            if terminated.wait(timeout: .now() + 2) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                _ = terminated.wait(timeout: .now() + 2)
+            }
+        }
+        _ = readDone.wait(timeout: .now() + 2)
+
+        bufferLock.lock()
+        let text = String(decoding: buffer, as: UTF8.self)
+        bufferLock.unlock()
+        return Result(
+            status: timedOut ? -1 : process.terminationStatus,
+            output: timedOut ? text + "\n[timed out after \(Int(timeout))s]" : text,
+            timedOut: timedOut
+        )
+    }
+}
+
+/// Resolves executable paths without ever spawning a shell on the call path.
+///
+/// `resolve` is pure file-system checks against the current PATH view, so it is
+/// safe to call from the main actor. The one login-shell probe that captures
+/// the operator's full interactive PATH happens only in `prewarm` — run once,
+/// off the main thread, coalesced so concurrent callers never each spawn their
+/// own login shell. Until the cache warms, resolution falls back to the process
+/// PATH plus standard directories, which already cover tmux, git, and ollama.
+final class EnvironmentResolver: @unchecked Sendable {
+    static let shared = EnvironmentResolver()
+
+    private static let defaultDirectories = [
+        "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"
+    ]
+
+    private let lock = NSLock()
+    private var cachedPath: [String]?
+    private var prewarmStarted = false
+
+    /// Captures the login-shell PATH once. Idempotent and coalesced: only the
+    /// first caller runs the shell; later callers return immediately. Must be
+    /// invoked off the main thread.
+    func prewarm() {
+        lock.lock()
+        if prewarmStarted {
+            lock.unlock()
+            return
+        }
+        prewarmStarted = true
+        lock.unlock()
+
+        var entries: [String] = []
+        let probe = SubprocessRunner.run("/bin/zsh", ["-l", "-c", "print -rn -- \"$PATH\""], timeout: 8)
+        if probe.status == 0 {
+            entries = probe.output
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(separator: ":")
+                .map(String.init)
+        }
+        entries += (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":").map(String.init)
+        entries += Self.defaultDirectories
+
+        lock.lock()
+        cachedPath = Self.dedupe(entries)
+        lock.unlock()
+    }
+
+    /// The current PATH view. Never spawns a process.
+    private func currentEntries() -> [String] {
+        lock.lock()
+        let cached = cachedPath
+        lock.unlock()
+        if let cached { return cached }
+        var entries = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":").map(String.init)
+        entries += Self.defaultDirectories
+        return Self.dedupe(entries)
+    }
+
+    /// Absolute and path-bearing commands are checked directly; bare names are
+    /// searched on the current PATH. Returns the executable's absolute path.
+    func resolve(_ command: String) -> String? {
+        guard !command.isEmpty else { return nil }
+        let fileManager = FileManager.default
+        if command.hasPrefix("/") {
+            return fileManager.isExecutableFile(atPath: command) ? command : nil
+        }
+        if command.contains("/") {
+            let expanded = (command as NSString).expandingTildeInPath
+            return fileManager.isExecutableFile(atPath: expanded) ? expanded : nil
+        }
+        for directory in currentEntries() {
+            let candidate = directory + "/" + command
+            if fileManager.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    private static func dedupe(_ entries: [String]) -> [String] {
+        var seen = Set<String>()
+        return entries.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+}
+
+/// A durable launch was stopped before attach because Conduit could not prove
+/// that the named tmux session belongs to the requested task history.
+///
+/// These are identity failures, not agent exit codes and not permission to
+/// launch a duplicate direct-PTY replacement.
+enum TerminalLaunchIssue: Equatable, Sendable, LocalizedError {
+    case appServerFailed(String)
+    case tmuxUnavailableForReconnect(sessionName: String)
+    case durableSessionMissing(sessionName: String)
+    case durableSessionPresenceInspectionFailed(sessionName: String)
+    case taskSessionIdentityRequired(sessionName: String)
+    case legacyTaskSessionAdoptionRequired(
+        sessionName: String,
+        requested: TaskSessionID
+    )
+    case taskSessionBindingConflict(
+        sessionName: String,
+        requested: TaskSessionID,
+        existing: TaskSessionID
+    )
+    case malformedTaskSessionBinding(sessionName: String, rawValue: String)
+    case taskSessionBindingInspectionFailed(sessionName: String)
+    case taskSessionBindingWriteFailed(
+        sessionName: String,
+        requested: TaskSessionID
+    )
+
+    var errorDescription: String? {
+        switch self {
+        case .appServerFailed(let message):
+            return "Codex app-server failed: \(message)"
+        case .tmuxUnavailableForReconnect(let sessionName):
+            return "Did not reconnect to \(sessionName): tmux is not currently available. No replacement process was started."
+        case .durableSessionMissing(let sessionName):
+            return "Did not reconnect to \(sessionName): the observed tmux session is no longer present. No replacement process was started."
+        case .durableSessionPresenceInspectionFailed(let sessionName):
+            return "Did not open \(sessionName): Conduit could not determine whether that tmux session already exists. No replacement process was started."
+        case .taskSessionIdentityRequired(let sessionName):
+            return "Did not attach to \(sessionName): the existing durable session has no matching task-session identity."
+        case .legacyTaskSessionAdoptionRequired(let sessionName, let requested):
+            return "Did not attach to \(sessionName): adopting this legacy unbound session into task \(requested.rawValue.uuidString) must be explicit."
+        case .taskSessionBindingConflict(let sessionName, let requested, let existing):
+            return "Did not attach to \(sessionName): it is bound to task \(existing.rawValue.uuidString), not requested task \(requested.rawValue.uuidString). The existing binding was left unchanged."
+        case .malformedTaskSessionBinding(let sessionName, let rawValue):
+            return "Did not attach to \(sessionName): its task-session binding is malformed (\(rawValue)). The existing value was left unchanged."
+        case .taskSessionBindingInspectionFailed(let sessionName):
+            return "Did not attach to \(sessionName): Conduit could not inspect its task-session binding."
+        case .taskSessionBindingWriteFailed(let sessionName, let requested):
+            return "Did not attach to \(sessionName): Conduit could not record and verify task \(requested.rawValue.uuidString) on the tmux session."
+        }
+    }
+}
+
+enum TmuxSessionEnsureDisposition: Equatable, Sendable {
+    case created
+    case existingSameTask
+    case adoptedLegacy
+}
+
+enum TmuxSessionEnsureResult: Equatable, Sendable {
+    /// The named tmux session is safe to attach.
+    case ready(TmuxSessionEnsureDisposition)
+    /// No named session could be provided. Launching a direct PTY is safe.
+    case directPTYFallback
+    /// An existing or newly-created named session cannot be attached safely.
+    /// A replacement process must not be launched.
+    case blocked(TerminalLaunchIssue)
+}
+
+/// Out-of-band tmux control operations targeting named sessions. The attach
+/// client inside SwiftTerm stays a plain `tmux attach-session`; every control
+/// action (create, detach, paste) goes through the tmux server directly so no
+/// keystroke emulation or prefix-key assumption is involved.
+struct TmuxDriver: Sendable {
+    let tmuxPath: String
+    /// Both the subprocess request and the decoded result are bounded. Keeping
+    /// this below RawDerivedOutputReducer's 700-line comparison ceiling leaves
+    /// room for the visible pane while preventing a configured giant tmux
+    /// history from entering the capture pipeline.
+    static let conversationCaptureLineLimit = 600
+
+    enum SessionPresence: Equatable, Sendable {
+        case present
+        case absent
+        case unknown
+    }
+
+    /// Distinguishes a proved absence from an observation failure. tmux uses a
+    /// non-zero status for both, so the diagnostic is part of the evidence.
+    func sessionPresence(_ name: String) -> SessionPresence {
+        let result = SubprocessRunner.run(
+            tmuxPath,
+            ["has-session", "-t", "=\(name)"],
+            timeout: 5
+        )
+        if result.status == 0 {
+            return .present
+        }
+        let diagnostic = result.output.lowercased()
+        if diagnostic.contains("can't find session")
+            || diagnostic.contains("no server running") {
+            return .absent
+        }
+        return .unknown
+    }
+
+    /// Creates the session detached if missing, or proves an existing session
+    /// has the requested task identity before allowing attach.
+    ///
+    /// A legacy session with no task option may be adopted only when the caller
+    /// explicitly opts in. A conflicting or malformed option is never
+    /// overwritten and never permits direct-PTY fallback.
+    func ensureSession(
+        name: String,
+        directory: String,
+        command: String,
+        projectPath: String? = nil,
+        agentName: String? = nil,
+        taskSessionID: TaskSessionID? = nil,
+        adoptUnboundExistingSession: Bool = false,
+        requireExistingSession: Bool = false
+    ) -> TmuxSessionEnsureResult {
+        switch sessionPresence(name) {
+        case .present:
+            return ensureExistingSession(
+                name: name,
+                projectPath: projectPath,
+                agentName: agentName,
+                taskSessionID: taskSessionID,
+                adoptUnboundExistingSession: adoptUnboundExistingSession
+            )
+        case .unknown:
+            return .blocked(
+                .durableSessionPresenceInspectionFailed(sessionName: name)
+            )
+        case .absent:
+            break
+        }
+        if requireExistingSession {
+            return .blocked(.durableSessionMissing(sessionName: name))
+        }
+        let result = SubprocessRunner.run(
+            tmuxPath,
+            ["new-session", "-d", "-s", name, "-c", directory, command],
+            timeout: 8
+        )
+        guard result.status == 0 else {
+            // Another launcher may have won the race after `has-session`.
+            // Inspect that session rather than launching a duplicate process.
+            switch sessionPresence(name) {
+            case .present:
+                return ensureExistingSession(
+                    name: name,
+                    projectPath: projectPath,
+                    agentName: agentName,
+                    taskSessionID: taskSessionID,
+                    adoptUnboundExistingSession: adoptUnboundExistingSession
+                )
+            case .unknown:
+                return .blocked(
+                    .durableSessionPresenceInspectionFailed(
+                        sessionName: name
+                    )
+                )
+            case .absent where requireExistingSession:
+                return .blocked(.durableSessionMissing(sessionName: name))
+            case .absent:
+                return .directPTYFallback
+            }
+        }
+
+        if let taskSessionID,
+           let issue = writeAndVerifyTaskSessionBinding(
+               session: name,
+               requested: taskSessionID
+           ) {
+            // The detached session may now contain a running agent. Leave it
+            // available for diagnosis, but do not attach or start a duplicate.
+            return .blocked(issue)
+        }
+        applySessionOptions(session: name)
+        recordIdentity(session: name, projectPath: projectPath, agentName: agentName)
+        return .ready(.created)
+    }
+
+    /// Stores identity on the tmux session itself as user options, so discovery
+    /// can read who a session belongs to instead of reversing its name. A name
+    /// is a display convenience; this is the record.
+    private func recordIdentity(session: String, projectPath: String?, agentName: String?) {
+        if let projectPath {
+            _ = SubprocessRunner.run(
+                tmuxPath,
+                ["set-option", "-t", "=\(session):", Self.projectOption, projectPath],
+                timeout: 4
+            )
+        }
+        if let agentName {
+            _ = SubprocessRunner.run(
+                tmuxPath,
+                ["set-option", "-t", "=\(session):", Self.agentOption, agentName],
+                timeout: 4
+            )
+        }
+    }
+
+    static let projectOption = "@conduit_project"
+    static let agentOption = "@conduit_agent"
+    static let taskSessionOption = "@conduit_task_session"
+
+    private enum TaskSessionBindingRead {
+        case observed(DiscoveredTaskSessionBinding)
+        case failed
+    }
+
+    private func ensureExistingSession(
+        name: String,
+        projectPath: String?,
+        agentName: String?,
+        taskSessionID: TaskSessionID?,
+        adoptUnboundExistingSession: Bool
+    ) -> TmuxSessionEnsureResult {
+        switch readTaskSessionBinding(session: name) {
+        case .failed:
+            return .blocked(
+                .taskSessionBindingInspectionFailed(sessionName: name)
+            )
+
+        case .observed(.malformed(let rawValue)):
+            return .blocked(
+                .malformedTaskSessionBinding(
+                    sessionName: name,
+                    rawValue: rawValue
+                )
+            )
+
+        case .observed(.valid(let existing)):
+            guard let taskSessionID else {
+                return .blocked(
+                    .taskSessionIdentityRequired(sessionName: name)
+                )
+            }
+            guard taskSessionID == existing else {
+                return .blocked(
+                    .taskSessionBindingConflict(
+                        sessionName: name,
+                        requested: taskSessionID,
+                        existing: existing
+                    )
+                )
+            }
+            // Project and agent options on an already-bound session are
+            // historical observations. Do not rewrite them on reconnect.
+            applySessionOptions(session: name)
+            return .ready(.existingSameTask)
+
+        case .observed(.absent):
+            guard let taskSessionID else {
+                return .blocked(
+                    .taskSessionIdentityRequired(sessionName: name)
+                )
+            }
+            guard adoptUnboundExistingSession else {
+                return .blocked(
+                    .legacyTaskSessionAdoptionRequired(
+                        sessionName: name,
+                        requested: taskSessionID
+                    )
+                )
+            }
+            if let issue = writeAndVerifyTaskSessionBinding(
+                session: name,
+                requested: taskSessionID
+            ) {
+                return .blocked(issue)
+            }
+            applySessionOptions(session: name)
+            // Adoption may fill known project/agent options, but callers pass
+            // nil for unidentified sessions so placeholders remain ephemeral.
+            recordIdentity(
+                session: name,
+                projectPath: projectPath,
+                agentName: agentName
+            )
+            return .ready(.adoptedLegacy)
+        }
+    }
+
+    /// `display-message` expands an unset user option to an empty value while
+    /// still failing for an unreachable target, so absence stays distinct from
+    /// an inspection failure.
+    private func readTaskSessionBinding(session: String) -> TaskSessionBindingRead {
+        let result = SubprocessRunner.run(
+            tmuxPath,
+            [
+                "display-message",
+                "-p",
+                "-t",
+                "=\(session):",
+                "#{\(Self.taskSessionOption)}"
+            ],
+            timeout: 4
+        )
+        guard result.status == 0 else { return .failed }
+        let value = result.output.trimmingCharacters(in: .newlines)
+        return .observed(
+            DiscoveredTaskSessionBinding(
+                optionValue: value.isEmpty ? nil : value
+            )
+        )
+    }
+
+    /// Set-only-if-unset avoids overwriting a binding installed by another
+    /// Conduit process between observation and adoption. The read-back is the
+    /// authority for whether attach may proceed.
+    private func writeAndVerifyTaskSessionBinding(
+        session: String,
+        requested: TaskSessionID
+    ) -> TerminalLaunchIssue? {
+        let write = SubprocessRunner.run(
+            tmuxPath,
+            [
+                "set-option",
+                "-o",
+                "-t",
+                "=\(session):",
+                Self.taskSessionOption,
+                requested.rawValue.uuidString.lowercased()
+            ],
+            timeout: 4
+        )
+        guard write.status == 0 else {
+            return .taskSessionBindingWriteFailed(
+                sessionName: session,
+                requested: requested
+            )
+        }
+
+        switch readTaskSessionBinding(session: session) {
+        case .failed:
+            return .taskSessionBindingInspectionFailed(sessionName: session)
+        case .observed(.absent):
+            return .taskSessionBindingWriteFailed(
+                sessionName: session,
+                requested: requested
+            )
+        case .observed(.malformed(let rawValue)):
+            return .malformedTaskSessionBinding(
+                sessionName: session,
+                rawValue: rawValue
+            )
+        case .observed(.valid(let existing)):
+            guard existing == requested else {
+                return .taskSessionBindingConflict(
+                    sessionName: session,
+                    requested: requested,
+                    existing: existing
+                )
+            }
+            return nil
+        }
+    }
+
+    /// Every `conduit-` session tmux currently knows about. Sessions Conduit
+    /// did not create are excluded by prefix; sessions it created before
+    /// identity options existed are included with nil identity rather than
+    /// dropped, so discovery never implies tmux is emptier than it is.
+    func listConduitSessions() -> [DiscoveredSession] {
+        listConduitSessionsDetailed().sessions
+    }
+
+    struct DiscoveryOutcome: Sendable {
+        let sessions: [DiscoveredSession]
+        let exitStatus: Int32
+        let rawOutput: String
+        /// True only when tmux was authoritatively empty or every Conduit row
+        /// in a successful listing was parsed.
+        let observationSucceeded: Bool
+    }
+
+    /// Same listing, but keeps the raw result so an empty list can explain
+    /// itself instead of every failure looking like "no sessions".
+    func listConduitSessionsDetailed() -> DiscoveryOutcome {
+        let result = SubprocessRunner.run(
+            tmuxPath,
+            ["list-sessions", "-F", TmuxSessionListParser.format],
+            timeout: 6
+        )
+        // "no server running" is a normal empty, not a failure to report.
+        let noServer = result.output.contains("no server running")
+        guard result.status == 0 || noServer else {
+            return DiscoveryOutcome(
+                sessions: [],
+                exitStatus: result.status,
+                rawOutput: result.output,
+                observationSucceeded: false
+            )
+        }
+        let sessions = TmuxSessionListParser.parse(result.output)
+        let conduitRowCount = result.output
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .filter { line in
+                String(line).components(
+                    separatedBy: TmuxSessionListParser.fieldSeparator
+                ).first?.hasPrefix("conduit-") == true
+            }
+            .count
+        return DiscoveryOutcome(
+            sessions: sessions,
+            exitStatus: result.status,
+            rawOutput: noServer ? "" : result.output,
+            observationSucceeded: noServer
+                || (result.status == 0 && sessions.count == conduitRowCount)
+        )
+    }
+
+    /// Session-scoped tmux options, so an operator attaching from a normal
+    /// terminal elsewhere is unaffected. Best-effort: a session is still
+    /// perfectly usable if any of these fail.
+    private func applySessionOptions(session: String) {
+        for option in Self.sessionOptions {
+            _ = SubprocessRunner.run(
+                tmuxPath,
+                ["set-option", "-t", session] + option,
+                timeout: 4
+            )
+        }
+    }
+
+    static let sessionOptions: [[String]] = [
+        // Conduit renders session identity, lifecycle state, and tmux backing
+        // in its own chrome, so tmux's status line is duplicate information
+        // drawn in a palette Conduit does not control.
+        ["status", "off"],
+        // tmux occupies the alternate screen, so the outer terminal has no
+        // scrollback for it. Without mouse mode SwiftTerm translates the wheel
+        // into arrow keys (see its scrollWheel alternate-buffer branch), which
+        // an agent CLI reads as "previous message" — scrolling walked the
+        // prompt history instead of the thread. With mouse on, the wheel
+        // reaches tmux, which scrolls the pane's real history.
+        //
+        // Drag-selection keeps working: tmux copies on drag-end, the server's
+        // `set-clipboard external` emits OSC 52, and SwiftTerm writes that to
+        // NSPasteboard — which is what Forward reads. Shift-drag still bypasses
+        // mouse reporting for native selection.
+        ["mouse", "on"],
+        // Copy-mode's default indicator and selection are bright yellow, which
+        // clashes with every palette the same way the status line did. A
+        // neutral grey stays legible in light and dark without reading as an
+        // accent or a state signal. tmux colours are its own 256 palette, so
+        // this cannot track the Conduit palette exactly — restraint over match.
+        ["mode-style", "fg=colour252,bg=colour238"]
+    ]
+
+    /// Detaches every client attached to the session — deterministic, no
+    /// prefix-key emulation, works with any operator tmux configuration.
+    func detachClients(session: String) {
+        _ = SubprocessRunner.run(tmuxPath, ["detach-client", "-s", "=\(session)"], timeout: 5)
+    }
+
+    /// Kills the named session and its processes. Used when the operator wants
+    /// a true fresh start rather than durable detach/reconnect.
+    @discardableResult
+    func killSession(_ name: String) -> Bool {
+        _ = SubprocessRunner.run(
+            tmuxPath,
+            ["kill-session", "-t", "=\(name)"],
+            timeout: 5
+        )
+        // Never turn a failed or ambiguous tmux observation into a positive
+        // "ended" claim. An already-absent session is also a verified end.
+        return sessionPresence(name) == .absent
+    }
+
+    /// Returns a bounded tail of tmux's rendered active pane. Formatting escape
+    /// sequences are intentionally omitted.
+    ///
+    /// This is a convenience snapshot for Conversation's `Derived from Raw`
+    /// projection. Failure or empty output is absence of a capture, never
+    /// evidence about the agent or its task.
+    func capturePaneSnapshot(session: String) -> String? {
+        let result = SubprocessRunner.run(
+            tmuxPath,
+            [
+                "capture-pane",
+                "-p",
+                "-J",
+                "-S",
+                "-\(Self.conversationCaptureLineLimit)",
+                "-E",
+                "-",
+                "-t",
+                "=\(session):"
+            ],
+            timeout: 5
+        )
+        guard result.status == 0 else { return nil }
+        let normalized = result.output
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .newlines)
+        let lines = normalized.split(
+            separator: "\n",
+            omittingEmptySubsequences: false
+        )
+        let snapshot = lines
+            .suffix(Self.conversationCaptureLineLimit)
+            .joined(separator: "\n")
+        return snapshot.isEmpty ? nil : snapshot
+    }
+
+    /// Delivers text into the session through a tmux buffer. `paste-buffer -p`
+    /// honours the foreground application's bracketed-paste mode, so multiline
+    /// prompts arrive as one block; the optional Enter is the explicit submit.
+    /// Pane targets use the `=name:` form — exact session match, active pane —
+    /// because `paste-buffer`/`send-keys` take a target-pane, and a bare
+    /// `=name` does not parse as one (verified against tmux 3.6b).
+    func paste(
+        session: String,
+        text: String,
+        submit: Bool,
+        willWrite: (() -> Bool)? = nil
+    ) -> Bool {
+        let paneTarget = "=\(session):"
+        let bufferName = "conduit-\(UUID().uuidString.prefix(8))"
+        let load = SubprocessRunner.run(
+            tmuxPath,
+            ["load-buffer", "-b", bufferName, "-"],
+            stdin: Data(text.utf8),
+            timeout: 5
+        )
+        guard load.status == 0 else { return false }
+        guard willWrite?() ?? true else {
+            _ = SubprocessRunner.run(
+                tmuxPath,
+                ["delete-buffer", "-b", bufferName],
+                timeout: 5
+            )
+            return false
+        }
+        let paste = SubprocessRunner.run(
+            tmuxPath,
+            ["paste-buffer", "-p", "-d", "-b", bufferName, "-t", paneTarget],
+            timeout: 5
+        )
+        guard paste.status == 0 else { return false }
+        if submit {
+            return SubprocessRunner.run(tmuxPath, ["send-keys", "-t", paneTarget, "Enter"], timeout: 5).status == 0
+        }
+        return true
+    }
+}
+#endif

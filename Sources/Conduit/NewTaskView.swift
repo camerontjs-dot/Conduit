@@ -1,0 +1,285 @@
+#if os(macOS)
+import ConduitCore
+import SwiftUI
+
+/// Explicit task creation. MainFrame's scanned projects and enabled local CLI
+/// profiles are the only choices; this view creates no shadow registry.
+struct NewTaskView: View {
+    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var selectedProjectID: String?
+    @State private var selectedAgentID: UUID?
+    @State private var selectedModelID: String?
+
+    private var palette: ConduitPalette {
+        themeStore.palette(for: colorScheme)
+    }
+
+    private var selectedProject: MainframeProject? {
+        guard let selectedProjectID else { return nil }
+        return model.projects.first { $0.id == selectedProjectID }
+    }
+
+    private var selectedAgent: AgentProfile? {
+        guard let selectedAgentID else { return nil }
+        return model.enabledAgents.first { $0.id == selectedAgentID }
+    }
+
+    private var canCreate: Bool {
+        selectedProject != nil
+            && selectedAgent != nil
+            && !(selectedAgent?.modelLaunchStyle == .ollamaRun && selectedModelID == nil)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider().overlay(palette.line)
+
+            VStack(alignment: .leading, spacing: 18) {
+                conversationFirstNote
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("PROJECT")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(palette.dim)
+                    projectPicker
+                    if let project = selectedProject {
+                        Text(project.path.path)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(palette.faint)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(project.path.path)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("AGENT")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(palette.dim)
+                    agentPicker
+                    if let agent = selectedAgent {
+                        Text("Installed CLI: \(agent.command)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(palette.faint)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(agent.command)
+                    }
+                }
+
+                if let agent = selectedAgent, agent.kind != .shell {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("MODEL")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .tracking(0.7)
+                            .foregroundStyle(palette.dim)
+                        AgentModelPicker(
+                            agent: agent,
+                            selectedModelID: selectedModelID,
+                            options: model.modelOptions(for: agent),
+                            isRefreshing: model.isModelCatalogRefreshing(for: agent),
+                            onSelect: { option in
+                                selectedModelID = option?.id
+                                model.setModelSelection(option, forAgentID: agent.id)
+                            },
+                            onRefresh: { model.refreshModelCatalog(for: agent) }
+                        )
+                        Text(
+                            agent.modelLaunchStyle == .ollamaRun && selectedModelID == nil
+                                ? "Choose a local or cloud-tagged Ollama model before starting."
+                                : "Model selection applies to the next launch; provider limits remain separate."
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(
+                            agent.modelLaunchStyle == .ollamaRun && selectedModelID == nil
+                                ? .orange
+                                : palette.faint
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if model.projects.isEmpty || model.enabledAgents.isEmpty {
+                    missingRequirement
+                }
+            }
+            .padding(20)
+
+            Spacer(minLength: 8)
+            Divider().overlay(palette.line)
+            footer
+        }
+        // Keep the model selector and its honest provider-limit note visible
+        // when the sheet is presented at the native macOS minimum size.
+        .frame(width: 520, height: 560)
+        .background(palette.canvas)
+        .onAppear {
+            reconcileSelections()
+            if let agent = selectedAgent {
+                model.refreshModelCatalog(for: agent)
+            }
+        }
+        .onChange(of: model.projects) { _ in
+            reconcileSelections()
+        }
+        .onChange(of: model.enabledAgents) { _ in
+            reconcileSelections()
+        }
+        .onChange(of: selectedAgentID) { _ in
+            selectedModelID = selectedAgent?.model
+            if let agent = selectedAgent {
+                model.refreshModelCatalog(for: agent)
+            }
+        }
+    }
+
+    private var header: some View {
+        ConduitSheetHeader(
+            title: "New Task",
+            subtitle: "Start an enabled CLI agent in a project from MainFrame.",
+            systemImage: "plus.circle",
+            onClose: { model.showNewTask = false }
+        )
+    }
+
+    private var conversationFirstNote: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .foregroundStyle(palette.dim)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Conversation opens first")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(palette.text)
+                Text("Conduit launches the installed CLI through a real PTY. The full terminal remains available from Raw for direct input, approvals, and debugging.")
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(palette.lineSoft)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var projectPicker: some View {
+        if model.projects.isEmpty {
+            Text("No projects are available")
+                .foregroundStyle(palette.dim)
+        } else {
+            Picker("Project", selection: $selectedProjectID) {
+                ForEach(model.projects) { project in
+                    Text(projectPickerTitle(project))
+                        .tag(Optional(project.id))
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel("Project")
+            .accessibilityValue(selectedProject.map(projectPickerTitle) ?? "None")
+            .help("Projects come from the current MainFrame file scan")
+        }
+    }
+
+    @ViewBuilder
+    private var agentPicker: some View {
+        if model.enabledAgents.isEmpty {
+            Text("No agent profiles are enabled")
+                .foregroundStyle(palette.dim)
+        } else {
+            Picker("Agent", selection: $selectedAgentID) {
+                ForEach(model.enabledAgents) { agent in
+                    Text(agent.kind == .shell ? "\(agent.name) — Shell" : agent.name)
+                        .tag(Optional(agent.id))
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel("Agent")
+            .accessibilityValue(selectedAgent?.name ?? "None")
+            .help("Enabled local CLI profiles from Conduit Settings")
+        }
+    }
+
+    private var missingRequirement: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(palette.dim)
+            Text(
+                model.projects.isEmpty
+                    ? "Choose or refresh a MainFrame root before starting a task."
+                    : "Enable at least one agent profile in Settings before starting a task."
+            )
+            .font(.caption)
+            .foregroundStyle(palette.dim)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("Starting opens a live local process.")
+                .font(.caption)
+                .foregroundStyle(palette.faint)
+            Spacer()
+            Button("Cancel") {
+                model.showNewTask = false
+            }
+            .keyboardShortcut(.cancelAction)
+            Button("Create Task", action: createTask)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canCreate)
+                .accessibilityHint("Starts the selected local CLI agent")
+        }
+        .padding(14)
+        .background(palette.surface)
+    }
+
+    private func projectPickerTitle(_ project: MainframeProject) -> String {
+        project.isMainframeRoot
+            ? "\(project.metadata.title) — MainFrame Root"
+            : project.metadata.title
+    }
+
+    private func reconcileSelections() {
+        if selectedProjectID == nil
+            || !model.projects.contains(where: { $0.id == selectedProjectID }) {
+            selectedProjectID = model.newTaskDefaultProjectID
+                ?? model.projects.first?.id
+        }
+
+        if selectedAgentID == nil
+            || !model.enabledAgents.contains(where: { $0.id == selectedAgentID }) {
+            selectedAgentID = model.enabledAgents.first(where: { $0.kind != .shell })?.id
+                ?? model.enabledAgents.first?.id
+        }
+        if let agent = selectedAgent {
+            selectedModelID = agent.model
+        } else {
+            selectedModelID = nil
+        }
+    }
+
+    private func createTask() {
+        guard let project = selectedProject, let agent = selectedAgent else {
+            return
+        }
+        var launchAgent = agent
+        launchAgent.model = selectedModelID
+        launchAgent.contextWindowTokens = model.modelOptions(for: agent)
+            .first(where: { $0.id == selectedModelID })?.contextWindowTokens
+            ?? agent.contextWindowTokens
+        _ = model.createTask(agent: launchAgent, project: project)
+    }
+}
+#endif
