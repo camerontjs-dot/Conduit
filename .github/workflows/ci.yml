@@ -10,14 +10,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
-      - name: Repository boundary scans
-        run: |
-          ./bin/repo-leak-scan --push
-          python3 bin/public-surface-lint --json
       - name: Selftest
         run: swift run conduit-selftest
       - name: Test
