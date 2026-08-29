@@ -44,6 +44,12 @@ Baseline checks on the current product source:
   references.
 * `git diff --check` was clean before publication.
 
+An attempted workflow addition of the MainFrame-owned scanners failed closed
+in CI run `33250715878` because those tools are not part of this portable
+checkout. Corrective commit `f75f178` reverted that addition; the final
+workflow remains product-only, while the strict boundary scans stay a local
+pre-push gate.
+
 Machine-bound checks not executed here include installed-app parity and GUI
 relaunch/persistence, authenticated agent CLI and adapter acceptance, tmux
 session lifecycle, MainFrame live-root and permission behavior, ChatGPT tunnel
