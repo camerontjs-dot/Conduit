@@ -24,6 +24,9 @@ credential or operator transcript is included.
 The live GitHub default branch before migration was `25faee50cf4df9627eac0f02442d2960681c06f5`.
 The old draft PR #1 head was `55ad069f78923c98811ea0346731d3d403165257`.
 The current local product source before migration was `90282eebbf48d996d7580f9404cc6f7ef0aaf2f2`.
+The migrated reconciliation head is
+`9c53caf93804aa771705e1d2868c6617492b336a`, published in PR #2:
+https://github.com/camerontjs-dot/Conduit/pull/2.
 The local workbench history had been reset by the operator, so it shared no
 common ancestor with GitHub. This reconciliation joins the two histories with
 an ours merge, preserving both lines without rewriting either one.
@@ -66,5 +69,5 @@ deterministic macOS build/test path only. GitHub branch-protection and ruleset
 settings were not readable from the current account (API returned 403).
 
 Review and CI for the reconciliation PR are the next authority. Merge, release,
-and tag operations remain separately authorized. The old draft PR is preserved
-for evidence and will be marked superseded only after the replacement PR exists.
+and tag operations remain separately authorized. The old draft PR #1 is closed
+as superseded; its branch and history remain preserved for evidence.
