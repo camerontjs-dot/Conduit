@@ -1,0 +1,8 @@
+# Narrow exemptions for deterministic rule text and synthetic test fixtures.
+# Format: path | substring | reason
+Sources/ConduitCore/AgentSlashCatalog.swift | Users/... | rule-text fixture for absolute-path rejection
+Sources/ConduitSelfTest/main.swift | Users/admin | synthetic path fixture
+Sources/ConduitSelfTest/main.swift | Users/someone | synthetic MindGraph projection fixture
+Tests/ConduitCoreTests/ConduitCoreTests.swift | Users/admin | synthetic path/host-envelope fixture
+Tests/ConduitCoreTests/ConduitSessionListTests.swift | Users/someone | synthetic path/projection fixture
+Tests/ConduitCoreTests/ConduitSessionEventsTests.swift | api_key=supersecret | synthetic redaction fixture; no live credential
