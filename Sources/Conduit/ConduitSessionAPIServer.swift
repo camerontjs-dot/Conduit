@@ -3,18 +3,63 @@ import ConduitCore
 import Darwin
 import Foundation
 
+/// Holds only the listener file descriptor and lifecycle flag shared with the
+/// blocking accept loop. The owner remains `ConduitSessionAPIServer` on the
+/// main actor; this box avoids reading its actor-isolated state from a socket
+/// worker.
+private final class SessionAPIListenerState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var listenFD: Int32 = -1
+    private var running = false
+
+    func start(listeningOn fd: Int32) {
+        lock.lock()
+        listenFD = fd
+        running = true
+        lock.unlock()
+    }
+
+    func stop() -> Int32 {
+        lock.lock()
+        let fd = listenFD
+        listenFD = -1
+        running = false
+        lock.unlock()
+        return fd
+    }
+
+    func activeFileDescriptor() -> Int32? {
+        lock.lock()
+        defer { lock.unlock() }
+        return running && listenFD >= 0 ? listenFD : nil
+    }
+
+    func isRunning() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return running
+    }
+}
+
 /// Loopback HTTP/MCP listener for D-039 session tools. Off unless enabled.
 ///
 /// Uses a POSIX IPv4 `127.0.0.1` socket so the full HTTP body is written
 /// before close. Network.framework's listener was observed dropping bodies.
 @MainActor
 final class ConduitSessionAPIServer {
-    private var listenFD: Int32 = -1
-    private var running = false
     private let acceptQueue = DispatchQueue(label: "dev.camerontjs.conduit.session-api")
+    private nonisolated let listenerState = SessionAPIListenerState()
+    private nonisolated let connectionQueue = DispatchQueue(
+        label: "dev.camerontjs.conduit.session-api.connections",
+        attributes: .concurrent
+    )
+    private nonisolated let connectionSlots = DispatchSemaphore(value: 8)
     private let token: String
     private let allowWrites: Bool
     private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
+    private nonisolated static let maximumHeaderBytes = 16_384
+    private nonisolated static let maximumBodyBytes = 1_048_576
+    private nonisolated static let readTimeoutSeconds: Int = 2
 
     /// `clientInfo` from the most recent `initialize` on this listener.
     ///
@@ -64,94 +109,195 @@ final class ConduitSessionAPIServer {
                 userInfo: [NSLocalizedDescriptionKey: "Could not bind 127.0.0.1:\(ConduitSessionAPI.loopbackPort)."]
             )
         }
-        listenFD = fd
-        running = true
+        listenerState.start(listeningOn: fd)
         acceptQueue.async { [weak self] in
             self?.acceptLoop()
         }
     }
 
     func stop() {
-        running = false
-        if listenFD >= 0 {
-            close(listenFD)
-            listenFD = -1
+        let fd = listenerState.stop()
+        if fd >= 0 {
+            close(fd)
         }
     }
 
-    private func acceptLoop() {
-        while running {
+    private enum RequestReadResult {
+        case request(Data)
+        case rejected(status: Int, body: String)
+    }
+
+    private nonisolated func acceptLoop() {
+        while let listenFD = listenerState.activeFileDescriptor() {
             let client = accept(listenFD, nil, nil)
             guard client >= 0 else {
-                if running { Thread.sleep(forTimeInterval: 0.02) }
+                if listenerState.isRunning() { Thread.sleep(forTimeInterval: 0.02) }
                 continue
             }
-            let request = readRequest(from: client)
-            let lock = DispatchSemaphore(value: 0)
-            var response = Data()
-            DispatchQueue.main.async {
-                response = self.response(for: request)
-                lock.signal()
+
+            guard connectionSlots.wait(timeout: .now()) == .success else {
+                Self.send(
+                    Self.http(503, body: "{\"error\":\"server busy\"}\n"),
+                    to: client
+                )
+                close(client)
+                continue
             }
-            lock.wait()
-            response.withUnsafeBytes { raw in
-                if let base = raw.baseAddress {
-                    _ = send(client, base, response.count, 0)
+
+            let slots = connectionSlots
+            connectionQueue.async { [weak self] in
+                guard let self else {
+                    close(client)
+                    slots.signal()
+                    return
+                }
+                self.serve(client) {
+                    slots.signal()
                 }
             }
-            close(client)
         }
     }
 
-    private func readRequest(from client: Int32) -> Data {
+    private nonisolated func serve(
+        _ client: Int32,
+        finished: @escaping () -> Void
+    ) {
+        switch Self.readRequest(from: client) {
+        case .request(let request):
+            DispatchQueue.main.async { [weak self] in
+                defer {
+                    close(client)
+                    finished()
+                }
+                guard let self else {
+                    Self.send(
+                        Self.http(503, body: "{\"error\":\"server stopped\"}\n"),
+                        to: client
+                    )
+                    return
+                }
+                Self.send(self.response(for: request), to: client)
+            }
+        case .rejected(let status, let body):
+            Self.send(Self.http(status, body: body), to: client)
+            close(client)
+            finished()
+        }
+    }
+
+    private nonisolated static func readRequest(from client: Int32) -> RequestReadResult {
+        var timeout = timeval(
+            tv_sec: readTimeoutSeconds,
+            tv_usec: 0
+        )
+        guard setsockopt(
+            client,
+            SOL_SOCKET,
+            SO_RCVTIMEO,
+            &timeout,
+            socklen_t(MemoryLayout<timeval>.size)
+        ) == 0 else {
+            return .rejected(
+                status: 500,
+                body: "{\"error\":\"read timeout unavailable\"}\n"
+            )
+        }
+
         let delimiter = Data("\r\n\r\n".utf8)
-        let maxRequestBytes = 1_048_576
         var request = Data()
         var buffer = [UInt8](repeating: 0, count: 16_384)
 
-        while request.range(of: delimiter) == nil, request.count < maxRequestBytes {
+        while request.range(of: delimiter) == nil {
             let count = recv(client, &buffer, buffer.count, 0)
-            guard count > 0 else { return request }
+            guard count > 0 else {
+                return .rejected(
+                    status: count == 0 ? 400 : 408,
+                    body: "{\"error\":\"incomplete request\"}\n"
+                )
+            }
             request.append(buffer, count: count)
+            if request.count > maximumHeaderBytes {
+                return .rejected(
+                    status: 413,
+                    body: "{\"error\":\"request headers too large\"}\n"
+                )
+            }
         }
 
         guard let headerRange = request.range(of: delimiter) else {
-            return request
+            return .rejected(
+                status: 400,
+                body: "{\"error\":\"invalid request\"}\n"
+            )
         }
-        let headerText = String(decoding: request[..<headerRange.lowerBound], as: UTF8.self)
-        let contentLength = headerText
+        guard let headerText = String(
+            data: request[..<headerRange.lowerBound],
+            encoding: .utf8
+        ) else {
+            return .rejected(
+                status: 400,
+                body: "{\"error\":\"invalid request headers\"}\n"
+            )
+        }
+        let headerLines = headerText
             .split(whereSeparator: \.isNewline)
-            .first { $0.lowercased().hasPrefix("content-length:") }
-            .flatMap { line in
-                line.split(separator: ":", maxSplits: 1)
-                    .last
-                    .flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-            } ?? 0
+            .map(String.init)
+        guard !SessionAPITransportSecurity.hasTransferEncoding(
+            headerLines: headerLines
+        ) else {
+            return .rejected(
+                status: 400,
+                body: "{\"error\":\"transfer encoding unsupported\"}\n"
+            )
+        }
+        let contentLength: Int
+        switch SessionAPITransportSecurity.contentLength(
+            headerLines: headerLines,
+            maximum: maximumBodyBytes
+        ) {
+        case .absent:
+            contentLength = 0
+        case .valid(let length):
+            contentLength = length
+        case .invalid:
+            return .rejected(
+                status: 400,
+                body: "{\"error\":\"invalid content length\"}\n"
+            )
+        }
         let bodyStart = headerRange.upperBound
-        let targetSize = min(maxRequestBytes, bodyStart + contentLength)
+        let targetSize = bodyStart + contentLength
+        guard request.count <= targetSize else {
+            return .rejected(
+                status: 400,
+                body: "{\"error\":\"invalid request framing\"}\n"
+            )
+        }
 
         while request.count < targetSize {
             let count = recv(client, &buffer, buffer.count, 0)
-            guard count > 0 else { break }
+            guard count > 0 else {
+                return .rejected(
+                    status: count == 0 ? 400 : 408,
+                    body: "{\"error\":\"incomplete request body\"}\n"
+                )
+            }
             request.append(buffer, count: count)
+            guard request.count <= targetSize else {
+                return .rejected(
+                    status: 400,
+                    body: "{\"error\":\"invalid request framing\"}\n"
+                )
+            }
         }
-        return request
+        return .request(request)
     }
 
     static func loadOrCreateToken() -> String {
         let url = AdapterThreadStore.defaultDirectory()
             .appendingPathComponent("session-api-token")
-        if let existing = try? String(contentsOf: url, encoding: .utf8) {
-            let trimmed = existing.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return trimmed }
-        }
-        let token = UUID().uuidString.lowercased()
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try? token.write(to: url, atomically: true, encoding: .utf8)
-        return token
+        return (try? SessionAPITransportSecurity.loadOrCreateToken(at: url))
+            ?? UUID().uuidString.lowercased()
     }
 
     private func response(for request: Data) -> Data {
@@ -160,10 +306,13 @@ final class ConduitSessionAPIServer {
             ?? text.range(of: "\n\n")?.upperBound
         let headers = headerEnd.map { String(text[..<$0]) } ?? text
         let body = headerEnd.map { String(text[$0...]) } ?? ""
-        let firstLine = headers.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let headerLines = headers
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+        let firstLine = headerLines.first ?? ""
         let isHealth = firstLine.contains("GET /healthz") || firstLine.contains("GET /readyz")
         if isHealth {
-            return http(200, body: "ok\n", contentType: "text/plain")
+            return Self.http(200, body: "ok\n", contentType: "text/plain")
         }
         // This endpoint uses a local bearer token supplied by tunnel-client,
         // not OAuth. A 404 tells no-auth MCP clients that protected-resource
@@ -172,30 +321,28 @@ final class ConduitSessionAPIServer {
         let isProtectedResourceMetadataRequest =
             firstLine.hasPrefix("GET /.well-known/oauth-protected-resource")
         if isProtectedResourceMetadataRequest {
-            return http(404, body: "{\"error\":\"not found\"}\n")
+            return Self.http(404, body: "{\"error\":\"not found\"}\n")
         }
-        let authorized = headers
-            .split(whereSeparator: \.isNewline)
-            .contains { line in
-                line.lowercased().hasPrefix("authorization:")
-                    && line.lowercased().contains("bearer \(token.lowercased())")
-            }
+        let authorized = SessionAPITransportSecurity.exactBearerAuthorization(
+            headerLines: headerLines,
+            token: token
+        )
         guard authorized else {
-            return http(401, body: "{\"error\":\"unauthorized\"}\n")
+            return Self.http(401, body: "{\"error\":\"unauthorized\"}\n")
         }
         guard firstLine.contains("POST ") else {
-            return http(405, body: "{\"error\":\"POST /mcp only\"}\n")
+            return Self.http(405, body: "{\"error\":\"POST /mcp only\"}\n")
         }
         guard let payload = CodexJSON.parseLine(body) else {
-            return http(400, body: "{\"error\":\"invalid json\"}\n")
+            return Self.http(400, body: "{\"error\":\"invalid json\"}\n")
         }
         let reply = mcpReply(payload)
         guard let data = try? JSONSerialization.data(withJSONObject: reply),
               let json = String(data: data, encoding: .utf8)
         else {
-            return http(500, body: "{\"error\":\"encode failed\"}\n")
+            return Self.http(500, body: "{\"error\":\"encode failed\"}\n")
         }
-        return http(200, body: json + "\n")
+        return Self.http(200, body: json + "\n")
     }
 
     private func mcpReply(_ payload: CodexJSON) -> [String: Any] {
@@ -727,7 +874,28 @@ final class ConduitSessionAPIServer {
         ],
     ]
 
-    private func http(_ status: Int, body: String, contentType: String = "application/json") -> Data {
+    private nonisolated static func send(_ response: Data, to client: Int32) {
+        response.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            var sent = 0
+            while sent < response.count {
+                let count = Darwin.send(
+                    client,
+                    base.advanced(by: sent),
+                    response.count - sent,
+                    0
+                )
+                guard count > 0 else { return }
+                sent += count
+            }
+        }
+    }
+
+    private nonisolated static func http(
+        _ status: Int,
+        body: String,
+        contentType: String = "application/json"
+    ) -> Data {
         let phrase = status == 200 ? "OK" : "Error"
         let header =
             "HTTP/1.1 \(status) \(phrase)\r\n"
