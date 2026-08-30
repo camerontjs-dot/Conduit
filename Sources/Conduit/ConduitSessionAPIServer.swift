@@ -60,6 +60,7 @@ final class ConduitSessionAPIServer {
     private nonisolated static let maximumHeaderBytes = 16_384
     private nonisolated static let maximumBodyBytes = 1_048_576
     private nonisolated static let readTimeoutSeconds: Int = 2
+    private nonisolated static let busyResponseDrainMicroseconds: Int32 = 50_000
 
     /// `clientInfo` from the most recent `initialize` on this listener.
     ///
@@ -898,6 +899,32 @@ final class ConduitSessionAPIServer {
     }
 
     private nonisolated static func drainAvailableInput(from client: Int32) {
+        var timeout = timeval(
+            tv_sec: 0,
+            tv_usec: busyResponseDrainMicroseconds
+        )
+        guard setsockopt(
+            client,
+            SOL_SOCKET,
+            SO_RCVTIMEO,
+            &timeout,
+            socklen_t(MemoryLayout<timeval>.size)
+        ) == 0
+        else {
+            return
+        }
+
+        var remaining = maximumHeaderBytes
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        let initialCount = Darwin.recv(
+            client,
+            &buffer,
+            min(buffer.count, remaining),
+            0
+        )
+        guard initialCount > 0 else { return }
+        remaining -= initialCount
+
         let originalFlags = Darwin.fcntl(client, F_GETFL)
         guard originalFlags >= 0,
               Darwin.fcntl(client, F_SETFL, originalFlags | O_NONBLOCK) == 0
@@ -906,8 +933,6 @@ final class ConduitSessionAPIServer {
         }
         defer { _ = Darwin.fcntl(client, F_SETFL, originalFlags) }
 
-        var remaining = maximumHeaderBytes
-        var buffer = [UInt8](repeating: 0, count: 4_096)
         while remaining > 0 {
             let count = Darwin.recv(
                 client,
