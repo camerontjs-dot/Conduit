@@ -136,11 +136,7 @@ final class ConduitSessionAPIServer {
             }
 
             guard connectionSlots.wait(timeout: .now()) == .success else {
-                Self.send(
-                    Self.http(503, body: "{\"error\":\"server busy\"}\n"),
-                    to: client
-                )
-                close(client)
+                Self.rejectBusyConnection(client)
                 continue
             }
 
@@ -889,6 +885,16 @@ final class ConduitSessionAPIServer {
                 sent += count
             }
         }
+    }
+
+    private nonisolated static func rejectBusyConnection(_ client: Int32) {
+        // The listener has not read this connection. Discard its inbound bytes
+        // before closing so the kernel can deliver the small 503 response
+        // rather than resetting the peer because unread data remains.
+        _ = Darwin.shutdown(client, SHUT_RD)
+        Self.send(Self.http(503, body: "{\"error\":\"server busy\"}\n"), to: client)
+        _ = Darwin.shutdown(client, SHUT_WR)
+        close(client)
     }
 
     private nonisolated static func http(
