@@ -49,7 +49,7 @@ not mistaken for adapter acceptance.
 | Non-provider material outcome rows | 25 | 4 | 2 | 7 | 3 |
 | Provider binary/version probes (8 lanes) | 8 | 0 | 0 | 0 | 0 |
 | Provider authentication beyond presence (6 structured lanes) | 0 | 0 | 0 | 0 | 6 |
-| Provider task/turn/lifecycle lanes (8 declared lanes) | 0 | 0 | 0 | 8 | 0 |
+| Provider task/turn/lifecycle lanes (8 installed/runtime lanes) | 0 | 0 | 0 | 8 | 0 |
 
 These are evidence classifications, not a readiness score. The original
 Session API failures remain in the count even though the focused fix now passes
