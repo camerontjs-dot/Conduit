@@ -891,10 +891,33 @@ final class ConduitSessionAPIServer {
         // The listener has not read this connection. Discard its inbound bytes
         // before closing so the kernel can deliver the small 503 response
         // rather than resetting the peer because unread data remains.
-        _ = Darwin.shutdown(client, SHUT_RD)
+        drainAvailableInput(from: client)
         Self.send(Self.http(503, body: "{\"error\":\"server busy\"}\n"), to: client)
         _ = Darwin.shutdown(client, SHUT_WR)
         close(client)
+    }
+
+    private nonisolated static func drainAvailableInput(from client: Int32) {
+        let originalFlags = Darwin.fcntl(client, F_GETFL)
+        guard originalFlags >= 0,
+              Darwin.fcntl(client, F_SETFL, originalFlags | O_NONBLOCK) == 0
+        else {
+            return
+        }
+        defer { _ = Darwin.fcntl(client, F_SETFL, originalFlags) }
+
+        var remaining = maximumHeaderBytes
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while remaining > 0 {
+            let count = Darwin.recv(
+                client,
+                &buffer,
+                min(buffer.count, remaining),
+                0
+            )
+            guard count > 0 else { return }
+            remaining -= count
+        }
     }
 
     private nonisolated static func http(
