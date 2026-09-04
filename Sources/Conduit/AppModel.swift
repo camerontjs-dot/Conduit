@@ -3992,7 +3992,8 @@ final class AppModel: ObservableObject {
                 turnActive: live.structuredTurnActive,
                 lastTurnStatus: live.structuredLastTurnStatus,
                 pendingApproval: live.structuredPendingApproval,
-                pendingApprovalSummary: live.structuredPendingApprovalSummary
+                pendingApprovalSummary: live.structuredPendingApprovalSummary,
+                lastError: live.structuredLastError
             )
         }()
         let persistedThreadID: String? = {
@@ -4481,6 +4482,18 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             ?? grokACP?.lastTurnStatus
             ?? openCode?.lastTurnStatus
             ?? streamJSON?.lastTurnStatus
+    }
+    /// The provider's own failure signal for the live structured host.
+    ///
+    /// Observed 2026-09-04: OpenCode died with `ProviderModelNotFoundError`
+    /// and authored nothing, while the control plane reported the turn as
+    /// `structured_completed`. Every client already recorded this; nothing
+    /// carried it out.
+    var structuredLastError: String? {
+        appServer?.lastError
+            ?? grokACP?.lastError
+            ?? openCode?.lastError
+            ?? streamJSON?.lastError
     }
     var structuredPendingApproval: Bool {
         pendingAppServerApproval != nil || pendingStructuredApproval != nil

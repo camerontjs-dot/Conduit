@@ -27,6 +27,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- A structured turn that died inside the provider is no longer reported as a
+  completed turn. `conduit_session_events` gains `turn.state: failed` and
+  `observation.checkpoint: structured_failed`, derived from the adapter's own
+  `.failed` signal rather than inferred from status text. Previously any
+  non-nil turn status was mapped to `completed`, so a provider error and a
+  finished turn were indistinguishable to a caller. `conduit_close_session`
+  now also states that a structured adapter is stopped and its task is not
+  recoverable afterwards, where a durable tmux runtime is only detached.
+
 - `conduit_create_task` no longer causes an initial objective to run twice on a
   PTY runtime. A PTY host accepts the objective and writes to the terminal
   after the response is serialized, while a structured host that is still

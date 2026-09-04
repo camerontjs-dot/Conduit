@@ -69,7 +69,7 @@ public enum ConduitSessionToolCatalog {
                 "properties": [
                     "state": [
                         "type": "string",
-                        "enum": ["idle", "active", "completed", "awaiting_input", "ambiguous"],
+                        "enum": ["idle", "active", "completed", "failed", "awaiting_input", "ambiguous"],
                     ],
                     "status": ["type": "string"],
                     "honesty": ["type": "string"],
@@ -99,7 +99,8 @@ public enum ConduitSessionToolCatalog {
                         "type": "string",
                         "enum": [
                             "structured_active", "structured_approval",
-                            "structured_completed", "structured_idle", "output_live",
+                            "structured_completed", "structured_failed",
+                            "structured_idle", "output_live",
                             "output_quiet", "output_unobserved", "capture_closed",
                         ],
                     ],
@@ -188,7 +189,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_session_events",
-            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification.",
+            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Durable Conduit task UUID."),
@@ -257,7 +258,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_close_session",
-            "Leave the live runtime (detach durable tmux or stop a structured adapter). This does not delete task history. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Leave the live runtime. This does not delete task history, but it is not symmetric across backends: a durable tmux runtime is detached and can be recovered with conduit_reconcile_task, while a structured adapter is stopped and the task is NOT recoverable afterwards — conduit_session_status reports recoverable false. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: stateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id to leave. Explicit close frees one live-task slot."),
