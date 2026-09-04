@@ -94,8 +94,13 @@ public struct ObjectiveDeliveryReport: Equatable, Sendable {
     }
 
     /// Merge into a `create_task` response payload.
+    ///
+    /// Every return path that could carry an objective must call this,
+    /// including the failure paths. The tool description tells callers to
+    /// branch on `objective_delivery_state`, so a response that omits it
+    /// leaves them with no defined branch — the ambiguity this type exists to
+    /// remove. `notAttempted` is therefore reported rather than skipped.
     public func apply(to payload: inout [String: Any]) {
-        guard state != .notAttempted else { return }
         payload["objective_delivered"] = deliveredAtResponseTime
         payload["objective_delivery_state"] = state.rawValue
         payload["objective_resend_required"] = resendRequired

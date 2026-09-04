@@ -4042,6 +4042,12 @@ final class AppModel: ObservableObject {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
         }
+        // Hoisted: every return path below that could carry an objective has
+        // to report its fate, including the failure paths. A response that
+        // omits objective_delivery_state leaves a caller branching on it with
+        // no defined case, which is the ambiguity this field exists to remove.
+        let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+        let objectiveWasSupplied = !objective.isEmpty
         guard let agent = enabledAgents.first(where: {
             ConduitSessionAPI.matchesAgent($0, name: agentName)
         }) else {
@@ -4123,7 +4129,15 @@ final class AppModel: ObservableObject {
                 ? (failedPayload["failure"] as? String ?? errorMessage ?? "create_task failed")
                 : (errorMessage ?? "create_task failed")
             failedPayload["created"] = true
-            failedPayload["objective_delivered"] = false
+            if objectiveWasSupplied {
+                // Provisioning failed, so nothing was ever handed to a
+                // runtime. The caller owns this objective.
+                ObjectiveDeliveryReport(
+                    state: .failed,
+                    error: "task registered but provisioning failed; "
+                        + "the objective was not delivered"
+                ).apply(to: &failedPayload)
+            }
             failedPayload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
             failedPayload["authority"] = "task registered; provisioning failed"
             return failedPayload
@@ -4133,18 +4147,33 @@ final class AppModel: ObservableObject {
         admission.commitCreate(reservationID: reservationID, taskSessionID: taskID)
         reservationCommitted = true
         guard let task = taskSessions.first(where: { $0.id == taskID }) else {
-            return [
+            var reloadFailure: [String: Any] = [
                 "error": "runtime started but durable task could not be reloaded",
                 "taskSessionID": taskID.rawValue.uuidString,
                 "agent": agent.name,
                 "project": project.slug,
             ]
+            if objectiveWasSupplied {
+                // The runtime exists but the objective was never passed to it.
+                ObjectiveDeliveryReport(
+                    state: .failed,
+                    error: "durable task could not be reloaded; "
+                        + "the objective was not delivered"
+                ).apply(to: &reloadFailure)
+            }
+            return reloadFailure
         }
         var payload = sessionAPITaskPayload(for: task)
         payload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
         payload["authority"] = "session created; not verification"
-        let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return payload }
+        guard !trimmed.isEmpty else {
+            // A whitespace-only objective is discarded. Say so rather than
+            // returning a task that looks like it carries an instruction.
+            if objectiveWasSupplied {
+                ObjectiveDeliveryReport(state: .notAttempted).apply(to: &payload)
+            }
+            return payload
+        }
         let sent = sessionAPIDeliver(
             trimmed,
             to: runtime,

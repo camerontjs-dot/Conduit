@@ -129,13 +129,89 @@ final class ObjectiveDeliveryTests: XCTestCase {
         XCTAssertEqual(payload["objective_resend_required"] as? Bool, true)
     }
 
-    func testNotAttemptedWritesNothing() {
-        // No objective supplied must not fabricate delivery fields.
+    func testNotAttemptedIsReportedRatherThanOmitted() {
+        // A caller told to branch on objective_delivery_state needs the key on
+        // every path that could carry an objective. Omitting it leaves the
+        // discarded-objective case indistinguishable from a delivered one.
         var payload: [String: Any] = ["taskSessionID": "abc"]
         ObjectiveDeliveryReport(state: .notAttempted).apply(to: &payload)
-        XCTAssertNil(payload["objective_delivered"])
-        XCTAssertNil(payload["objective_delivery_state"])
-        XCTAssertEqual(payload.count, 1)
+        XCTAssertEqual(
+            payload["objective_delivery_state"] as? String,
+            "not_attempted"
+        )
+        XCTAssertEqual(payload["objective_delivered"] as? Bool, false)
+        XCTAssertEqual(
+            payload["objective_resend_required"] as? Bool,
+            false,
+            "Nothing was accepted, but there is also nothing to resend."
+        )
+    }
+
+    /// Every state must emit the key the tool description tells callers to
+    /// branch on. A path that omits it has no defined case.
+    func testEveryStateEmitsTheBranchKey() {
+        for state in [
+            ObjectiveDeliveryReport.State.delivered,
+            .queued,
+            .failed,
+            .notAttempted,
+        ] {
+            var payload: [String: Any] = [:]
+            ObjectiveDeliveryReport(state: state).apply(to: &payload)
+            XCTAssertEqual(
+                payload["objective_delivery_state"] as? String,
+                state.rawValue,
+                "\(state.rawValue) must report itself"
+            )
+            XCTAssertNotNil(
+                payload["objective_resend_required"] as? Bool,
+                "\(state.rawValue) must tell the caller whether to resend"
+            )
+        }
+    }
+
+    /// Guards the regression site itself.
+    ///
+    /// The defect was not in this type — it was AppModel forwarding only
+    /// `delivered` and `error` from sessionAPIDeliver and discarding
+    /// `delivery`. This reproduces that exact dictionary and asserts the
+    /// three-argument read, so dropping the `delivery` argument again fails
+    /// here rather than silently shipping.
+    func testForwardingTheFullDeliverResultIsWhatSeparatesTheCases() {
+        let ptyResult: [String: Any] = [
+            "delivered": false,
+            "delivery": "queued",
+            "authority": "prompt queued to PTY; delivery is decided asynchronously.",
+        ]
+        let structuredResult: [String: Any] = [
+            "delivered": false,
+            "error": "agent runtime is still starting; retry conduit_send_prompt",
+        ]
+
+        func report(from result: [String: Any]) -> ObjectiveDeliveryReport {
+            ObjectiveDeliveryReport.from(
+                delivered: result["delivered"] as? Bool ?? false,
+                delivery: result["delivery"] as? String,
+                error: result["error"] as? String
+            )
+        }
+
+        XCTAssertFalse(report(from: ptyResult).resendRequired)
+        XCTAssertTrue(report(from: structuredResult).resendRequired)
+
+        // Drop the `delivery` argument — the original bug — and the two
+        // results collapse into the same answer.
+        let collapsed = ObjectiveDeliveryReport.from(
+            delivered: ptyResult["delivered"] as? Bool ?? false,
+            delivery: nil,
+            error: ptyResult["error"] as? String
+        )
+        XCTAssertTrue(
+            collapsed.resendRequired,
+            "Without the delivery marker a queued PTY objective reads as "
+                + "failed, which is what told the caller to resend and ran "
+                + "the objective twice."
+        )
     }
 
     func testGuidanceForQueuedTellsCallerNotToResend() {
