@@ -25,6 +25,20 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- `conduit_create_task` no longer causes an initial objective to run twice on a
+  PTY runtime. A PTY host accepts the objective and writes to the terminal
+  after the response is serialized, while a structured host that is still
+  starting refuses it outright; both used to be reported as a bare
+  `objective_delivered: false`, and the tool description told callers to resend
+  in that case. The response now reports `objective_delivery_state`
+  (`delivered`, `queued`, `failed`, `not_attempted`) alongside
+  `objective_resend_required`, and every `create_task` return path that could
+  carry an objective reports one — including the provisioning-failure and
+  reload-failure paths. `objective_delivered` keeps its existing meaning, so
+  current consumers are unaffected.
+
 ### Security
 
 - The loopback Session API now keeps its bearer-token file owner-only (`0600`),
