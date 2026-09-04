@@ -787,6 +787,12 @@ def main() -> int:
                         help="execute the write canary (requires writes already enabled)")
     parser.add_argument("--project", default="conduit", help="project slug (default: conduit)")
     parser.add_argument("--agent", default="Shell", help="adapter name (default: Shell)")
+    parser.add_argument(
+        "--repeat", type=int, default=1, metavar="N",
+        help="run the canary N times and report per-lane flake rates. "
+             "Intermittent defects are the ones a single run hides: OBS-1 was "
+             "observed at 2 of 5 before becoming unreproducible.",
+    )
     args = parser.parse_args()
 
     try:
@@ -825,20 +831,40 @@ def main() -> int:
         print(f"\nREFUSED: project '{args.project}' not in {projects}")
         return 4
 
-    try:
-        result = canary(args.project, args.agent)
-    except CanaryError as exc:
-        print(f"\nCANARY ABORTED: {exc}")
-        write_receipt(pre, None, f"ABORTED — {exc}")
-        return 5
+    tally: dict[str, dict[str, int]] = {}
+    total_failures = 0
+    for attempt in range(1, max(1, args.repeat) + 1):
+        if args.repeat > 1:
+            print(f"\n----- attempt {attempt}/{args.repeat} -----")
+        try:
+            result = canary(args.project, args.agent)
+        except CanaryError as exc:
+            print(f"\nCANARY ABORTED: {exc}")
+            write_receipt(pre, None, f"ABORTED — {exc}")
+            return 5
 
-    path = write_receipt(pre, result)
-    failures = [l for l in result["lanes"] if l["result"] == "FAIL"]
-    print(f"\nReceipt: {path}")
-    print(f"Lanes: {len(result['lanes'])}  FAIL: {len(failures)}")
-    for lane in failures:
-        print(f"  FAIL {lane['test_id']}: {lane['observed']}")
-    return 1 if failures else 0
+        path = write_receipt(pre, result)
+        failures = [l for l in result["lanes"] if l["result"] == "FAIL"]
+        total_failures += len(failures)
+        for lane in result["lanes"]:
+            row = tally.setdefault(lane["test_id"], {"runs": 0, "fail": 0})
+            row["runs"] += 1
+            row["fail"] += lane["result"] == "FAIL"
+        print(f"\nReceipt: {path}")
+        print(f"Lanes: {len(result['lanes'])}  FAIL: {len(failures)}")
+        for lane in failures:
+            print(f"  FAIL {lane['test_id']}: {lane['observed']}")
+
+    if args.repeat > 1:
+        print(f"\n=== flake rates over {args.repeat} attempts ===")
+        for test_id, row in tally.items():
+            marker = ""
+            if 0 < row["fail"] < row["runs"]:
+                marker = "   ** INTERMITTENT **"
+            elif row["fail"] == row["runs"]:
+                marker = "   ** ALWAYS FAILS **"
+            print(f"  {test_id:34} {row['fail']}/{row['runs']} failed{marker}")
+    return 1 if total_failures else 0
 
 
 if __name__ == "__main__":
