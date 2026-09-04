@@ -157,6 +157,52 @@ def _run(cmd: list[str], cwd: Path | None = None) -> str:
         return f"<unavailable: {exc}>"
 
 
+def pty_scrollback(tmux_session: str) -> str | None:
+    """Ground truth for a tmux-backed task.
+
+    `capture-pane -p` alone returns only the visible region, which is empty
+    once the shell redraws. `-S -` is required to reach scrollback, and
+    scrollback is the only durable proof that a command actually ran. This
+    deliberately bypasses Conduit so the canary can tell 'the work happened'
+    apart from 'Conduit observed the work happening'.
+    """
+    if not tmux_session:
+        return None
+    probe = subprocess.run(
+        ["tmux", "has-session", "-t", tmux_session],
+        capture_output=True, text=True,
+    )
+    if probe.returncode != 0:
+        return None
+    out = subprocess.run(
+        ["tmux", "capture-pane", "-p", "-S", "-", "-t", tmux_session],
+        capture_output=True, text=True,
+    )
+    return out.stdout if out.returncode == 0 else None
+
+
+def find_tmux_session(task_id: str) -> str | None:
+    """Recover the tmux session name from the durable task-session log."""
+    log = Path.home() / ".conduit" / "task-sessions" / f"{task_id}.jsonl"
+    if not log.exists():
+        return None
+    name = None
+    for line in log.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = event.get("kind")
+        if isinstance(kind, dict):
+            changed = (kind.get("operationalStateChanged") or {}).get("_0") or {}
+            prov = (changed.get("runtimeProvisioning") or {})
+            if isinstance(prov, dict) and prov.get("tmuxSessionName"):
+                name = prov["tmuxSessionName"]
+    return name
+
+
 def pin_object() -> dict:
     """Test plan §1.1 - pin the exact object under test."""
     app = Path("/Applications/Conduit.app/Contents/MacOS/Conduit")
@@ -254,7 +300,17 @@ def canary(project: str, agent: str) -> dict:
     run_id = uuid.uuid4().hex[:8]
     marker = f"CONDUIT_CANARY_{run_id}"
     # Filesystem-inert: stdout only, bounded, self-clearing.
-    objective = f"echo {marker}_START; sleep {BUSY_SECONDS}; echo {marker}_END"
+    #
+    # The marker is assembled from a shell variable so the ECHOED COMMAND LINE
+    # never contains the literal marker string. A tmux pane holds both the
+    # command echo and its output; without this split, searching scrollback for
+    # `<marker>_END` matches the echoed `echo <marker>_END` even when the
+    # command was cancelled before running. Expansion happens only on
+    # execution, so a literal hit is proof of output.
+    objective = (
+        f'C={marker}; echo "${{C}}_START"; '
+        f'sleep {BUSY_SECONDS}; echo "${{C}}_END"'
+    )
 
     api = SessionAPI(load_token())
     api.initialize()
@@ -313,28 +369,40 @@ def canary(project: str, agent: str) -> dict:
     )
 
     # ---- L3.3 discriminator: A (durable intent) vs B (two-phase) -----------
-    # If the objective was not delivered at create, does it EVER arrive without
-    # a second call? Contract §7 turns on exactly this.
+    # Contract §7 turns on whether an undelivered objective EVER arrives
+    # without a second call.
+    #
+    # The marker must NOT be looked for in the event JSON. Conduit records the
+    # objective as a `user_prompt` event at create time, so the marker is
+    # present there whether or not the shell ever ran it. Matching that is a
+    # false positive, and it is exactly the "prompt delivered == provider
+    # acknowledged" equivalence contract §3 forbids. Ground truth is the PTY
+    # scrollback.
+    time.sleep(POLL_INTERVAL * 2)
+    tmux_session = find_tmux_session(task_id)
+    pane = pty_scrollback(tmux_session) or ""
+    executed = f"{marker}_START" in pane
     verdict = "UNKNOWN"
-    if delivered:
+    if executed and not delivered:
+        verdict = "candidate-A-observed"
+        detail = "objective REACHED THE SHELL without a second call (durable intent)"
+    elif executed and delivered:
         verdict = "candidate-A-consistent"
-        detail = "objective delivered at create; durable-intent path not exercised"
+        detail = "objective delivered at create and executed"
+    elif not executed and not delivered:
+        verdict = "candidate-B-required"
+        detail = "objective never reached the shell; an explicit send is required"
     else:
-        time.sleep(POLL_INTERVAL * 2)
-        events = api.call("conduit_session_events", taskSessionID=task_id, limit=50)
-        text = json.dumps(events)
-        if marker in text:
-            verdict = "candidate-A-observed"
-            detail = "objective arrived later WITHOUT a second call (durable intent)"
-        else:
-            verdict = "candidate-B-required"
-            detail = "objective absent after ready; a second send_prompt is required"
+        verdict = "contradiction"
+        detail = "create claimed delivery but the shell never ran it"
     lane(
         "L3.3-delivery-semantics",
-        "contract §7 Candidate A vs B is discriminated by evidence, not preference",
+        "contract §7 Candidate A vs B is discriminated by PTY ground truth, not by Conduit's own record",
         f"{verdict}: {detail}",
-        "OBSERVED",
-        f"objective_delivered={delivered}; marker_present_after_ready={verdict}",
+        "OBSERVED" if verdict != "contradiction" else "FAIL",
+        f"objective_delivered={delivered}; tmux={tmux_session}; "
+        f"marker_executed_in_pane={executed}",
+        negative="Marker presence in a user_prompt event proves recording, not execution.",
         follow_up="Feed this into PR #6 §7 before the contract is accepted.",
     )
 
@@ -385,16 +453,48 @@ def canary(project: str, agent: str) -> dict:
     post = api.call("conduit_session_events", taskSessionID=task_id, limit=10)
     post_turn = (post.get("turn") or {}).get("state")
     claimed = ack.get("interrupted")
-    mismatch = bool(claimed) and post_turn in {"active"}
+    # Ground truth: _START ran, _END did not => the sleep was really cancelled.
+    pane_after = pty_scrollback(tmux_session) or ""
+    really_cancelled = (
+        f"{marker}_START" in pane_after and f"{marker}_END" not in pane_after
+    )
     lane(
         "L3.7-interrupt",
         "acknowledgement is recorded as a request, never as observed cancellation",
-        f"turn {pre_turn} -> ack.interrupted={claimed} -> turn {post_turn}"
-        + ("  ** ACK/STATE MISMATCH **" if mismatch else ""),
-        "FAIL" if mismatch else "OBSERVED",
-        json.dumps({"ack": ack, "pre": pre_turn, "post": post_turn})[:500],
+        f"turn {pre_turn} -> ack.interrupted={claimed} -> turn {post_turn}; "
+        f"pty_actually_cancelled={really_cancelled}",
+        "OBSERVED",
+        json.dumps({"ack": ack, "pre": pre_turn, "post": post_turn,
+                    "pty_cancelled": really_cancelled})[:500],
         negative="interrupted=true is Conduit's request record, not provider cancellation.",
-        follow_up="This is the known ack-mismatch bug; a mismatch here reproduces it.",
+        follow_up="Compare the PTY truth against what the control plane could see.",
+    )
+
+    # ---- observability gap -------------------------------------------------
+    # The defect that matters for orchestration: work really happened at the
+    # PTY and the control plane could not see it. An orchestrating agent polls
+    # the control plane, not tmux, so anything invisible here is invisible to
+    # the orchestrator forever.
+    observation = post.get("observation") or {}
+    provider_events = [
+        e for e in (post.get("events") or [])
+        if e.get("authority") not in {"conduitRecorded", None}
+        or e.get("source") not in {"session", "conduit", "chatgpt", None}
+    ]
+    pty_produced_output = f"{marker}_START" in pane_after
+    blind = pty_produced_output and observation.get("last_output_state") in {"none", None}
+    lane(
+        "OBS-1-control-plane-visibility",
+        "output the runtime really produced is visible through the control plane",
+        f"pty_output={pty_produced_output} "
+        f"last_output_state={observation.get('last_output_state')} "
+        f"checkpoint={observation.get('checkpoint')} "
+        f"provider_authored_events={len(provider_events)}"
+        + ("  ** CONTROL PLANE BLIND **" if blind else ""),
+        "FAIL" if blind else "OBSERVED",
+        json.dumps(observation)[:400],
+        negative="Conduit's honesty fields are correct here; the gap is observability, not truthfulness.",
+        follow_up="An orchestrator cannot close a loop it cannot observe. This gates issue #4 Phase B.",
     )
 
     # ---- L4.2 leave / detach ----------------------------------------------
