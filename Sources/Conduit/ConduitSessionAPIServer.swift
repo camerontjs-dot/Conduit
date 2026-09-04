@@ -780,7 +780,7 @@ final class ConduitSessionAPIServer {
     private static let writeTools: [[String: Any]] = [
         [
             "name": "conduit_create_task",
-            "description": "Start a Conduit agent session and return its taskSessionID. Delivery of objective is attempted once, immediately; a runtime that is still starting returns objective_delivered false, and you then send it yourself with conduit_send_prompt once conduit_session_status reports ready. Nothing is delivered later on your behalf. Approvals stay on the Mac.",
+            "description": "Start a Conduit agent session and return its taskSessionID. Delivery of objective is attempted once, immediately, and the response reports objective_delivery_state: delivered (it reached the runtime), queued (Conduit accepted it and will finish delivering it without another call - do not resend, or the objective runs twice), or failed (the runtime refused it; objective_resend_required is true, so wait for conduit_session_status to report ready and send it with conduit_send_prompt). Approvals stay on the Mac.",
             "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -795,7 +795,7 @@ final class ConduitSessionAPIServer {
                     ],
                     "objective": [
                         "type": "string",
-                        "description": "Optional first prompt. Delivered only if the runtime is ready the moment the task is created; otherwise the response reports objective_delivered false and it is yours to send. Omit it and send the first prompt explicitly if you want one clear delivery point.",
+                        "description": "Optional first prompt. A structured runtime that is still starting refuses it and hands the retry back to you; a PTY runtime accepts it and writes asynchronously. Check objective_delivery_state to tell those apart. Omit it and send the first prompt explicitly if you want one clear delivery point.",
                     ],
                     "idempotency_key": [
                         "type": "string",

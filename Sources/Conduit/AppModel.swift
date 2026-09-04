@@ -4150,10 +4150,17 @@ final class AppModel: ObservableObject {
             to: runtime,
             origin: .chatgpt
         )
-        payload["objective_delivered"] = sent["delivered"] as? Bool ?? false
-        if let error = sent["error"] {
-            payload["objective_error"] = error
-        }
+        // sessionAPIDeliver already distinguishes a refused objective from one
+        // it accepted and will write asynchronously, but only `delivered` and
+        // `error` used to be forwarded. Dropping the queued marker made a PTY
+        // create indistinguishable from a structured refusal, so a caller
+        // following the documented recovery re-sent an objective that was
+        // already on its way and ran the work twice.
+        ObjectiveDeliveryReport.from(
+            delivered: sent["delivered"] as? Bool ?? false,
+            delivery: sent["delivery"] as? String,
+            error: sent["error"] as? String
+        ).apply(to: &payload)
         return payload
     }
 

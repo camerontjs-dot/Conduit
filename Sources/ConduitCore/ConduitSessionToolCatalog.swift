@@ -217,7 +217,7 @@ public enum ConduitSessionToolCatalog {
     private static let writeTools: [[String: Any]] = [
         tool(
             "conduit_create_task",
-            "Start a Conduit agent session and return its taskSessionID. Objective delivery is attempted only once immediately. If objective_delivered is false, wait for ready then send it explicitly with conduit_send_prompt. The model remains the operator-configured profile choice; this tool has no model override. Approvals stay on the Mac. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Start a Conduit agent session and return its taskSessionID. Read objective_delivery_state, not objective_delivered, to decide what to do next: delivered means it reached the runtime; queued means Conduit owns delivery and will complete it without another call, so resending would run the objective twice; failed means the runtime refused it and objective_resend_required is true, so wait for ready then send it with conduit_send_prompt. The model remains the operator-configured profile choice; this tool has no model override. Approvals stay on the Mac. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: stateChangingAnnotations,
             properties: [
                 "agent": property("string", "Enabled profile name or command from conduit_list_adapters. An unlisted or disabled profile is refused."),
