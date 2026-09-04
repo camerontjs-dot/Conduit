@@ -25,6 +25,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Security
+
+- The loopback Session API now keeps its bearer-token file owner-only (`0600`),
+  repairs an existing regular token file to that mode, and accepts only one
+  exact Bearer credential. It rejects malformed, ambiguous, oversized, and
+  incomplete HTTP framing; applies a two-second read deadline; and bounds
+  concurrently stalled connections rather than letting one block the listener.
+  Session API write authorization and lifecycle semantics are unchanged.
+
 ### Changed
 
 - Orchestrate can now explicitly prepare a proposal for the configured
