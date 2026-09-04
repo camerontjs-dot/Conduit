@@ -14,8 +14,12 @@ Design constraints, in the project's own terms:
 
   * This script NEVER enables Session API writes. The operator owns that
     switch. Preflight reports the gate state and stops.
-  * The worker is the Shell adapter running a deterministic, filesystem-inert
-    prompt (echo / sleep / echo). No model, no cost, no project mutation.
+  * The worker is deterministic and filesystem-inert. Shell runs echo/sleep;
+    a structured adapter (Codex, OpenCode) is told to emit a token, count, and
+    emit a closing token, with tool use refused. No project mutation either way.
+  * Evidence is always the PROVIDER's own record - tmux scrollback, Codex
+    rollout logs, OpenCode's SQLite store - never Conduit's event log, so the
+    canary can tell 'the work happened' apart from 'Conduit saw it happen'.
   * A response is not completion. An interrupt acknowledgement is not observed
     cancellation. Quiet output is not done. The receipt records what was seen
     and labels everything it could not establish.
@@ -25,7 +29,7 @@ Design constraints, in the project's own terms:
 Usage:
     scripts/canary-control-plane.py                 # preflight, read-only
     scripts/canary-control-plane.py --run           # execute the write canary
-    scripts/canary-control-plane.py --run --project conduit
+    scripts/canary-control-plane.py --run --agent Codex
 """
 
 from __future__ import annotations
@@ -57,6 +61,8 @@ RECEIPT_DIR = REPO / "outputs" / "local-acceptance" / "canary"
 BUSY_SECONDS = 25
 READY_TIMEOUT = 60
 POLL_INTERVAL = 2.0
+# A model can spend tens of seconds on context before its first token.
+STRUCTURED_OUTPUT_TIMEOUT = 120
 
 
 class CanaryError(RuntimeError):
@@ -181,6 +187,85 @@ def pty_scrollback(tmux_session: str) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
+def codex_assistant_text(since: float) -> str:
+    """Assistant-authored text from Codex's own rollout logs.
+
+    Independent of Conduit: these are the provider's records. Only
+    `role == "assistant"` payloads count. The prompt itself contains the
+    marker, so any match in a user/developer message proves the instruction
+    was recorded, never that the model produced output.
+    """
+    root = Path.home() / ".codex" / "sessions"
+    if not root.exists():
+        return ""
+    chunks: list[str] = []
+    for path in root.rglob("rollout-*.jsonl"):
+        try:
+            if path.stat().st_mtime < since - 5:
+                continue
+            for line in path.read_text(errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                payload = event.get("payload") or {}
+                if payload.get("role") != "assistant":
+                    continue
+                for block in payload.get("content") or []:
+                    text = block.get("text")
+                    if text:
+                        chunks.append(text)
+        except OSError:
+            continue
+    return "\n".join(chunks)
+
+
+def opencode_assistant_text(since: float) -> str:
+    """Assistant-authored text from OpenCode's own SQLite store."""
+    db = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+    if not db.exists():
+        return ""
+    # Read-only URI so a live OpenCode process is never disturbed.
+    query = """
+        SELECT p.data FROM part p JOIN message m ON p.message_id = m.id
+        WHERE p.time_created >= ?
+          AND json_extract(m.data, '$.role') = 'assistant'
+    """
+    out = subprocess.run(
+        ["sqlite3", f"file:{db}?mode=ro", query.replace("?", str(int(since * 1000) - 5000))],
+        capture_output=True, text=True,
+    )
+    if out.returncode != 0:
+        return ""
+    chunks = []
+    for line in out.stdout.splitlines():
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if data.get("type") == "text" and data.get("text"):
+            chunks.append(data["text"])
+    return "\n".join(chunks)
+
+
+def ground_truth(agent: str, task_id: str, since: float) -> tuple[str, str]:
+    """Provider-native evidence that output was really produced.
+
+    Returns (source_label, text). Never consults Conduit's own event log:
+    the whole point is to be able to tell 'the work happened' apart from
+    'Conduit observed the work happening'.
+    """
+    name = agent.strip().lower()
+    if name == "codex":
+        return "codex-rollout", codex_assistant_text(since)
+    if name == "opencode":
+        return "opencode-db", opencode_assistant_text(since)
+    session = find_tmux_session(task_id)
+    return f"tmux:{session}", (pty_scrollback(session) or "")
+
+
 def find_tmux_session(task_id: str) -> str | None:
     """Recover the tmux session name from the durable task-session log."""
     log = Path.home() / ".conduit" / "task-sessions" / f"{task_id}.jsonl"
@@ -299,18 +384,39 @@ def preflight(verbose: bool = True) -> dict:
 def canary(project: str, agent: str) -> dict:
     run_id = uuid.uuid4().hex[:8]
     marker = f"CONDUIT_CANARY_{run_id}"
-    # Filesystem-inert: stdout only, bounded, self-clearing.
-    #
-    # The marker is assembled from a shell variable so the ECHOED COMMAND LINE
-    # never contains the literal marker string. A tmux pane holds both the
-    # command echo and its output; without this split, searching scrollback for
-    # `<marker>_END` matches the echoed `echo <marker>_END` even when the
-    # command was cancelled before running. Expansion happens only on
-    # execution, so a literal hit is proof of output.
-    objective = (
-        f'C={marker}; echo "${{C}}_START"; '
-        f'sleep {BUSY_SECONDS}; echo "${{C}}_END"'
-    )
+    structured = agent.strip().lower() in {"codex", "opencode"}
+
+    if structured:
+        # An LLM worker needs an instruction, not a shell line. The turn has to
+        # last long enough to interrupt, so the count follows the first token.
+        # Tool use is refused explicitly: OpenCode's profile runs with
+        # permissionMode `acceptEdits`, and this canary must not touch a repo.
+        # Echo safety comes from ROLE here, not from string shape - only
+        # assistant-authored provider records are searched, so the marker
+        # appearing in the recorded user prompt can never count as output.
+        objective = (
+            f"Output the exact token {marker}_START on its own line. "
+            f"Then count from 1 to 400, one number per line. "
+            f"Then output the exact token {marker}_END on its own line. "
+            "Do not use any tools. Do not read, write, or edit any files. "
+            "Do not run any commands. Do not ask questions. Output only the "
+            "token, the numbers, and the closing token."
+        )
+    else:
+        # Filesystem-inert: stdout only, bounded, self-clearing.
+        #
+        # The marker is assembled from a shell variable so the ECHOED COMMAND
+        # LINE never contains the literal marker string. A tmux pane holds both
+        # the command echo and its output; without this split, searching
+        # scrollback for `<marker>_END` matches the echoed `echo <marker>_END`
+        # even when the command was cancelled before running. Expansion happens
+        # only on execution, so a literal hit is proof of output.
+        objective = (
+            f'C={marker}; echo "${{C}}_START"; '
+            f'sleep {BUSY_SECONDS}; echo "${{C}}_END"'
+        )
+
+    started_at = time.time()
 
     api = SessionAPI(load_token())
     api.initialize()
@@ -379,9 +485,16 @@ def canary(project: str, agent: str) -> dict:
     # acknowledged" equivalence contract §3 forbids. Ground truth is the PTY
     # scrollback.
     time.sleep(POLL_INTERVAL * 2)
-    tmux_session = find_tmux_session(task_id)
-    pane = pty_scrollback(tmux_session) or ""
-    executed = f"{marker}_START" in pane
+    gt_source, gt_text = ground_truth(agent, task_id, started_at)
+    executed = f"{marker}_START" in gt_text
+    if structured and not executed:
+        # A model may take longer than a shell to emit its first token.
+        for _ in range(int(STRUCTURED_OUTPUT_TIMEOUT / POLL_INTERVAL)):
+            time.sleep(POLL_INTERVAL)
+            gt_source, gt_text = ground_truth(agent, task_id, started_at)
+            if f"{marker}_START" in gt_text:
+                executed = True
+                break
     verdict = "UNKNOWN"
     if executed and not delivered:
         verdict = "candidate-A-observed"
@@ -400,9 +513,9 @@ def canary(project: str, agent: str) -> dict:
         "contract §7 Candidate A vs B is discriminated by PTY ground truth, not by Conduit's own record",
         f"{verdict}: {detail}",
         "OBSERVED" if verdict != "contradiction" else "FAIL",
-        f"objective_delivered={delivered}; tmux={tmux_session}; "
-        f"marker_executed_in_pane={executed}",
-        negative="Marker presence in a user_prompt event proves recording, not execution.",
+        f"objective_delivered={delivered}; ground_truth={gt_source}; "
+        f"marker_in_provider_output={executed}",
+        negative="Marker presence in a recorded prompt proves recording, not execution.",
         follow_up="Feed this into PR #6 §7 before the contract is accepted.",
     )
 
@@ -446,6 +559,17 @@ def canary(project: str, agent: str) -> dict:
     )
 
     # ---- L3.7 interrupt semantics -----------------------------------------
+    # Interrupting a turn that has not begun producing tests nothing. A shell
+    # echoes within milliseconds; a model can spend tens of seconds loading
+    # context before its first token. Wait for real output first, so L3.7
+    # measures cancellation rather than a race with startup.
+    if structured:
+        for _ in range(int(STRUCTURED_OUTPUT_TIMEOUT / POLL_INTERVAL)):
+            _, probe = ground_truth(agent, task_id, started_at)
+            if f"{marker}_START" in probe:
+                break
+            time.sleep(POLL_INTERVAL)
+
     pre = api.call("conduit_session_events", taskSessionID=task_id, limit=10)
     pre_turn = (pre.get("turn") or {}).get("state")
     ack = api.call("conduit_interrupt", taskSessionID=task_id)
@@ -454,9 +578,9 @@ def canary(project: str, agent: str) -> dict:
     post_turn = (post.get("turn") or {}).get("state")
     claimed = ack.get("interrupted")
     # Ground truth: _START ran, _END did not => the sleep was really cancelled.
-    pane_after = pty_scrollback(tmux_session) or ""
+    _, gt_after = ground_truth(agent, task_id, started_at)
     really_cancelled = (
-        f"{marker}_START" in pane_after and f"{marker}_END" not in pane_after
+        f"{marker}_START" in gt_after and f"{marker}_END" not in gt_after
     )
     lane(
         "L3.7-interrupt",
@@ -481,7 +605,7 @@ def canary(project: str, agent: str) -> dict:
         if e.get("authority") not in {"conduitRecorded", None}
         or e.get("source") not in {"session", "conduit", "chatgpt", None}
     ]
-    pty_produced_output = f"{marker}_START" in pane_after
+    pty_produced_output = f"{marker}_START" in gt_after
     blind = pty_produced_output and observation.get("last_output_state") in {"none", None}
     lane(
         "OBS-1-control-plane-visibility",
@@ -495,6 +619,34 @@ def canary(project: str, agent: str) -> dict:
         json.dumps(observation)[:400],
         negative="Conduit's honesty fields are correct here; the gap is observability, not truthfulness.",
         follow_up="An orchestrator cannot close a loop it cannot observe. This gates issue #4 Phase B.",
+    )
+
+    # ---- OBS-2: false completion ------------------------------------------
+    # The inverse of OBS-1 and the more dangerous direction. OBS-1 asks
+    # "did we miss real work?". This asks "did we claim work that never
+    # happened?". A turn reported completed while the provider authored
+    # nothing is contract §3's forbidden equivalence -- process/turn exit
+    # treated as task success -- and an orchestrator acting on it would
+    # advance a plan on work that does not exist.
+    turn_state = (post.get("turn") or {}).get("state")
+    checkpoint = observation.get("checkpoint")
+    claims_done = turn_state == "completed" or checkpoint == "structured_completed"
+    produced_nothing = (
+        not pty_produced_output
+        and observation.get("last_output_state") in {"none", None}
+    )
+    false_completion = claims_done and produced_nothing
+    lane(
+        "OBS-2-false-completion",
+        "a completed turn is never reported for a provider that authored no output",
+        f"turn={turn_state} checkpoint={checkpoint} "
+        f"last_output_state={observation.get('last_output_state')} "
+        f"provider_output={pty_produced_output}"
+        + ("  ** COMPLETION CLAIMED WITH NO OUTPUT **" if false_completion else ""),
+        "FAIL" if false_completion else "OBSERVED",
+        json.dumps({"turn": post.get("turn"), "observation": observation})[:600],
+        negative="Provider error termination must not be indistinguishable from success.",
+        follow_up="Check the provider's own log for an error at this timestamp before reading it as success.",
     )
 
     # ---- L4.2 leave / detach ----------------------------------------------
@@ -511,17 +663,55 @@ def canary(project: str, agent: str) -> dict:
     )
 
     # ---- L4.3 reconnect ----------------------------------------------------
+    # Only attempt reconcile when Conduit still reports the task as
+    # recoverable. On a structured backend close_session stops the adapter, so
+    # a post-close reconcile cannot succeed AND raises a modal the operator has
+    # to dismiss by hand. Re-triggering that on every run would be rude to the
+    # machine and adds no evidence beyond the first observation.
+    closed_status = after_close.get("session") or after_close
+    recoverable = closed_status.get("recoverable")
+    if recoverable is False:
+        lane(
+            "L4.3-reconnect",
+            "same task identity recovered AND a live runtime is restored",
+            f"not attempted: Conduit reports recoverable=false after close "
+            f"(backend={closed_status.get('backend')})",
+            "OBSERVED",
+            json.dumps(closed_status)[:400],
+            negative="close_session detaches durable tmux but STOPS a structured "
+                     "adapter; a structured task is not recoverable after close.",
+            follow_up="Calling reconcile here returns 'No identity-compatible "
+                      "runtime' AND raises a native modal on the operator's Mac.",
+        )
+        try:
+            api.call("conduit_close_session", taskSessionID=task_id)
+        except CanaryError:
+            pass
+        return {"run_id": run_id, "task_id": task_id, "agent": agent,
+                "project": project, "marker": marker, "lanes": lanes,
+                "call_log": api.calls}
+
     reconciled = api.call("conduit_reconcile_task", taskSessionID=task_id)
     after_recon = api.call("conduit_session_status", taskSessionID=task_id)
     same_task = (after_recon.get("taskSessionID") or task_id) == task_id
+    # Identity preservation alone is not recovery. A reconcile that returns an
+    # error recovered nothing, and on a structured backend it also raises a
+    # blocking modal on the operator's Mac -- a GUI side effect with no
+    # representation in the MCP result an unattended orchestrator can act on.
+    recon_error = reconciled.get("error")
+    recovered = bool(reconciled.get("reconciled")) and not recon_error
     lane(
         "L4.3-reconnect",
-        "same task identity recovered; no duplicate runtime silently created",
-        f"same_task_id={same_task} lifecycle="
-        f"{(after_recon.get('session') or after_recon).get('lifecycle')}",
-        "OBSERVED" if same_task else "FAIL",
+        "same task identity recovered AND a live runtime is restored",
+        f"same_task_id={same_task} recovered={recovered} lifecycle="
+        f"{(after_recon.get('session') or after_recon).get('lifecycle')}"
+        + (f"  ** {recon_error} **" if recon_error else ""),
+        "OBSERVED" if (same_task and recovered) else "FAIL",
         json.dumps(reconciled)[:400],
-        follow_up="Duplicate-runtime detection needs a separate L5 restart lane.",
+        negative="close_session detaches durable tmux but STOPS a structured adapter; "
+                 "after that, reconcile has no runtime to adopt.",
+        follow_up="A failed reconcile also raises a native modal. Unattended "
+                  "orchestration would strand dialogs on the operator's Mac.",
     )
 
     # ---- cleanup -----------------------------------------------------------
