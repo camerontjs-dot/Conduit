@@ -320,7 +320,40 @@ final class AppModel: ObservableObject {
     @Published private(set) var composerSendFlashToken: Int = 0
 
     @Published var statusMessage: String?
-    @Published var errorMessage: String?
+    /// Backing store for the operator-facing alert in `RootView`.
+    @Published private var operatorAlert: String?
+
+    /// Depth of the Session API call currently being served, if any.
+    private var sessionAPIServingDepth = 0
+    private var sessionAPICapturedError: String?
+
+    /// The error channel shared by the Mac UI and the Session API.
+    ///
+    /// `RootView` presents any non-nil value as a blocking `.alert`. That made
+    /// every failure inside an MCP write raise a modal on the operator's Mac —
+    /// observed with `conduit_reconcile_task` on a closed structured task,
+    /// which returned its refusal to the caller *and* left a dialog on screen
+    /// that only a human standing at the machine could dismiss. Unattended
+    /// orchestration cannot clear its own dialogs.
+    ///
+    /// While a Session API call is being served, assignments are captured for
+    /// the MCP result instead of presented. Reads return the captured value,
+    /// which is what the create/reconcile/send paths already rely on when they
+    /// scrape this property to build an error payload.
+    ///
+    /// This covers failures raised synchronously while serving the call. An
+    /// error assigned later, from an async continuation the call started, is
+    /// outside the window and still reaches the operator's alert.
+    var errorMessage: String? {
+        get { sessionAPIServingDepth > 0 ? sessionAPICapturedError : operatorAlert }
+        set {
+            if sessionAPIServingDepth > 0 {
+                sessionAPICapturedError = newValue
+            } else {
+                operatorAlert = newValue
+            }
+        }
+    }
     @Published var isDropTargeted = false
 
     @Published var showDiagnostics = false
@@ -3633,7 +3666,34 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Serve one MCP command without letting it raise a modal on the Mac.
+    ///
+    /// A failure that the UI would have shown in an alert is returned to the
+    /// caller instead. If the command's own payload already carries an
+    /// `error`, that wording wins — it was written for this caller — and the
+    /// captured alert text is offered alongside it rather than replacing it.
     private func sessionAPIPayload(
+        _ command: ConduitSessionCommand,
+        caller: ConduitSessionCaller = .unidentified
+    ) -> [String: Any] {
+        sessionAPIServingDepth += 1
+        let captured = sessionAPICapturedError
+        sessionAPICapturedError = nil
+        var payload = sessionAPIDispatch(command, caller: caller)
+        let raised = sessionAPICapturedError
+        sessionAPICapturedError = captured
+        sessionAPIServingDepth -= 1
+        if let raised, !raised.isEmpty {
+            if payload["error"] == nil {
+                payload["error"] = raised
+            } else if (payload["error"] as? String) != raised {
+                payload["ui_error_suppressed"] = raised
+            }
+        }
+        return payload
+    }
+
+    private func sessionAPIDispatch(
         _ command: ConduitSessionCommand,
         caller: ConduitSessionCaller = .unidentified
     ) -> [String: Any] {
@@ -3940,6 +4000,14 @@ final class AppModel: ObservableObject {
         // silent gap between the create response and the delivery.
         if let live, live.heldPromptCount > 0 {
             payload["prompts_held_pending_ready"] = live.heldPromptCount
+        }
+        // Whether close_session is reversible is a property of the backend,
+        // and an orchestrator needs it before it decides to free a slot, not
+        // in the response that tells it the decision was final.
+        if let live {
+            payload["close_outcome"] = SessionCloseSemantics.outcome(
+                usesStructuredHost: live.usesStructuredHost
+            ).rawValue
         }
         if let recoveryAction {
             payload["recovery_action"] = recoveryAction
@@ -4451,14 +4519,21 @@ final class AppModel: ObservableObject {
         guard decision.shouldExecute else {
             return sessionAPIAdmissionRefusal(decision)
         }
-        guard sessionAPILiveRuntime(for: taskID) != nil else {
+        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to close", "taskSessionID": rawID]
         }
+        // Read the backend before the close: afterwards there is no live
+        // runtime left to ask.
+        let outcome = SessionCloseSemantics.outcome(
+            usesStructuredHost: runtime.usesStructuredHost
+        )
         leaveTask(taskID)
         return [
             "taskSessionID": rawID,
             "closed": true,
-            "authority": "leave requested; not verification",
+            "close_outcome": outcome.rawValue,
+            "recoverable": !outcome.isTerminal,
+            "authority": SessionCloseSemantics.authority(for: outcome),
         ]
     }
 

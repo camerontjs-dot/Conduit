@@ -27,6 +27,25 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- A failure inside an MCP write no longer raises a blocking dialog on the
+  operator's Mac. The Session API and the Mac UI shared one `errorMessage`
+  channel, and `RootView` presents any non-nil value as an alert, so a remote
+  `conduit_reconcile_task` on a closed structured task returned its refusal to
+  the caller *and* left a modal on screen that only a human at the machine
+  could dismiss. Errors raised while serving a Session API call are now
+  captured into the MCP result instead; where a command already reported its
+  own error, the suppressed alert text is offered separately as
+  `ui_error_suppressed`. Errors raised later from async work the call started
+  are outside this window and still reach the operator.
+
+- `conduit_close_session` now reports which of two different things it did.
+  Detaching a durable tmux runtime and stopping a structured adapter both
+  returned `closed: true` with the same authority line, so a caller could not
+  tell an interruption it could undo from one it could not. The response
+  carries `close_outcome` (`detached` or `stopped`) and `recoverable`, and
+  `conduit_session_status` reports the same `close_outcome` for a live task
+  before the call is made, while not closing is still an option.
+
 - `conduit_create_task` can now start an agent on an objective in one call.
   A structured runtime is still starting when the create response is
   serialized, so the objective was refused outright and reported
