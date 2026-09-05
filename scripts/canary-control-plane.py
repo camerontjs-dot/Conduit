@@ -443,6 +443,9 @@ def canary(project: str, agent: str) -> dict:
     )
     task_id = created.get("taskSessionID") or created.get("task_session_id")
     delivered = created.get("objective_delivered")
+    # Recorded for the receipt boundary: a receipt must name the backend it
+    # actually exercised rather than assert a fixed one.
+    backend_observed = created.get("backend")
     if not task_id:
         raise CanaryError(f"create_task returned no task id: {created}")
     lane(
@@ -486,6 +489,7 @@ def canary(project: str, agent: str) -> dict:
     # scrollback.
     time.sleep(POLL_INTERVAL * 2)
     gt_source, gt_text = ground_truth(agent, task_id, started_at)
+    truth_source = gt_source
     executed = f"{marker}_START" in gt_text
     if structured and not executed:
         # A model may take longer than a shell to emit its first token.
@@ -722,6 +726,7 @@ def canary(project: str, agent: str) -> dict:
 
     return {"run_id": run_id, "task_id": task_id, "agent": agent,
             "project": project, "marker": marker, "lanes": lanes,
+            "backend": backend_observed, "truth_source": truth_source,
             "call_log": api.calls}
 
 
@@ -767,14 +772,22 @@ def write_receipt(pre: dict, result: dict | None, note: str = "") -> Path:
             if lane["follow_up"]:
                 lines.append(f"- Follow-up: {lane['follow_up']}")
             lines.append("")
+        agent = result.get("agent") or "unknown"
+        backend = result.get("backend") or "unobserved"
+        truth = result.get("truth_source") or "unrecorded"
         lines += [
             "## Boundary", "",
-            "This run exercised one Shell-adapter task with a filesystem-inert",
-            "prompt. It does not establish provider conformance for any model",
-            "backend, does not prove GUI-termination survival, and does not",
-            "verify that any agent did correct work. A response is not",
-            "completion; an interrupt acknowledgement is not observed",
-            "cancellation; quiet output is not done.",
+            f"This run exercised ONE task on the {agent} adapter "
+            f"(backend {backend}) with a",
+            "filesystem-inert prompt, and nothing else. Ground truth for "
+            f"provider output came from {truth},",
+            "never from Conduit's own event log. It does not establish "
+            "provider conformance for any",
+            "other backend, does not prove GUI-termination survival, and "
+            "does not verify that any",
+            "agent did correct work. A response is not completion; an "
+            "interrupt acknowledgement is",
+            "not observed cancellation; quiet output is not done.",
             "",
         ]
     path.write_text("\n".join(lines))
@@ -782,6 +795,12 @@ def write_receipt(pre: dict, result: dict | None, note: str = "") -> Path:
 
 
 def main() -> int:
+    # A --repeat run redirected to a file otherwise block-buffers, so a run
+    # that is making steady progress looks hung for minutes at a time.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:  # pragma: no cover - non-standard stdout
+        pass
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true",
                         help="execute the write canary (requires writes already enabled)")
