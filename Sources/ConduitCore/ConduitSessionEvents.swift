@@ -10,19 +10,30 @@ public struct ConduitSessionAdapterSnapshot: Equatable, Sendable {
     public var lastTurnStatus: String?
     public var pendingApproval: Bool
     public var pendingApprovalSummary: String?
+    /// The provider's failure for THIS turn, from the adapter's
+    /// `.failed(message)` effect while the turn was still running.
+    ///
+    /// Deliberately a separate field rather than something inferred from
+    /// `lastTurnStatus` text, and deliberately scoped to the turn: an error
+    /// that arrives after a turn completed does not un-complete it.
+    /// Interrupting a finished turn makes the provider report an error, and
+    /// treating that as a turn failure would erase a real completion.
+    public var turnFailure: String?
 
     public init(
         threadID: String? = nil,
         turnActive: Bool = false,
         lastTurnStatus: String? = nil,
         pendingApproval: Bool = false,
-        pendingApprovalSummary: String? = nil
+        pendingApprovalSummary: String? = nil,
+        turnFailure: String? = nil
     ) {
         self.threadID = threadID
         self.turnActive = turnActive
         self.lastTurnStatus = lastTurnStatus
         self.pendingApproval = pendingApproval
         self.pendingApprovalSummary = pendingApprovalSummary
+        self.turnFailure = turnFailure
     }
 }
 
@@ -49,6 +60,10 @@ public enum ConduitSessionObservationCheckpoint: String, Equatable, Sendable {
     case structuredActive = "structured_active"
     case structuredApproval = "structured_approval"
     case structuredCompleted = "structured_completed"
+    /// The provider reported a failure for this turn. Distinct from
+    /// `structuredCompleted`: an orchestrator that cannot tell these apart
+    /// advances a plan on work that never happened.
+    case structuredFailed = "structured_failed"
     case structuredIdle = "structured_idle"
     case outputLive = "output_live"
     case outputQuiet = "output_quiet"
@@ -487,6 +502,19 @@ public enum ConduitSessionEventExport {
                     threadIDSource: thread.source
                 )
             }
+            // A provider failure ends the turn, but it is not completion.
+            // Checked before the completion branch because an adapter can
+            // report a terminal status alongside the error, and any non-nil
+            // status used to be mapped straight to "completed".
+            if let failure = adapter?.turnFailure, !failure.isEmpty {
+                return ConduitSessionTurnSnapshot(
+                    state: "failed",
+                    status: adapter?.lastTurnStatus ?? "failed",
+                    honesty: "structured adapter reported a provider failure for this turn; no result was produced. Not completion.",
+                    threadID: thread.id,
+                    threadIDSource: thread.source
+                )
+            }
             if adapter?.lastTurnStatus != nil
                 || lastStructuredOutput(in: source.events)?.state == .closed
             {
@@ -554,6 +582,10 @@ public enum ConduitSessionEventExport {
                 inputSummary = nil
             case "completed":
                 checkpoint = .structuredCompleted
+                inputState = .none
+                inputSummary = nil
+            case "failed":
+                checkpoint = .structuredFailed
                 inputState = .none
                 inputSummary = nil
             default:

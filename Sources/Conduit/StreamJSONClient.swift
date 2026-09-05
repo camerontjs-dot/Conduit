@@ -30,6 +30,14 @@ final class StreamJSONClient: ObservableObject {
     @Published private(set) var isTurnActive = false
     @Published private(set) var lastTurnStatus: String?
     @Published private(set) var lastError: String?
+    /// Set only when a failure ends a turn that was still running.
+    ///
+    /// A `.failed` effect that arrives after the turn already completed does
+    /// not un-complete it: interrupting a finished turn makes the provider
+    /// report an error, and treating that as a turn failure erases a real
+    /// observed completion. `lastError` keeps every error for display; this
+    /// field carries only the ones that are the turn's outcome.
+    @Published private(set) var turnFailure: String?
     var pendingApprovalSummary: String? { nil }
 
     var onEffect: ((StructuredAdapterEffect) -> Void)?
@@ -74,7 +82,12 @@ final class StreamJSONClient: ObservableObject {
         }
         mapper.resetTurn()
         isTurnActive = true
+        // A new turn must not inherit the previous turn's failure. lastError
+        // is what marks a turn failed rather than completed, so leaving it set
+        // would report every later successful turn on this task as failed.
         lastTurnStatus = nil
+        lastError = nil
+        turnFailure = nil
         try spawnTurn(executable: executable, prompt: text)
     }
 
@@ -188,6 +201,10 @@ final class StreamJSONClient: ObservableObject {
             lastTurnStatus = status
         case .failed(let message):
             lastError = message
+            if isTurnActive {
+                isTurnActive = false
+                turnFailure = message
+            }
             onFailed?(message)
         }
         onEffect?(effect)
