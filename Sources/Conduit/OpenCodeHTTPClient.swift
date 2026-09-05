@@ -11,6 +11,9 @@ final class OpenCodeServeLease {
     private var process: Process?
     private var record: OpenCodeServeLeaseRecord?
     private var retainCount = 0
+    /// The most recent in-flight resolve. Each new acquire waits for it, so
+    /// only one caller can be between the record check and the assignment.
+    private var resolveChain: Task<OpenCodeServeLeaseRecord, Error>?
 
     private var leaseURL: URL {
         AdapterThreadStore.defaultDirectory().appendingPathComponent(
@@ -18,8 +21,46 @@ final class OpenCodeServeLease {
         )
     }
 
+    /// Resolve the shared server, one caller at a time.
+    ///
+    /// `@MainActor` serialises statements, not `await`s. The previous version
+    /// checked `record`, awaited a health probe, awaited `load()`'s probe, and
+    /// only then awaited `spawn` — three suspension points before anything was
+    /// assigned. Concurrent `conduit_create_task` calls therefore all saw a nil
+    /// record and all spawned: observed 2026-09-05 with three simultaneous
+    /// OpenCode creates, which left `opencode serve` running on ports
+    /// 18752/18753/18754. Only the last one is reachable through `process`, so
+    /// `shutdownIfIdle` could never terminate the others, and the finite port
+    /// range leaks one entry per concurrent create for the life of the app.
+    ///
+    /// Chaining each resolve behind the previous one means the second caller
+    /// runs its check after the first has assigned `record`, finds it healthy,
+    /// and reuses it — which is what the retain count always assumed.
     func acquire(executable: String) async throws -> OpenCodeServeLeaseRecord {
+        let previous = resolveChain
+        let task = Task { [weak self] () async throws -> OpenCodeServeLeaseRecord in
+            // A previous failure must not poison this caller's attempt; it
+            // only has to finish before this one looks at the record.
+            _ = try? await previous?.value
+            guard let self else {
+                throw OpenCodeHTTPClient.ClientError.protocolError(
+                    "OpenCode lease was torn down."
+                )
+            }
+            return try await self.resolve(executable: executable)
+        }
+        resolveChain = task
+        // The retain is taken only on success. Incrementing first meant a
+        // failed spawn left the count permanently above zero, so a later
+        // release could never reach idle and shut the server down.
+        let record = try await task.value
         retainCount += 1
+        return record
+    }
+
+    private func resolve(
+        executable: String
+    ) async throws -> OpenCodeServeLeaseRecord {
         if let record, await health(record) {
             return record
         }

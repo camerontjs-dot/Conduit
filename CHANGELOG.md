@@ -27,6 +27,20 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Concurrent OpenCode tasks no longer leak an `opencode serve` process each.
+  `OpenCodeServeLease.acquire` is `@MainActor`, but that serialises statements
+  and not `await`s: it checked the shared record, awaited a health probe,
+  awaited a second probe, and only then awaited `spawn`, so simultaneous
+  `conduit_create_task` calls all saw a nil record and all spawned. Only the
+  last process stayed reachable, so `shutdownIfIdle` could never terminate the
+  others and the finite port range lost one entry per concurrent create for the
+  life of the app. Observed with three simultaneous creates leaving servers on
+  ports 18752-18754 after every task had been closed. Resolves are now chained
+  so the second caller finds the record the first assigned. The retain count is
+  also taken only on success; incrementing before the attempt meant a failed
+  spawn left it permanently above zero, so a later release could never reach
+  idle.
+
 - A failure inside an MCP write no longer raises a blocking dialog on the
   operator's Mac. The Session API and the Mac UI shared one `errorMessage`
   channel, and `RootView` presents any non-nil value as an alert, so a remote
