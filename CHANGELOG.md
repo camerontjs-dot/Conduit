@@ -70,8 +70,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   resend. A held prompt is visible as `prompts_held_pending_ready` on
   `conduit_session_status`, and always reaches a recorded outcome on its
   prompt event: delivered, refused by the host, or abandoned if the runtime
-  never becomes ready within two minutes or stops first. `conduit_send_prompt`
-  holds on the same terms. PTY delivery is unchanged.
+  never becomes ready within two minutes, stops first, or is removed — every
+  path that makes a runtime unreachable now resolves what it still owed,
+  rather than leaving the prompt `queued` for a caller that was told not to
+  resend. `conduit_send_prompt` holds on the same terms. PTY delivery is
+  unchanged.
 
 - A structured turn that died inside the provider is no longer reported as a
   completed turn. `conduit_session_events` gains `turn.state: failed` and
