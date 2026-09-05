@@ -1427,6 +1427,10 @@ final class AppModel: ObservableObject {
                 selectedTaskSessionID = nil
                 selectedProjectID = nil
                 activeSessionID = nil
+                // Same reason as removeSessionTab: these runtimes are about to
+                // become unreachable, so any promise they still owe has to be
+                // recorded as broken first.
+                for runtime in sessions { runtime.abandonHeldPrompts() }
                 sessions.removeAll()
                 lastSelectedSessionIDByProject.removeAll()
                 taskScopeProjectID = nil
@@ -2799,6 +2803,15 @@ final class AppModel: ObservableObject {
     }
 
     private func removeSessionTab(_ runtime: TerminalRuntime) {
+        // Dropping the tab drops the last strong reference to the runtime, and
+        // the hold-expiry Task holds it weakly, so anything still held here
+        // would never be resolved: the durable prompt event would stay
+        // `queued` for good and a caller that was told not to resend would
+        // wait on nothing. closeSession and endSession already resolve holds
+        // via stopStructuredAdapter, but the stale-tab sweeps and the
+        // provisioning-failure path reach this function without them, and an
+        // adapter that exits on its own never calls stop at all.
+        runtime.abandonHeldPrompts()
         if let taskSessionID = runtime.descriptor.taskSessionID {
             // Never present volatile runtime memory as retained history. This
             // read is queued behind every prior append/close revision.
