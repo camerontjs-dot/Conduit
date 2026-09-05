@@ -180,7 +180,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_session_status",
-            "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. Status is observation, never verification of what an agent did.",
+            "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. close_outcome says whether conduit_close_session would be reversible for this task. prompts_held_pending_ready counts objectives Conduit accepted before the runtime was ready and still owes delivery on. Status is observation, never verification of what an agent did.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or a conduit_list_sessions row. Poll after creating a task: ready turns true when the runtime will accept a prompt."),
@@ -223,7 +223,7 @@ public enum ConduitSessionToolCatalog {
             properties: [
                 "agent": property("string", "Enabled profile name or command from conduit_list_adapters. An unlisted or disabled profile is refused."),
                 "project_slug": property("string", "Existing project slug from conduit_list_projects; it sets the session working directory."),
-                "objective": property("string", "Optional first prompt. If the runtime is not ready, no later automatic delivery occurs."),
+                "objective": property("string", "Optional first prompt. A structured runtime is normally still starting when this returns; Conduit holds the objective and delivers it when the runtime reports ready, which is what objective_delivery_state queued means. Do not resend a queued objective."),
                 "idempotency_key": property("string", "Optional stable key for a safe repeated create. An identical repeat returns the original task."),
             ],
             required: ["agent", "project_slug"]
@@ -234,7 +234,7 @@ public enum ConduitSessionToolCatalog {
             annotations: nonDestructiveStateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or conduit_list_sessions."),
-                "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it."),
+                "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it. If the runtime is still starting, Conduit holds this prompt and delivers it on ready rather than refusing it."),
             ],
             required: ["taskSessionID", "text"]
         ),
@@ -258,7 +258,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_close_session",
-            "Leave the live runtime. This does not delete task history, but it is not symmetric across backends: a durable tmux runtime is detached and can be recovered with conduit_reconcile_task, while a structured adapter is stopped and the task is NOT recoverable afterwards — conduit_session_status reports recoverable false. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Leave the live runtime. This does not delete task history, but it is not symmetric across backends. Read close_outcome: detached means a durable tmux runtime was left running and conduit_reconcile_task can adopt it again; stopped means a structured adapter was ended and the task is NOT recoverable — reconcile cannot reconnect it. conduit_session_status reports the same close_outcome for a live task BEFORE you close it, so check there first if the decision needs to be reversible. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: stateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id to leave. Explicit close frees one live-task slot."),

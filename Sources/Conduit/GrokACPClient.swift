@@ -38,6 +38,11 @@ final class GrokACPClient: ObservableObject {
     @Published var pendingPermission: ACPPendingPermission?
 
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    /// Fired once the host can accept a turn.
+    ///
+    /// Conduit holds a prompt that arrives before this point rather than
+    /// refusing it, so something has to say when the wait is over.
+    var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
 
@@ -219,6 +224,7 @@ final class GrokACPClient: ObservableObject {
             throw ClientError.protocolError("ACP session/new did not return a session id.")
         }
         isReady = true
+        onReady?()
     }
 
     private func ingest(_ data: Data, generation: UUID) {

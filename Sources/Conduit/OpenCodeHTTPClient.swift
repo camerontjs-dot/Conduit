@@ -189,6 +189,11 @@ final class OpenCodeHTTPClient: ObservableObject {
     @Published var pendingApprovalSummary: String?
 
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    /// Fired once the host can accept a turn.
+    ///
+    /// Conduit holds a prompt that arrives before this point rather than
+    /// refusing it, so something has to say when the wait is over.
+    var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
 
@@ -232,6 +237,7 @@ final class OpenCodeHTTPClient: ObservableObject {
             emit(.sessionStarted(id: sessionID))
         }
         isReady = true
+        onReady?()
         startSSE(base: base, password: lease.password)
     }
 
