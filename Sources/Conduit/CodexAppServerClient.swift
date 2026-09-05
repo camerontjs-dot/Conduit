@@ -44,6 +44,10 @@ final class CodexAppServerClient: ObservableObject {
     @Published private(set) var turnFailure: String?
 
     var onEffect: ((CodexAppServerEffect) -> Void)?
+    /// Fired once the host can accept a turn.
+    ///
+    /// Conduit holds a prompt that arrives before this point rather than
+    /// refusing it, so something has to say when the wait is over.
     var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?

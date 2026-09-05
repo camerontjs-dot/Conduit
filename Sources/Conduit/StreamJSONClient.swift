@@ -41,6 +41,11 @@ final class StreamJSONClient: ObservableObject {
     var pendingApprovalSummary: String? { nil }
 
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    /// Fired once the host can accept a turn.
+    ///
+    /// Conduit holds a prompt that arrives before this point rather than
+    /// refusing it, so something has to say when the wait is over.
+    var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
 
@@ -73,6 +78,7 @@ final class StreamJSONClient: ObservableObject {
             emit(.sessionStarted(id: resumeSessionID))
         }
         isReady = true
+        onReady?()
     }
 
     func sendTurn(text: String) throws {

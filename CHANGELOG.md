@@ -27,6 +27,19 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- `conduit_create_task` can now start an agent on an objective in one call.
+  A structured runtime is still starting when the create response is
+  serialized, so the objective was refused outright and reported
+  `objective_delivery_state: failed` with instructions to send it again — on
+  every structured backend, in every recorded canary run. Conduit now holds
+  the objective and delivers it when the runtime reports ready, reporting
+  `queued`, which already means Conduit owns delivery and the caller must not
+  resend. A held prompt is visible as `prompts_held_pending_ready` on
+  `conduit_session_status`, and always reaches a recorded outcome on its
+  prompt event: delivered, refused by the host, or abandoned if the runtime
+  never becomes ready within two minutes or stops first. `conduit_send_prompt`
+  holds on the same terms. PTY delivery is unchanged.
+
 - A structured turn that died inside the provider is no longer reported as a
   completed turn. `conduit_session_events` gains `turn.state: failed` and
   `observation.checkpoint: structured_failed`, derived from the adapter's own

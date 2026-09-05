@@ -223,7 +223,7 @@ public enum ConduitSessionToolCatalog {
             properties: [
                 "agent": property("string", "Enabled profile name or command from conduit_list_adapters. An unlisted or disabled profile is refused."),
                 "project_slug": property("string", "Existing project slug from conduit_list_projects; it sets the session working directory."),
-                "objective": property("string", "Optional first prompt. If the runtime is not ready, no later automatic delivery occurs."),
+                "objective": property("string", "Optional first prompt. A structured runtime is normally still starting when this returns; Conduit holds the objective and delivers it when the runtime reports ready, which is what objective_delivery_state queued means. Do not resend a queued objective."),
                 "idempotency_key": property("string", "Optional stable key for a safe repeated create. An identical repeat returns the original task."),
             ],
             required: ["agent", "project_slug"]
@@ -234,7 +234,7 @@ public enum ConduitSessionToolCatalog {
             annotations: nonDestructiveStateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or conduit_list_sessions."),
-                "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it."),
+                "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it. If the runtime is still starting, Conduit holds this prompt and delivers it on ready rather than refusing it."),
             ],
             required: ["taskSessionID", "text"]
         ),

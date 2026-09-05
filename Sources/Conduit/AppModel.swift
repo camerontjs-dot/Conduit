@@ -3545,8 +3545,13 @@ final class AppModel: ObservableObject {
             guard let value else { return .unknown }
             return .known(value: value, observedAt: now)
         }
+        // Prompts Conduit is holding for a not-yet-ready structured host are
+        // real backlog. Counting only the PTY controller's depth would let a
+        // caller stack holds behind a slow-starting runtime while the circuit
+        // breaker read the queue as empty.
         let queued = sessions.reduce(into: UInt64(0)) { total, runtime in
             total += UInt64(max(0, runtime.controller.queuedPromptDepth))
+            total += UInt64(max(0, runtime.heldPromptCount))
         }
         return ConduitResourceSnapshot(
             availablePhysicalMemoryBytes: measured(
@@ -3930,6 +3935,12 @@ final class AppModel: ObservableObject {
         if let failure {
             payload["failure"] = failure
         }
+        // A caller told `queued` was told not to resend. Surfacing the count
+        // makes that promise observable while it is outstanding, instead of a
+        // silent gap between the create response and the delivery.
+        if let live, live.heldPromptCount > 0 {
+            payload["prompts_held_pending_ready"] = live.heldPromptCount
+        }
         if let recoveryAction {
             payload["recovery_action"] = recoveryAction
         }
@@ -4264,6 +4275,8 @@ final class AppModel: ObservableObject {
             observedTaskQueueDepth: UInt64(
                 max(0, sessionAPILiveRuntime(for: taskID)?
                     .controller.queuedPromptDepth ?? 0)
+                    + max(0, sessionAPILiveRuntime(for: taskID)?
+                        .heldPromptCount ?? 0)
             ),
             resources: sessionAPIResourceSnapshot()
         )
@@ -4294,14 +4307,6 @@ final class AppModel: ObservableObject {
         to runtime: TerminalRuntime,
         origin: ConduitSessionOrigin
     ) -> [String: Any] {
-        if runtime.usesStructuredHost, !runtime.structuredIsReady {
-            return [
-                "error": "agent runtime is still starting; retry conduit_send_prompt",
-                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
-                "delivered": false,
-                "ready": false,
-            ]
-        }
         _ = selectSession(runtime)
         let eventID = runtime.recordPrompt(
             origin: origin.promptOrigin,
@@ -4310,6 +4315,37 @@ final class AppModel: ObservableObject {
             renderedPayload: text
         )
         runtime.selectedSurface = .conversation
+        // A structured host that has not finished starting used to refuse the
+        // prompt outright and tell the caller to send it again. That made
+        // create_task(objective:) undeliverable on every structured backend:
+        // the runtime it had just started was necessarily still starting, so
+        // the objective always came back `failed` while the host reported
+        // ready seconds later. Conduit queues for a PTY already; it now does
+        // the same here, and `queued` means what it has always meant — Conduit
+        // owns delivery, do not resend.
+        //
+        // Readiness is read once, on this actor, with no suspension between
+        // the check and the hold, so a host cannot become ready in the gap and
+        // strand the prompt.
+        if StructuredPromptHold.disposition(
+            text: text,
+            usesStructuredHost: runtime.usesStructuredHost,
+            isReady: runtime.structuredIsReady
+        ) == .hold {
+            runtime.holdPromptUntilReady(eventID: eventID, text: text)
+            return [
+                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                "delivered": false,
+                "delivery": "queued",
+                "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
+                "origin": origin.rawValue,
+                "ready": false,
+                "authority": "prompt accepted before the runtime was ready; "
+                    + "Conduit owns delivery and will complete it when the host "
+                    + "reports ready. Do not resend. The outcome is recorded on "
+                    + "the prompt event, readable through conduit_session_events.",
+            ]
+        }
         if runtime.structuredIsReady {
             let delivered = runtime.sendStructuredPrompt(text: text)
             runtime.updatePromptDelivery(
@@ -4917,6 +4953,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
         }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
+        }
         appServer = client
     }
 
@@ -4947,11 +4986,139 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
     }
 
+    // MARK: - Held prompts
+
+    /// A prompt Conduit accepted on behalf of a structured host that was not
+    /// ready to take it yet.
+    private struct HeldPrompt {
+        let eventID: UUID
+        let text: String
+        let heldAt: Date
+    }
+
+    private var heldPrompts: [HeldPrompt] = []
+    private var holdExpiry: Task<Void, Never>?
+
+    /// How many prompts Conduit is currently holding for this runtime.
+    var heldPromptCount: Int { heldPrompts.count }
+
+    /// Take ownership of a prompt the structured host cannot accept yet.
+    ///
+    /// The caller is told `queued`, which in `ObjectiveDeliveryReport` means
+    /// exactly this: Conduit owns delivery and the caller must not resend. The
+    /// prompt event is recorded before the hold, so the promise is visible in
+    /// `conduit_session_events` as a queued prompt rather than as nothing at
+    /// all, and its real outcome lands on that same event.
+    func holdPromptUntilReady(eventID: UUID, text: String) {
+        heldPrompts.append(
+            HeldPrompt(eventID: eventID, text: text, heldAt: Date())
+        )
+        scheduleHoldExpiry()
+    }
+
+    /// Deliver everything Conduit promised to deliver, in arrival order.
+    ///
+    /// Order matters: an orchestrator can create a task with an objective and
+    /// send a follow-up before the host finishes starting, and the follow-up
+    /// must not overtake the objective.
+    func deliverHeldPrompts() {
+        guard !heldPrompts.isEmpty, structuredIsReady else { return }
+        let pending = heldPrompts
+        heldPrompts = []
+        holdExpiry?.cancel()
+        holdExpiry = nil
+        for prompt in pending {
+            let delivered = sendStructuredPrompt(text: prompt.text)
+            resolve(
+                prompt,
+                with: delivered
+                    ? .delivered
+                    : .refused(
+                        "\(descriptor.agent.name) refused the prompt Conduit "
+                            + "was holding for it"
+                    )
+            )
+        }
+    }
+
+    /// Break the promise out loud.
+    ///
+    /// Conduit told the caller it owned delivery. If the runtime goes away
+    /// first, the prompt is recorded as failed rather than left queued
+    /// forever, because a caller waiting on `queued` has been told not to
+    /// resend and would otherwise wait on nothing.
+    func abandonHeldPrompts() {
+        guard !heldPrompts.isEmpty else { return }
+        let pending = heldPrompts
+        heldPrompts = []
+        holdExpiry?.cancel()
+        holdExpiry = nil
+        let resolution = StructuredPromptHold.teardownResolution(
+            agentName: descriptor.agent.name
+        )
+        for prompt in pending { resolve(prompt, with: resolution) }
+    }
+
+    private func resolve(
+        _ prompt: HeldPrompt,
+        with resolution: StructuredPromptHold.Resolution
+    ) {
+        updatePromptDelivery(
+            eventID: prompt.eventID,
+            to: resolution.promptDeliveryState
+        )
+        if let reason = resolution.reason {
+            conversationCaptureNotice = reason
+        }
+    }
+
+    /// Re-arm the deadline for the oldest hold still outstanding.
+    private func scheduleHoldExpiry() {
+        holdExpiry?.cancel()
+        guard let earliest = heldPrompts.map(\.heldAt).min() else {
+            holdExpiry = nil
+            return
+        }
+        let wait = max(
+            0,
+            earliest
+                .addingTimeInterval(StructuredPromptHold.readinessGrace)
+                .timeIntervalSinceNow
+        )
+        holdExpiry = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.expireHeldPrompts()
+        }
+    }
+
+    private func expireHeldPrompts() {
+        let now = Date()
+        let expired = heldPrompts.filter {
+            StructuredPromptHold.hasExpired(heldAt: $0.heldAt, now: now)
+        }
+        guard !expired.isEmpty else {
+            scheduleHoldExpiry()
+            return
+        }
+        let expiredIDs = Set(expired.map(\.eventID))
+        heldPrompts.removeAll { expiredIDs.contains($0.eventID) }
+        let resolution = StructuredPromptHold.expiryResolution(
+            agentName: descriptor.agent.name
+        )
+        for prompt in expired { resolve(prompt, with: resolution) }
+        scheduleHoldExpiry()
+    }
+
     func stopAppServer() {
         stopStructuredAdapter()
     }
 
     func stopStructuredAdapter() {
+        // Before the clients go, anything Conduit promised to deliver has to
+        // be recorded as undelivered. Otherwise a caller that was told
+        // `queued` — and therefore told not to resend — waits forever.
+        abandonHeldPrompts()
         appServer?.stop()
         appServer = nil
         grokACP?.stop()
@@ -5122,6 +5289,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
         }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
+        }
     }
 
     private func wireStructured(_ client: OpenCodeHTTPClient) {
@@ -5134,6 +5304,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
         }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
+        }
     }
 
     private func wireStructured(_ client: StreamJSONClient) {
@@ -5145,6 +5318,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
+        }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
         }
     }
 
