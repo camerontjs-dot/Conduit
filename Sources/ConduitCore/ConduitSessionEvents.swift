@@ -10,14 +10,15 @@ public struct ConduitSessionAdapterSnapshot: Equatable, Sendable {
     public var lastTurnStatus: String?
     public var pendingApproval: Bool
     public var pendingApprovalSummary: String?
-    /// The provider's own structured failure signal, from the adapter's
-    /// `.failed(message)` effect.
+    /// The provider's failure for THIS turn, from the adapter's
+    /// `.failed(message)` effect while the turn was still running.
     ///
-    /// This is deliberately a separate field rather than something inferred
-    /// from `lastTurnStatus` text. Every structured client already records it;
-    /// it simply was not carried here, so a turn that died in the provider
-    /// reached the caller looking exactly like one that finished.
-    public var lastError: String?
+    /// Deliberately a separate field rather than something inferred from
+    /// `lastTurnStatus` text, and deliberately scoped to the turn: an error
+    /// that arrives after a turn completed does not un-complete it.
+    /// Interrupting a finished turn makes the provider report an error, and
+    /// treating that as a turn failure would erase a real completion.
+    public var turnFailure: String?
 
     public init(
         threadID: String? = nil,
@@ -25,14 +26,14 @@ public struct ConduitSessionAdapterSnapshot: Equatable, Sendable {
         lastTurnStatus: String? = nil,
         pendingApproval: Bool = false,
         pendingApprovalSummary: String? = nil,
-        lastError: String? = nil
+        turnFailure: String? = nil
     ) {
         self.threadID = threadID
         self.turnActive = turnActive
         self.lastTurnStatus = lastTurnStatus
         self.pendingApproval = pendingApproval
         self.pendingApprovalSummary = pendingApprovalSummary
-        self.lastError = lastError
+        self.turnFailure = turnFailure
     }
 }
 
@@ -505,7 +506,7 @@ public enum ConduitSessionEventExport {
             // Checked before the completion branch because an adapter can
             // report a terminal status alongside the error, and any non-nil
             // status used to be mapped straight to "completed".
-            if let failure = adapter?.lastError, !failure.isEmpty {
+            if let failure = adapter?.turnFailure, !failure.isEmpty {
                 return ConduitSessionTurnSnapshot(
                     state: "failed",
                     status: adapter?.lastTurnStatus ?? "failed",

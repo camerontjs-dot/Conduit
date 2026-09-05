@@ -42,7 +42,7 @@ final class StructuredTurnFailureTests: XCTestCase {
                     threadID: "ses_f958a07f",
                     turnActive: false,
                     lastTurnStatus: "completed",
-                    lastError: "ProviderModelNotFoundError: Model not found"
+                    turnFailure: "ProviderModelNotFoundError: Model not found"
                 )
             )
         )
@@ -64,7 +64,7 @@ final class StructuredTurnFailureTests: XCTestCase {
                 adapter: ConduitSessionAdapterSnapshot(
                     turnActive: false,
                     lastTurnStatus: "completed",
-                    lastError: "ProviderModelNotFoundError: Model not found"
+                    turnFailure: "ProviderModelNotFoundError: Model not found"
                 )
             )
         )
@@ -84,7 +84,7 @@ final class StructuredTurnFailureTests: XCTestCase {
                 adapter: ConduitSessionAdapterSnapshot(
                     turnActive: false,
                     lastTurnStatus: "wrote error-handling for the failed login path",
-                    lastError: nil
+                    turnFailure: nil
                 )
             )
         )
@@ -105,7 +105,7 @@ final class StructuredTurnFailureTests: XCTestCase {
                 adapter: ConduitSessionAdapterSnapshot(
                     turnActive: false,
                     lastTurnStatus: "done",
-                    lastError: "connection reset"
+                    turnFailure: "connection reset"
                 )
             )
         )
@@ -119,11 +119,61 @@ final class StructuredTurnFailureTests: XCTestCase {
             source: source(
                 adapter: ConduitSessionAdapterSnapshot(
                     turnActive: true,
-                    lastError: "earlier failure"
+                    turnFailure: "earlier failure"
                 )
             )
         )
         XCTAssertEqual(snapshot.state, "active")
+    }
+
+    func testASucceedingTurnAfterAFailedOneIsNotStillFailed() {
+        // Caught in review before merge. lastError was never cleared by any
+        // client, while lastTurnStatus was cleared at every turn start. A task
+        // that failed once would therefore have reported every later
+        // successful turn as failed, because the completed branch is only
+        // reached when no error is present.
+        //
+        // The clients now clear lastError in sendTurn alongside lastTurnStatus.
+        // This asserts the state that reaches Core after that reset.
+        let afterReset = ConduitSessionEventExport.turnSnapshot(
+            source: source(
+                adapter: ConduitSessionAdapterSnapshot(
+                    turnActive: false,
+                    lastTurnStatus: "completed",
+                    turnFailure: nil
+                )
+            )
+        )
+        XCTAssertEqual(
+            afterReset.state,
+            "completed",
+            "A later successful turn must not inherit an earlier failure."
+        )
+    }
+
+    func testALateInterruptDoesNotUncompleteAFinishedTurn() {
+        // Caught by the canary during review. Codex finished its turn, the
+        // canary then issued an interrupt, the provider reported an error for
+        // interrupting a finished turn, and the observed state flipped
+        // completed -> failed. That erases a real completion.
+        //
+        // The clients now only record turnFailure when the failure ends a turn
+        // that was still running, so a post-completion error leaves the
+        // outcome alone. This asserts the state Core then sees.
+        let snapshot = ConduitSessionEventExport.turnSnapshot(
+            source: source(
+                adapter: ConduitSessionAdapterSnapshot(
+                    turnActive: false,
+                    lastTurnStatus: "completed",
+                    turnFailure: nil
+                )
+            )
+        )
+        XCTAssertEqual(
+            snapshot.state,
+            "completed",
+            "An error arriving after the turn finished is not the turn's outcome."
+        )
     }
 
     func testPendingApprovalOutranksAStaleError() {
@@ -132,7 +182,7 @@ final class StructuredTurnFailureTests: XCTestCase {
                 adapter: ConduitSessionAdapterSnapshot(
                     turnActive: false,
                     pendingApproval: true,
-                    lastError: "earlier failure"
+                    turnFailure: "earlier failure"
                 )
             )
         )
@@ -145,7 +195,7 @@ final class StructuredTurnFailureTests: XCTestCase {
                 adapter: ConduitSessionAdapterSnapshot(
                     turnActive: false,
                     lastTurnStatus: "completed",
-                    lastError: ""
+                    turnFailure: ""
                 )
             )
         )

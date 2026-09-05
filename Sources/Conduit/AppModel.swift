@@ -3993,7 +3993,7 @@ final class AppModel: ObservableObject {
                 lastTurnStatus: live.structuredLastTurnStatus,
                 pendingApproval: live.structuredPendingApproval,
                 pendingApprovalSummary: live.structuredPendingApprovalSummary,
-                lastError: live.structuredLastError
+                turnFailure: live.structuredTurnFailure
             )
         }()
         let persistedThreadID: String? = {
@@ -4489,11 +4489,11 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     /// and authored nothing, while the control plane reported the turn as
     /// `structured_completed`. Every client already recorded this; nothing
     /// carried it out.
-    var structuredLastError: String? {
-        appServer?.lastError
-            ?? grokACP?.lastError
-            ?? openCode?.lastError
-            ?? streamJSON?.lastError
+    var structuredTurnFailure: String? {
+        appServer?.turnFailure
+            ?? grokACP?.turnFailure
+            ?? openCode?.turnFailure
+            ?? streamJSON?.turnFailure
     }
     var structuredPendingApproval: Bool {
         pendingAppServerApproval != nil || pendingStructuredApproval != nil

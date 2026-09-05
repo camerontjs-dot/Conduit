@@ -35,6 +35,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   finished turn were indistinguishable to a caller. `conduit_close_session`
   now also states that a structured adapter is stopped and its task is not
   recoverable afterwards, where a durable tmux runtime is only detached.
+  The failure is scoped to the turn it ended: interrupting a turn that already
+  finished makes the provider report an error, and that no longer un-completes
+  the finished turn, nor does a failed turn leave every later turn on the same
+  task reading as failed.
 
 - `conduit_create_task` no longer causes an initial objective to run twice on a
   PTY runtime. A PTY host accepts the objective and writes to the terminal
