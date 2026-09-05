@@ -4040,8 +4040,24 @@ final class AppModel: ObservableObject {
         idempotencyKey: String?,
         caller: ConduitSessionCaller
     ) -> [String: Any] {
-        guard settings.enableSessionAPIWrites else {
-            return ["error": "write tools are disabled"]
+        // Gate, agent, and project are one decision, evaluated in ConduitCore
+        // so the refusal contract and its ordering are testable without AppKit
+        // (contract §18). Admission deliberately stays below: it consumes rate
+        // and capacity budget, so it must not run for a request that names no
+        // real agent or project.
+        let precondition = CreateTaskPrecondition.evaluate(
+            writesEnabled: settings.enableSessionAPIWrites,
+            requestedAgent: agentName,
+            among: enabledAgents,
+            requestedProject: projectSlug,
+            projectSlugs: projects.map(\.slug)
+        )
+        if let refusal = precondition.refusalPayload { return refusal }
+        guard case .admitted(let resolvedAgent, let resolvedSlug) = precondition,
+              let agent = enabledAgents.first(where: { $0.name == resolvedAgent }),
+              let project = projects.first(where: { $0.slug == resolvedSlug })
+        else {
+            return ["error": "unknown or disabled agent", "agent": agentName]
         }
         // Hoisted: every return path below that could carry an objective has
         // to report its fate, including the failure paths. A response that
@@ -4049,20 +4065,6 @@ final class AppModel: ObservableObject {
         // no defined case, which is the ambiguity this field exists to remove.
         let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
         let objectiveWasSupplied = !objective.isEmpty
-        guard let agent = enabledAgents.first(where: {
-            ConduitSessionAPI.matchesAgent($0, name: agentName)
-        }) else {
-            return [
-                "error": "unknown or disabled agent",
-                "agent": agentName,
-                "enabled": enabledAgents.map(\.name),
-            ]
-        }
-        guard let project = projects.first(where: {
-            $0.slug.lowercased() == projectSlug.lowercased()
-        }) else {
-            return ["error": "unknown project_slug", "project_slug": projectSlug]
-        }
 
         // Admission runs only once the request is known to name a real agent
         // and project, so a typo can never burn create-rate budget or hold a
