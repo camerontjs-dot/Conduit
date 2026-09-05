@@ -93,7 +93,23 @@ def await_turn(api, task_id, deadline):
     return last
 
 
-def run(project: str, agent: str) -> dict:
+def objective_for(agent: str, token: str, word: str) -> str:
+    """One assertion shape across backends that answer very differently.
+
+    A Shell is not an agent and cannot be asked to reason, but the control
+    plane still has to carry work to it. Giving it a command that produces the
+    same `TOKEN-n` line means a single ground-truth check covers every backend
+    in a mixed fan-out.
+    """
+    if agent.strip().lower() == "shell":
+        return f'T={token}; echo "${{T}}-{len(word)}"'
+    return (
+        f"Reply with exactly one line: {token}-<n> where <n> is the number of "
+        f"letters in the word {word}. No other text. Do not use any tools."
+    )
+
+
+def run(project: str, agents: list[str]) -> dict:
     api = cp.SessionAPI(cp.load_token())
     api.initialize()
     rows: list[dict] = []
@@ -102,28 +118,28 @@ def run(project: str, agent: str) -> dict:
     tasks: dict[str, dict] = {}
 
     # ---- fan-out ----------------------------------------------------------
-    print("\n-- fan-out: 3 concurrent tasks, objective delivered at create --")
-    plan = {
-        "alpha": ("ALPHA", "Reply with exactly one line: ALPHA-<n> where <n> is "
-                           "the number of letters in the word orchestration. "
-                           "No other text. Do not use any tools."),
-        "bravo": ("BRAVO", "Reply with exactly one line: BRAVO-<n> where <n> is "
-                           "the number of letters in the word conduit. "
-                           "No other text. Do not use any tools."),
-        "charlie": ("CHARLIE", "Reply with exactly one line: CHARLIE-<n> where "
-                               "<n> is the number of letters in the word agent. "
-                               "No other text. Do not use any tools."),
-    }
-    for name, (token, objective) in plan.items():
-        created = create(api, agent, project, objective, f"orch-{stamp}-{name}")
+    print(f"\n-- fan-out: 3 concurrent tasks across {agents} --")
+    words = {"alpha": ("ALPHA", "orchestration"),
+             "bravo": ("BRAVO", "conduit"),
+             "charlie": ("CHARLIE", "agent")}
+    plan = {}
+    for index, (name, (token, word)) in enumerate(words.items()):
+        # Round-robin so a single-agent list behaves exactly as before and a
+        # mixed list puts each task on a different backend.
+        assigned = agents[index % len(agents)]
+        plan[name] = (token, objective_for(assigned, token, word), assigned)
+
+    for name, (token, objective, assigned) in plan.items():
+        created = create(api, assigned, project, objective, f"orch-{stamp}-{name}")
         tid = created.get("taskSessionID")
-        tasks[name] = {"id": tid, "token": token, "created": created}
+        tasks[name] = {"id": tid, "token": token, "created": created,
+                       "agent": assigned}
         state = created.get("objective_delivery_state")
         lane(
             rows, f"ORCH-1-create-{name}",
             "objective is accepted at create; Conduit owns delivery",
-            f"task={tid} delivery_state={state} resend_required="
-            f"{created.get('objective_resend_required')}",
+            f"agent={assigned} task={tid} delivery_state={state} "
+            f"resend_required={created.get('objective_resend_required')}",
             state in {"queued", "delivered"}
             and not created.get("objective_resend_required"),
             json.dumps(created)[:400],
@@ -145,8 +161,8 @@ def run(project: str, agent: str) -> dict:
     refusal = None
     for extra in range(1, 4):
         created = create(
-            api, agent, project,
-            "Reply with exactly one line: OVERFLOW. Do not use any tools.",
+            api, agents[0], project,
+            objective_for(agents[0], "OVERFLOW", "x"),
             f"orch-{stamp}-overflow{extra}",
         )
         overflow.append(created)
@@ -178,27 +194,51 @@ def run(project: str, agent: str) -> dict:
         tid = tasks[name]["id"]
         if not tid:
             continue
+        assigned = plan[name][2]
+        is_pty = assigned.strip().lower() == "shell"
         state, checkpoint, _ = await_turn(api, tid, deadline)
         tasks[name]["turn"] = state
-        lane(
-            rows, f"ORCH-4-turn-{name}",
-            "the turn reaches a terminal state the caller can branch on",
-            f"turn={state} checkpoint={checkpoint}",
-            state in {"completed", "failed"},
-            negative="A terminal turn is not a correct answer.",
-        )
+        if is_pty:
+            # A PTY has no turn to report. Conduit says `ambiguous`, which is
+            # the honest answer and also a hard limit on orchestration: there
+            # is no terminal turn state coming, so an orchestrator that polls
+            # for one waits forever. Work on a PTY can only be confirmed out
+            # of band, from the pane itself. Recorded as its own lane rather
+            # than folded into a pass, because it changes what an orchestrator
+            # may rely on.
+            lane(
+                rows, f"ORCH-4-turn-{name}",
+                "a PTY reports ambiguity rather than inventing a turn result",
+                f"agent={assigned} turn={state} checkpoint={checkpoint}",
+                state in {"ambiguous", "idle", "completed"},
+                negative="ambiguous is honest, not terminal. An orchestrator "
+                         "cannot detect PTY completion through the control "
+                         "plane and must not poll for a state that never "
+                         "arrives; confirm PTY work from the pane, or "
+                         "orchestrate through a structured backend.",
+            )
+        else:
+            lane(
+                rows, f"ORCH-4-turn-{name}",
+                "the turn reaches a terminal state the caller can branch on",
+                f"agent={assigned} turn={state} checkpoint={checkpoint}",
+                state in {"completed", "failed"},
+                negative="A terminal turn is not a correct answer.",
+            )
 
-    provider_text = cp.opencode_assistant_text(since) if agent.lower() == "opencode" \
-        else ""
-    for name, (token, _) in plan.items():
-        hit = [
-            line for line in provider_text.splitlines()
-            if token + "-" in line
-        ]
+    # Each task is checked against ITS OWN provider's store — Codex rollout
+    # JSONL, OpenCode SQLite, or the tmux pane. A mixed fan-out is only
+    # meaningful if each backend is witnessed by itself.
+    for name, (token, _, assigned) in plan.items():
+        tid = tasks[name]["id"]
+        source, text = cp.ground_truth(assigned, tid, since) if tid else ("none", "")
+        hit = [line for line in text.splitlines() if token + "-" in line]
         answers[name] = hit[0].strip() if hit else ""
+        tasks[name]["truth_source"] = source
         lane(
             rows, f"ORCH-5-ground-truth-{name}",
             "the answer exists in the provider's own store, not only in Conduit",
+            f"agent={assigned} source={source} "
             f"provider_answer={answers[name] or '(absent)'}",
             bool(answers[name]),
             negative="An answer only Conduit recorded proves recording, not work.",
@@ -221,25 +261,38 @@ def run(project: str, agent: str) -> dict:
                     pass
         time.sleep(2)
         since_chain = time.time() - 5
+        # Run the dependent task on a DIFFERENT backend from the one that
+        # produced the answer wherever the run has more than one. Chaining a
+        # backend to itself never leaves the provider, so it cannot show that
+        # the control plane is what carried the value between agents.
+        source_agent = plan["alpha"][2]
+        chain_agent = next(
+            (a for a in agents if a != source_agent), source_agent
+        )
         chained = create(
-            api, agent, project,
-            f"Another agent produced this line: {source}. "
-            f"Reply with exactly one line: ECHO-{source}. "
-            "No other text. Do not use any tools.",
+            api, chain_agent, project,
+            objective_for(chain_agent, "ECHO", source)
+            if chain_agent.strip().lower() == "shell"
+            else (f"Another agent produced this line: {source}. "
+                  f"Reply with exactly one line: ECHO-{source}. "
+                  "No other text. Do not use any tools."),
             f"orch-{stamp}-chain",
         )
         tid = chained.get("taskSessionID")
         if tid:
-            tasks["chain"] = {"id": tid, "token": "ECHO", "created": chained}
+            tasks["chain"] = {"id": tid, "token": "ECHO", "created": chained,
+                              "agent": chain_agent}
             state, checkpoint, _ = await_turn(
                 api, tid, time.time() + TURN_TIMEOUT
             )
-            text = cp.opencode_assistant_text(since_chain)
+            _, text = cp.ground_truth(chain_agent, tid, since_chain)
             carried = source in text and "ECHO" in text
             lane(
                 rows, "ORCH-6-chain",
-                "a dependent task receives and acts on the first task's real output",
-                f"turn={state} carried_prior_answer={carried} source={source!r}",
+                "a dependent task on another backend receives and acts on the "
+                "first task's real output",
+                f"{source_agent} -> {chain_agent}: turn={state} "
+                f"carried_prior_answer={carried} source={source!r}",
                 carried,
                 evidence=text[-300:],
                 negative="Carrying a value is not understanding it.",
@@ -275,7 +328,8 @@ def run(project: str, agent: str) -> dict:
         negative="close_outcome stopped means these tasks are not recoverable.",
     )
 
-    return {"rows": rows, "tasks": tasks, "answers": answers, "agent": agent,
+    return {"rows": rows, "tasks": tasks, "answers": answers,
+            "agent": ",".join(agents), "agents": agents,
             "project": project, "stamp": stamp}
 
 
@@ -312,7 +366,7 @@ def write_receipt(pre: dict, result: dict) -> Path:
         lines.append("")
     lines += [
         "## Boundary", "",
-        f"One machine, one project, the {result['agent']} adapter, small",
+        f"One machine, one project, adapters: {result['agent']}. Small",
         "deterministic objectives. This establishes that the control plane can",
         "carry work between agents; it establishes nothing about how well any",
         "agent does the work. A model that answers wrongly still produces a",
@@ -332,7 +386,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--project", default="conduit")
-    parser.add_argument("--agent", default="OpenCode")
+    parser.add_argument(
+        "--agents", default="OpenCode",
+        help="comma-separated adapters, assigned round-robin to the fan-out. "
+             "A mixed list (Codex,OpenCode,Shell) exercises heterogeneous "
+             "backends concurrently and chains across them.",
+    )
     args = parser.parse_args()
 
     pre = cp.preflight()
@@ -347,7 +406,11 @@ def main() -> int:
         print("\nPreflight only. Nothing was written. Re-run with --run.")
         return 0
 
-    result = run(args.project, args.agent)
+    agents = [a.strip() for a in args.agents.split(",") if a.strip()]
+    if not agents:
+        print("REFUSED: no agents given.")
+        return 2
+    result = run(args.project, agents)
     path = write_receipt(pre, result)
     fails = [r for r in result["rows"] if r["result"] == "FAIL"]
     print(f"\nReceipt: {path}")
