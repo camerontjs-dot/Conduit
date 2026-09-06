@@ -1,32 +1,32 @@
 # Conduit Control-Plane Contract v1
 
-Status: proposed contract freeze  
+Status: reconciled Phase A candidate; acceptance occurs when this PR is reviewed and merged  
 Programme authority: issue #4  
-Machine-bound evidence dependency: issue #3
+Machine-bound evidence lineage: issue #3 and PRs #7, #8, #10–#21  
+Reconciliation evidence base: `main` at `34555ccd6cd2af6fa763bd730198636e47a0e1e4`
 
 ## Purpose
 
 This document defines the first explicit contract for separating Conduit's execution/control-plane semantics from the macOS user interface.
 
-It is intentionally implementation-neutral.
+It is intentionally implementation-neutral about process hosting. The control plane may remain in-process while its semantics are extracted. This contract does not select XPC, a helper process, launchd, a daemon, or another host.
 
-The contract may initially be implemented in-process. It does not select XPC, a helper process, launchd, a daemon, or any other hosting mechanism.
-
-The goal is to establish the semantics that any future host and any client must preserve.
+The goal is to freeze the semantics that any future host and client must preserve, using the machine-bound evidence now available rather than the assumptions that existed when this contract was first drafted.
 
 ---
 
 # 1. Product boundary
 
-Conduit is a local agent execution and governance control plane.
+Conduit is a local agent execution and governance control plane with a native macOS operator client.
 
 It owns:
 
 - task identity;
 - runtime-attempt identity;
 - provider adapter leases/process ownership;
-- turn lifecycle;
-- prompt delivery state;
+- turn lifecycle where the backend exposes one;
+- prompt delivery state and delivery ownership;
+- provider-thread/session continuity observations;
 - interrupt request state;
 - approval state;
 - admission/capacity/resource policy;
@@ -46,11 +46,9 @@ Conduit does not own:
 - recursive delegation;
 - provider credentials beyond supported local authentication flows.
 
-The macOS application is a privileged client of this control plane.
+The macOS application is a privileged client of this control plane, even while substantial runtime ownership still resides in `AppModel` today.
 
-External orchestration surfaces such as MCP are adapters over this control plane.
-
-No external protocol is the internal semantic authority.
+External orchestration surfaces such as MCP are adapters over the control plane. No external protocol is the internal semantic authority.
 
 ---
 
@@ -64,7 +62,7 @@ A task is the durable identity of an intended unit of work.
 
 Initial v1 states:
 
-```
+```text
 proposed
 approved
 admitted
@@ -74,7 +72,7 @@ closed
 
 A task may outlive multiple runtime attempts.
 
-A task being `closed` does not by itself mean the requested work was successful.
+A task being `closed` does not mean the requested work succeeded.
 
 ## 2.2 Runtime-attempt state
 
@@ -82,7 +80,7 @@ A runtime attempt is one concrete provider/process execution attempt for a task.
 
 Initial v1 states:
 
-```
+```text
 starting
 ready
 running
@@ -93,13 +91,20 @@ failed
 
 A runtime exit is an execution observation, not a work-verification result.
 
+Closing a runtime must distinguish at least:
+
+- `detached`: the runtime continues and is expected to be recoverable;
+- `stopped`: the adapter/runtime was stopped and recovery is not established.
+
+A generic `closed: true` is insufficient authority for an orchestrator deciding whether it can continue later.
+
 ## 2.3 Turn state
 
-A turn is one admitted prompt/instruction interaction with a provider runtime.
+A turn is one admitted prompt/instruction interaction with a structured provider runtime.
 
 Initial v1 states:
 
-```
+```text
 queued
 delivered
 active
@@ -110,17 +115,25 @@ failed
 ambiguous
 ```
 
-Provider-reported completion may justify `completed` at the turn axis.
+Provider-reported completion may justify `completed` on the turn axis only when the adapter has not also observed a provider failure for that turn.
+
+A provider failure is `failed`, not completion, even if the provider's raw status vocabulary also contains a terminal or completed-like value.
 
 It does not verify the task's requested outcome.
 
-PTY output quietness must not produce `completed`.
+### PTY limitation
+
+A PTY has no provider-native turn protocol. Output quietness therefore must not produce `completed`.
+
+For PTY work, the turn axis may remain `ambiguous` indefinitely. An orchestrator that requires a terminal structured turn state must not wait on a PTY as though one will eventually appear. PTY work requires another completion/verification mechanism or direct Raw/tmux inspection.
+
+This is a capability boundary, not permission to invent completion.
 
 ## 2.4 Approval state
 
 Initial v1 states:
 
-```
+```text
 none
 requested
 approved
@@ -136,7 +149,7 @@ Observing an approval request does not grant permission to resolve it.
 
 Initial v1 values:
 
-```
+```text
 no_claim
 claimed_complete
 ```
@@ -149,7 +162,7 @@ It is not verification.
 
 Initial v1 values:
 
-```
+```text
 unverified
 verified
 failed
@@ -169,22 +182,27 @@ The control plane must never silently equate:
 - process alive with task healthy;
 - process exit with task success;
 - provider completion with task verification;
+- provider terminal status with successful turn completion when a provider failure was observed;
 - agent "done" prose with verified completion;
 - interrupt request with observed interruption;
 - prompt queued with prompt delivered;
 - prompt delivered with provider acknowledged;
 - output quietness with provider completion;
+- resume requested with resume established;
+- a replacement session with continuous history;
+- a provider thread id asserted by Conduit with provider-confirmed continuity;
+- a stopped structured adapter with a detachable/recoverable runtime;
 - retrieved context with verified evidence;
 - UI selection with runtime ownership;
 - MCP tool publication with authorization.
 
-Where evidence is insufficient, the state should remain explicit or ambiguous rather than being inferred upward.
+Where evidence is insufficient, the state remains explicit, ambiguous, or unknown rather than being inferred upward.
 
 ---
 
-# 4. Identity model
+# 4. Identity and continuity model
 
-The following identifiers are distinct.
+The following identifiers and continuity observations are distinct.
 
 ## 4.1 task_id
 
@@ -205,7 +223,7 @@ A new runtime attempt must not overwrite the historical identity of an earlier a
 
 ## 4.3 turn_id
 
-Identity for one admitted prompt/instruction interaction.
+Identity for one admitted prompt/instruction interaction where the backend exposes a meaningful turn.
 
 Required for:
 
@@ -215,25 +233,53 @@ Required for:
 - approval association;
 - interrupt association.
 
+PTY backends do not gain false structured-turn semantics merely to satisfy this model.
+
 ## 4.4 provider_thread_id
 
 Native provider thread/session identity where available.
 
-The control plane must also record the source of the identity:
+The control plane must record the source/authority of the identity and must not infer continuity from string equality alone.
 
-- live;
-- persisted;
-- unavailable.
+## 4.5 provider thread provenance
 
-## 4.5 approval_id
+A structured session start has one of four v1 provenance states:
+
+```text
+fresh
+resumed
+restarted
+unverified
+```
+
+Meaning:
+
+- `fresh`: no resume was requested; the session is new;
+- `resumed`: the provider accepted the requested id and continuity is established at the provider-session boundary;
+- `restarted`: a resume was requested, the provider refused it, and Conduit is now driving a replacement session without the requested history;
+- `unverified`: Conduit presented the session as a resume but the client did not confirm that with the provider, so continuity is unknown.
+
+Only `resumed` claims history continuity.
+
+`history_is_continuous` is therefore three-valued:
+
+- true for `resumed`;
+- false for `fresh` and `restarted`;
+- unknown for `unverified`.
+
+When a replacement displaces a previous provider thread id, the prior id must remain recoverable as a bounded recovery hint rather than being overwritten by the replacement id.
+
+Provider-thread provenance is observation. It is not work verification and it does not by itself make a closed task recoverable.
+
+## 4.6 approval_id
 
 Identity for one approval request.
 
-## 4.6 event_id
+## 4.7 event_id
 
 Stable identity for a durable supervisory event.
 
-## 4.7 principal_id
+## 4.8 principal_id
 
 Identity for the authenticated caller/capability principal.
 
@@ -245,7 +291,7 @@ Self-declared client metadata may be retained as descriptive provenance but must
 
 The internal command surface is semantic and independent of MCP tool count or hosted-client entitlement.
 
-Initial v1 command families:
+Initial v1 command families follow.
 
 ## CreateTask
 
@@ -253,7 +299,7 @@ Inputs should include, at minimum:
 
 - project/scope identity;
 - agent/profile identity;
-- objective or explicit absence of objective according to the selected delivery contract;
+- optional objective;
 - origin/principal;
 - optional idempotency key;
 - optional lineage metadata where supported.
@@ -264,7 +310,31 @@ Outputs should distinguish:
 - created task id;
 - runtime attempt id when provisioned;
 - initial-objective state;
+- whether the caller must resend;
 - admission refusal reason.
+
+### Durable create intent is the v1 delivery contract
+
+When `CreateTask(objective)` is accepted, Conduit owns exactly-once eventual initial delivery of that objective unless a terminal delivery failure is recorded.
+
+The caller must be able to branch on at least:
+
+```text
+not_attempted
+queued
+delivered
+failed
+```
+
+`queued` means Conduit owns delivery. The caller must not resend merely because delivery has not completed at response serialization time.
+
+`failed` means Conduit no longer owns eventual delivery and the response must explain whether caller retry/resend is appropriate.
+
+A duplicate idempotent create must not duplicate objective delivery.
+
+A held objective is a promise. It must reach a durable outcome such as delivered, refused/failed, or abandoned if the runtime disappears or never becomes ready. A held prompt must not remain queued forever after its owning runtime has been dropped.
+
+This decision supersedes the original Candidate A/Candidate B uncertainty in the first draft of this contract. It is evidence-backed by the merged write-enabled PTY and structured-provider behavior and the cross-backend orchestration exercises.
 
 ## StartTurn / SendPrompt
 
@@ -283,11 +353,15 @@ Outputs must distinguish:
 - refused;
 - terminal delivery failure.
 
+A structured runtime that is not yet ready may hold an accepted prompt under the same single-owner rule as initial-objective delivery.
+
 ## ReconcileTask
 
 Reconciles durable task state against current provider/runtime observations.
 
-Reconciliation must not fabricate work verification.
+Reconciliation must not fabricate work verification or provider-history continuity.
+
+A closed/stopped structured task is not presumed recoverable merely because a provider thread id was persisted.
 
 ## RequestInterrupt
 
@@ -299,7 +373,9 @@ Observed provider cancellation/interruption is a separate event.
 
 ## CloseTask
 
-Closes Conduit's task lifecycle according to explicit policy.
+Closes/leaves Conduit's live runtime according to explicit backend semantics.
+
+The result must expose whether the operation detached a recoverable runtime or stopped the structured adapter.
 
 A close does not assert successful work.
 
@@ -323,7 +399,7 @@ Context attachment is not evidence verification.
 
 # 6. Internal query contract
 
-Initial v1 query families:
+Initial v1 query families follow.
 
 ## ListTasks
 
@@ -338,13 +414,17 @@ Returns current projections for:
 - turn;
 - approval;
 - agent claim;
-- verification.
+- verification;
+- provider-thread provenance where applicable;
+- close/recoverability semantics where applicable.
 
 These axes must remain separately labelled.
 
 ## ListAdapters
 
 Returns declared and observed adapter capabilities separately where possible.
+
+At minimum the query surface should make capability differences discoverable before a caller starts work. In particular, a PTY does not provide a terminal structured turn state.
 
 ## GetTaskEventsSince
 
@@ -361,6 +441,7 @@ The global stream should include only bounded supervisory information such as:
 - turn queued/delivered/active/completed/cancelled/failed;
 - approval requested/resolved;
 - interrupt requested/observed;
+- provider-thread continuity/restart observations when material;
 - task reconciled/closed.
 
 It must not export:
@@ -380,46 +461,45 @@ Returns control-plane health/availability without conflating provider account st
 
 ---
 
-# 7. Initial-objective delivery decision
+# 7. Evidence-backed initial-objective decision
 
-The current implementation may create a task while returning `objective_delivered: false` when the runtime is not yet ready.
+The original contract deferred between:
 
-That behavior is not accepted as the target control-plane contract.
+- Candidate A: durable create intent;
+- Candidate B: strict two-phase start.
 
-The programme must choose one of two explicit semantics.
+That uncertainty is now resolved for v1.
 
-## Candidate A: durable create intent
+## Decision: Candidate A
 
-Preferred candidate pending local evidence.
+`CreateTask(objective)` durably records the objective as accepted task intent and Conduit owns exactly-once eventual initial delivery after runtime readiness, unless a terminal failure is recorded.
 
-`CreateTask(objective)` durably records the objective as part of the accepted task intent.
+This does not mean the response must lie about timing. A response may report `queued` while delivery is still pending.
 
-Conduit then owns exactly-once eventual initial delivery once the selected runtime is ready, unless a terminal failure occurs.
+Required observable stages are conceptually:
 
-Required observable stages:
-
-```
+```text
 task_created
 objective_queued
 objective_delivery_attempted
-objective_delivered | objective_delivery_failed
+objective_delivered | objective_delivery_failed | objective_abandoned
 ```
 
-A duplicate idempotent create must not duplicate objective delivery.
+The exact event vocabulary may evolve, but the ownership distinction may not.
 
-## Candidate B: strict two-phase start
+## Evidence basis
 
-`CreateTask` creates/adopts only the task/runtime.
+The decision is supported within the current implementation by:
 
-A separate `StartTurn` command carries the first instruction.
+- the duplicate-objective failure and repair in PR #10;
+- the write-enabled canary in PR #11;
+- repeated installed-app verification in PR #12;
+- the hold-until-ready implementation and live orchestration evidence in PR #16;
+- cross-backend Codex/OpenCode/Shell orchestration in PR #19;
+- the held-prompt abandonment repair in PR #20;
+- post-merge receipts on `main`, including `8b72bf79ae791d9fedbe2f1bff112a0d975c52ba`, `48365450b095e3de3a472756e03c8f2ed6f55d10`, and `34555ccd6cd2af6fa763bd730198636e47a0e1e4`.
 
-This avoids implicit eventual delivery but requires the caller to perform two explicit operations.
-
-## Freeze rule
-
-Do not choose between A and B solely from preference.
-
-Use the local L3.3 and L10.4 evidence from the local acceptance plan to document current behavior and failure modes before final acceptance.
+This evidence establishes the bounded v1 ownership rule. It does not establish that every future provider or transport will honor it without adapter-specific conformance testing.
 
 ---
 
@@ -435,7 +515,7 @@ Each durable supervisory event should carry, where applicable:
 - task id;
 - runtime attempt id;
 - turn id;
-- provider thread id/source;
+- provider thread id/source/provenance;
 - approval id;
 - principal/origin;
 - event kind;
@@ -450,7 +530,9 @@ Examples:
 
 - `interrupt_requested`, not `interrupted`, when only the local request was issued;
 - `provider_turn_completed`, not `task_verified`;
-- `runtime_exited`, not `task_succeeded`.
+- `provider_turn_failed`, not a completed turn merely because the raw provider status is terminal;
+- `runtime_exited`, not `task_succeeded`;
+- `thread_restarted`, not `thread_resumed`, when the provider refused the requested thread.
 
 ---
 
@@ -487,7 +569,7 @@ The MCP facade may expose:
 - one tool per semantic action;
 - a smaller command-envelope surface;
 - a read-only subset;
-- a future write-capable subset.
+- a write-capable subset when the connected product legitimately supports it.
 
 The choice must preserve:
 
@@ -495,12 +577,15 @@ The choice must preserve:
 - confirmation clarity;
 - structured refusal;
 - idempotency;
+- delivery ownership;
 - authority labels;
 - evidence quality.
 
 Do not change the internal command model merely to satisfy a temporary hosted-tool count or plan entitlement.
 
 Do not disguise mutation as a read operation.
+
+Hosted MCP availability and entitlement are deployment observations. A tunnel failure before Conduit answers is not evidence about Conduit command semantics.
 
 ---
 
@@ -525,6 +610,8 @@ The UI should not remain the only process or object capable of:
 - recording supervisory events.
 
 A GUI restart must eventually be survivable without silently minting a new task/runtime.
+
+Current evidence does not establish that goal for structured providers. Process hosting remains undecided.
 
 ---
 
@@ -558,7 +645,7 @@ It does not mean the material is correct or sufficient.
 
 # 13. Lineage contract
 
-Before any agent-to-agent delegation, add minimal lineage fields:
+Before any agent-to-agent delegation feature is accepted, add minimal lineage fields:
 
 - parent_task_id;
 - delegated_by;
@@ -567,7 +654,7 @@ Before any agent-to-agent delegation, add minimal lineage fields:
 - verification_of;
 - runtime_attempt_id.
 
-This is not authorization for a general DAG engine.
+The existing cross-backend orchestration exercise demonstrates that the control plane can carry a provider-grounded value from one backend into another task. It does not by itself authorize recursive delegation or establish worker-result verification.
 
 The first future delegation mode should remain:
 
@@ -604,72 +691,106 @@ No adapter should auto-approve merely to produce smoother orchestration.
 
 # 15. Recovery contract
 
-The control plane must eventually define explicit behavior for:
+The control plane must define or explicitly leave unknown behavior for:
 
 - GUI restart;
 - control-plane host restart;
 - provider process exit;
 - provider transport disconnect;
 - tmux detach/orphan;
-- stale provider thread id;
+- stale/refused provider thread id;
+- replacement provider session;
 - pending approval at restart;
 - interrupt request followed by disconnect;
 - duplicate create retry;
-- incomplete prompt delivery;
-- partial/corrupt local event log.
+- incomplete/held prompt delivery;
+- runtime removal while a prompt is held;
+- partial/corrupt local event or thread store.
 
-Recovery may yield `ambiguous`, `failed`, or `inconclusive`.
+Recovery may yield `ambiguous`, `failed`, `restarted`, `unverified`, or `inconclusive` where those are the narrowest supported descriptions.
 
-It must not invent a successful state.
+It must not invent a successful state or continuous provider history.
 
----
+### Persisted provider-thread records
 
-# 16. Phase A acceptance conditions
+A provider-thread store must remain backward-readable when its schema grows. A decode failure of one migrated record must not silently turn the entire store into an empty map that is then overwritten by the next save.
 
-This contract can be considered accepted for Phase A when:
-
-1. issue #3 machine-bound results needed to constrain the contract are linked;
-2. current initial-objective behavior is observed and recorded;
-3. task/runtime/turn/approval/verification separation is accepted;
-4. command/query/event families are accepted;
-5. capability classes are accepted;
-6. MCP is explicitly treated as an adapter rather than the internal semantic authority;
-7. no hosting mechanism is prematurely selected;
-8. explicit unknowns remain listed.
-
-Acceptance of this contract does not claim UI-independent runtime ownership is implemented.
+Prior thread ids displaced by a replacement session may be retained in a small content-free bounded list for recovery. That list is a recovery hint, not an audit log.
 
 ---
 
-# 17. Known unknowns before Phase B
+# 16. Phase A acceptance disposition
 
-The following remain intentionally unresolved until local evidence exists:
+The current evidence satisfies the substantive Phase A acceptance conditions defined by the original draft:
 
-- exact failure modes of current initial-objective delivery;
-- provider-specific resume reliability;
+1. machine-bound results needed to constrain the contract exist and are linked through issue #3 / PR #7 and successor PRs;
+2. initial-objective behavior has been observed across PTY and structured providers and Candidate A is now selected;
+3. task/runtime/turn/approval/verification separation remains accepted and has caught real false-equivalence defects;
+4. command/query/event families remain the intended semantic boundary;
+5. capability classes remain separate;
+6. MCP remains an adapter rather than internal semantic authority;
+7. no final hosting mechanism has been selected;
+8. material unknowns remain explicit below.
+
+Therefore this PR is now a **Phase A acceptance candidate**, rather than a speculative contract draft.
+
+Merging this PR accepts the v1 semantic contract only. It does not claim UI-independent runtime ownership is implemented, provider recovery is complete, or Conduit is production-ready.
+
+---
+
+# 17. Known unknowns before deeper Phase B work
+
+The following remain intentionally unresolved:
+
+- **OBS-1:** PTY control-plane output observation was blind in 2 of 5 original runs while tmux proved the work ran. Targeted later probes have not reproduced it, and the relevant mechanism was not changed. Root cause remains unknown.
+- provider-specific resume reliability after a structured adapter has been stopped;
+- `unverified` resume continuity for clients that cannot check the provider at startup;
 - provider-specific observed interrupt/cancel semantics;
 - approval recovery after GUI restart;
-- whether current runtime ownership can be extracted in-process without large AppModel surgery;
-- whether a helper/XPC/launch-agent host is ultimately required;
-- actual hosted MCP capabilities of the user's connected ChatGPT surface at execution time;
-- control-plane restart semantics for active non-tmux structured providers.
+- exact structured-provider survival/recovery across GUI termination;
+- whether current runtime ownership can be extracted in-process far enough to make the GUI a true client without a separate host;
+- whether a helper/XPC/launch-agent/daemon host is ultimately required;
+- actual hosted MCP capability and liveness at execution time;
+- control-plane restart semantics for active non-tmux structured providers;
+- whether the global supervisory cursor is needed before or after hosting extraction;
+- how independent work verification should attach to task/turn lineage without collapsing agent claims into verification.
 
-These unknowns are inputs to the next design step, not blanks to fill with assumptions.
+These are inputs to the next design step, not blanks to fill with assumptions.
 
 ---
 
 # 18. Phase B implementation constraint
 
-The first implementation PR after contract acceptance should be an **in-process boundary extraction**, not a daemon rewrite.
+Phase B remains an **in-process boundary extraction first**, not a daemon rewrite.
 
-It should:
+Small pieces of that extraction have already begun on `main`, including testable Core policy for create-task preconditions, prompt-hold semantics, close semantics, and provider-thread resume provenance.
 
-- introduce testable control-plane protocols/types in ConduitCore where practical;
-- preserve current product behavior;
-- route AppModel lifecycle operations through the new boundary;
-- add contract-level tests;
+The next implementation slices should:
+
+- continue moving durable lifecycle/control-plane policy into AppKit-independent ConduitCore types/protocols where practical;
+- preserve current product behavior unless a separately evidenced defect requires change;
+- route AppModel lifecycle operations through the extracted boundary rather than duplicating policy;
+- add contract-level tests for each extracted semantic distinction;
+- retain installed-app/provider-native canaries for boundaries the deterministic suite cannot reach;
 - avoid selecting final process hosting;
-- avoid adding delegation;
+- avoid recursive delegation;
 - avoid broad UI redesign.
 
-Only after that boundary exists should the GUI-termination/restart experiment determine the next runtime-hosting change.
+Only after enough ownership is behind that boundary should the GUI-termination/restart experiment determine whether a separate runtime host is actually required.
+
+---
+
+# 19. Evidence discipline for successor work
+
+Future changes to this contract should preserve the distinction between:
+
+- deterministic Core tests;
+- installed-app canary evidence;
+- provider-native ground truth;
+- hosted MCP/tunnel observations;
+- inference about architecture;
+- untested capability.
+
+A green Core suite does not establish installed runtime behavior. A provider's terminal status does not establish task success. A provider-grounded answer proves that the provider emitted that answer, not that the answer is correct. A clean run after an intermittent failure narrows the observed rate; it does not erase the failure.
+
+When those boundaries matter, preserve the exact failure and the exact object under test.
