@@ -50,6 +50,13 @@ that switch is never flipped for you.
 args work, so `./scripts/test.sh --filter MCPAdmissionTests` narrows the XCTest
 run.
 
+`scripts/probe-provider-resume.py` checks a premise neither suite can reach:
+D-047 reports a refused resume as `restarted`, which is only correct while
+providers actually refuse an id they no longer own. The probe asks them
+directly, outside Conduit — read-only, no task, no write gate. Re-run it when a
+provider updates; if one starts answering an unknown id with a session, the
+client would report continuity it does not have.
+
 Background, so this is not misdiagnosed again: `swift test` needs XCTest, which
 ships inside Xcode.app and **not** with the Command Line Tools. If
 `xcode-select -p` points at `/Library/Developer/CommandLineTools`, a bare
