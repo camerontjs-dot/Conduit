@@ -5,6 +5,13 @@ import Foundation
 /// Dispatch and runtime writes remain app-target responsibilities. Keeping the
 /// catalog here makes the caller-facing contract testable without AppKit.
 public enum ConduitSessionToolCatalog {
+    /// Human-visible revision embedded in every published tool description.
+    ///
+    /// Hosted MCP clients can snapshot tool metadata. Bump this whenever the
+    /// caller-facing catalog contract changes so an operator can distinguish a
+    /// stale hosted snapshot from the currently installed Conduit catalog.
+    public static let catalogRevision = "2026-09-06.1"
+
     /// The published catalog is deliberately independent of local write
     /// authorization. Some MCP clients snapshot tools/list and otherwise never
     /// discover a lifecycle action after the operator enables it. The server
@@ -27,6 +34,10 @@ public enum ConduitSessionToolCatalog {
 
     private static func names(in tools: [[String: Any]]) -> [String] {
         tools.compactMap { $0["name"] as? String }
+    }
+
+    private static var catalogRevisionMarker: String {
+        "[Conduit MCP catalog \(catalogRevision)]"
     }
 
     private static let localReadOnlyAnnotations: [String: Any] = [
@@ -279,7 +290,7 @@ public enum ConduitSessionToolCatalog {
         if !required.isEmpty { inputSchema["required"] = required }
         var result: [String: Any] = [
             "name": name,
-            "description": description,
+            "description": "\(description) \(catalogRevisionMarker)",
             "annotations": annotations,
             "inputSchema": inputSchema,
         ]
