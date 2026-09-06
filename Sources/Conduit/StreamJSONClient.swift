@@ -40,6 +40,15 @@ final class StreamJSONClient: ObservableObject {
     @Published private(set) var turnFailure: String?
     var pendingApprovalSummary: String? { nil }
 
+    /// Where the session this client is driving came from.
+    ///
+    /// Unlike the other three clients this one contacts no provider at start:
+    /// it asserts the resume id and reports ready, so at handshake continuity
+    /// is genuinely `unverified` rather than true or false. The provider
+    /// settles it later -- the first session id in the stream either confirms
+    /// the resume or names the replacement -- and `emit` upgrades this then.
+    private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
+
     var onEffect: ((StructuredAdapterEffect) -> Void)?
     /// Fired once the host can accept a turn.
     ///
@@ -75,6 +84,11 @@ final class StreamJSONClient: ObservableObject {
         if let resumeSessionID, !resumeSessionID.isEmpty {
             sessionID = resumeSessionID
             mapper.sessionID = resumeSessionID
+            resumeProvenance = SessionResumeSemantics.classify(
+                requested: resumeSessionID,
+                started: resumeSessionID,
+                attempt: .unchecked
+            )
             emit(.sessionStarted(id: resumeSessionID))
         }
         isReady = true
@@ -194,9 +208,26 @@ final class StreamJSONClient: ObservableObject {
         }
     }
 
+    /// Settles an `unverified` resume the moment the provider names a session.
+    ///
+    /// This client cannot check at start, but the stream answers eventually: a
+    /// matching id confirms the resume, and a different one means the provider
+    /// quietly gave us a new session instead. Only an unverified resume is
+    /// upgraded -- a provenance the handshake already established is not
+    /// rewritten by later session ids in the same run.
+    private func resolveProvenance(againstProviderSession id: String) {
+        guard case .unverified(let asserted)? = resumeProvenance else { return }
+        resumeProvenance = SessionResumeSemantics.classify(
+            requested: asserted,
+            started: id,
+            attempt: asserted == id ? .accepted : .refused
+        )
+    }
+
     private func emit(_ effect: StructuredAdapterEffect) {
         switch effect {
         case .sessionStarted(let id):
+            resolveProvenance(againstProviderSession: id)
             sessionID = id
         case .upsertOutput:
             isTurnActive = true

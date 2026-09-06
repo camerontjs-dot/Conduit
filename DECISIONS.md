@@ -1448,3 +1448,54 @@ access or relax the bounded project-relative path policy.
 normal OpenCode worker service for planning; parsing arbitrary model prose into
 a task; using a hidden task queue; treating a plan as verification; or falling
 back to a cloud model when a local planner is unavailable.
+
+## D-047: A replaced session is reported as replaced, and never overwrites the way back
+
+**Context.** Every structured client accepts a resume id and every one of them
+substitutes a new session when that id does not take. `CodexAppServerClient` and
+`GrokACPClient` catch the failed `thread/resume` / `session/load` and start a
+fresh one; `OpenCodeHTTPClient` creates a session when its existence check
+misses; `StreamJSONClient` contacts no provider at start at all — it asserts the
+id, emits `sessionStarted`, and reports ready, so it cannot fail loudly. In each
+case the adapter then reports a healthy, ready session and nothing downstream can
+tell that the history the caller asked for is absent.
+
+That is the D-042 / OBS-2 shape — a clean green result over an empty one — with a
+second failure on top of it. `AdapterThreadStore` is keyed by task, so the
+replacement's id was written over the only pointer to the real thread. The failed
+recovery destroyed the route back, and a second attempt could not even try the
+right thread.
+
+**Decision.** Substituting a session stays: it is the right recovery when a
+provider refuses a resume. Reporting it as the resume the caller asked for does
+not.
+
+- `SessionResumeSemantics` names the four outcomes a client can produce —
+  `fresh`, `resumed`, `restarted`, `unverified` — and each client states which
+  one it produced. Only `resumed` claims the caller's history carried over.
+  `unverified` exists so a client that never checked says so instead of guessing
+  in either direction; `historyIsContinuous` is three-valued for the same reason.
+- `conduit_session_status` carries `thread_provenance`, its authority line, and
+  `superseded_thread_id`. This is the same promise `close_outcome` makes in the
+  other direction: the caller learns what a session actually is while it can
+  still act on it, rather than after trusting it.
+- `AdapterThreadStore.save` carries a displaced thread id into
+  `supersededThreadIDs` instead of overwriting it. The carry-forward is
+  unconditional rather than opt-in, because the write sites cannot all tell a
+  resume from a replacement and the cost of guessing wrong in the losing
+  direction is an unrecoverable task.
+
+**Boundary.** Provenance is observation, not verification, and it does not make a
+closed task resumable: `reconcileTask` still refuses a task that is not in a
+retryable provisioning state. Whether a provider honours a resume after its
+adapter was stopped remains untested and unclaimed. `supersededThreadIDs` stays
+content-free — thread ids only, bounded — and is a recovery hint, not an audit
+trail.
+
+**Rejected alternatives:** Failing the handshake when a resume is refused, which
+would turn a recoverable task into a dead one; inferring provenance by comparing
+ids after the fact, which cannot distinguish a provider that reissues the same id
+from one that never checked; recording provenance only in the log, which leaves
+the orchestrator that must decide with nothing to branch on; and refusing the
+store write outright, which would leave the pointer naming a thread the runtime
+is not driving.

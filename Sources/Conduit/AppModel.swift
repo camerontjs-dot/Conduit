@@ -4022,6 +4022,32 @@ final class AppModel: ObservableObject {
                 usesStructuredHost: live.usesStructuredHost
             ).rawValue
         }
+        // Every structured client replaces a refused resume with a new, empty
+        // session and then reports a healthy ready one. Saying which it is
+        // turns a clean green result over lost history into something the
+        // caller can branch on -- the same promise close_outcome makes about
+        // the other direction.
+        if let provenance = live?.structuredResumeProvenance {
+            payload["thread_provenance"] = provenance.wireValue
+            payload["thread_provenance_authority"] =
+                SessionResumeSemantics.authority(for: provenance)
+            if let continuous = provenance.historyIsContinuous {
+                payload["history_is_continuous"] = continuous
+            }
+            if let superseded = provenance.supersededID {
+                payload["superseded_thread_id"] = superseded
+            }
+        }
+        // Durable counterpart: the live provenance goes with the runtime, but
+        // a thread this task displaced stays readable after it is gone.
+        if let profile, profile.preferredSessionBackend.isStructured {
+            let history = AdapterThreadStore(
+                directory: AdapterThreadStore.defaultDirectory()
+            ).supersededThreadIDs(for: task.id)
+            if !history.isEmpty {
+                payload["superseded_thread_ids"] = history
+            }
+        }
         if let recoveryAction {
             payload["recovery_action"] = recoveryAction
         }
@@ -4608,6 +4634,18 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             ?? grokACP?.lastTurnStatus
             ?? openCode?.lastTurnStatus
             ?? streamJSON?.lastTurnStatus
+    }
+    /// Whether the live structured session is the one the caller asked to
+    /// resume, a replacement started after the provider refused, or unknown.
+    ///
+    /// Every client substitutes a fresh session when a resume does not take.
+    /// The substitution is the right recovery and the wrong thing to report as
+    /// success, so it is carried out to the caller instead of being swallowed.
+    var structuredResumeProvenance: SessionResumeSemantics.Provenance? {
+        appServer?.resumeProvenance
+            ?? grokACP?.resumeProvenance
+            ?? openCode?.resumeProvenance
+            ?? streamJSON?.resumeProvenance
     }
     /// The provider's own failure signal for the live structured host.
     ///

@@ -27,6 +27,36 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- A structured session that was **restarted** after a refused resume is no
+  longer reported as one that was **resumed**. Every structured client accepts a
+  resume id and every one of them substitutes a new session when it does not
+  take: Codex and Grok/Gemini catch the failed `thread/resume` / `session/load`
+  and start a fresh one, OpenCode creates a session when its existence check
+  misses, and the Claude/Antigravity `stream-json` client contacts no provider at
+  start at all. The adapter then reported a healthy ready session, so a task
+  could come back with its entire history missing and look identical to one that
+  recovered. `conduit_session_status` now carries `thread_provenance`
+  (`fresh` / `resumed` / `restarted` / `unverified`) with an authority line, and
+  names the displaced thread in `superseded_thread_id`. Only `resumed` claims
+  continuity; a client that never checked reports `unverified` rather than
+  guessing.
+- A failed recovery no longer destroys the route back to the real thread.
+  `AdapterThreadStore` is keyed by task, so the replacement session's id was
+  written over the stored one and a second resume attempt could not even try the
+  right thread. Displaced ids are kept in `supersededThreadIDs` (bounded, ids
+  only) and surface as `superseded_thread_ids`. Records written before this field
+  existed still decode: the store loads the whole map with `try?`, so a required
+  field would have returned an empty store and dropped every existing pointer on
+  the next save.
+
+### Changed
+
+- `conduit_list_adapters` now states what `structured: false` costs an
+  orchestrator: a PTY agent has no turn protocol, so its `turn.state` never
+  becomes `completed` and polling one for completion waits forever. The honesty
+  existed in the turn snapshot already, but it only arrived after a caller had
+  created the task and begun polling — too late to pick a different agent.
+
 - Concurrent OpenCode tasks no longer leak an `opencode serve` process each.
   `OpenCodeServeLease.acquire` is `@MainActor`, but that serialises statements
   and not `await`s: it checked the shared record, awaited a health probe,
