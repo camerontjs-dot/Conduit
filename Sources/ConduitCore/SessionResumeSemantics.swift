@@ -73,11 +73,14 @@ public enum SessionResumeSemantics {
             return requested
         }
 
-        /// Whether the caller's history carried over.
+        /// Whether this session contains an earlier session's history.
         ///
-        /// Three-valued on purpose. `nil` means unknown, and an orchestrator
-        /// must treat unknown as "verify against the provider's own store",
-        /// never as yes.
+        /// Phrased about the session rather than about the request, so it
+        /// answers all four cases: `fresh` is false because the session is new,
+        /// `restarted` is false because the history was lost, and only
+        /// `thread_provenance` distinguishes those two. Three-valued on
+        /// purpose -- `nil` means unknown, and an orchestrator must treat
+        /// unknown as "verify against the provider's own store", never as yes.
         public var historyIsContinuous: Bool? {
             switch self {
             case .resumed: return true
