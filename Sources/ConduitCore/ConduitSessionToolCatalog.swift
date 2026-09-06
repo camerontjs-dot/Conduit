@@ -69,7 +69,7 @@ public enum ConduitSessionToolCatalog {
                 "properties": [
                     "state": [
                         "type": "string",
-                        "enum": ["idle", "active", "completed", "awaiting_input", "ambiguous"],
+                        "enum": ["idle", "active", "completed", "failed", "awaiting_input", "ambiguous"],
                     ],
                     "status": ["type": "string"],
                     "honesty": ["type": "string"],
@@ -99,7 +99,8 @@ public enum ConduitSessionToolCatalog {
                         "type": "string",
                         "enum": [
                             "structured_active", "structured_approval",
-                            "structured_completed", "structured_idle", "output_live",
+                            "structured_completed", "structured_failed",
+                            "structured_idle", "output_live",
                             "output_quiet", "output_unobserved", "capture_closed",
                         ],
                     ],
@@ -174,12 +175,12 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_list_adapters",
-            "List enabled agent profiles and their preferred session backend. Use name as the agent argument to conduit_create_task. This is a declared launch surface, not a live health check.",
+            "List enabled agent profiles and their preferred session backend. Use name as the agent argument to conduit_create_task. This is a declared launch surface, not a live health check. structured false means a PTY agent: it has no turn protocol, so its turn.state NEVER becomes completed and polling one for completion waits forever. Orchestrate through a structured profile, or confirm PTY work from the pane yourself.",
             annotations: localReadOnlyAnnotations
         ),
         tool(
             "conduit_session_status",
-            "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. Status is observation, never verification of what an agent did.",
+            "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. close_outcome says whether conduit_close_session would be reversible for this task. prompts_held_pending_ready counts objectives Conduit accepted before the runtime was ready and still owes delivery on. thread_provenance says where the live structured session came from: resumed means the provider honoured the earlier thread, restarted means it refused and this is a NEW EMPTY session whose displaced id is superseded_thread_id, unverified means continuity was never confirmed, fresh means nobody asked to resume. Treat restarted and unverified as history you do not have. Status is observation, never verification of what an agent did.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or a conduit_list_sessions row. Poll after creating a task: ready turns true when the runtime will accept a prompt."),
@@ -188,7 +189,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_session_events",
-            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification.",
+            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Durable Conduit task UUID."),
@@ -217,12 +218,12 @@ public enum ConduitSessionToolCatalog {
     private static let writeTools: [[String: Any]] = [
         tool(
             "conduit_create_task",
-            "Start a Conduit agent session and return its taskSessionID. Objective delivery is attempted only once immediately. If objective_delivered is false, wait for ready then send it explicitly with conduit_send_prompt. The model remains the operator-configured profile choice; this tool has no model override. Approvals stay on the Mac. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Start a Conduit agent session and return its taskSessionID. Read objective_delivery_state, not objective_delivered, to decide what to do next: delivered means it reached the runtime; queued means Conduit owns delivery and will complete it without another call, so resending would run the objective twice; failed means the runtime refused it and objective_resend_required is true, so wait for ready then send it with conduit_send_prompt. The model remains the operator-configured profile choice; this tool has no model override. Approvals stay on the Mac. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: stateChangingAnnotations,
             properties: [
                 "agent": property("string", "Enabled profile name or command from conduit_list_adapters. An unlisted or disabled profile is refused."),
                 "project_slug": property("string", "Existing project slug from conduit_list_projects; it sets the session working directory."),
-                "objective": property("string", "Optional first prompt. If the runtime is not ready, no later automatic delivery occurs."),
+                "objective": property("string", "Optional first prompt. A structured runtime is normally still starting when this returns; Conduit holds the objective and delivers it when the runtime reports ready, which is what objective_delivery_state queued means. Do not resend a queued objective."),
                 "idempotency_key": property("string", "Optional stable key for a safe repeated create. An identical repeat returns the original task."),
             ],
             required: ["agent", "project_slug"]
@@ -233,7 +234,7 @@ public enum ConduitSessionToolCatalog {
             annotations: nonDestructiveStateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or conduit_list_sessions."),
-                "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it."),
+                "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it. If the runtime is still starting, Conduit holds this prompt and delivers it on ready rather than refusing it."),
             ],
             required: ["taskSessionID", "text"]
         ),
@@ -257,7 +258,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_close_session",
-            "Leave the live runtime (detach durable tmux or stop a structured adapter). This does not delete task history. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Leave the live runtime. This does not delete task history, but it is not symmetric across backends. Read close_outcome: detached means a durable tmux runtime was left running and conduit_reconcile_task can adopt it again; stopped means a structured adapter was ended and the task is NOT recoverable — reconcile cannot reconnect it. conduit_session_status reports the same close_outcome for a live task BEFORE you close it, so check there first if the decision needs to be reversible. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: stateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id to leave. Explicit close frees one live-task slot."),

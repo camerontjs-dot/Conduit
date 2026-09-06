@@ -30,9 +30,31 @@ final class StreamJSONClient: ObservableObject {
     @Published private(set) var isTurnActive = false
     @Published private(set) var lastTurnStatus: String?
     @Published private(set) var lastError: String?
+    /// Set only when a failure ends a turn that was still running.
+    ///
+    /// A `.failed` effect that arrives after the turn already completed does
+    /// not un-complete it: interrupting a finished turn makes the provider
+    /// report an error, and treating that as a turn failure erases a real
+    /// observed completion. `lastError` keeps every error for display; this
+    /// field carries only the ones that are the turn's outcome.
+    @Published private(set) var turnFailure: String?
     var pendingApprovalSummary: String? { nil }
 
+    /// Where the session this client is driving came from.
+    ///
+    /// Unlike the other three clients this one contacts no provider at start:
+    /// it asserts the resume id and reports ready, so at handshake continuity
+    /// is genuinely `unverified` rather than true or false. The provider
+    /// settles it later -- the first session id in the stream either confirms
+    /// the resume or names the replacement -- and `emit` upgrades this then.
+    private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
+
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    /// Fired once the host can accept a turn.
+    ///
+    /// Conduit holds a prompt that arrives before this point rather than
+    /// refusing it, so something has to say when the wait is over.
+    var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
 
@@ -62,9 +84,15 @@ final class StreamJSONClient: ObservableObject {
         if let resumeSessionID, !resumeSessionID.isEmpty {
             sessionID = resumeSessionID
             mapper.sessionID = resumeSessionID
+            resumeProvenance = SessionResumeSemantics.classify(
+                requested: resumeSessionID,
+                started: resumeSessionID,
+                attempt: .unchecked
+            )
             emit(.sessionStarted(id: resumeSessionID))
         }
         isReady = true
+        onReady?()
     }
 
     func sendTurn(text: String) throws {
@@ -74,7 +102,12 @@ final class StreamJSONClient: ObservableObject {
         }
         mapper.resetTurn()
         isTurnActive = true
+        // A new turn must not inherit the previous turn's failure. lastError
+        // is what marks a turn failed rather than completed, so leaving it set
+        // would report every later successful turn on this task as failed.
         lastTurnStatus = nil
+        lastError = nil
+        turnFailure = nil
         try spawnTurn(executable: executable, prompt: text)
     }
 
@@ -175,9 +208,26 @@ final class StreamJSONClient: ObservableObject {
         }
     }
 
+    /// Settles an `unverified` resume the moment the provider names a session.
+    ///
+    /// This client cannot check at start, but the stream answers eventually: a
+    /// matching id confirms the resume, and a different one means the provider
+    /// quietly gave us a new session instead. Only an unverified resume is
+    /// upgraded -- a provenance the handshake already established is not
+    /// rewritten by later session ids in the same run.
+    private func resolveProvenance(againstProviderSession id: String) {
+        guard case .unverified(let asserted)? = resumeProvenance else { return }
+        resumeProvenance = SessionResumeSemantics.classify(
+            requested: asserted,
+            started: id,
+            attempt: asserted == id ? .accepted : .refused
+        )
+    }
+
     private func emit(_ effect: StructuredAdapterEffect) {
         switch effect {
         case .sessionStarted(let id):
+            resolveProvenance(againstProviderSession: id)
             sessionID = id
         case .upsertOutput:
             isTurnActive = true
@@ -188,6 +238,10 @@ final class StreamJSONClient: ObservableObject {
             lastTurnStatus = status
         case .failed(let message):
             lastError = message
+            if isTurnActive {
+                isTurnActive = false
+                turnFailure = message
+            }
             onFailed?(message)
         }
         onEffect?(effect)

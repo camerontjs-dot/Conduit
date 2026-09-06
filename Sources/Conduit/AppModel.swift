@@ -320,7 +320,40 @@ final class AppModel: ObservableObject {
     @Published private(set) var composerSendFlashToken: Int = 0
 
     @Published var statusMessage: String?
-    @Published var errorMessage: String?
+    /// Backing store for the operator-facing alert in `RootView`.
+    @Published private var operatorAlert: String?
+
+    /// Depth of the Session API call currently being served, if any.
+    private var sessionAPIServingDepth = 0
+    private var sessionAPICapturedError: String?
+
+    /// The error channel shared by the Mac UI and the Session API.
+    ///
+    /// `RootView` presents any non-nil value as a blocking `.alert`. That made
+    /// every failure inside an MCP write raise a modal on the operator's Mac —
+    /// observed with `conduit_reconcile_task` on a closed structured task,
+    /// which returned its refusal to the caller *and* left a dialog on screen
+    /// that only a human standing at the machine could dismiss. Unattended
+    /// orchestration cannot clear its own dialogs.
+    ///
+    /// While a Session API call is being served, assignments are captured for
+    /// the MCP result instead of presented. Reads return the captured value,
+    /// which is what the create/reconcile/send paths already rely on when they
+    /// scrape this property to build an error payload.
+    ///
+    /// This covers failures raised synchronously while serving the call. An
+    /// error assigned later, from an async continuation the call started, is
+    /// outside the window and still reaches the operator's alert.
+    var errorMessage: String? {
+        get { sessionAPIServingDepth > 0 ? sessionAPICapturedError : operatorAlert }
+        set {
+            if sessionAPIServingDepth > 0 {
+                sessionAPICapturedError = newValue
+            } else {
+                operatorAlert = newValue
+            }
+        }
+    }
     @Published var isDropTargeted = false
 
     @Published var showDiagnostics = false
@@ -1394,6 +1427,10 @@ final class AppModel: ObservableObject {
                 selectedTaskSessionID = nil
                 selectedProjectID = nil
                 activeSessionID = nil
+                // Same reason as removeSessionTab: these runtimes are about to
+                // become unreachable, so any promise they still owe has to be
+                // recorded as broken first.
+                for runtime in sessions { runtime.abandonHeldPrompts() }
                 sessions.removeAll()
                 lastSelectedSessionIDByProject.removeAll()
                 taskScopeProjectID = nil
@@ -2766,6 +2803,15 @@ final class AppModel: ObservableObject {
     }
 
     private func removeSessionTab(_ runtime: TerminalRuntime) {
+        // Dropping the tab drops the last strong reference to the runtime, and
+        // the hold-expiry Task holds it weakly, so anything still held here
+        // would never be resolved: the durable prompt event would stay
+        // `queued` for good and a caller that was told not to resend would
+        // wait on nothing. closeSession and endSession already resolve holds
+        // via stopStructuredAdapter, but the stale-tab sweeps and the
+        // provisioning-failure path reach this function without them, and an
+        // adapter that exits on its own never calls stop at all.
+        runtime.abandonHeldPrompts()
         if let taskSessionID = runtime.descriptor.taskSessionID {
             // Never present volatile runtime memory as retained history. This
             // read is queued behind every prior append/close revision.
@@ -3545,8 +3591,13 @@ final class AppModel: ObservableObject {
             guard let value else { return .unknown }
             return .known(value: value, observedAt: now)
         }
+        // Prompts Conduit is holding for a not-yet-ready structured host are
+        // real backlog. Counting only the PTY controller's depth would let a
+        // caller stack holds behind a slow-starting runtime while the circuit
+        // breaker read the queue as empty.
         let queued = sessions.reduce(into: UInt64(0)) { total, runtime in
             total += UInt64(max(0, runtime.controller.queuedPromptDepth))
+            total += UInt64(max(0, runtime.heldPromptCount))
         }
         return ConduitResourceSnapshot(
             availablePhysicalMemoryBytes: measured(
@@ -3628,7 +3679,34 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Serve one MCP command without letting it raise a modal on the Mac.
+    ///
+    /// A failure that the UI would have shown in an alert is returned to the
+    /// caller instead. If the command's own payload already carries an
+    /// `error`, that wording wins — it was written for this caller — and the
+    /// captured alert text is offered alongside it rather than replacing it.
     private func sessionAPIPayload(
+        _ command: ConduitSessionCommand,
+        caller: ConduitSessionCaller = .unidentified
+    ) -> [String: Any] {
+        sessionAPIServingDepth += 1
+        let captured = sessionAPICapturedError
+        sessionAPICapturedError = nil
+        var payload = sessionAPIDispatch(command, caller: caller)
+        let raised = sessionAPICapturedError
+        sessionAPICapturedError = captured
+        sessionAPIServingDepth -= 1
+        if let raised, !raised.isEmpty {
+            if payload["error"] == nil {
+                payload["error"] = raised
+            } else if (payload["error"] as? String) != raised {
+                payload["ui_error_suppressed"] = raised
+            }
+        }
+        return payload
+    }
+
+    private func sessionAPIDispatch(
         _ command: ConduitSessionCommand,
         caller: ConduitSessionCaller = .unidentified
     ) -> [String: Any] {
@@ -3930,6 +4008,46 @@ final class AppModel: ObservableObject {
         if let failure {
             payload["failure"] = failure
         }
+        // A caller told `queued` was told not to resend. Surfacing the count
+        // makes that promise observable while it is outstanding, instead of a
+        // silent gap between the create response and the delivery.
+        if let live, live.heldPromptCount > 0 {
+            payload["prompts_held_pending_ready"] = live.heldPromptCount
+        }
+        // Whether close_session is reversible is a property of the backend,
+        // and an orchestrator needs it before it decides to free a slot, not
+        // in the response that tells it the decision was final.
+        if let live {
+            payload["close_outcome"] = SessionCloseSemantics.outcome(
+                usesStructuredHost: live.usesStructuredHost
+            ).rawValue
+        }
+        // Every structured client replaces a refused resume with a new, empty
+        // session and then reports a healthy ready one. Saying which it is
+        // turns a clean green result over lost history into something the
+        // caller can branch on -- the same promise close_outcome makes about
+        // the other direction.
+        if let provenance = live?.structuredResumeProvenance {
+            payload["thread_provenance"] = provenance.wireValue
+            payload["thread_provenance_authority"] =
+                SessionResumeSemantics.authority(for: provenance)
+            if let continuous = provenance.historyIsContinuous {
+                payload["history_is_continuous"] = continuous
+            }
+            if let superseded = provenance.supersededID {
+                payload["superseded_thread_id"] = superseded
+            }
+        }
+        // Durable counterpart: the live provenance goes with the runtime, but
+        // a thread this task displaced stays readable after it is gone.
+        if let profile, profile.preferredSessionBackend.isStructured {
+            let history = AdapterThreadStore(
+                directory: AdapterThreadStore.defaultDirectory()
+            ).supersededThreadIDs(for: task.id)
+            if !history.isEmpty {
+                payload["superseded_thread_ids"] = history
+            }
+        }
         if let recoveryAction {
             payload["recovery_action"] = recoveryAction
         }
@@ -3992,7 +4110,8 @@ final class AppModel: ObservableObject {
                 turnActive: live.structuredTurnActive,
                 lastTurnStatus: live.structuredLastTurnStatus,
                 pendingApproval: live.structuredPendingApproval,
-                pendingApprovalSummary: live.structuredPendingApprovalSummary
+                pendingApprovalSummary: live.structuredPendingApprovalSummary,
+                turnFailure: live.structuredTurnFailure
             )
         }()
         let persistedThreadID: String? = {
@@ -4039,23 +4158,31 @@ final class AppModel: ObservableObject {
         idempotencyKey: String?,
         caller: ConduitSessionCaller
     ) -> [String: Any] {
-        guard settings.enableSessionAPIWrites else {
-            return ["error": "write tools are disabled"]
+        // Gate, agent, and project are one decision, evaluated in ConduitCore
+        // so the refusal contract and its ordering are testable without AppKit
+        // (contract §18). Admission deliberately stays below: it consumes rate
+        // and capacity budget, so it must not run for a request that names no
+        // real agent or project.
+        let precondition = CreateTaskPrecondition.evaluate(
+            writesEnabled: settings.enableSessionAPIWrites,
+            requestedAgent: agentName,
+            among: enabledAgents,
+            requestedProject: projectSlug,
+            projectSlugs: projects.map(\.slug)
+        )
+        if let refusal = precondition.refusalPayload { return refusal }
+        guard case .admitted(let resolvedAgent, let resolvedSlug) = precondition,
+              let agent = enabledAgents.first(where: { $0.name == resolvedAgent }),
+              let project = projects.first(where: { $0.slug == resolvedSlug })
+        else {
+            return ["error": "unknown or disabled agent", "agent": agentName]
         }
-        guard let agent = enabledAgents.first(where: {
-            ConduitSessionAPI.matchesAgent($0, name: agentName)
-        }) else {
-            return [
-                "error": "unknown or disabled agent",
-                "agent": agentName,
-                "enabled": enabledAgents.map(\.name),
-            ]
-        }
-        guard let project = projects.first(where: {
-            $0.slug.lowercased() == projectSlug.lowercased()
-        }) else {
-            return ["error": "unknown project_slug", "project_slug": projectSlug]
-        }
+        // Hoisted: every return path below that could carry an objective has
+        // to report its fate, including the failure paths. A response that
+        // omits objective_delivery_state leaves a caller branching on it with
+        // no defined case, which is the ambiguity this field exists to remove.
+        let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+        let objectiveWasSupplied = !objective.isEmpty
 
         // Admission runs only once the request is known to name a real agent
         // and project, so a typo can never burn create-rate budget or hold a
@@ -4123,7 +4250,15 @@ final class AppModel: ObservableObject {
                 ? (failedPayload["failure"] as? String ?? errorMessage ?? "create_task failed")
                 : (errorMessage ?? "create_task failed")
             failedPayload["created"] = true
-            failedPayload["objective_delivered"] = false
+            if objectiveWasSupplied {
+                // Provisioning failed, so nothing was ever handed to a
+                // runtime. The caller owns this objective.
+                ObjectiveDeliveryReport(
+                    state: .failed,
+                    error: "task registered but provisioning failed; "
+                        + "the objective was not delivered"
+                ).apply(to: &failedPayload)
+            }
             failedPayload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
             failedPayload["authority"] = "task registered; provisioning failed"
             return failedPayload
@@ -4133,27 +4268,49 @@ final class AppModel: ObservableObject {
         admission.commitCreate(reservationID: reservationID, taskSessionID: taskID)
         reservationCommitted = true
         guard let task = taskSessions.first(where: { $0.id == taskID }) else {
-            return [
+            var reloadFailure: [String: Any] = [
                 "error": "runtime started but durable task could not be reloaded",
                 "taskSessionID": taskID.rawValue.uuidString,
                 "agent": agent.name,
                 "project": project.slug,
             ]
+            if objectiveWasSupplied {
+                // The runtime exists but the objective was never passed to it.
+                ObjectiveDeliveryReport(
+                    state: .failed,
+                    error: "durable task could not be reloaded; "
+                        + "the objective was not delivered"
+                ).apply(to: &reloadFailure)
+            }
+            return reloadFailure
         }
         var payload = sessionAPITaskPayload(for: task)
         payload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
         payload["authority"] = "session created; not verification"
-        let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return payload }
+        guard !trimmed.isEmpty else {
+            // A whitespace-only objective is discarded. Say so rather than
+            // returning a task that looks like it carries an instruction.
+            if objectiveWasSupplied {
+                ObjectiveDeliveryReport(state: .notAttempted).apply(to: &payload)
+            }
+            return payload
+        }
         let sent = sessionAPIDeliver(
             trimmed,
             to: runtime,
             origin: .chatgpt
         )
-        payload["objective_delivered"] = sent["delivered"] as? Bool ?? false
-        if let error = sent["error"] {
-            payload["objective_error"] = error
-        }
+        // sessionAPIDeliver already distinguishes a refused objective from one
+        // it accepted and will write asynchronously, but only `delivered` and
+        // `error` used to be forwarded. Dropping the queued marker made a PTY
+        // create indistinguishable from a structured refusal, so a caller
+        // following the documented recovery re-sent an objective that was
+        // already on its way and ran the work twice.
+        ObjectiveDeliveryReport.from(
+            delivered: sent["delivered"] as? Bool ?? false,
+            delivery: sent["delivery"] as? String,
+            error: sent["error"] as? String
+        ).apply(to: &payload)
         return payload
     }
 
@@ -4225,6 +4382,8 @@ final class AppModel: ObservableObject {
             observedTaskQueueDepth: UInt64(
                 max(0, sessionAPILiveRuntime(for: taskID)?
                     .controller.queuedPromptDepth ?? 0)
+                    + max(0, sessionAPILiveRuntime(for: taskID)?
+                        .heldPromptCount ?? 0)
             ),
             resources: sessionAPIResourceSnapshot()
         )
@@ -4255,14 +4414,6 @@ final class AppModel: ObservableObject {
         to runtime: TerminalRuntime,
         origin: ConduitSessionOrigin
     ) -> [String: Any] {
-        if runtime.usesStructuredHost, !runtime.structuredIsReady {
-            return [
-                "error": "agent runtime is still starting; retry conduit_send_prompt",
-                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
-                "delivered": false,
-                "ready": false,
-            ]
-        }
         _ = selectSession(runtime)
         let eventID = runtime.recordPrompt(
             origin: origin.promptOrigin,
@@ -4271,6 +4422,37 @@ final class AppModel: ObservableObject {
             renderedPayload: text
         )
         runtime.selectedSurface = .conversation
+        // A structured host that has not finished starting used to refuse the
+        // prompt outright and tell the caller to send it again. That made
+        // create_task(objective:) undeliverable on every structured backend:
+        // the runtime it had just started was necessarily still starting, so
+        // the objective always came back `failed` while the host reported
+        // ready seconds later. Conduit queues for a PTY already; it now does
+        // the same here, and `queued` means what it has always meant — Conduit
+        // owns delivery, do not resend.
+        //
+        // Readiness is read once, on this actor, with no suspension between
+        // the check and the hold, so a host cannot become ready in the gap and
+        // strand the prompt.
+        if StructuredPromptHold.disposition(
+            text: text,
+            usesStructuredHost: runtime.usesStructuredHost,
+            isReady: runtime.structuredIsReady
+        ) == .hold {
+            runtime.holdPromptUntilReady(eventID: eventID, text: text)
+            return [
+                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                "delivered": false,
+                "delivery": "queued",
+                "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
+                "origin": origin.rawValue,
+                "ready": false,
+                "authority": "prompt accepted before the runtime was ready; "
+                    + "Conduit owns delivery and will complete it when the host "
+                    + "reports ready. Do not resend. The outcome is recorded on "
+                    + "the prompt event, readable through conduit_session_events.",
+            ]
+        }
         if runtime.structuredIsReady {
             let delivered = runtime.sendStructuredPrompt(text: text)
             runtime.updatePromptDelivery(
@@ -4376,14 +4558,21 @@ final class AppModel: ObservableObject {
         guard decision.shouldExecute else {
             return sessionAPIAdmissionRefusal(decision)
         }
-        guard sessionAPILiveRuntime(for: taskID) != nil else {
+        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to close", "taskSessionID": rawID]
         }
+        // Read the backend before the close: afterwards there is no live
+        // runtime left to ask.
+        let outcome = SessionCloseSemantics.outcome(
+            usesStructuredHost: runtime.usesStructuredHost
+        )
         leaveTask(taskID)
         return [
             "taskSessionID": rawID,
             "closed": true,
-            "authority": "leave requested; not verification",
+            "close_outcome": outcome.rawValue,
+            "recoverable": !outcome.isTerminal,
+            "authority": SessionCloseSemantics.authority(for: outcome),
         ]
     }
 
@@ -4445,6 +4634,30 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             ?? grokACP?.lastTurnStatus
             ?? openCode?.lastTurnStatus
             ?? streamJSON?.lastTurnStatus
+    }
+    /// Whether the live structured session is the one the caller asked to
+    /// resume, a replacement started after the provider refused, or unknown.
+    ///
+    /// Every client substitutes a fresh session when a resume does not take.
+    /// The substitution is the right recovery and the wrong thing to report as
+    /// success, so it is carried out to the caller instead of being swallowed.
+    var structuredResumeProvenance: SessionResumeSemantics.Provenance? {
+        appServer?.resumeProvenance
+            ?? grokACP?.resumeProvenance
+            ?? openCode?.resumeProvenance
+            ?? streamJSON?.resumeProvenance
+    }
+    /// The provider's own failure signal for the live structured host.
+    ///
+    /// Observed 2026-09-04: OpenCode died with `ProviderModelNotFoundError`
+    /// and authored nothing, while the control plane reported the turn as
+    /// `structured_completed`. Every client already recorded this; nothing
+    /// carried it out.
+    var structuredTurnFailure: String? {
+        appServer?.turnFailure
+            ?? grokACP?.turnFailure
+            ?? openCode?.turnFailure
+            ?? streamJSON?.turnFailure
     }
     var structuredPendingApproval: Bool {
         pendingAppServerApproval != nil || pendingStructuredApproval != nil
@@ -4866,6 +5079,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
         }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
+        }
         appServer = client
     }
 
@@ -4896,11 +5112,139 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
     }
 
+    // MARK: - Held prompts
+
+    /// A prompt Conduit accepted on behalf of a structured host that was not
+    /// ready to take it yet.
+    private struct HeldPrompt {
+        let eventID: UUID
+        let text: String
+        let heldAt: Date
+    }
+
+    private var heldPrompts: [HeldPrompt] = []
+    private var holdExpiry: Task<Void, Never>?
+
+    /// How many prompts Conduit is currently holding for this runtime.
+    var heldPromptCount: Int { heldPrompts.count }
+
+    /// Take ownership of a prompt the structured host cannot accept yet.
+    ///
+    /// The caller is told `queued`, which in `ObjectiveDeliveryReport` means
+    /// exactly this: Conduit owns delivery and the caller must not resend. The
+    /// prompt event is recorded before the hold, so the promise is visible in
+    /// `conduit_session_events` as a queued prompt rather than as nothing at
+    /// all, and its real outcome lands on that same event.
+    func holdPromptUntilReady(eventID: UUID, text: String) {
+        heldPrompts.append(
+            HeldPrompt(eventID: eventID, text: text, heldAt: Date())
+        )
+        scheduleHoldExpiry()
+    }
+
+    /// Deliver everything Conduit promised to deliver, in arrival order.
+    ///
+    /// Order matters: an orchestrator can create a task with an objective and
+    /// send a follow-up before the host finishes starting, and the follow-up
+    /// must not overtake the objective.
+    func deliverHeldPrompts() {
+        guard !heldPrompts.isEmpty, structuredIsReady else { return }
+        let pending = heldPrompts
+        heldPrompts = []
+        holdExpiry?.cancel()
+        holdExpiry = nil
+        for prompt in pending {
+            let delivered = sendStructuredPrompt(text: prompt.text)
+            resolve(
+                prompt,
+                with: delivered
+                    ? .delivered
+                    : .refused(
+                        "\(descriptor.agent.name) refused the prompt Conduit "
+                            + "was holding for it"
+                    )
+            )
+        }
+    }
+
+    /// Break the promise out loud.
+    ///
+    /// Conduit told the caller it owned delivery. If the runtime goes away
+    /// first, the prompt is recorded as failed rather than left queued
+    /// forever, because a caller waiting on `queued` has been told not to
+    /// resend and would otherwise wait on nothing.
+    func abandonHeldPrompts() {
+        guard !heldPrompts.isEmpty else { return }
+        let pending = heldPrompts
+        heldPrompts = []
+        holdExpiry?.cancel()
+        holdExpiry = nil
+        let resolution = StructuredPromptHold.teardownResolution(
+            agentName: descriptor.agent.name
+        )
+        for prompt in pending { resolve(prompt, with: resolution) }
+    }
+
+    private func resolve(
+        _ prompt: HeldPrompt,
+        with resolution: StructuredPromptHold.Resolution
+    ) {
+        updatePromptDelivery(
+            eventID: prompt.eventID,
+            to: resolution.promptDeliveryState
+        )
+        if let reason = resolution.reason {
+            conversationCaptureNotice = reason
+        }
+    }
+
+    /// Re-arm the deadline for the oldest hold still outstanding.
+    private func scheduleHoldExpiry() {
+        holdExpiry?.cancel()
+        guard let earliest = heldPrompts.map(\.heldAt).min() else {
+            holdExpiry = nil
+            return
+        }
+        let wait = max(
+            0,
+            earliest
+                .addingTimeInterval(StructuredPromptHold.readinessGrace)
+                .timeIntervalSinceNow
+        )
+        holdExpiry = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.expireHeldPrompts()
+        }
+    }
+
+    private func expireHeldPrompts() {
+        let now = Date()
+        let expired = heldPrompts.filter {
+            StructuredPromptHold.hasExpired(heldAt: $0.heldAt, now: now)
+        }
+        guard !expired.isEmpty else {
+            scheduleHoldExpiry()
+            return
+        }
+        let expiredIDs = Set(expired.map(\.eventID))
+        heldPrompts.removeAll { expiredIDs.contains($0.eventID) }
+        let resolution = StructuredPromptHold.expiryResolution(
+            agentName: descriptor.agent.name
+        )
+        for prompt in expired { resolve(prompt, with: resolution) }
+        scheduleHoldExpiry()
+    }
+
     func stopAppServer() {
         stopStructuredAdapter()
     }
 
     func stopStructuredAdapter() {
+        // Before the clients go, anything Conduit promised to deliver has to
+        // be recorded as undelivered. Otherwise a caller that was told
+        // `queued` — and therefore told not to resend — waits forever.
+        abandonHeldPrompts()
         appServer?.stop()
         appServer = nil
         grokACP?.stop()
@@ -5071,6 +5415,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
         }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
+        }
     }
 
     private func wireStructured(_ client: OpenCodeHTTPClient) {
@@ -5083,6 +5430,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
         }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
+        }
     }
 
     private func wireStructured(_ client: StreamJSONClient) {
@@ -5094,6 +5444,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
+        }
+        client.onReady = { [weak self] in
+            self?.deliverHeldPrompts()
         }
     }
 

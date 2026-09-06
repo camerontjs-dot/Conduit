@@ -25,6 +25,121 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- A structured session that was **restarted** after a refused resume is no
+  longer reported as one that was **resumed**. Every structured client accepts a
+  resume id and every one of them substitutes a new session when it does not
+  take: Codex and Grok/Gemini catch the failed `thread/resume` / `session/load`
+  and start a fresh one, OpenCode creates a session when its existence check
+  misses, and the Claude/Antigravity `stream-json` client contacts no provider at
+  start at all. The adapter then reported a healthy ready session, so a task
+  could come back with its entire history missing and look identical to one that
+  recovered. `conduit_session_status` now carries `thread_provenance`
+  (`fresh` / `resumed` / `restarted` / `unverified`) with an authority line, and
+  names the displaced thread in `superseded_thread_id`. Only `resumed` claims
+  continuity; a client that never checked reports `unverified` rather than
+  guessing.
+- A failed recovery no longer destroys the route back to the real thread.
+  `AdapterThreadStore` is keyed by task, so the replacement session's id was
+  written over the stored one and a second resume attempt could not even try the
+  right thread. Displaced ids are kept in `supersededThreadIDs` (bounded, ids
+  only) and surface as `superseded_thread_ids`. Records written before this field
+  existed still decode: the store loads the whole map with `try?`, so a required
+  field would have returned an empty store and dropped every existing pointer on
+  the next save.
+
+### Changed
+
+- `conduit_list_adapters` now states what `structured: false` costs an
+  orchestrator: a PTY agent has no turn protocol, so its `turn.state` never
+  becomes `completed` and polling one for completion waits forever. The honesty
+  existed in the turn snapshot already, but it only arrived after a caller had
+  created the task and begun polling — too late to pick a different agent.
+
+- Concurrent OpenCode tasks no longer leak an `opencode serve` process each.
+  `OpenCodeServeLease.acquire` is `@MainActor`, but that serialises statements
+  and not `await`s: it checked the shared record, awaited a health probe,
+  awaited a second probe, and only then awaited `spawn`, so simultaneous
+  `conduit_create_task` calls all saw a nil record and all spawned. Only the
+  last process stayed reachable, so `shutdownIfIdle` could never terminate the
+  others and the finite port range lost one entry per concurrent create for the
+  life of the app. Observed with three simultaneous creates leaving servers on
+  ports 18752-18754 after every task had been closed. Resolves are now chained
+  so the second caller finds the record the first assigned. The retain count is
+  also taken only on success; incrementing before the attempt meant a failed
+  spawn left it permanently above zero, so a later release could never reach
+  idle.
+
+- A failure inside an MCP write no longer raises a blocking dialog on the
+  operator's Mac. The Session API and the Mac UI shared one `errorMessage`
+  channel, and `RootView` presents any non-nil value as an alert, so a remote
+  `conduit_reconcile_task` on a closed structured task returned its refusal to
+  the caller *and* left a modal on screen that only a human at the machine
+  could dismiss. Errors raised while serving a Session API call are now
+  captured into the MCP result instead; where a command already reported its
+  own error, the suppressed alert text is offered separately as
+  `ui_error_suppressed`. Errors raised later from async work the call started
+  are outside this window and still reach the operator.
+
+- `conduit_close_session` now reports which of two different things it did.
+  Detaching a durable tmux runtime and stopping a structured adapter both
+  returned `closed: true` with the same authority line, so a caller could not
+  tell an interruption it could undo from one it could not. The response
+  carries `close_outcome` (`detached` or `stopped`) and `recoverable`, and
+  `conduit_session_status` reports the same `close_outcome` for a live task
+  before the call is made, while not closing is still an option.
+
+- `conduit_create_task` can now start an agent on an objective in one call.
+  A structured runtime is still starting when the create response is
+  serialized, so the objective was refused outright and reported
+  `objective_delivery_state: failed` with instructions to send it again — on
+  every structured backend, in every recorded canary run. Conduit now holds
+  the objective and delivers it when the runtime reports ready, reporting
+  `queued`, which already means Conduit owns delivery and the caller must not
+  resend. A held prompt is visible as `prompts_held_pending_ready` on
+  `conduit_session_status`, and always reaches a recorded outcome on its
+  prompt event: delivered, refused by the host, or abandoned if the runtime
+  never becomes ready within two minutes, stops first, or is removed — every
+  path that makes a runtime unreachable now resolves what it still owed,
+  rather than leaving the prompt `queued` for a caller that was told not to
+  resend. `conduit_send_prompt` holds on the same terms. PTY delivery is
+  unchanged.
+
+- A structured turn that died inside the provider is no longer reported as a
+  completed turn. `conduit_session_events` gains `turn.state: failed` and
+  `observation.checkpoint: structured_failed`, derived from the adapter's own
+  `.failed` signal rather than inferred from status text. Previously any
+  non-nil turn status was mapped to `completed`, so a provider error and a
+  finished turn were indistinguishable to a caller. `conduit_close_session`
+  now also states that a structured adapter is stopped and its task is not
+  recoverable afterwards, where a durable tmux runtime is only detached.
+  The failure is scoped to the turn it ended: interrupting a turn that already
+  finished makes the provider report an error, and that no longer un-completes
+  the finished turn, nor does a failed turn leave every later turn on the same
+  task reading as failed.
+
+- `conduit_create_task` no longer causes an initial objective to run twice on a
+  PTY runtime. A PTY host accepts the objective and writes to the terminal
+  after the response is serialized, while a structured host that is still
+  starting refuses it outright; both used to be reported as a bare
+  `objective_delivered: false`, and the tool description told callers to resend
+  in that case. The response now reports `objective_delivery_state`
+  (`delivered`, `queued`, `failed`, `not_attempted`) alongside
+  `objective_resend_required`, and every `create_task` return path that could
+  carry an objective reports one — including the provisioning-failure and
+  reload-failure paths. `objective_delivered` keeps its existing meaning, so
+  current consumers are unaffected.
+
+### Security
+
+- The loopback Session API now keeps its bearer-token file owner-only (`0600`),
+  repairs an existing regular token file to that mode, and accepts only one
+  exact Bearer credential. It rejects malformed, ambiguous, oversized, and
+  incomplete HTTP framing; applies a two-second read deadline; and bounds
+  concurrently stalled connections rather than letting one block the listener.
+  Session API write authorization and lifecycle semantics are unchanged.
+
 ### Changed
 
 - Orchestrate can now explicitly prepare a proposal for the configured

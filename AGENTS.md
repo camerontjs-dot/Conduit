@@ -31,11 +31,31 @@ Run:
 ```bash
 ./scripts/test.sh            # both suites; resolves the Xcode toolchain itself
 ./scripts/build-app.sh
+./scripts/verify-installed.sh  # after installing: live canary against the real app
 ```
+
+`scripts/test.sh` proves ConduitCore logic. It cannot prove the installed
+bundle drives a real runtime: the Session API, the adapters, and the PTY all
+sit outside the deterministic suite. Every defect found on 2026-09-04 — a
+duplicate objective delivery, an intermittent PTY observation gap, a provider
+error reported as a completed turn — passed 291 tests and failed on the first
+live run.
+
+`verify-installed.sh` refuses to run when the installed bundle is not the build
+you just made, then runs the canary several times, because a single green run
+hides intermittent defects. It needs the operator's Session API write gate;
+that switch is never flipped for you.
 
 `scripts/test.sh` runs `conduit-selftest` and then `swift test`. Pass through
 args work, so `./scripts/test.sh --filter MCPAdmissionTests` narrows the XCTest
 run.
+
+`scripts/probe-provider-resume.py` checks a premise neither suite can reach:
+D-047 reports a refused resume as `restarted`, which is only correct while
+providers actually refuse an id they no longer own. The probe asks them
+directly, outside Conduit — read-only, no task, no write gate. Re-run it when a
+provider updates; if one starts answering an unknown id with a session, the
+client would report continuity it does not have.
 
 Background, so this is not misdiagnosed again: `swift test` needs XCTest, which
 ships inside Xcode.app and **not** with the Command Line Tools. If

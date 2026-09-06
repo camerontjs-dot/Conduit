@@ -11,6 +11,9 @@ final class OpenCodeServeLease {
     private var process: Process?
     private var record: OpenCodeServeLeaseRecord?
     private var retainCount = 0
+    /// The most recent in-flight resolve. Each new acquire waits for it, so
+    /// only one caller can be between the record check and the assignment.
+    private var resolveChain: Task<OpenCodeServeLeaseRecord, Error>?
 
     private var leaseURL: URL {
         AdapterThreadStore.defaultDirectory().appendingPathComponent(
@@ -18,8 +21,46 @@ final class OpenCodeServeLease {
         )
     }
 
+    /// Resolve the shared server, one caller at a time.
+    ///
+    /// `@MainActor` serialises statements, not `await`s. The previous version
+    /// checked `record`, awaited a health probe, awaited `load()`'s probe, and
+    /// only then awaited `spawn` — three suspension points before anything was
+    /// assigned. Concurrent `conduit_create_task` calls therefore all saw a nil
+    /// record and all spawned: observed 2026-09-05 with three simultaneous
+    /// OpenCode creates, which left `opencode serve` running on ports
+    /// 18752/18753/18754. Only the last one is reachable through `process`, so
+    /// `shutdownIfIdle` could never terminate the others, and the finite port
+    /// range leaks one entry per concurrent create for the life of the app.
+    ///
+    /// Chaining each resolve behind the previous one means the second caller
+    /// runs its check after the first has assigned `record`, finds it healthy,
+    /// and reuses it — which is what the retain count always assumed.
     func acquire(executable: String) async throws -> OpenCodeServeLeaseRecord {
+        let previous = resolveChain
+        let task = Task { [weak self] () async throws -> OpenCodeServeLeaseRecord in
+            // A previous failure must not poison this caller's attempt; it
+            // only has to finish before this one looks at the record.
+            _ = try? await previous?.value
+            guard let self else {
+                throw OpenCodeHTTPClient.ClientError.protocolError(
+                    "OpenCode lease was torn down."
+                )
+            }
+            return try await self.resolve(executable: executable)
+        }
+        resolveChain = task
+        // The retain is taken only on success. Incrementing first meant a
+        // failed spawn left the count permanently above zero, so a later
+        // release could never reach idle and shut the server down.
+        let record = try await task.value
         retainCount += 1
+        return record
+    }
+
+    private func resolve(
+        executable: String
+    ) async throws -> OpenCodeServeLeaseRecord {
         if let record, await health(record) {
             return record
         }
@@ -177,10 +218,30 @@ final class OpenCodeHTTPClient: ObservableObject {
     @Published private(set) var isTurnActive = false
     @Published private(set) var lastTurnStatus: String?
     @Published private(set) var lastError: String?
+    /// Set only when a failure ends a turn that was still running.
+    ///
+    /// A `.failed` effect that arrives after the turn already completed does
+    /// not un-complete it: interrupting a finished turn makes the provider
+    /// report an error, and treating that as a turn failure erases a real
+    /// observed completion. `lastError` keeps every error for display; this
+    /// field carries only the ones that are the turn's outcome.
+    @Published private(set) var turnFailure: String?
     @Published var pendingApprovalID: String?
     @Published var pendingApprovalSummary: String?
 
+    /// Where the session this client is driving came from.
+    ///
+    /// Set once the handshake settles. A refused resume is silently replaced
+    /// with a fresh session below, so without this the caller cannot tell a
+    /// recovered task from an empty one wearing its name.
+    private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
+
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    /// Fired once the host can accept a turn.
+    ///
+    /// Conduit holds a prompt that arrives before this point rather than
+    /// refusing it, so something has to say when the wait is over.
+    var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
 
@@ -208,11 +269,18 @@ final class OpenCodeHTTPClient: ObservableObject {
         guard let base = lease.baseURL else {
             throw ClientError.protocolError("OpenCode lease URL is invalid.")
         }
+        var attempt: SessionResumeSemantics.Attempt = .notRequested
+        let askedToResume = !(resumeSessionID ?? "").isEmpty
         if let resumeSessionID, !resumeSessionID.isEmpty,
            await sessionExists(base: base, id: resumeSessionID, password: lease.password) {
             sessionID = resumeSessionID
             mapper.sessionID = resumeSessionID
+            attempt = .accepted
         } else {
+            // Unlike the ACP and app-server clients this one checks first, so
+            // a miss here is a definite refusal rather than a swallowed error
+            // -- but the session it creates is just as empty.
+            if askedToResume { attempt = .refused }
             let created = try await createSession(base: base, password: lease.password)
             guard let sessionID = OpenCodeHTTPContract.sessionID(in: created) else {
                 throw ClientError.protocolError("OpenCode POST /session did not return an id.")
@@ -221,9 +289,15 @@ final class OpenCodeHTTPClient: ObservableObject {
             mapper.sessionID = sessionID
         }
         if let sessionID {
+            resumeProvenance = SessionResumeSemantics.classify(
+                requested: resumeSessionID,
+                started: sessionID,
+                attempt: attempt
+            )
             emit(.sessionStarted(id: sessionID))
         }
         isReady = true
+        onReady?()
         startSSE(base: base, password: lease.password)
     }
 
@@ -233,7 +307,12 @@ final class OpenCodeHTTPClient: ObservableObject {
         }
         mapper.resetTurn()
         isTurnActive = true
+        // A new turn must not inherit the previous turn's failure. lastError
+        // is what marks a turn failed rather than completed, so leaving it set
+        // would report every later successful turn on this task as failed.
         lastTurnStatus = nil
+        lastError = nil
+        turnFailure = nil
         let split = OpenCodeHTTPContract.splitModel(model)
         let body = OpenCodeHTTPContract.promptBody(
             text: text,
@@ -366,6 +445,10 @@ final class OpenCodeHTTPClient: ObservableObject {
             lastTurnStatus = status
         case .failed(let message):
             lastError = message
+            if isTurnActive {
+                isTurnActive = false
+                turnFailure = message
+            }
             onFailed?(message)
         }
         onEffect?(effect)

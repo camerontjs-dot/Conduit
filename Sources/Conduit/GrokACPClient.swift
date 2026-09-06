@@ -27,9 +27,29 @@ final class GrokACPClient: ObservableObject {
     @Published private(set) var isTurnActive = false
     @Published private(set) var lastTurnStatus: String?
     @Published private(set) var lastError: String?
+    /// Set only when a failure ends a turn that was still running.
+    ///
+    /// A `.failed` effect that arrives after the turn already completed does
+    /// not un-complete it: interrupting a finished turn makes the provider
+    /// report an error, and treating that as a turn failure erases a real
+    /// observed completion. `lastError` keeps every error for display; this
+    /// field carries only the ones that are the turn's outcome.
+    @Published private(set) var turnFailure: String?
     @Published var pendingPermission: ACPPendingPermission?
 
+    /// Where the session this client is driving came from.
+    ///
+    /// Set once the handshake settles. A refused resume is silently replaced
+    /// with a fresh session below, so without this the caller cannot tell a
+    /// recovered task from an empty one wearing its name.
+    private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
+
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    /// Fired once the host can accept a turn.
+    ///
+    /// Conduit holds a prompt that arrives before this point rather than
+    /// refusing it, so something has to say when the wait is over.
+    var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
 
@@ -109,7 +129,12 @@ final class GrokACPClient: ObservableObject {
         mapper.resetTurn()
         send(ACPRequests.sessionPrompt(id: 0, sessionID: sessionID, text: text))
         isTurnActive = true
+        // A new turn must not inherit the previous turn's failure. lastError
+        // is what marks a turn failed rather than completed, so leaving it set
+        // would report every later successful turn on this task as failed.
         lastTurnStatus = nil
+        lastError = nil
+        turnFailure = nil
     }
 
     func interrupt() {
@@ -179,6 +204,7 @@ final class GrokACPClient: ObservableObject {
             )
         }
         let started: CodexJSON
+        var attempt: SessionResumeSemantics.Attempt = .notRequested
         if let resumeSessionID, !resumeSessionID.isEmpty {
             do {
                 started = try await request(
@@ -188,7 +214,11 @@ final class GrokACPClient: ObservableObject {
                         cwd: cwd.path
                     )
                 )
+                attempt = .accepted
             } catch {
+                // session/new answers with a NEW, EMPTY session. Falling back
+                // is right; passing it off as the requested one is not.
+                attempt = .refused
                 started = try await request(
                     ACPRequests.sessionNew(id: 0, cwd: cwd.path)
                 )
@@ -202,10 +232,16 @@ final class GrokACPClient: ObservableObject {
             self.sessionID = sessionID
             mapper.sessionID = sessionID
         }
-        guard self.sessionID != nil else {
+        guard let liveSessionID = self.sessionID else {
             throw ClientError.protocolError("ACP session/new did not return a session id.")
         }
+        resumeProvenance = SessionResumeSemantics.classify(
+            requested: resumeSessionID,
+            started: liveSessionID,
+            attempt: attempt
+        )
         isReady = true
+        onReady?()
     }
 
     private func ingest(_ data: Data, generation: UUID) {
@@ -264,6 +300,10 @@ final class GrokACPClient: ObservableObject {
             lastTurnStatus = status
         case .failed(let message):
             lastError = message
+            if isTurnActive {
+                isTurnActive = false
+                turnFailure = message
+            }
         }
         onEffect?(effect)
     }
