@@ -11,13 +11,34 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
         XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 5)
     }
 
+    func testEveryPublishedDescriptionCarriesCatalogRevision() throws {
+        let marker = "[Conduit MCP catalog \(ConduitSessionToolCatalog.catalogRevision)]"
+        for tool in ConduitSessionToolCatalog.tools() {
+            let name = try XCTUnwrap(tool["name"] as? String)
+            let description = try XCTUnwrap(tool["description"] as? String)
+            XCTAssertTrue(
+                description.hasSuffix(marker),
+                "\(name) is missing the hosted-catalog freshness marker"
+            )
+        }
+    }
+
     func testRequiredArgumentsAndDescriptionsRemainActionable() throws {
         let create = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_create_task"))
         let createSchema = try XCTUnwrap(create["inputSchema"] as? [String: Any])
         XCTAssertEqual(createSchema["required"] as? [String], ["agent", "project_slug"])
-        XCTAssertTrue((create["description"] as? String)?.contains("no model override") == true)
-        XCTAssertTrue((create["description"] as? String)?.contains("always advertised") == true)
-        XCTAssertTrue((create["description"] as? String)?.contains("enables Session API writes locally") == true)
+
+        let createDescription = try XCTUnwrap(create["description"] as? String)
+        XCTAssertTrue(createDescription.contains("no model override"))
+        XCTAssertTrue(createDescription.contains("always advertised"))
+        XCTAssertTrue(createDescription.contains("enables Session API writes locally"))
+        XCTAssertTrue(createDescription.contains("queued means Conduit owns delivery"))
+        XCTAssertTrue(createDescription.contains("resending would run the objective twice"))
+
+        let properties = try XCTUnwrap(createSchema["properties"] as? [String: Any])
+        let objective = try XCTUnwrap(properties["objective"] as? [String: Any])
+        let objectiveDescription = try XCTUnwrap(objective["description"] as? String)
+        XCTAssertTrue(objectiveDescription.contains("Do not resend a queued objective"))
 
         let interrupt = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_interrupt"))
         let description = try XCTUnwrap(interrupt["description"] as? String)
