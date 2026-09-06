@@ -2497,7 +2497,63 @@ withTempDir { directory in
     let task = TaskSessionID()
     store.save(taskSessionID: task, backend: "app-server", threadID: "thr_x")
     check("adapter thread store remembers thread id", store.threadID(for: task) == "thr_x")
+
+    // A refused resume starts a replacement, and its id arrives here as an
+    // ordinary save. Overwriting in place destroyed the only route back to
+    // the real thread, so the failed recovery took the history with it.
+    store.save(taskSessionID: task, backend: "app-server", threadID: "thr_y")
+    check(
+        "a replacement thread does not erase the prior pointer",
+        store.threadID(for: task) == "thr_y"
+            && store.supersededThreadIDs(for: task) == ["thr_x"]
+    )
 }
+
+// MARK: - Resume provenance
+//
+// Every structured client substitutes a fresh session when a resume is
+// refused, then reports a healthy ready session. Only `resumed` may claim the
+// caller's history came back; a client that never checked says so rather than
+// guessing in either direction.
+do {
+    let restarted = SessionResumeSemantics.classify(
+        requested: "thr_old", started: "thr_new", attempt: .refused
+    )
+    check(
+        "refused resume reports restarted and names what it displaced",
+        restarted.wireValue == "restarted"
+            && restarted.supersededID == "thr_old"
+            && restarted.historyIsContinuous == false
+    )
+    check(
+        "restarted authority says the session is new and empty",
+        SessionResumeSemantics.authority(for: restarted).contains("EMPTY")
+    )
+    check(
+        "accepted resume is the only provenance claiming continuity",
+        SessionResumeSemantics.classify(
+            requested: "thr_old", started: "thr_old", attempt: .accepted
+        ).historyIsContinuous == true
+    )
+    check(
+        "an unchecked resume reports unknown, not success",
+        SessionResumeSemantics.classify(
+            requested: "c-1", started: "c-1", attempt: .unchecked
+        ).historyIsContinuous == nil
+    )
+}
+
+// A PTY profile has no turn protocol, so an orchestrator that polls one for
+// completion waits forever. The catalog is where it learns that in time to
+// pick a different agent.
+check(
+    "list_adapters warns that PTY turn state never completes",
+    ConduitSessionToolCatalog.tools()
+        .first { $0["name"] as? String == "conduit_list_adapters" }
+        .flatMap { $0["description"] as? String }
+        .map { $0.contains("never becomes completed") || $0.contains("NEVER becomes completed") }
+        == true
+)
 
 
 // MARK: - MCP admission boundary

@@ -37,6 +37,13 @@ final class GrokACPClient: ObservableObject {
     @Published private(set) var turnFailure: String?
     @Published var pendingPermission: ACPPendingPermission?
 
+    /// Where the session this client is driving came from.
+    ///
+    /// Set once the handshake settles. A refused resume is silently replaced
+    /// with a fresh session below, so without this the caller cannot tell a
+    /// recovered task from an empty one wearing its name.
+    private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
+
     var onEffect: ((StructuredAdapterEffect) -> Void)?
     /// Fired once the host can accept a turn.
     ///
@@ -197,6 +204,7 @@ final class GrokACPClient: ObservableObject {
             )
         }
         let started: CodexJSON
+        var attempt: SessionResumeSemantics.Attempt = .notRequested
         if let resumeSessionID, !resumeSessionID.isEmpty {
             do {
                 started = try await request(
@@ -206,7 +214,11 @@ final class GrokACPClient: ObservableObject {
                         cwd: cwd.path
                     )
                 )
+                attempt = .accepted
             } catch {
+                // session/new answers with a NEW, EMPTY session. Falling back
+                // is right; passing it off as the requested one is not.
+                attempt = .refused
                 started = try await request(
                     ACPRequests.sessionNew(id: 0, cwd: cwd.path)
                 )
@@ -220,9 +232,14 @@ final class GrokACPClient: ObservableObject {
             self.sessionID = sessionID
             mapper.sessionID = sessionID
         }
-        guard self.sessionID != nil else {
+        guard let liveSessionID = self.sessionID else {
             throw ClientError.protocolError("ACP session/new did not return a session id.")
         }
+        resumeProvenance = SessionResumeSemantics.classify(
+            requested: resumeSessionID,
+            started: liveSessionID,
+            attempt: attempt
+        )
         isReady = true
         onReady?()
     }

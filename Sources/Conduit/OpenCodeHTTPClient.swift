@@ -229,6 +229,13 @@ final class OpenCodeHTTPClient: ObservableObject {
     @Published var pendingApprovalID: String?
     @Published var pendingApprovalSummary: String?
 
+    /// Where the session this client is driving came from.
+    ///
+    /// Set once the handshake settles. A refused resume is silently replaced
+    /// with a fresh session below, so without this the caller cannot tell a
+    /// recovered task from an empty one wearing its name.
+    private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
+
     var onEffect: ((StructuredAdapterEffect) -> Void)?
     /// Fired once the host can accept a turn.
     ///
@@ -262,11 +269,18 @@ final class OpenCodeHTTPClient: ObservableObject {
         guard let base = lease.baseURL else {
             throw ClientError.protocolError("OpenCode lease URL is invalid.")
         }
+        var attempt: SessionResumeSemantics.Attempt = .notRequested
+        let askedToResume = !(resumeSessionID ?? "").isEmpty
         if let resumeSessionID, !resumeSessionID.isEmpty,
            await sessionExists(base: base, id: resumeSessionID, password: lease.password) {
             sessionID = resumeSessionID
             mapper.sessionID = resumeSessionID
+            attempt = .accepted
         } else {
+            // Unlike the ACP and app-server clients this one checks first, so
+            // a miss here is a definite refusal rather than a swallowed error
+            // -- but the session it creates is just as empty.
+            if askedToResume { attempt = .refused }
             let created = try await createSession(base: base, password: lease.password)
             guard let sessionID = OpenCodeHTTPContract.sessionID(in: created) else {
                 throw ClientError.protocolError("OpenCode POST /session did not return an id.")
@@ -275,6 +289,11 @@ final class OpenCodeHTTPClient: ObservableObject {
             mapper.sessionID = sessionID
         }
         if let sessionID {
+            resumeProvenance = SessionResumeSemantics.classify(
+                requested: resumeSessionID,
+                started: sessionID,
+                attempt: attempt
+            )
             emit(.sessionStarted(id: sessionID))
         }
         isReady = true

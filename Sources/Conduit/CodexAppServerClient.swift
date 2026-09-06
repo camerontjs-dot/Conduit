@@ -43,6 +43,13 @@ final class CodexAppServerClient: ObservableObject {
     /// field carries only the ones that are the turn's outcome.
     @Published private(set) var turnFailure: String?
 
+    /// Where the session this client is driving came from.
+    ///
+    /// Set once the handshake settles. A refused resume is silently replaced
+    /// with a fresh session below, so without this the caller cannot tell a
+    /// recovered task from an empty one wearing its name.
+    private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
+
     var onEffect: ((CodexAppServerEffect) -> Void)?
     /// Fired once the host can accept a turn.
     ///
@@ -209,12 +216,19 @@ final class CodexAppServerClient: ObservableObject {
         _ = try await request(CodexAppServerRequests.initialize(id: 0))
         send(CodexAppServerRequests.initialized())
         var started: CodexJSON
+        var attempt: SessionResumeSemantics.Attempt = .notRequested
         if let resumeThreadID, !resumeThreadID.isEmpty {
             do {
                 started = try await request(
                     CodexAppServerRequests.threadResume(id: 0, threadID: resumeThreadID)
                 )
+                attempt = .accepted
             } catch {
+                // The replacement is a NEW, EMPTY thread. Starting one is the
+                // right recovery; reporting it as the resume the caller asked
+                // for is not, so the substitution is recorded rather than
+                // swallowed with the error.
+                attempt = .refused
                 started = try await request(
                     CodexAppServerRequests.threadStart(
                         id: 0,
@@ -238,9 +252,14 @@ final class CodexAppServerClient: ObservableObject {
             self.threadID = threadID
             streamPump?.setThreadID(threadID)
         }
-        guard self.threadID != nil else {
+        guard let liveThreadID = self.threadID else {
             throw ClientError.protocolError("thread start/resume did not return a thread id.")
         }
+        resumeProvenance = SessionResumeSemantics.classify(
+            requested: resumeThreadID,
+            started: liveThreadID,
+            attempt: attempt
+        )
         isReady = true
         onReady?()
     }

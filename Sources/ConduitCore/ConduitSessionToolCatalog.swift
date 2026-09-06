@@ -175,12 +175,12 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_list_adapters",
-            "List enabled agent profiles and their preferred session backend. Use name as the agent argument to conduit_create_task. This is a declared launch surface, not a live health check.",
+            "List enabled agent profiles and their preferred session backend. Use name as the agent argument to conduit_create_task. This is a declared launch surface, not a live health check. structured false means a PTY agent: it has no turn protocol, so its turn.state NEVER becomes completed and polling one for completion waits forever. Orchestrate through a structured profile, or confirm PTY work from the pane yourself.",
             annotations: localReadOnlyAnnotations
         ),
         tool(
             "conduit_session_status",
-            "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. close_outcome says whether conduit_close_session would be reversible for this task. prompts_held_pending_ready counts objectives Conduit accepted before the runtime was ready and still owes delivery on. Status is observation, never verification of what an agent did.",
+            "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. close_outcome says whether conduit_close_session would be reversible for this task. prompts_held_pending_ready counts objectives Conduit accepted before the runtime was ready and still owes delivery on. thread_provenance says where the live structured session came from: resumed means the provider honoured the earlier thread, restarted means it refused and this is a NEW EMPTY session whose displaced id is superseded_thread_id, unverified means continuity was never confirmed, fresh means nobody asked to resume. Treat restarted and unverified as history you do not have. Status is observation, never verification of what an agent did.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or a conduit_list_sessions row. Poll after creating a task: ready turns true when the runtime will accept a prompt."),
