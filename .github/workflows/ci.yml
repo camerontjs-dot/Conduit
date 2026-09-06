@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
+      - name: MCP tunnel script syntax
+        run: bash -n scripts/chatgpt-tunnel scripts/chatgpt-tunnel-status
       - name: Selftest
         run: swift run conduit-selftest
       - name: Test
