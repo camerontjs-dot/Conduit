@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Diagnose the two independent processes required by Conduit's current hosted MCP path.
+# This command reads no secret values and performs no writes.
+set -uo pipefail
+
+CONDUIT_DIR="${CONDUIT_DIR:-$HOME/.conduit}"
+PROFILE_DIR="${TUNNEL_CLIENT_PROFILE_DIR:-$HOME/.config/tunnel-client}"
+PROFILE_NAME="${CONDUIT_TUNNEL_PROFILE:-conduit}"
+SESSION_HEALTH_URL="${CONDUIT_SESSION_API_HEALTH_URL:-http://127.0.0.1:8750/healthz}"
+HEALTH_ADDR="${CONDUIT_TUNNEL_HEALTH_ADDR:-127.0.0.1:8760}"
+TUNNEL_HEALTH_URL="http://${HEALTH_ADDR}/healthz"
+TUNNEL_READY_URL="http://${HEALTH_ADDR}/readyz"
+PROFILE="$PROFILE_DIR/${PROFILE_NAME}.yaml"
+TOKEN_FILE="$CONDUIT_DIR/session-api-token"
+TUNNEL_ID_FILE="$CONDUIT_DIR/chatgpt-tunnel-id"
+KEY_FILE="${CONTROL_PLANE_API_KEY_FILE:-$CONDUIT_DIR/control-plane-api-key}"
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is required for MCP liveness probes." >&2
+  exit 127
+fi
+
+probe() {
+  local label="$1"
+  local url="$2"
+  if curl --silent --show-error --fail --max-time 1 "$url" >/dev/null 2>&1; then
+    printf '%-18s %s\n' "$label" "READY"
+    return 0
+  fi
+  printf '%-18s %s\n' "$label" "UNAVAILABLE"
+  return 1
+}
+
+presence() {
+  local label="$1"
+  local path="$2"
+  if [[ -s "$path" ]]; then
+    printf '%-18s %s\n' "$label" "present"
+    return 0
+  fi
+  printf '%-18s %s\n' "$label" "missing"
+  return 1
+}
+
+echo "Conduit hosted MCP status"
+echo "========================="
+
+status=0
+session_ok=0
+tunnel_ok=0
+ready_ok=0
+
+probe "session_api" "$SESSION_HEALTH_URL" || { session_ok=$?; status=1; }
+probe "tunnel_health" "$TUNNEL_HEALTH_URL" || { tunnel_ok=$?; status=1; }
+probe "tunnel_ready" "$TUNNEL_READY_URL" || { ready_ok=$?; status=1; }
+
+echo
+presence "profile" "$PROFILE" || status=1
+presence "session_token" "$TOKEN_FILE" || status=1
+presence "tunnel_id" "$TUNNEL_ID_FILE" || status=1
+if [[ -s "$KEY_FILE" || -n "${CONTROL_PLANE_API_KEY:-}" ]]; then
+  printf '%-18s %s\n' "control_plane_key" "present"
+else
+  printf '%-18s %s\n' "control_plane_key" "missing"
+  status=1
+fi
+
+echo
+if [[ "$session_ok" -ne 0 ]]; then
+  echo "session_api is unavailable: under the current architecture Conduit.app owns"
+  echo "the loopback Session API, so the app must be open with Session API enabled."
+fi
+if [[ "$tunnel_ok" -ne 0 || "$ready_ok" -ne 0 ]]; then
+  echo "tunnel-client is not healthy/ready on ${HEALTH_ADDR}; ChatGPT cannot reach"
+  echo "Conduit until the configured tunnel daemon is running."
+fi
+if [[ "$status" -eq 0 ]]; then
+  echo "local Session API and tunnel daemon are both reachable. This is transport"
+  echo "liveness only; it does not prove hosted catalog freshness or write entitlement."
+fi
+
+exit "$status"
