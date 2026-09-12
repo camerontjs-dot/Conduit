@@ -28,25 +28,27 @@ Command:
 swift test --package-path /tmp/conduit-lifecycle-check
 ```
 
-Result:
+Result after strict-parity review:
 
 ```text
 Test Suite 'MainframeLifecycleScannerTests' passed
-Executed 9 tests, with 0 failures (0 unexpected)
+Executed 11 tests, with 0 failures (0 unexpected)
 Build complete
 ```
 
 Covered cases:
 
 1. legacy project README without `record_type` resolves as a project;
-2. operation README with `record_type: operation` resolves as an operation;
+2. operation README with exact `record_type: operation` resolves as an operation;
 3. missing `40_operations/` is tolerated;
 4. operation missing explicit `record_type: operation` is invalid;
 5. duplicate slug across `30_projects/` and `40_operations/` fails closed;
 6. missing README authority is invalid;
 7. conflicting `project_state` and `lifecycle_state` is invalid;
 8. `PROJECT.md` coordination state can own state while disagreement remains visible as an issue;
-9. malformed nested frontmatter is rejected and expected record type can be enforced.
+9. malformed nested frontmatter is rejected;
+10. expected record type can be enforced and an explicit blank `record_type:` cannot fall back to the legacy project default;
+11. an operation declaration with non-exact casing can normalize to an operation type for diagnosis but remains invalid because the operation-root README did not declare exact `record_type: operation`.
 
 ## GitHub Actions status
 
