@@ -1,10 +1,8 @@
 import Foundation
 
-/// Direct lifecycle identity exposed by public MainFrame v0.4.0.
-///
-/// This type is intentionally independent from `MainframeProject`: existing
-/// task/session flows remain project-scoped until they are migrated explicitly,
-/// while Explorer can consume the complete project + operation namespace.
+/// Typed direct-authority record for MainFrame's shared project/operation slug namespace.
+/// Kept separate from `MainframeProject` so existing task/runtime flows stay unchanged
+/// until they are migrated deliberately.
 public enum MainframeLifecycleRecordType: String, Codable, CaseIterable, Sendable {
     case project
     case operation
@@ -15,10 +13,7 @@ public enum MainframeLifecycleRootKind: String, Codable, CaseIterable, Sendable 
     case operations
 
     public var directoryName: String {
-        switch self {
-        case .projects: return "30_projects"
-        case .operations: return "40_operations"
-        }
+        self == .projects ? "30_projects" : "40_operations"
     }
 }
 
@@ -116,11 +111,7 @@ public struct MainframeLifecycleScan: Sendable {
     public let issues: [String]
     public let rootIssues: [String]
 
-    public init(
-        records: [MainframeLifecycleRecord],
-        issues: [String],
-        rootIssues: [String]
-    ) {
+    public init(records: [MainframeLifecycleRecord], issues: [String], rootIssues: [String]) {
         self.records = records
         self.issues = issues
         self.rootIssues = rootIssues
@@ -142,14 +133,11 @@ public enum MainframeLifecycleIdentityError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .missingRoot(let path):
-            return "MainFrame root does not exist: \(path)"
-        case .invalidSlug(let slug):
-            return "Invalid lifecycle slug: \(slug)"
+        case .missingRoot(let path): return "MainFrame root does not exist: \(path)"
+        case .invalidSlug(let slug): return "Invalid lifecycle slug: \(slug)"
         case .cannotProveUniqueness(let issues):
             return "Cannot prove cross-root lifecycle uniqueness: \(issues.joined(separator: "; "))"
-        case .missingIdentity(let slug):
-            return "No direct lifecycle authority for \(slug)"
+        case .missingIdentity(let slug): return "No direct lifecycle authority for \(slug)"
         case .duplicateIdentity(let slug, let locations):
             return "Duplicate lifecycle identity \(slug): \(locations.joined(separator: ", "))"
         case .invalidIdentity(let path, let issues):
@@ -161,98 +149,82 @@ public enum MainframeLifecycleIdentityError: LocalizedError, Equatable {
 }
 
 public enum MainframeLifecycleFrontmatterError: LocalizedError, Equatable {
-    case missingClosingDelimiter
-    case unsupportedNestedDeclaration
-    case malformedDeclaration(String)
-    case invalidKey(String)
-    case duplicateKey(String)
+    case invalid(String)
 
     public var errorDescription: String? {
-        switch self {
-        case .missingClosingDelimiter:
-            return "frontmatter opening delimiter has no closing delimiter"
-        case .unsupportedNestedDeclaration:
-            return "indented/nested frontmatter declarations are not supported"
-        case .malformedDeclaration(let line):
-            return "frontmatter line is not a key/value declaration: \(line)"
-        case .invalidKey(let key):
-            return "frontmatter key is invalid: \(key)"
-        case .duplicateKey(let key):
-            return "duplicate frontmatter key: \(key)"
-        }
+        if case .invalid(let message) = self { return message }
+        return nil
     }
 }
 
 public enum MainframeLifecycleFrontmatterParser {
     public static func parse(_ markdown: String) throws -> MainframeLifecycleMetadata {
-        let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
-        guard normalized.hasPrefix("---\n") || normalized == "---" else {
-            return MainframeLifecycleMetadata(title: heading(in: normalized))
+        let text = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+        guard text.hasPrefix("---\n") || text == "---" else {
+            return MainframeLifecycleMetadata(title: heading(in: text))
         }
-        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        guard let closeIndex = lines.indices.dropFirst().first(where: { lines[$0].trimmingCharacters(in: .whitespaces) == "---" }) else {
-            throw MainframeLifecycleFrontmatterError.missingClosingDelimiter
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let end = lines.indices.dropFirst().first(where: {
+            lines[$0].trimmingCharacters(in: .whitespaces) == "---"
+        }) else {
+            throw MainframeLifecycleFrontmatterError.invalid(
+                "frontmatter opening delimiter has no closing delimiter"
+            )
         }
 
         var values: [String: String] = [:]
         var tags: [String] = []
-        for line in lines[1..<closeIndex] {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+        for line in lines[1..<end] {
+            let stripped = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if stripped.isEmpty || stripped.hasPrefix("#") { continue }
             if line.first?.isWhitespace == true {
-                throw MainframeLifecycleFrontmatterError.unsupportedNestedDeclaration
+                throw MainframeLifecycleFrontmatterError.invalid(
+                    "indented/nested frontmatter declarations are not supported"
+                )
             }
             guard let colon = line.firstIndex(of: ":") else {
-                throw MainframeLifecycleFrontmatterError.malformedDeclaration(line)
+                throw MainframeLifecycleFrontmatterError.invalid(
+                    "frontmatter line is not a key/value declaration: \(line)"
+                )
             }
             let key = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
-            guard isValidKey(key) else {
-                throw MainframeLifecycleFrontmatterError.invalidKey(key)
+            guard key.range(of: #"^[A-Za-z_][A-Za-z0-9_-]*$"#, options: .regularExpression) != nil else {
+                throw MainframeLifecycleFrontmatterError.invalid("frontmatter key is invalid: \(key)")
             }
             guard values[key] == nil else {
-                throw MainframeLifecycleFrontmatterError.duplicateKey(key)
+                throw MainframeLifecycleFrontmatterError.invalid("duplicate frontmatter key: \(key)")
             }
             let raw = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-            if key == "tags" {
-                tags = parseInlineArray(raw)
-                values[key] = raw
-            } else {
-                values[key] = unquote(raw)
-            }
+            values[key] = unquote(raw)
+            if key == "tags" { tags = parseInlineArray(raw) }
         }
 
         return MainframeLifecycleMetadata(
-            title: nonEmpty(values["title"]) ?? heading(in: normalized),
-            domain: nonEmpty(values["domain"]),
-            status: nonEmpty(values["status"]),
-            projectState: nonEmpty(values["project_state"]),
-            lifecycleState: nonEmpty(values["lifecycle_state"]),
-            goal: nonEmpty(values["goal"]),
-            nextAction: nonEmpty(values["next_action"]),
-            updated: nonEmpty(values["updated"]),
-            wipClass: nonEmpty(values["wip_class"]),
-            recordTypeDeclaration: nonEmpty(values["record_type"]),
-            typeDeclaration: nonEmpty(values["type"]),
+            title: value(values["title"]) ?? heading(in: text),
+            domain: value(values["domain"]),
+            status: nullable(values["status"]),
+            projectState: nullable(values["project_state"]),
+            lifecycleState: nullable(values["lifecycle_state"]),
+            goal: value(values["goal"]),
+            nextAction: value(values["next_action"]),
+            updated: value(values["updated"]),
+            wipClass: nullable(values["wip_class"]),
+            // Presence matters here: an explicit blank/unknown declaration must
+            // not fall back to the legacy project default.
+            recordTypeDeclaration: values["record_type"],
+            typeDeclaration: values["type"],
             tags: tags
         )
     }
 
-    private static func isValidKey(_ key: String) -> Bool {
-        key.range(of: #"^[A-Za-z_][A-Za-z0-9_-]*$"#, options: .regularExpression) != nil
+    private static func value(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        return raw
     }
 
-    private static func heading(in markdown: String) -> String? {
-        markdown
-            .split(separator: "\n")
-            .map(String.init)
-            .first(where: { $0.hasPrefix("# ") })?
-            .dropFirst(2)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func nonEmpty(_ value: String?) -> String? {
-        guard let value, !value.isEmpty else { return nil }
-        return value
+    private static func nullable(_ raw: String?) -> String? {
+        guard let raw = value(raw) else { return nil }
+        return ["null", "none", "~"].contains(raw.lowercased()) ? nil : raw
     }
 
     private static func unquote(_ value: String) -> String {
@@ -264,24 +236,22 @@ public enum MainframeLifecycleFrontmatterParser {
         return value
     }
 
-    private static func parseInlineArray(_ value: String) -> [String] {
-        let normalized = unquote(value)
-        guard normalized.hasPrefix("["), normalized.hasSuffix("]") else { return [] }
-        return normalized
-            .dropFirst()
-            .dropLast()
-            .split(separator: ",")
-            .map { unquote($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            .filter { !$0.isEmpty }
+    private static func parseInlineArray(_ raw: String) -> [String] {
+        let value = unquote(raw)
+        guard value.hasPrefix("["), value.hasSuffix("]") else { return [] }
+        return value.dropFirst().dropLast().split(separator: ",").map {
+            unquote($0.trimmingCharacters(in: .whitespacesAndNewlines))
+        }.filter { !$0.isEmpty }
+    }
+
+    private static func heading(in markdown: String) -> String? {
+        markdown.split(separator: "\n").map(String.init).first(where: { $0.hasPrefix("# ") })?
+            .dropFirst(2).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
-/// Scanner for the public MainFrame project/operation identity contract.
-///
-/// Compatibility reference: camerontjs-dot/MainFrame main at
-/// 200a95e847e7f69a35c9e4d9d3f5a9e48c02f508 (v0.4.0 public candidate).
-/// Missing lifecycle roots are tolerated; malformed roots make uniqueness
-/// unprovable and therefore make direct resolution fail closed.
+/// Compatibility reference: camerontjs-dot/MainFrame
+/// `200a95e847e7f69a35c9e4d9d3f5a9e48c02f508` (public v0.4.0 candidate).
 public struct MainframeLifecycleScanner: @unchecked Sendable {
     private let fileManager: FileManager
 
@@ -298,21 +268,18 @@ public struct MainframeLifecycleScanner: @unchecked Sendable {
         var records: [MainframeLifecycleRecord] = []
         var issues: [String] = []
         var rootIssues: [String] = []
-
-        for rootKind in MainframeLifecycleRootKind.allCases {
-            let lifecycleRoot = root.appendingPathComponent(rootKind.directoryName, isDirectory: true)
+        for kind in MainframeLifecycleRootKind.allCases {
+            let lifecycleRoot = root.appendingPathComponent(kind.directoryName, isDirectory: true)
             let rootValues = try? lifecycleRoot.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey])
             if rootValues?.isSymbolicLink == true {
-                let issue = "\(rootKind.rawValue) lifecycle root is symlinked: \(lifecycleRoot.path)"
+                let issue = "\(kind.rawValue) lifecycle root is symlinked: \(lifecycleRoot.path)"
                 issues.append(issue)
                 rootIssues.append(issue)
                 continue
             }
-            guard fileManager.fileExists(atPath: lifecycleRoot.path, isDirectory: &isDirectory) else {
-                continue
-            }
+            guard fileManager.fileExists(atPath: lifecycleRoot.path, isDirectory: &isDirectory) else { continue }
             guard isDirectory.boolValue else {
-                let issue = "\(rootKind.rawValue) lifecycle root is not a directory: \(lifecycleRoot.path)"
+                let issue = "\(kind.rawValue) lifecycle root is not a directory: \(lifecycleRoot.path)"
                 issues.append(issue)
                 rootIssues.append(issue)
                 continue
@@ -326,29 +293,29 @@ public struct MainframeLifecycleScanner: @unchecked Sendable {
                     options: [.skipsHiddenFiles]
                 ).sorted { $0.lastPathComponent < $1.lastPathComponent }
             } catch {
-                let issue = "cannot enumerate \(rootKind.rawValue) lifecycle root: \(error.localizedDescription)"
+                let issue = "cannot enumerate \(kind.rawValue) lifecycle root: \(error.localizedDescription)"
                 issues.append(issue)
                 rootIssues.append(issue)
                 continue
             }
 
             for child in children {
-                let childValues = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-                guard childValues?.isDirectory == true || childValues?.isSymbolicLink == true else { continue }
-                let record = record(for: child, rootKind: rootKind)
+                let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values?.isDirectory == true || values?.isSymbolicLink == true else { continue }
+                let record = record(for: child, rootKind: kind)
                 records.append(record)
-                issues.append(contentsOf: record.issues.map {
-                    "\(rootKind.directoryName)/\(record.slug): \($0)"
-                })
+                issues += record.issues.map { "\(kind.directoryName)/\(record.slug): \($0)" }
             }
         }
 
         let grouped = Dictionary(grouping: records, by: \.slug)
         for (slug, matches) in grouped where matches.count > 1 {
-            let locations = matches.map { relativePath(root: root, url: $0.path) }.sorted()
-            issues.append("duplicate lifecycle identity \(slug): \(locations.joined(separator: ", "))")
+            issues.append(
+                "duplicate lifecycle identity \(slug): " + matches.map {
+                    relativePath(root: root, url: $0.path)
+                }.sorted().joined(separator: ", ")
+            )
         }
-
         return MainframeLifecycleScan(records: records, issues: issues, rootIssues: rootIssues)
     }
 
@@ -357,17 +324,13 @@ public struct MainframeLifecycleScanner: @unchecked Sendable {
         slug: String,
         expectedRecordType: MainframeLifecycleRecordType? = nil
     ) throws -> MainframeLifecycleRecord {
-        guard isValidSlug(slug) else {
-            throw MainframeLifecycleIdentityError.invalidSlug(slug)
+        guard validSlug(slug) else { throw MainframeLifecycleIdentityError.invalidSlug(slug) }
+        let scan = try scan(root: root)
+        guard scan.rootIssues.isEmpty else {
+            throw MainframeLifecycleIdentityError.cannotProveUniqueness(scan.rootIssues)
         }
-        let result = try scan(root: root)
-        guard result.rootIssues.isEmpty else {
-            throw MainframeLifecycleIdentityError.cannotProveUniqueness(result.rootIssues)
-        }
-        let matches = result.bySlug[slug] ?? []
-        guard !matches.isEmpty else {
-            throw MainframeLifecycleIdentityError.missingIdentity(slug)
-        }
+        let matches = scan.bySlug[slug] ?? []
+        guard !matches.isEmpty else { throw MainframeLifecycleIdentityError.missingIdentity(slug) }
         guard matches.count == 1 else {
             throw MainframeLifecycleIdentityError.duplicateIdentity(
                 slug: slug,
@@ -391,84 +354,66 @@ public struct MainframeLifecycleScanner: @unchecked Sendable {
         return record
     }
 
-    private func record(
-        for child: URL,
-        rootKind: MainframeLifecycleRootKind
-    ) -> MainframeLifecycleRecord {
+    private func record(for child: URL, rootKind: MainframeLifecycleRootKind) -> MainframeLifecycleRecord {
         let slug = child.lastPathComponent
         var issues: [String] = []
-
-        let childValues = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-        if childValues?.isSymbolicLink == true {
-            issues.append("symlinked lifecycle entity is not an authority")
-        }
-        if !isValidSlug(slug) {
-            issues.append("invalid lifecycle slug")
-        }
-        if !isContained(child, in: child.deletingLastPathComponent()) {
-            issues.append("lifecycle entity escapes its root")
-        }
-        if childValues?.isDirectory != true && childValues?.isSymbolicLink != true {
-            issues.append("lifecycle entity is not a directory")
-        }
+        let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        if values?.isSymbolicLink == true { issues.append("symlinked lifecycle entity is not an authority") }
+        if !validSlug(slug) { issues.append("invalid lifecycle slug") }
+        if !contained(child, in: child.deletingLastPathComponent()) { issues.append("lifecycle entity escapes its root") }
+        if values?.isDirectory != true && values?.isSymbolicLink != true { issues.append("lifecycle entity is not a directory") }
 
         let readme = child.appendingPathComponent("README.md")
         let metadata = readMetadata(
             at: readme,
-            ownerDirectory: child,
+            owner: child,
             label: "README.md",
             required: true,
             issues: &issues
         ) ?? MainframeLifecycleMetadata()
-
-        let coordination = child.appendingPathComponent("PROJECT.md")
-        let coordinationMetadata = readMetadata(
-            at: coordination,
-            ownerDirectory: child,
+        let project = child.appendingPathComponent("PROJECT.md")
+        let projectMetadata = readMetadata(
+            at: project,
+            owner: child,
             label: "PROJECT.md",
             required: false,
             issues: &issues
         )
 
-        let recordType = effectiveRecordType(metadata: metadata, rootKind: rootKind)
-        if recordType == nil {
-            issues.append("record_type is missing or invalid")
-        }
-        if rootKind == .operations,
-           normalizeType(metadata.recordTypeDeclaration) != MainframeLifecycleRecordType.operation.rawValue {
+        let type = effectiveRecordType(metadata, rootKind: rootKind)
+        if type == nil { issues.append("record_type is missing or invalid") }
+        // Public MainFrame requires this exact direct declaration for operations.
+        if rootKind == .operations, metadata.recordTypeDeclaration != "operation" {
             issues.append("operation-root README must declare record_type: operation")
         }
 
-        let readmeState = lifecycleState(metadata: metadata, label: nil, issues: &issues)
-        let coordinationState = coordinationMetadata.flatMap {
-            lifecycleState(metadata: $0, label: "PROJECT.md", issues: &issues)
-        }
-        let state: String?
+        let readmeState = state(metadata, label: nil, issues: &issues)
+        let projectState = projectMetadata.flatMap { state($0, label: "PROJECT.md", issues: &issues) }
+        let lifecycleState: String?
         let stateSource: String
-        if let coordinationState {
-            if let readmeState, readmeState != coordinationState {
+        if let projectState {
+            if let readmeState, readmeState != projectState {
                 issues.append("README lifecycle state differs from PROJECT.md owner")
             }
-            state = coordinationState
+            lifecycleState = projectState
             stateSource = "PROJECT.md"
         } else {
-            state = readmeState
+            lifecycleState = readmeState
             stateSource = "README.md"
         }
 
         let readmeWip = metadata.wipClass
-        let coordinationWip = coordinationMetadata?.wipClass
-        if let readmeWip, let coordinationWip, readmeWip != coordinationWip {
+        let projectWip = projectMetadata?.wipClass
+        if let readmeWip, let projectWip, readmeWip != projectWip {
             issues.append("README wip_class differs from PROJECT.md owner")
         }
-        let wipClass = coordinationWip ?? readmeWip
+        let wipClass = projectWip ?? readmeWip
         if let wipClass, !["product", "eval", "anchor"].contains(wipClass) {
             issues.append("invalid wip_class: \(wipClass)")
         }
-
-        if let coordinationMetadata,
-           coordinationMetadata.recordTypeDeclaration != nil,
-           effectiveRecordType(metadata: coordinationMetadata, rootKind: rootKind) != recordType {
+        if let projectMetadata,
+           projectMetadata.recordTypeDeclaration != nil,
+           effectiveRecordType(projectMetadata, rootKind: rootKind) != type {
             issues.append("README and PROJECT.md record_type declarations differ")
         }
 
@@ -476,21 +421,21 @@ public struct MainframeLifecycleScanner: @unchecked Sendable {
             slug: slug,
             path: child,
             rootKind: rootKind,
-            recordType: recordType,
+            recordType: type,
             readmePath: readme,
-            coordinationPath: coordinationMetadata == nil ? nil : coordination,
+            coordinationPath: projectMetadata == nil ? nil : project,
             metadata: metadata,
-            coordinationMetadata: coordinationMetadata,
-            lifecycleState: state,
+            coordinationMetadata: projectMetadata,
+            lifecycleState: lifecycleState,
             stateSource: stateSource,
             wipClass: wipClass,
-            issues: unique(issues)
+            issues: deduplicated(issues)
         )
     }
 
     private func readMetadata(
         at file: URL,
-        ownerDirectory: URL,
+        owner: URL,
         label: String,
         required: Bool,
         issues: inout [String]
@@ -508,71 +453,68 @@ public struct MainframeLifecycleScanner: @unchecked Sendable {
             issues.append("\(label) is not a regular file")
             return nil
         }
-        guard isContained(file, in: ownerDirectory) else {
+        guard contained(file, in: owner) else {
             issues.append("\(label) escapes lifecycle entity")
             return nil
         }
         do {
-            let text = try String(contentsOf: file, encoding: .utf8)
-            return try MainframeLifecycleFrontmatterParser.parse(text)
-        } catch let error as MainframeLifecycleFrontmatterError {
-            issues.append("\(label == "README.md" ? "" : "\(label): ")\(error.localizedDescription)")
-            return nil
+            return try MainframeLifecycleFrontmatterParser.parse(
+                String(contentsOf: file, encoding: .utf8)
+            )
         } catch {
-            issues.append("\(label) unreadable: \(error.localizedDescription)")
+            let prefix = label == "README.md" ? "" : "\(label): "
+            issues.append(prefix + error.localizedDescription)
             return nil
         }
     }
 
     private func effectiveRecordType(
-        metadata: MainframeLifecycleMetadata,
+        _ metadata: MainframeLifecycleMetadata,
         rootKind: MainframeLifecycleRootKind
     ) -> MainframeLifecycleRecordType? {
         let declarations = [metadata.recordTypeDeclaration, metadata.typeDeclaration].compactMap { $0 }
-        guard !declarations.isEmpty else {
-            return rootKind == .projects ? .project : nil
-        }
-        let values = declarations.map { declaration -> MainframeLifecycleRecordType? in
-            switch normalizeType(declaration) {
+        guard !declarations.isEmpty else { return rootKind == .projects ? .project : nil }
+        let types = declarations.map { raw -> MainframeLifecycleRecordType? in
+            switch normalizedType(raw) {
             case "operation": return .operation
             case "project", "program", "evaluation", "lifecycle": return .project
             default: return nil
             }
         }
-        if values.count == 2, values[0] != values[1] { return nil }
-        return values[0]
+        if types.count == 2, types[0] != types[1] { return nil }
+        return types[0]
     }
 
-    private func lifecycleState(
-        metadata: MainframeLifecycleMetadata,
+    private func state(
+        _ metadata: MainframeLifecycleMetadata,
         label: String?,
         issues: inout [String]
     ) -> String? {
         if let projectState = metadata.projectState,
            let lifecycleState = metadata.lifecycleState,
            projectState != lifecycleState {
-            let prefix = label.map { "\($0): " } ?? ""
-            issues.append("\(prefix)project_state and lifecycle_state conflict")
+            issues.append(
+                (label.map { "\($0): " } ?? "") + "project_state and lifecycle_state conflict"
+            )
             return nil
         }
         return metadata.lifecycleState ?? metadata.projectState ?? metadata.status
     }
 
-    private func normalizeType(_ value: String?) -> String? {
-        value?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    private func normalizedType(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
             .lowercased()
     }
 
-    private func isValidSlug(_ slug: String) -> Bool {
+    private func validSlug(_ slug: String) -> Bool {
         slug.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]*$"#, options: .regularExpression) != nil
     }
 
-    private func isContained(_ candidate: URL, in parent: URL) -> Bool {
-        let resolvedParent = parent.resolvingSymlinksInPath().standardizedFileURL.path
-        let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL.path
-        return resolvedCandidate == resolvedParent || resolvedCandidate.hasPrefix(resolvedParent + "/")
+    private func contained(_ candidate: URL, in parent: URL) -> Bool {
+        let parentPath = parent.resolvingSymlinksInPath().standardizedFileURL.path
+        let candidatePath = candidate.resolvingSymlinksInPath().standardizedFileURL.path
+        return candidatePath == parentPath || candidatePath.hasPrefix(parentPath + "/")
     }
 
     private func relativePath(root: URL, url: URL) -> String {
@@ -582,7 +524,7 @@ public struct MainframeLifecycleScanner: @unchecked Sendable {
         return String(path.dropFirst(rootPath.count + 1))
     }
 
-    private func unique(_ values: [String]) -> [String] {
+    private func deduplicated(_ values: [String]) -> [String] {
         var seen = Set<String>()
         return values.filter { seen.insert($0).inserted }
     }
