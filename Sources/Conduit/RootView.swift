@@ -468,6 +468,10 @@ struct RootView: View {
                 OrchestrateWorkspaceView()
                     .environmentObject(model)
                     .environmentObject(themeStore)
+            } else if model.workspace == .explore,
+                      let root = model.settings.mainframeRoot {
+                MainframeExplorerWorkspaceView(root: root)
+                    .environmentObject(themeStore)
             } else if let project = model.selectedTaskProject ?? model.selectedProject {
                 ProjectWorkspaceView(
                     project: project,

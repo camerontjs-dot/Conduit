@@ -1,14 +1,17 @@
 import Foundation
 
 /// The app-level workspace selector. `sessions` keeps the existing task rail
-/// and terminal presentation intact; `orchestrate` is not a session surface.
+/// and terminal presentation intact; `explore` is a read-only MainFrame
+/// surface; `orchestrate` is not a session surface.
 public enum ConduitWorkspace: String, CaseIterable, Codable, Sendable {
     case sessions
+    case explore
     case orchestrate
 
     public var displayName: String {
         switch self {
         case .sessions: return "Sessions"
+        case .explore: return "Explore"
         case .orchestrate: return "Orchestrate"
         }
     }
@@ -16,6 +19,7 @@ public enum ConduitWorkspace: String, CaseIterable, Codable, Sendable {
     public var symbolName: String {
         switch self {
         case .sessions: return "rectangle.3.group"
+        case .explore: return "folder"
         case .orchestrate: return "point.3.connected.trianglepath.dotted"
         }
     }

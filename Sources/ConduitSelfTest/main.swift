@@ -51,6 +51,19 @@ check("frontmatter parses tags", frontmatter.tags == ["images", "agents"])
 check("frontmatter falls back to heading",
       FrontmatterParser.parse("# Plain\n", fallbackTitle: "F").title == "Plain")
 
+check("workspace picker keeps Sessions, Explore, Orchestrate order",
+      ConduitWorkspace.allCases.map(\.rawValue) == ["sessions", "explore", "orchestrate"])
+check("Explore workspace display name",
+      ConduitWorkspace.explore.displayName == "Explore")
+check("Explore workspace symbol",
+      ConduitWorkspace.explore.symbolName == "folder")
+check("Sessions workspace presentation remains unchanged",
+      ConduitWorkspace.sessions.displayName == "Sessions"
+        && ConduitWorkspace.sessions.symbolName == "rectangle.3.group")
+check("Orchestrate workspace presentation remains unchanged",
+      ConduitWorkspace.orchestrate.displayName == "Orchestrate"
+        && ConduitWorkspace.orchestrate.symbolName == "point.3.connected.trianglepath.dotted")
+
 let orchestrationRoot = MainframeProject(
     slug: "mainframe",
     path: URL(fileURLWithPath: "/tmp/MainFrame"),
