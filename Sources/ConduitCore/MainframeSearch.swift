@@ -3,6 +3,7 @@ import Foundation
 public enum MainframeSearchHitKind: String, Sendable {
     case path
     case heading
+    case metadata
     case content
 }
 
@@ -52,6 +53,18 @@ public enum MainframeTextSearch {
             if let markdown = record.markdown {
                 for heading in markdown.headings where heading.text.localizedCaseInsensitiveContains(needle) {
                     hits.append(MainframeSearchHit(path: record.path, line: heading.line, excerpt: heading.text, kind: .heading, score: 20))
+                }
+                for key in markdown.frontmatter.keys.sorted() {
+                    let value = markdown.frontmatter[key] ?? ""
+                    if key.localizedCaseInsensitiveContains(needle) || value.localizedCaseInsensitiveContains(needle) {
+                        hits.append(MainframeSearchHit(
+                            path: record.path,
+                            line: 0,
+                            excerpt: "\(key): \(value)",
+                            kind: .metadata,
+                            score: 25
+                        ))
+                    }
                 }
             }
 
