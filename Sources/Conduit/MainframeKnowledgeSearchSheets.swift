@@ -99,7 +99,7 @@ struct MainframeSearchSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(palette.dim)
-                TextField("Find exact text, headings, names, or paths", text: $model.searchQuery)
+                TextField("Find exact text, headings, metadata, tags, names, or paths", text: $model.searchQuery)
                     .textFieldStyle(.plain)
                     .focused($focused)
                 Button("Done") { dismiss() }
@@ -139,7 +139,7 @@ struct MainframeSearchSheet: View {
                     Text("Search the bounded MainFrame corpus")
                         .font(.headline)
                         .foregroundStyle(palette.text)
-                    Text("Find matches path/name, Markdown headings, and exact file content. Related semantic retrieval is separate in the Reader inspector and Radar.")
+                    Text("Find matches path/name, Markdown headings, frontmatter metadata/tags, and exact file content. Related semantic retrieval is separate in the Reader inspector and Radar.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(palette.dim)
                         .frame(maxWidth: 500)
@@ -209,6 +209,7 @@ struct MainframeSearchSheet: View {
         switch kind {
         case .path: return "folder.badge.questionmark"
         case .heading: return "textformat.size"
+        case .metadata: return "tag"
         case .content: return "text.magnifyingglass"
         }
     }
