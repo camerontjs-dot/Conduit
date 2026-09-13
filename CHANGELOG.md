@@ -151,6 +151,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- A first-class **Explore** workspace now provides a lazy, read-only MainFrame
+  file tree, bounded Quick Open, source viewing, and navigation. Project and
+  operation labels use validated lifecycle authority, and Explorer performs no
+  file mutation.
+
 - A top-level **Orchestrate** workspace now separates task planning from a
   worker's Conversation/Raw surfaces. It sends an explicit request only to a
   fixed loopback Ollama planner with no tool interface, carries
