@@ -109,6 +109,37 @@ final class MainframeDocumentIndexTests: XCTestCase {
         XCTAssertTrue(result.mayBeIncomplete)
     }
 
+    func testTextSearchTreatsFrontmatterTagsAsStructuredMetadataHits() {
+        let document = MainframeMarkdownParser.parse("""
+        ---
+        tags: [swift, explorer]
+        domain: mainframe
+        ---
+        # Demo
+        no matching body phrase
+        """)
+        let record = MainframeDocumentRecord(
+            path: "10_knowledge/demo.md",
+            name: "demo.md",
+            zone: .knowledge,
+            recordScope: nil,
+            text: document.source,
+            byteCount: document.source.utf8.count,
+            markdown: document
+        )
+        let index = MainframeContentIndex(
+            records: [record],
+            filesystemEntries: [],
+            filesystemIndexTruncated: false,
+            contentTruncated: false,
+            bytesIndexed: record.byteCount,
+            skippedNonText: 0,
+            skippedTooLarge: 0
+        )
+        let result = MainframeTextSearch.search(index, query: "explorer")
+        XCTAssertTrue(result.hits.contains { $0.kind == .metadata && $0.excerpt.contains("tags:") })
+    }
+
     func testContentIndexerIsBoundedReadOnlyAndSkipsSymlinksAndBinary() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("conduit-doc-index-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
