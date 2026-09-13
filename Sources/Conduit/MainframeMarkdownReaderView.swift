@@ -101,7 +101,7 @@ struct MainframeMarkdownReaderView: View {
                     ForEach(Array(document.blocks.enumerated()), id: \.offset) { _, block in
                         markdownBlock(block)
                     }
-                    localImages(document)
+                    localImages
                 }
                 .padding(.horizontal, 28)
                 .padding(.vertical, 24)
@@ -117,6 +117,9 @@ struct MainframeMarkdownReaderView: View {
                 DispatchQueue.main.async { headingTarget = nil }
             }
         }
+        .environment(\.openURL, OpenURLAction { url in
+            handleInlineURL(url)
+        })
         .accessibilityLabel("Rendered Markdown, read only")
     }
 
@@ -223,7 +226,7 @@ struct MainframeMarkdownReaderView: View {
     }
 
     @ViewBuilder
-    private func localImages(_ document: MainframeMarkdownDocument) -> some View {
+    private var localImages: some View {
         let images = model.selectedOutgoingLinks.filter { $0.link.isImage }
         if !images.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
@@ -263,6 +266,43 @@ struct MainframeMarkdownReaderView: View {
         let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values?.isRegularFile == true, values?.isSymbolicLink != true else { return nil }
         return NSImage(contentsOf: url)
+    }
+
+    private func handleInlineURL(_ url: URL) -> OpenURLAction.Result {
+        let raw = url.absoluteString
+        if let scheme = url.scheme?.lowercased(), ["http", "https", "mailto", "tel"].contains(scheme) {
+            NSWorkspace.shared.open(url)
+            return .handled
+        }
+        guard let sourcePath = model.selectedPath, let content = model.contentIndex else {
+            return .discarded
+        }
+        let documents = content.markdownDocuments
+        let resolution = MainframeLinkResolver.resolve(
+            sourcePath: sourcePath,
+            target: raw,
+            documents: documents,
+            knownPaths: Set(documents.keys)
+        )
+        switch resolution {
+        case .local(let path, let anchor):
+            model.open(relativePath: path, surface: .reader)
+            if let anchor { headingTarget = anchor }
+            model.readerMode = .rendered
+            return .handled
+        case .sameDocumentAnchor(let anchor):
+            headingTarget = anchor
+            model.readerMode = .rendered
+            return .handled
+        case .external(let external):
+            guard let target = URL(string: external), let scheme = target.scheme?.lowercased(), ["http", "https", "mailto", "tel"].contains(scheme) else {
+                return .discarded
+            }
+            NSWorkspace.shared.open(target)
+            return .handled
+        case .unresolved:
+            return .discarded
+        }
     }
 
     private func frontmatterCard(_ values: [String: String]) -> some View {
@@ -308,7 +348,7 @@ struct MainframeMarkdownReaderView: View {
                     .font(.caption)
                     .foregroundStyle(palette.faint)
             }
-            Text("Expand this folder in the tree or use Search and Graph to navigate its contents.")
+            Text("Expand this folder in the tree or use Find and Graph to navigate its contents.")
                 .foregroundStyle(palette.dim)
         }
         .padding(32)
