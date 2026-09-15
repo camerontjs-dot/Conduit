@@ -6,11 +6,13 @@ import SwiftUI
 enum MainframeReaderMode: String, CaseIterable {
     case rendered
     case source
+    case edit
 
     var displayName: String {
         switch self {
         case .rendered: return "Read"
         case .source: return "Source"
+        case .edit: return "Edit"
         }
     }
 }
@@ -30,7 +32,9 @@ struct MainframeMarkdownReaderView: View {
         switch mode {
         case .rendered:
             renderedDocument
-        case .source:
+        case .source, .edit:
+            // Edit mode is normally intercepted by Explorer and rendered with a
+            // TextEditor. Falling back to source keeps this projection total.
             sourceDocument
         }
     }
