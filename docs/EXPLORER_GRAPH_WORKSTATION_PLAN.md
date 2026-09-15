@@ -2,8 +2,11 @@
 
 Status: proposed product/engineering plan
 Date: 2026-09-12
+Last usability calibration: 2026-09-14
 Scope: Conduit UI/navigation/retrieval programme
 Authority boundary: planning document only; no implementation, promotion, release, or MainFrame lifecycle mutation is implied by this file.
+
+The 2026-09-14 calibration incorporates direct use of the first installed Explorer shell. It confirms the overall Explore → Graph → Workstation direction while changing several presentation priorities: the reader should wrap and render Markdown by default, ordinary prose should use a readability-first proportional font, file-path actions should be first-class, symlink targets should be inspectable without weakening traversal safety, Explorer should use the application's actual sidebar rather than nesting a second rail, and bounded Markdown editing should become a later maintained capability rather than a permanent non-goal.
 
 ## 1. Objective
 
@@ -117,6 +120,21 @@ Conduit
 
 `Orchestrate` may remain a separate workspace where appropriate. This plan does not require collapsing existing workspaces.
 
+### 3.1 Sidebar ownership
+
+The first installed Explorer shell proved that a second file-tree rail nested inside the existing task sidebar creates unnecessary visual hierarchy.
+
+The target topology is one first-class application sidebar whose contents adapt to the active workspace:
+
+- **Work:** task/session navigation;
+- **Explore:** MainFrame tree and file-navigation controls;
+- **Graph:** scene/navigation controls and graph filters;
+- **Workstation:** lifecycle/work-record navigation appropriate to the overview.
+
+The active workspace may keep its own local Inspector or secondary controls, but it should not recreate a second primary sidebar inside the detail area unless a later usability test demonstrates a real need.
+
+Workspace switching must preserve task/runtime continuity. Changing sidebar contents is presentation state, not permission to remount or replace active execution state.
+
 ## 4. Explore workspace
 
 Explore is the reliable everyday interface and should be useful before Graph or Workstation exist.
@@ -153,6 +171,8 @@ System
 
 Project and operation badges appear only when the record validates against the MainFrame lifecycle identity contract.
 
+The tree should occupy the application's actual sidebar in Explore mode rather than a nested Explorer-only rail in the detail pane.
+
 ### 4.2 Core interactions
 
 Explorer should support multiple routes to the same destination:
@@ -167,7 +187,10 @@ Explorer should support multiple routes to the same destination:
 - Reveal in Tree;
 - Recent Files;
 - Collapse All;
-- optional auto-reveal of the active file.
+- optional auto-reveal of the active file;
+- Copy MainFrame-relative Path;
+- Copy Absolute Path;
+- Reveal in Finder where the platform permits it.
 
 Suggested shortcuts:
 
@@ -181,14 +204,16 @@ Suggested shortcuts:
 
 Exact shortcuts should be reconciled against existing Conduit shortcuts before implementation.
 
+The breadcrumb/path surface should remain easy to select and should expose path-copy actions without requiring the operator to locate the same file elsewhere.
+
 ### 4.3 Reader
 
-The first editing posture should be read-only.
+The initial implementation may remain read-only while the rendering and navigation boundary is qualified, but read-only source text is not the target reader experience.
 
-The reader should provide:
+The default Markdown reader should provide:
 
-- rendered Markdown;
-- raw/source Markdown toggle;
+- rendered Markdown rather than raw Markdown syntax;
+- normal line wrapping for prose;
 - headings;
 - lists;
 - block quotes;
@@ -198,11 +223,41 @@ The reader should provide:
 - local images where safe and resolvable;
 - heading anchors;
 - text selection;
-- an Outline synchronized with the current heading.
+- an Outline synchronized with the current heading;
+- a source/raw Markdown mode for exact inspection.
 
 Broken or unresolved links must be shown as broken/unresolved. Conduit must not guess targets.
 
-Editing, rename, delete, move, graph-created links, and drag-to-reorganize are deliberately deferred.
+#### Reader typography
+
+Normal prose should use the native macOS system text face, effectively SF Pro Text through SwiftUI's system font APIs, rather than a monospaced font. This keeps the reader aligned with Dynamic Type/accessibility behavior and gives the best default readability without adding a font dependency.
+
+Recommended reading posture:
+
+- proportional system body text for prose;
+- roughly 15–17 pt equivalent at the default scale;
+- comfortable line spacing;
+- a bounded readable text measure rather than an infinitely wide line, targeting roughly 70–85 characters for ordinary prose where layout permits;
+- monospaced treatment only for source Markdown, code blocks, paths, hashes, terminal material, and other content whose exact character geometry matters.
+
+A later reader preference may offer a system serif treatment and/or a qualified accessibility-oriented face, but the default should remain native and dependency-free until real use demonstrates a need for bundled fonts.
+
+#### Bounded Markdown editing
+
+Editing should become a later maintained Explorer capability after rendered reading and file-authority behavior are stable.
+
+The preferred first editing model is deliberately simpler than Obsidian Live Preview:
+
+- **Read** mode: fully rendered Markdown;
+- **Edit** mode: wrapped Markdown source in the same reader area;
+- optional split preview only if it remains useful after real use;
+- visible dirty/saved state;
+- explicit save command and standard keyboard save behavior;
+- atomic file replacement where practical;
+- conflict detection when the file changed on disk after the edit buffer was opened;
+- failed writes leave the original file intact and surface the error visibly.
+
+This slice does not authorize rename, delete, move, drag-to-reorganize, graph-created links, or a full syntax-hiding/WYSIWYG Markdown editor. A true Obsidian-style Live Preview may be considered later if the simpler Read/Edit model proves insufficient.
 
 ### 4.4 Explorer Inspector
 
@@ -225,7 +280,9 @@ Suggested sections:
 - lifecycle zone;
 - record type where validated;
 - frontmatter;
-- basic filesystem facts.
+- basic filesystem facts;
+- path-copy actions;
+- symlink target and target classification where applicable.
 
 **Related**
 - optional MindGraph nominations;
@@ -236,6 +293,19 @@ Suggested sections:
 - observed Conduit tasks/sessions associated with the validated project/operation scope;
 - agent identity and lifecycle labels derived from existing Conduit task/runtime evidence;
 - optional sprite companion as presentation only.
+
+### 4.5 Symbolic links
+
+The current fail-closed non-traversal rule remains the safety default, but a symbolic link should be informative rather than opaque.
+
+For a selected symlink, Explorer should expose:
+
+- the link path;
+- the raw/resolved target where the operating system can provide it safely;
+- whether the target resolves **inside MainFrame**, **outside MainFrame**, or is **missing/unresolved**;
+- an explicit `Open Target` action only when the resolved target remains inside the selected MainFrame root and the same path-safety checks succeed.
+
+Explorer must not recursively traverse symlinked directories during ordinary tree scans or indexing. External targets may be displayed as facts without silently expanding the filesystem authority boundary.
 
 ## 5. Deterministic search versus semantic retrieval
 
@@ -274,6 +344,8 @@ The UI should never blend these into one unlabeled result list.
 Graph should be an investigative environment, not a decorative global hairball.
 
 The default graph should be local and intentionally small.
+
+The Graph workspace remains an explicit part of the programme. Its absence from the first installed Explorer shell reflects implementation sequencing, not removal from the product direction.
 
 ### 6.1 Graph relationship classes
 
@@ -403,6 +475,8 @@ It should answer a different question:
 > What is happening across my MainFrame, where is my attention, and what evidence of movement actually exists?
 
 It should not become a kanban clone or a fake game dashboard.
+
+The Workstation also remains in the implementation programme. It should not be exposed merely as an empty placeholder before the underlying Explorer/Graph projections can support a useful interface.
 
 ### 8.1 MainFrame map
 
@@ -641,6 +715,7 @@ Conduit
 ├── ExploreWorkspaceView
 ├── MainframeTreeView
 ├── MarkdownReaderView
+├── MarkdownEditorView
 ├── ExplorerInspectorView
 ├── QuickOpenView
 ├── SearchView
@@ -689,12 +764,22 @@ Include:
 - Reveal in Tree;
 - Recent Files.
 
+Usability calibration after the first installed shell:
+
+- keep the qualified read-only filesystem safety boundary;
+- move the MainFrame tree into the application's real sidebar in Explore mode rather than keeping a nested rail;
+- preserve Sessions ↔ Explore runtime/task continuity while the rail contents change;
+- add direct path-copy actions;
+- display symlink target/classification without recursively traversing links.
+
 ### Slice C — Markdown reader and explicit-link index
 
 Include:
 
-- rendered Markdown;
-- source toggle;
+- rendered Markdown as the default view;
+- ordinary prose wrapping;
+- native proportional system typography and readable line measure;
+- source toggle using monospaced text;
 - heading outline;
 - link interception;
 - deterministic outgoing-link index;
@@ -712,11 +797,28 @@ Include:
 - Outline;
 - Links;
 - Document;
+- path and symlink facts/actions;
 - Work context;
 - optional MindGraph Related section;
 - auto-reveal preference.
 
 Milestone outcome: Conduit is useful as a MainFrame reader/navigation tool even if Graph never ships.
+
+### Slice D2 — bounded Markdown editing
+
+Add editing only after the rendered reader and file-watch/conflict behavior are stable.
+
+Include:
+
+- Read/Edit mode in the reader area;
+- wrapped source editor;
+- dirty/saved state;
+- explicit and keyboard save;
+- atomic write behavior where practical;
+- external-change conflict detection;
+- write-error recovery that preserves the original file.
+
+Do not include rename/delete/move, drag reorganization, graph-authored links, or full Obsidian-style Live Preview in this slice.
 
 ### Slice E — Orbit graph MVP
 
@@ -731,6 +833,8 @@ Include:
 - graph Back / Forward;
 - Open in Explore;
 - accessible equivalent node/edge list.
+
+The first graph UI should expose Orbit before attempting a visually complete Atlas/Workstation environment. A small useful graph is the acceptance target.
 
 ### Slice F — Atlas and Pathfinder
 
@@ -780,16 +884,33 @@ The pixel pass should not be allowed to conceal missing labels, inaccessible int
 - projects and operations follow public MainFrame lifecycle identity rules;
 - invalid/ambiguous identities are visible rather than guessed.
 
+When editing is enabled, `no silent file mutation` means every write is an explicit operator edit/save action with visible failure/conflict behavior, not that Conduit must remain permanently read-only.
+
 ### Explorer
 
 - tree reflects filesystem changes after refresh/watch;
-- selection does not mutate content;
+- the tree uses the application sidebar in Explore mode rather than a nested primary rail;
+- switching between Work/Sessions and Explore preserves active task/runtime identity and retained output;
+- selection alone does not mutate content;
+- Markdown prose wraps and rendered Markdown is the default reader posture;
+- normal reader prose uses readability-first proportional system typography; source/code/path surfaces remain monospaced where character geometry matters;
+- ordinary prose does not require horizontal scrolling at normal window sizes;
 - navigation history is deterministic;
 - relative Markdown links resolve from source file location;
 - broken links remain broken;
+- file path can be copied directly as MainFrame-relative and absolute forms;
+- symlink target/classification is inspectable without automatic directory traversal;
 - Quick Open and search work without MindGraph;
 - keyboard-only navigation is practical;
 - VoiceOver exposes meaningful file/document structure.
+
+When bounded Markdown editing is enabled:
+
+- dirty/saved state is visible;
+- save writes only the selected source file;
+- an external modification after buffer load cannot be silently overwritten;
+- failed save leaves the prior file content recoverable/intact;
+- editing does not expand authority to rename, move, delete, or reorganize files.
 
 ### Graph
 
@@ -834,7 +955,17 @@ Minimum deterministic coverage should include:
 - deterministic layout snapshots/structural checks;
 - Pathfinder with disconnected graphs and edge filters;
 - path-root escape cases;
+- symlink inside-root/outside-root/missing-target classification;
+- reader wrapping/rendered-block coverage;
+- path-copy value coverage;
 - scenes with MindGraph unavailable.
+
+Editing-specific verification, when that slice begins, should add:
+
+- exact-file atomic save behavior;
+- external-change conflict case;
+- write failure without original-content loss;
+- no authority expansion to adjacent files.
 
 Before Atlas/Workstation scale claims, create a synthetic MainFrame fixture large enough to expose responsiveness and layout problems. Choose thresholds from measurement rather than inventing an unsupported performance number.
 
@@ -855,7 +986,7 @@ Private inventory details must not enter the repository.
 
 ## 16. Explicit non-goals for the first programme
 
-- Markdown editing;
+- full syntax-hiding/WYSIWYG or Obsidian-style Live Preview editing;
 - rename/delete/move;
 - drag-to-reorganize MainFrame;
 - graph-created links;
@@ -868,6 +999,8 @@ Private inventory details must not enter the repository.
 - inferred completion percentages;
 - a new MindGraph operations scope;
 - treating graph scene state as knowledge authority.
+
+Basic bounded Markdown source editing is no longer a permanent non-goal; it is intentionally deferred to Slice D2 so the reader and filesystem safety boundary can be qualified first.
 
 ## 17. Design question to preserve during implementation
 
