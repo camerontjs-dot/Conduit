@@ -41,8 +41,11 @@ final class MainframeMarkdownEditingSession: ObservableObject {
     func discard() {
         guard let baseline else { return }
         buffer = baseline
-        statusMessage = "Unsaved changes discarded."
-        hasConflict = false
+        statusMessage = hasConflict
+            ? "Unsaved buffer changes discarded. The file still changed on disk; reload it before continuing."
+            : "Unsaved changes discarded."
+        // Preserve conflict state so a stale baseline cannot make the explicit
+        // Reload from Disk action disappear after discarding the local draft.
     }
 
     func noteNavigationBlocked() {
