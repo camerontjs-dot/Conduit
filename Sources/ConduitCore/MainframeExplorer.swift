@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Presentation grouping for paths in a MainFrame root. Only the seven
 /// lifecycle directories have lifecycle meaning; every other root child is a
@@ -190,29 +195,29 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
 
     public func children(root: URL, directory: URL) throws -> [MainframeExplorerNode] {
         let validatedRoot = try validateRoot(root)
+        let canonicalRoot = try canonicalExistingURL(validatedRoot)
         let lexicalDirectory = directory.standardizedFileURL
-        guard isLexicallyContained(lexicalDirectory, in: validatedRoot) else {
-            throw MainframeExplorerError.unsafePath(directory.path)
-        }
-        let directoryValues = try lexicalDirectory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-        if directoryValues.isSymbolicLink == true {
+
+        if symbolicLinkDestination(at: lexicalDirectory) != nil {
             throw MainframeExplorerError.symbolicLinkTraversal(directory.path)
         }
+        let directoryValues = try lexicalDirectory.resourceValues(forKeys: [.isDirectoryKey])
         guard directoryValues.isDirectory == true else {
             throw MainframeExplorerError.notDirectory(directory.path)
         }
-        guard isResolvedContained(lexicalDirectory, in: validatedRoot) else {
+        let canonicalDirectory = try canonicalExistingURL(lexicalDirectory)
+        guard isPath(canonicalDirectory.path, containedIn: canonicalRoot.path) else {
             throw MainframeExplorerError.unsafePath(directory.path)
         }
 
         let urls = try fileManager.contentsOfDirectory(
             at: lexicalDirectory,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
             options: []
         )
         return try urls
             .filter { !ignoredNames.contains($0.lastPathComponent) }
-            .map { try node(root: validatedRoot, url: $0) }
+            .map { try node(root: canonicalRoot, canonicalParent: canonicalDirectory, url: $0) }
             .sorted(by: nodeSort)
     }
 
@@ -251,18 +256,17 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
         maxBytes: Int = 2_000_000
     ) throws -> String {
         let validatedRoot = try validateRoot(root)
+        let canonicalRoot = try canonicalExistingURL(validatedRoot)
         let lexicalFile = file.standardizedFileURL
-        guard isLexicallyContained(lexicalFile, in: validatedRoot) else {
-            throw MainframeExplorerError.unsafePath(file.path)
-        }
-        let values = try lexicalFile.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-        if values.isSymbolicLink == true {
+        if symbolicLinkDestination(at: lexicalFile) != nil {
             throw MainframeExplorerError.symbolicLinkTraversal(file.path)
         }
+        let values = try lexicalFile.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
         guard values.isRegularFile == true else {
             throw MainframeExplorerError.notFile(file.path)
         }
-        guard isResolvedContained(lexicalFile, in: validatedRoot) else {
+        let canonicalFile = try canonicalExistingURL(lexicalFile)
+        guard isPath(canonicalFile.path, containedIn: canonicalRoot.path) else {
             throw MainframeExplorerError.unsafePath(file.path)
         }
         let limit = max(1, maxBytes)
@@ -285,41 +289,49 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
     /// an explicit navigation action only when `relativeTargetPath` is present.
     public func inspectSymbolicLink(root: URL, link: URL) throws -> MainframeSymlinkInspection {
         let validatedRoot = try validateRoot(root)
-        let resolvedRoot = validatedRoot.resolvingSymlinksInPath().standardizedFileURL
+        let canonicalRoot = try canonicalExistingURL(validatedRoot)
         let lexicalLink = link.standardizedFileURL
-        guard isLexicallyContained(lexicalLink, in: validatedRoot) else {
-            throw MainframeExplorerError.unsafePath(link.path)
-        }
-        let values = try lexicalLink.resourceValues(forKeys: [.isSymbolicLinkKey])
-        guard values.isSymbolicLink == true else {
+        guard let rawTarget = symbolicLinkDestination(at: lexicalLink) else {
             throw MainframeExplorerError.notSymbolicLink(link.path)
         }
+        let canonicalLink = try canonicalLeafPreservingURL(lexicalLink)
+        guard isPath(canonicalLink.path, containedIn: canonicalRoot.path) else {
+            throw MainframeExplorerError.unsafePath(link.path)
+        }
 
-        let rawTarget = try fileManager.destinationOfSymbolicLink(atPath: lexicalLink.path)
         let targetURL: URL
         if rawTarget.hasPrefix("/") {
             targetURL = URL(fileURLWithPath: rawTarget)
         } else {
             targetURL = lexicalLink.deletingLastPathComponent().appendingPathComponent(rawTarget)
         }
-        let resolvedTarget = targetURL.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
-        let exists = fileManager.fileExists(atPath: resolvedTarget.path)
+        let standardizedTarget = targetURL.standardizedFileURL
+        let exists = fileManager.fileExists(atPath: standardizedTarget.path)
+
+        let resolvedTarget: URL
+        if exists, let canonical = try? canonicalExistingURL(standardizedTarget) {
+            resolvedTarget = canonical
+        } else if let preserved = try? canonicalLeafPreservingURL(standardizedTarget) {
+            resolvedTarget = preserved
+        } else {
+            resolvedTarget = standardizedTarget
+        }
 
         let location: MainframeSymlinkTargetLocation
         let relativeTargetPath: String?
         if !exists {
             location = .missing
             relativeTargetPath = nil
-        } else if isResolvedContained(resolvedTarget, in: validatedRoot) {
+        } else if isPath(resolvedTarget.path, containedIn: canonicalRoot.path) {
             location = .insideRoot
-            relativeTargetPath = try relativePath(root: resolvedRoot, url: resolvedTarget)
+            relativeTargetPath = try relativePath(root: canonicalRoot, canonicalURL: resolvedTarget, original: targetURL)
         } else {
             location = .outsideRoot
             relativeTargetPath = nil
         }
 
         return MainframeSymlinkInspection(
-            linkPath: try relativePath(root: validatedRoot, url: lexicalLink),
+            linkPath: try relativePath(root: canonicalRoot, canonicalURL: canonicalLink, original: link),
             rawTarget: rawTarget,
             resolvedTargetPath: resolvedTarget.path,
             location: location,
@@ -333,31 +345,41 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
         guard fileManager.fileExists(atPath: lexicalRoot.path, isDirectory: &isDirectory), isDirectory.boolValue else {
             throw MainframeExplorerError.missingRoot(root.path)
         }
-        let values = try lexicalRoot.resourceValues(forKeys: [.isSymbolicLinkKey])
-        if values.isSymbolicLink == true {
+        if symbolicLinkDestination(at: lexicalRoot) != nil {
             throw MainframeExplorerError.symbolicLinkTraversal(root.path)
         }
         return lexicalRoot
     }
 
-    private func node(root: URL, url: URL) throws -> MainframeExplorerNode {
+    private func node(
+        root canonicalRoot: URL,
+        canonicalParent: URL,
+        url: URL
+    ) throws -> MainframeExplorerNode {
         let lexicalURL = url.standardizedFileURL
-        guard isLexicallyContained(lexicalURL, in: root) else {
-            throw MainframeExplorerError.unsafePath(url.path)
-        }
-        let values = try lexicalURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey])
+        let isSymbolicLink = symbolicLinkDestination(at: lexicalURL) != nil
+        let values = try lexicalURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
         let kind: MainframeExplorerNodeKind
-        if values.isSymbolicLink == true {
+        if isSymbolicLink {
             kind = .symbolicLink
         } else if values.isDirectory == true {
             kind = .directory
         } else {
             kind = .file
         }
-        if kind != .symbolicLink, !isResolvedContained(lexicalURL, in: root) {
+
+        // `contentsOfDirectory` may rewrite an ancestor spelling on macOS
+        // (`/tmp` -> `/private/tmp`). The parent directory has already been
+        // canonicalized and containment-checked, so derive the child identity
+        // from that authorized parent plus the literal leaf name. This also
+        // preserves a dangling symlink as a leaf instead of resolving it.
+        let canonicalURL = canonicalParent
+            .appendingPathComponent(lexicalURL.lastPathComponent, isDirectory: false)
+            .standardizedFileURL
+        guard isPath(canonicalURL.path, containedIn: canonicalRoot.path) else {
             throw MainframeExplorerError.unsafePath(url.path)
         }
-        let relativePath = try relativePath(root: root, url: lexicalURL)
+        let relativePath = try relativePath(root: canonicalRoot, canonicalURL: canonicalURL, original: url)
         return MainframeExplorerNode(
             name: lexicalURL.lastPathComponent,
             relativePath: relativePath,
@@ -368,16 +390,40 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
         )
     }
 
-    /// Foundation can surface a child through the resolved spelling of an
-    /// ancestor even when the operator selected the same root through an alias
-    /// (for example macOS `/tmp` versus `/private/tmp`). Treat only the root's
-    /// own lexical and resolved spellings as equivalent. The candidate itself
-    /// is never resolved here, so symbolic-link leaves remain leaves and an
-    /// arbitrary third alias does not gain authority.
-    private func rootPathRepresentations(_ root: URL) -> [String] {
-        let lexical = root.standardizedFileURL.path
-        let resolved = root.resolvingSymlinksInPath().standardizedFileURL.path
-        return lexical == resolved ? [lexical] : [lexical, resolved]
+    /// Canonicalize an existing filesystem object using POSIX `realpath`, which
+    /// normalizes filesystem aliases such as macOS `/var` -> `/private/var` and
+    /// resolves intermediate symlinks. Callers use this only for objects that
+    /// are allowed to resolve fully, never for a symlink leaf that must remain
+    /// a leaf.
+    private func canonicalExistingURL(_ url: URL) throws -> URL {
+        let path = url.standardizedFileURL.path
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        let succeeded = buffer.withUnsafeMutableBufferPointer { output in
+            path.withCString { input in
+                realpath(input, output.baseAddress) != nil
+            }
+        }
+        guard succeeded else {
+            throw MainframeExplorerError.unsafePath(url.path)
+        }
+        let terminator = buffer.firstIndex(of: 0) ?? buffer.endIndex
+        let bytes = buffer[..<terminator].map { UInt8(bitPattern: $0) }
+        return URL(fileURLWithPath: String(decoding: bytes, as: UTF8.self)).standardizedFileURL
+    }
+
+    /// Canonicalize all ancestors while deliberately preserving the final path
+    /// component. This is the key boundary for dangling symlinks: their parent
+    /// directory may be canonicalized, but the link itself is never followed.
+    private func canonicalLeafPreservingURL(_ url: URL) throws -> URL {
+        let lexical = url.standardizedFileURL
+        let canonicalParent = try canonicalExistingURL(lexical.deletingLastPathComponent())
+        return canonicalParent
+            .appendingPathComponent(lexical.lastPathComponent, isDirectory: false)
+            .standardizedFileURL
+    }
+
+    private func symbolicLinkDestination(at url: URL) -> String? {
+        try? fileManager.destinationOfSymbolicLink(atPath: url.standardizedFileURL.path)
     }
 
     private func isPath(_ candidatePath: String, containedIn rootPath: String) -> Bool {
@@ -385,29 +431,15 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
             || candidatePath.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
     }
 
-    private func relativePath(root: URL, url: URL) throws -> String {
-        let candidatePath = url.standardizedFileURL.path
-        for rootPath in rootPathRepresentations(root) {
-            if candidatePath == rootPath { return "" }
-            let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
-            if candidatePath.hasPrefix(prefix) {
-                return String(candidatePath.dropFirst(prefix.count))
-            }
+    private func relativePath(root: URL, canonicalURL: URL, original: URL) throws -> String {
+        let rootPath = root.standardizedFileURL.path
+        let candidatePath = canonicalURL.standardizedFileURL.path
+        guard isPath(candidatePath, containedIn: rootPath) else {
+            throw MainframeExplorerError.unsafePath(original.path)
         }
-        throw MainframeExplorerError.unsafePath(url.path)
-    }
-
-    private func isLexicallyContained(_ candidate: URL, in root: URL) -> Bool {
-        let candidatePath = candidate.standardizedFileURL.path
-        return rootPathRepresentations(root).contains {
-            isPath(candidatePath, containedIn: $0)
-        }
-    }
-
-    private func isResolvedContained(_ candidate: URL, in root: URL) -> Bool {
-        let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL.path
-        let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL.path
-        return resolvedCandidate == resolvedRoot || resolvedCandidate.hasPrefix(resolvedRoot.hasSuffix("/") ? resolvedRoot : resolvedRoot + "/")
+        if candidatePath == rootPath { return "" }
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        return String(candidatePath.dropFirst(prefix.count))
     }
 
     private func nodeSort(_ lhs: MainframeExplorerNode, _ rhs: MainframeExplorerNode) -> Bool {
