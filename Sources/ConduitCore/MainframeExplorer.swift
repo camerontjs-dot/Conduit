@@ -285,6 +285,7 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
     /// an explicit navigation action only when `relativeTargetPath` is present.
     public func inspectSymbolicLink(root: URL, link: URL) throws -> MainframeSymlinkInspection {
         let validatedRoot = try validateRoot(root)
+        let resolvedRoot = validatedRoot.resolvingSymlinksInPath().standardizedFileURL
         let lexicalLink = link.standardizedFileURL
         guard isLexicallyContained(lexicalLink, in: validatedRoot) else {
             throw MainframeExplorerError.unsafePath(link.path)
@@ -311,7 +312,7 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
             relativeTargetPath = nil
         } else if isResolvedContained(resolvedTarget, in: validatedRoot) {
             location = .insideRoot
-            relativeTargetPath = relativePath(root: validatedRoot, url: resolvedTarget)
+            relativeTargetPath = relativePath(root: resolvedRoot, url: resolvedTarget)
         } else {
             location = .outsideRoot
             relativeTargetPath = nil
