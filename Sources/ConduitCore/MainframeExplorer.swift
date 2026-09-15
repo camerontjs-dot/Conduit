@@ -312,14 +312,14 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
             relativeTargetPath = nil
         } else if isResolvedContained(resolvedTarget, in: validatedRoot) {
             location = .insideRoot
-            relativeTargetPath = relativePath(root: resolvedRoot, url: resolvedTarget)
+            relativeTargetPath = try relativePath(root: resolvedRoot, url: resolvedTarget)
         } else {
             location = .outsideRoot
             relativeTargetPath = nil
         }
 
         return MainframeSymlinkInspection(
-            linkPath: relativePath(root: validatedRoot, url: lexicalLink),
+            linkPath: try relativePath(root: validatedRoot, url: lexicalLink),
             rawTarget: rawTarget,
             resolvedTargetPath: resolvedTarget.path,
             location: location,
@@ -357,7 +357,7 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
         if kind != .symbolicLink, !isResolvedContained(lexicalURL, in: root) {
             throw MainframeExplorerError.unsafePath(url.path)
         }
-        let relativePath = relativePath(root: root, url: lexicalURL)
+        let relativePath = try relativePath(root: root, url: lexicalURL)
         return MainframeExplorerNode(
             name: lexicalURL.lastPathComponent,
             relativePath: relativePath,
@@ -368,16 +368,40 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
         )
     }
 
-    private func relativePath(root: URL, url: URL) -> String {
-        let rootComponents = root.standardizedFileURL.pathComponents
-        let urlComponents = url.standardizedFileURL.pathComponents
-        return urlComponents.dropFirst(rootComponents.count).joined(separator: "/")
+    /// Foundation can surface a child through the resolved spelling of an
+    /// ancestor even when the operator selected the same root through an alias
+    /// (for example macOS `/tmp` versus `/private/tmp`). Treat only the root's
+    /// own lexical and resolved spellings as equivalent. The candidate itself
+    /// is never resolved here, so symbolic-link leaves remain leaves and an
+    /// arbitrary third alias does not gain authority.
+    private func rootPathRepresentations(_ root: URL) -> [String] {
+        let lexical = root.standardizedFileURL.path
+        let resolved = root.resolvingSymlinksInPath().standardizedFileURL.path
+        return lexical == resolved ? [lexical] : [lexical, resolved]
+    }
+
+    private func isPath(_ candidatePath: String, containedIn rootPath: String) -> Bool {
+        candidatePath == rootPath
+            || candidatePath.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
+    }
+
+    private func relativePath(root: URL, url: URL) throws -> String {
+        let candidatePath = url.standardizedFileURL.path
+        for rootPath in rootPathRepresentations(root) {
+            if candidatePath == rootPath { return "" }
+            let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+            if candidatePath.hasPrefix(prefix) {
+                return String(candidatePath.dropFirst(prefix.count))
+            }
+        }
+        throw MainframeExplorerError.unsafePath(url.path)
     }
 
     private func isLexicallyContained(_ candidate: URL, in root: URL) -> Bool {
-        let rootPath = root.standardizedFileURL.path
         let candidatePath = candidate.standardizedFileURL.path
-        return candidatePath == rootPath || candidatePath.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
+        return rootPathRepresentations(root).contains {
+            isPath(candidatePath, containedIn: $0)
+        }
     }
 
     private func isResolvedContained(_ candidate: URL, in root: URL) -> Bool {
