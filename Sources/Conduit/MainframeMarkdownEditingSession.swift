@@ -8,7 +8,8 @@ import Foundation
 final class MainframeMarkdownEditingSession: ObservableObject {
     @Published var buffer = ""
     @Published private(set) var baseline: String?
-    @Published private(set) var path: String?
+    @Published private(set) var relativePath: String?
+    @Published private(set) var absolutePath: String?
     @Published private(set) var statusMessage: String?
     @Published private(set) var hasConflict = false
 
@@ -19,8 +20,9 @@ final class MainframeMarkdownEditingSession: ObservableObject {
         return buffer != baseline
     }
 
-    func load(path: String, source: String) {
-        self.path = path
+    func load(relativePath: String, absolutePath: String, source: String) {
+        self.relativePath = relativePath
+        self.absolutePath = absolutePath
         buffer = source
         baseline = source
         statusMessage = nil
@@ -28,7 +30,8 @@ final class MainframeMarkdownEditingSession: ObservableObject {
     }
 
     func clear() {
-        path = nil
+        relativePath = nil
+        absolutePath = nil
         buffer = ""
         baseline = nil
         statusMessage = nil
@@ -48,11 +51,11 @@ final class MainframeMarkdownEditingSession: ObservableObject {
 
     @discardableResult
     func save(root: URL, file: URL) -> Bool {
-        guard let baseline, let path else {
+        guard let baseline, let absolutePath else {
             statusMessage = "No editable Markdown source is loaded."
             return false
         }
-        guard file.standardizedFileURL.path.hasSuffix(path) else {
+        guard file.standardizedFileURL.path == absolutePath else {
             statusMessage = "The selected file no longer matches the edit buffer."
             return false
         }
