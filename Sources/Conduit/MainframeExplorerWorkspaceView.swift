@@ -4,10 +4,11 @@ import ConduitCore
 import Foundation
 import SwiftUI
 
-/// Workspace-local state for the read-only MainFrame Explorer shell.
+/// Workspace-local state for MainFrame Explorer.
 ///
-/// This deliberately does not live in AppModel: selecting/expanding files is
-/// transient navigation state and must not become task/runtime authority.
+/// Navigation and edit-buffer state deliberately do not live in AppModel:
+/// selecting files and holding an unsaved draft must not become task/runtime
+/// authority.
 @MainActor
 final class MainframeExplorerWorkspaceModel: ObservableObject {
     struct VisibleRow: Identifiable {
@@ -37,6 +38,8 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     @Published var quickOpenQuery = ""
     @Published var isQuickOpenPresented = false
     @Published private(set) var navigationRevision = 0
+
+    let editor = MainframeMarkdownEditingSession()
 
     private var nodesByPath: [String: MainframeExplorerNode] = [:]
     private var lifecycleScan: MainframeLifecycleScan?
@@ -107,6 +110,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         navigationRevision += 1
         nodesByPath = [:]
         lifecycleScan = nil
+        editor.clear()
 
         do {
             let nodes = try scanner.rootChildren(root: normalized)
@@ -130,6 +134,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     }
 
     func toggle(_ node: MainframeExplorerNode) {
+        guard navigationAllowed(to: node.relativePath) else { return }
         switch node.kind {
         case .directory:
             select(node, recordHistory: true)
@@ -140,11 +145,13 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
                 expandedPaths.insert(node.relativePath)
             }
         case .file, .symbolicLink:
+            if selectedNode?.id == node.id { return }
             select(node, recordHistory: true)
         }
     }
 
     func select(_ node: MainframeExplorerNode, recordHistory: Bool = true) {
+        guard navigationAllowed(to: node.relativePath) else { return }
         selectedNode = node
         if recordHistory {
             history.visit(node.relativePath)
@@ -156,13 +163,16 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
 
         guard let root else {
             documentMessage = "No MainFrame root is selected."
+            editor.clear()
             return
         }
 
         switch node.kind {
         case .directory:
+            editor.clear()
             documentMessage = "Directory · read-only"
         case .symbolicLink:
+            editor.clear()
             do {
                 symlinkInspection = try scanner.inspectSymbolicLink(root: root, link: node.url)
                 documentMessage = "Symbolic link · shown as a leaf; Explorer does not traverse links during scans."
@@ -171,20 +181,70 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
             }
         case .file:
             do {
-                documentText = try scanner.readUTF8Text(root: root, file: node.url)
+                let text = try scanner.readUTF8Text(root: root, file: node.url)
+                documentText = text
+                if Self.isMarkdown(node) {
+                    editor.load(
+                        relativePath: node.relativePath,
+                        absolutePath: node.url.standardizedFileURL.path,
+                        source: text
+                    )
+                } else {
+                    editor.clear()
+                }
             } catch {
+                editor.clear()
                 documentMessage = error.localizedDescription
             }
         }
     }
 
+    func saveEdits() {
+        guard let root,
+              let selectedNode,
+              selectedNode.kind == .file,
+              Self.isMarkdown(selectedNode) else {
+            editor.noteNavigationBlocked()
+            return
+        }
+        if editor.save(root: root, file: selectedNode.url) {
+            documentText = editor.buffer
+            documentMessage = nil
+        }
+    }
+
+    func discardEdits() {
+        editor.discard()
+    }
+
+    func reloadSelectedFileDiscardingBuffer() {
+        guard let root,
+              let selectedNode,
+              selectedNode.kind == .file,
+              Self.isMarkdown(selectedNode) else { return }
+        do {
+            let text = try scanner.readUTF8Text(root: root, file: selectedNode.url)
+            documentText = text
+            documentMessage = nil
+            editor.load(
+                relativePath: selectedNode.relativePath,
+                absolutePath: selectedNode.url.standardizedFileURL.path,
+                source: text
+            )
+        } catch {
+            documentMessage = error.localizedDescription
+        }
+    }
+
     func goBack() {
+        guard navigationAllowed(to: nil) else { return }
         guard let path = history.goBack() else { return }
         navigationRevision += 1
         revealAndSelect(relativePath: path, recordHistory: false)
     }
 
     func goForward() {
+        guard navigationAllowed(to: nil) else { return }
         guard let path = history.goForward() else { return }
         navigationRevision += 1
         revealAndSelect(relativePath: path, recordHistory: false)
@@ -199,11 +259,13 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     }
 
     func selectBreadcrumb(_ relativePath: String) {
+        guard navigationAllowed(to: relativePath) else { return }
         if relativePath.isEmpty {
             selectedNode = nil
             documentText = nil
             documentMessage = "MainFrame root · read-only"
             symlinkInspection = nil
+            editor.clear()
             return
         }
         revealAndSelect(relativePath: relativePath, recordHistory: true)
@@ -234,7 +296,17 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         return relativePath.split(separator: "/").last.map(String.init) ?? relativePath
     }
 
+    private func navigationAllowed(to relativePath: String?) -> Bool {
+        guard editor.hasUnsavedChanges else { return true }
+        if let relativePath, relativePath == selectedNode?.relativePath {
+            return true
+        }
+        editor.noteNavigationBlocked()
+        return false
+    }
+
     private func revealAndSelect(relativePath: String, recordHistory: Bool) {
+        guard navigationAllowed(to: relativePath) else { return }
         guard let root else { return }
         if let known = nodesByPath[relativePath] {
             expandAncestors(of: relativePath, root: root)
@@ -248,7 +320,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         } else {
             documentText = nil
             symlinkInspection = nil
-            documentMessage = "The requested path is no longer present in the current read-only scan."
+            documentMessage = "The requested path is no longer present in the current scan."
         }
     }
 
@@ -379,6 +451,10 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     private static func pathParts(_ path: String) -> [String] {
         path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
     }
+
+    private static func isMarkdown(_ node: MainframeExplorerNode) -> Bool {
+        ["md", "markdown", "mdown", "mkd"].contains(node.url.pathExtension.lowercased())
+    }
 }
 
 /// The application-level NavigationSplitView owns this rail. Explore therefore
@@ -402,7 +478,7 @@ struct MainframeExplorerSidebarView: View {
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .tracking(1.2)
                         .foregroundStyle(palette.faint)
-                    Text("MainFrame · read-only")
+                    Text("MainFrame")
                         .font(.caption)
                         .foregroundStyle(palette.dim)
                 }
@@ -618,7 +694,14 @@ struct MainframeExplorerWorkspaceView: View {
     @Environment(\.colorScheme) private var colorScheme
     let root: URL
     @ObservedObject var explorer: MainframeExplorerWorkspaceModel
+    @ObservedObject private var editor: MainframeMarkdownEditingSession
     @State private var readerMode: MainframeReaderMode = .rendered
+
+    init(root: URL, explorer: MainframeExplorerWorkspaceModel) {
+        self.root = root
+        self._explorer = ObservedObject(wrappedValue: explorer)
+        self._editor = ObservedObject(wrappedValue: explorer.editor)
+    }
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -642,6 +725,10 @@ struct MainframeExplorerWorkspaceView: View {
         VStack(spacing: 0) {
             readerToolbar
             Divider().overlay(palette.line)
+            if let status = editor.statusMessage, isSelectedMarkdown {
+                editStatusBanner(status)
+                Divider().overlay(palette.line)
+            }
             readerContent
         }
         .background(palette.sink)
@@ -653,16 +740,16 @@ struct MainframeExplorerWorkspaceView: View {
                 Image(systemName: "chevron.left")
             }
             .buttonStyle(.borderless)
-            .disabled(!explorer.canGoBack)
-            .help("Back")
+            .disabled(!explorer.canGoBack || editor.hasUnsavedChanges)
+            .help(editor.hasUnsavedChanges ? "Save or discard edits before navigating" : "Back")
             .accessibilityLabel("Back")
 
             Button(action: explorer.goForward) {
                 Image(systemName: "chevron.right")
             }
             .buttonStyle(.borderless)
-            .disabled(!explorer.canGoForward)
-            .help("Forward")
+            .disabled(!explorer.canGoForward || editor.hasUnsavedChanges)
+            .help(editor.hasUnsavedChanges ? "Save or discard edits before navigating" : "Forward")
             .accessibilityLabel("Forward")
 
             Divider().frame(height: 20)
@@ -676,6 +763,7 @@ struct MainframeExplorerWorkspaceView: View {
                         .buttonStyle(.plain)
                         .font(.caption)
                         .foregroundStyle(palette.dim)
+                        .disabled(editor.hasUnsavedChanges && path != explorer.selectedNode?.relativePath)
                         if path != explorer.breadcrumbPaths.last {
                             Image(systemName: "chevron.right")
                                 .font(.caption2)
@@ -688,7 +776,7 @@ struct MainframeExplorerWorkspaceView: View {
 
             Spacer(minLength: 8)
 
-            if let selected = explorer.selectedNode, isMarkdown(selected), explorer.documentText != nil {
+            if isSelectedMarkdown, explorer.documentText != nil {
                 Picker("Reader mode", selection: $readerMode) {
                     ForEach(MainframeReaderMode.allCases, id: \.self) { mode in
                         Text(mode.displayName).tag(mode)
@@ -696,8 +784,31 @@ struct MainframeExplorerWorkspaceView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 130)
+                .frame(width: 190)
                 .accessibilityLabel("Markdown reader mode")
+
+                if editor.hasUnsavedChanges {
+                    Button("Save") {
+                        explorer.saveEdits()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("s", modifiers: [.command])
+                    .help("Save Markdown (Command-S)")
+
+                    Button("Discard") {
+                        explorer.discardEdits()
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Discard unsaved buffer changes")
+                }
+
+                if editor.hasConflict {
+                    Button("Reload from Disk") {
+                        explorer.reloadSelectedFileDiscardingBuffer()
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Discard the current buffer and load the changed file from disk")
+                }
             }
 
             if let selected = explorer.selectedNode {
@@ -734,10 +845,17 @@ struct MainframeExplorerWorkspaceView: View {
                     .accessibilityLabel(scope.label)
             }
 
-            Text("READ ONLY")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .tracking(0.8)
-                .foregroundStyle(palette.faint)
+            if isSelectedMarkdown, readerMode == .edit {
+                Text(editor.hasUnsavedChanges ? "UNSAVED" : "EDIT")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(editor.hasUnsavedChanges ? palette.accent : palette.faint)
+            } else {
+                Text("READ")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(palette.faint)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -748,12 +866,16 @@ struct MainframeExplorerWorkspaceView: View {
     private var readerContent: some View {
         if let text = explorer.documentText, let selected = explorer.selectedNode {
             if isMarkdown(selected) {
-                MainframeMarkdownReaderView(
-                    source: text,
-                    mode: readerMode,
-                    palette: palette
-                )
-                .accessibilityLabel("\(readerMode.displayName) view for \(selected.name)")
+                if readerMode == .edit {
+                    markdownEditor(selected)
+                } else {
+                    MainframeMarkdownReaderView(
+                        source: editor.hasUnsavedChanges ? editor.buffer : text,
+                        mode: readerMode,
+                        palette: palette
+                    )
+                    .accessibilityLabel("\(readerMode.displayName) view for \(selected.name)")
+                }
             } else {
                 plainTextReader(text, selected: selected)
             }
@@ -780,6 +902,33 @@ struct MainframeExplorerWorkspaceView: View {
             .padding(36)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func markdownEditor(_ selected: MainframeExplorerNode) -> some View {
+        TextEditor(text: $editor.buffer)
+            .font(.system(.body, design: .monospaced))
+            .foregroundStyle(palette.text)
+            .scrollContentBackground(.hidden)
+            .background(palette.sink)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .accessibilityLabel("Edit Markdown source for \(selected.name)")
+    }
+
+    private func editStatusBanner(_ status: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: editor.hasConflict ? "exclamationmark.triangle.fill" : "info.circle")
+                .foregroundStyle(editor.hasConflict ? Color.orange : palette.dim)
+            Text(status)
+                .font(.caption)
+                .foregroundStyle(palette.dim)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(palette.surface.opacity(0.72))
+        .accessibilityLabel("Editor status: \(status)")
     }
 
     private func plainTextReader(_ text: String, selected: MainframeExplorerNode) -> some View {
@@ -900,6 +1049,11 @@ struct MainframeExplorerWorkspaceView: View {
         case .outsideRoot: return "TARGET OUTSIDE MAINFRAME"
         case .missing: return "TARGET MISSING"
         }
+    }
+
+    private var isSelectedMarkdown: Bool {
+        guard let selected = explorer.selectedNode else { return false }
+        return isMarkdown(selected)
     }
 
     private func isMarkdown(_ node: MainframeExplorerNode) -> Bool {
