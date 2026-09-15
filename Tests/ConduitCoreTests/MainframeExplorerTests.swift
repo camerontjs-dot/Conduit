@@ -108,12 +108,18 @@ final class MainframeExplorerTests: XCTestCase {
             XCTAssertEqual(inside.location, .insideRoot)
             XCTAssertEqual(inside.rawTarget, "10_knowledge/inside.md")
             XCTAssertEqual(inside.relativeTargetPath, "10_knowledge/inside.md")
-            XCTAssertEqual(inside.resolvedTargetPath, insideTarget.path)
+            XCTAssertEqual(
+                inside.resolvedTargetPath,
+                insideTarget.resolvingSymlinksInPath().standardizedFileURL.path
+            )
 
             let outside = try scanner.inspectSymbolicLink(root: root, link: outsideLink)
             XCTAssertEqual(outside.location, .outsideRoot)
             XCTAssertNil(outside.relativeTargetPath)
-            XCTAssertEqual(outside.resolvedTargetPath, outsideTarget.path)
+            XCTAssertEqual(
+                outside.resolvedTargetPath,
+                outsideTarget.resolvingSymlinksInPath().standardizedFileURL.path
+            )
 
             let missing = try scanner.inspectSymbolicLink(root: root, link: missingLink)
             XCTAssertEqual(missing.location, .missing)
