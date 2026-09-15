@@ -84,6 +84,43 @@ final class MainframeDocumentIndexTests: XCTestCase {
         XCTAssertEqual(index.unresolved.count, 1)
     }
 
+    func testContentLinkIndexResolvesKnownNonMarkdownTarget() {
+        let source = MainframeMarkdownParser.parse("[plain](note.txt)\n")
+        let markdownRecord = MainframeDocumentRecord(
+            path: "a.md",
+            name: "a.md",
+            zone: .knowledge,
+            recordScope: nil,
+            text: source.source,
+            byteCount: source.source.utf8.count,
+            markdown: source
+        )
+        let plainRecord = MainframeDocumentRecord(
+            path: "note.txt",
+            name: "note.txt",
+            zone: .knowledge,
+            recordScope: nil,
+            text: "plain text",
+            byteCount: 10,
+            markdown: nil
+        )
+        let index = MainframeContentIndex(
+            records: [markdownRecord, plainRecord],
+            filesystemEntries: [],
+            filesystemIndexTruncated: false,
+            contentTruncated: false,
+            bytesIndexed: markdownRecord.byteCount + plainRecord.byteCount,
+            skippedNonText: 0,
+            skippedTooLarge: 0
+        )
+
+        XCTAssertEqual(
+            index.linkIndex.outgoing["a.md"]?.first?.resolution,
+            .local(path: "note.txt", anchor: nil)
+        )
+        XCTAssertEqual(index.linkIndex.incoming["note.txt"]?.count, 1)
+    }
+
     func testTextSearchIsDeterministicAndPreservesIncompleteReceipt() {
         let document = MainframeMarkdownParser.parse("# Needle Heading\nneedle body\n")
         let record = MainframeDocumentRecord(

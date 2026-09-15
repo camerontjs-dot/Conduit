@@ -35,8 +35,11 @@ public struct MainframeLinkIndex: Sendable {
         self.unresolved = unresolved
     }
 
-    public static func build(documents: [String: MainframeMarkdownDocument]) -> MainframeLinkIndex {
-        let knownPaths = Set(documents.keys)
+    public static func build(
+        documents: [String: MainframeMarkdownDocument],
+        knownPaths: Set<String>? = nil
+    ) -> MainframeLinkIndex {
+        let availablePaths = knownPaths ?? Set(documents.keys)
         var outgoing: [String: [MainframeDocumentLinkRecord]] = [:]
         var incoming: [String: [MainframeDocumentLinkRecord]] = [:]
         var unresolved: [MainframeDocumentLinkRecord] = []
@@ -48,7 +51,7 @@ public struct MainframeLinkIndex: Sendable {
                     sourcePath: sourcePath,
                     target: link.target,
                     documents: documents,
-                    knownPaths: knownPaths
+                    knownPaths: availablePaths
                 )
                 let record = MainframeDocumentLinkRecord(sourcePath: sourcePath, link: link, resolution: resolution)
                 outgoing[sourcePath, default: []].append(record)

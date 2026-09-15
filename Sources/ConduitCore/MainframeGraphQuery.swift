@@ -51,17 +51,23 @@ public enum MainframeGraphQuery {
 
         for zone in MainframeExplorerZone.allCases {
             let zoneNodes = snapshot.nodes.filter { $0.zone == zone }
-            let records = zoneNodes.filter { $0.kind == .project || $0.kind == .operation }
-            for node in records { selected.insert(node.id) }
-            let remaining = zoneNodes.filter { $0.kind == .document }
+            let records = zoneNodes
+                .filter { $0.kind == .project || $0.kind == .operation }
+                .sorted { $0.id < $1.id }
+            let selectedRecords = Array(records.prefix(perZone))
+            for node in selectedRecords { selected.insert(node.id) }
+
+            let remainingCapacity = max(0, perZone - selectedRecords.count)
+            guard remainingCapacity > 0 else { continue }
+            let documents = zoneNodes.filter { $0.kind == .document }
                 .sorted {
                     let left = degree[$0.id] ?? 0
                     let right = degree[$1.id] ?? 0
                     if left != right { return left > right }
                     return $0.id < $1.id
                 }
-                .prefix(perZone)
-            for node in remaining { selected.insert(node.id) }
+                .prefix(remainingCapacity)
+            for node in documents { selected.insert(node.id) }
         }
 
         let nodes = snapshot.nodes.filter { selected.contains($0.id) }
@@ -102,6 +108,7 @@ public enum MainframeGraphQuery {
             cursor += 1
             if current == targetID { break }
             for item in adjacency[current] ?? [] where !visited.contains(item.neighbor) {
+                guard visited.count < visitLimit else { break }
                 visited.insert(item.neighbor)
                 previous[item.neighbor] = (current, item.edge)
                 queue.append(item.neighbor)

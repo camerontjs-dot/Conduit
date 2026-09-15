@@ -63,7 +63,8 @@ public struct MainframeContentIndex: Sendable {
     }
 
     public var linkIndex: MainframeLinkIndex {
-        MainframeLinkIndex.build(documents: markdownDocuments)
+        let knownPaths = Set(filesystemEntries.map(\.relativePath)).union(records.map(\.path))
+        return MainframeLinkIndex.build(documents: markdownDocuments, knownPaths: knownPaths)
     }
 
     public var mayBeIncomplete: Bool { filesystemIndexTruncated || contentTruncated }

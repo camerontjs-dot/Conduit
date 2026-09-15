@@ -48,11 +48,46 @@ final class MainframeGraphTests: XCTestCase {
         XCTAssertEqual(Set(two.nodes.map(\.id)), Set(["30_projects/demo/a.md", "30_projects/demo/b.md", "30_projects/demo/c.md"]))
     }
 
+    func testAtlasBoundsTotalNodesPerZoneIncludingWorkRecords() {
+        let nodes = (1...3).map { index in
+            MainframeGraphNode(
+                id: "30_projects/p\(index)",
+                label: "P\(index)",
+                path: "30_projects/p\(index)",
+                kind: .project,
+                zone: .projects,
+                isAuthoritative: true
+            )
+        }
+        let snapshot = MainframeGraphSnapshot(nodes: nodes, edges: [], sourceMayBeIncomplete: false)
+        let atlas = MainframeGraphQuery.atlas(snapshot: snapshot, maxNodesPerZone: 2)
+        XCTAssertEqual(atlas.nodes.map(\.id), ["30_projects/p1", "30_projects/p2"])
+    }
+
     func testPathfinderUsesAllowedExplicitEdges() {
         let snapshot = fixture()
         let path = MainframeGraphQuery.shortestPath(snapshot: snapshot, from: "30_projects/demo/a.md", to: "30_projects/demo/c.md")
         XCTAssertEqual(path?.nodes.map(\.id), ["30_projects/demo/a.md", "30_projects/demo/b.md", "30_projects/demo/c.md"])
         XCTAssertTrue(path?.edges.allSatisfy { $0.kind == .authoredLink } == true)
+    }
+
+    func testPathfinderHonorsVisitedNodeBoundDuringWideExpansion() {
+        let nodes = ["source", "a", "b", "target"].map {
+            MainframeGraphNode(id: $0, label: $0, path: $0, kind: .document, zone: .knowledge, isAuthoritative: true)
+        }
+        let edges = ["a", "b", "target"].map { target in
+            MainframeGraphEdge(
+                id: "source-\(target)",
+                sourceID: "source",
+                targetID: target,
+                kind: .authoredLink,
+                provenance: "fixture",
+                isDirected: true
+            )
+        }
+        let snapshot = MainframeGraphSnapshot(nodes: nodes, edges: edges, sourceMayBeIncomplete: false)
+        XCTAssertNil(MainframeGraphQuery.shortestPath(snapshot: snapshot, from: "source", to: "target", maxVisited: 2))
+        XCTAssertNotNil(MainframeGraphQuery.shortestPath(snapshot: snapshot, from: "source", to: "target", maxVisited: 4))
     }
 
     func testSemanticNominationsStayDistinctAndNonAuthoritative() {
