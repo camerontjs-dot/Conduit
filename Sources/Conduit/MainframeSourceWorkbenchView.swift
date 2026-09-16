@@ -26,6 +26,7 @@ private struct SourceGitEvidence: Sendable {
     let stagedDiff: GitWorkspaceDiff?
     let history: [String]
     let headBlobIdentity: String?
+    let workingTreeBlobIdentity: String?
     let error: String?
 }
 
@@ -60,6 +61,7 @@ struct MainframeSourceWorkbenchView: View {
     @State private var gitHistory: [String] = []
     @State private var gitError: String?
     @State private var headBlobIdentity: String?
+    @State private var workingTreeBlobIdentity: String?
     @State private var selectedLineBlame: GitWorkspaceBlame?
     @State private var gitRefreshing = false
     @State private var showSideDiff = false
@@ -107,6 +109,10 @@ struct MainframeSourceWorkbenchView: View {
     private var selectedGitStatus: GitWorkspaceStatusEntry? {
         guard let path = repositoryRelativePath else { return nil }
         return gitSnapshot?.statusEntry(for: path)
+    }
+
+    private var contextActionsBlockedByUnsavedBuffer: Bool {
+        editor.hasUnsavedChanges
     }
 
     var body: some View {
@@ -363,7 +369,9 @@ struct MainframeSourceWorkbenchView: View {
             .contextMenu {
                 Button("Copy Path:Line") { copyPathLine(number) }
                 Button("Pin Line to Context") { pinLine(number) }
+                    .disabled(contextActionsBlockedByUnsavedBuffer)
                 Button("Copy Agent Handoff for Line") { copyLineHandoff(number) }
+                    .disabled(contextActionsBlockedByUnsavedBuffer)
             }
 
             SyntaxLineView(source: source, kind: editor.kind, palette: palette)
@@ -405,7 +413,7 @@ struct MainframeSourceWorkbenchView: View {
                     .actionExplainer(
                         ActionExplainerSpec(
                             title: "Refresh Git Evidence",
-                            summary: "Re-read HEAD, branch, status, exact HEAD blob identity, history, and this file's diffs using fixed read-only Git commands.",
+                            summary: "Re-read HEAD, branch, status, exact content identities, history, and this file's diffs using fixed read-only Git commands.",
                             nonEffect: "Does not stage, commit, checkout, reset, clean, stash, merge, or rebase.",
                             target: gitSnapshot?.repositoryRoot,
                             authority: "Git observation"
@@ -534,6 +542,9 @@ struct MainframeSourceWorkbenchView: View {
                         inspectorFact("THIS FILE", selectedGitStatus?.statusLabel ?? "clean")
                         inspectorFact("REPO PATH", path)
                     }
+                    if let workingTreeBlobIdentity {
+                        inspectorFact("CURRENT BLOB", workingTreeBlobIdentity)
+                    }
                     if let headBlobIdentity {
                         inspectorFact("HEAD BLOB", headBlobIdentity)
                     } else if repositoryRelativePath != nil {
@@ -597,8 +608,20 @@ struct MainframeSourceWorkbenchView: View {
                     inspectorFact("REPO HEAD", snapshot.headSHA)
                     inspectorFact("BRANCH", snapshot.branch ?? "detached")
                 }
+                if let workingTreeBlobIdentity {
+                    inspectorFact("EXACT CURRENT BLOB", workingTreeBlobIdentity)
+                }
                 if let headBlobIdentity {
                     inspectorFact("EXACT HEAD BLOB", headBlobIdentity)
+                }
+
+                if editor.hasUnsavedChanges {
+                    Label(
+                        "Save or discard the edit buffer before pinning or drafting agent context. Context actions are bound to exact on-disk bytes, not an uncommitted editor buffer.",
+                        systemImage: "lock"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
                 }
 
                 Divider().overlay(palette.line)
@@ -608,12 +631,15 @@ struct MainframeSourceWorkbenchView: View {
 
                 Button("Pin File to Context") { pinFile() }
                     .buttonStyle(.bordered)
+                    .disabled(contextActionsBlockedByUnsavedBuffer)
                     .actionExplainer(
                         ActionExplainerSpec(
                             title: "Pin File Context",
-                            summary: "Nominate this exact source path for the current Context IDE preview.",
+                            summary: editor.hasUnsavedChanges
+                                ? "Save or discard the edit buffer before pinning exact source context."
+                                : "Nominate this exact on-disk source path for the current Context IDE preview.",
                             effect: "Adds a provenance-labelled file item when a calling context stack is available.",
-                            nonEffect: "Does not send anything to an agent by itself.",
+                            nonEffect: "Does not send anything to an agent by itself and never snapshots unsaved editor text as filesystem truth.",
                             target: relativePath,
                             authority: "Filesystem source"
                         )
@@ -621,15 +647,19 @@ struct MainframeSourceWorkbenchView: View {
 
                 Button("Pin Selected Line") { pinLine(selectedLine) }
                     .buttonStyle(.bordered)
+                    .disabled(contextActionsBlockedByUnsavedBuffer)
 
                 Button("Copy Agent Handoff for Line") { copyLineHandoff(selectedLine) }
                     .buttonStyle(.bordered)
+                    .disabled(contextActionsBlockedByUnsavedBuffer)
                     .actionExplainer(
                         ActionExplainerSpec(
                             title: "Draft from Source Line",
-                            summary: "Copy a provenance-labelled agent handoff draft for this exact source location.",
+                            summary: editor.hasUnsavedChanges
+                                ? "Save or discard the edit buffer before drafting from exact source bytes."
+                                : "Copy a provenance-labelled agent handoff draft for this exact source location.",
                             effect: "Writes a draft to the pasteboard.",
-                            nonEffect: "Does not send it, launch an agent, or claim the line is unchanged from Git HEAD.",
+                            nonEffect: "Does not send it, launch an agent, or claim the current bytes match Git HEAD.",
                             target: "\(relativePath):\(selectedLine)",
                             authority: "Filesystem source + observed Git identity"
                         )
@@ -732,6 +762,7 @@ struct MainframeSourceWorkbenchView: View {
                         stagedDiff: nil,
                         history: [],
                         headBlobIdentity: nil,
+                        workingTreeBlobIdentity: nil,
                         error: nil
                     )
                 }
@@ -751,7 +782,11 @@ struct MainframeSourceWorkbenchView: View {
                     relativePath: path,
                     limit: 12
                 )
-                let blob = try inspector.headBlobIdentity(
+                let headBlob = try inspector.headBlobIdentity(
+                    startingAt: fileURL,
+                    relativePath: path
+                )
+                let workingBlob = try inspector.workingTreeBlobIdentity(
                     startingAt: fileURL,
                     relativePath: path
                 )
@@ -760,7 +795,8 @@ struct MainframeSourceWorkbenchView: View {
                     workingDiff: working,
                     stagedDiff: staged,
                     history: history,
-                    headBlobIdentity: blob,
+                    headBlobIdentity: headBlob,
+                    workingTreeBlobIdentity: workingBlob,
                     error: nil
                 )
             } catch {
@@ -770,6 +806,7 @@ struct MainframeSourceWorkbenchView: View {
                     stagedDiff: nil,
                     history: [],
                     headBlobIdentity: nil,
+                    workingTreeBlobIdentity: nil,
                     error: error.localizedDescription
                 )
             }
@@ -780,6 +817,7 @@ struct MainframeSourceWorkbenchView: View {
         stagedDiff = evidence.stagedDiff
         gitHistory = evidence.history
         headBlobIdentity = evidence.headBlobIdentity
+        workingTreeBlobIdentity = evidence.workingTreeBlobIdentity
         gitError = evidence.error
         gitRefreshing = false
     }
@@ -807,13 +845,17 @@ struct MainframeSourceWorkbenchView: View {
     }
 
     private func pinFile() {
+        guard !editor.hasUnsavedChanges else {
+            lastContextAction = "Save or discard the edit buffer before pinning exact filesystem context."
+            return
+        }
         let item = AgentContextItem(
             id: "file:\(relativePath)",
             title: file.lastPathComponent,
             kind: .file,
             authority: .filesystemSource,
             sourceReference: relativePath,
-            revisionIdentity: headBlobIdentity,
+            revisionIdentity: workingTreeBlobIdentity,
             estimatedTokens: max(1, editor.buffer.count / 4),
             isPinned: true,
             freshness: .current
@@ -825,6 +867,10 @@ struct MainframeSourceWorkbenchView: View {
     }
 
     private func pinLine(_ line: Int) {
+        guard !editor.hasUnsavedChanges else {
+            lastContextAction = "Save or discard the edit buffer before pinning exact filesystem context."
+            return
+        }
         guard line > 0, line <= lines.count else { return }
         let item = contextItem(for: line)
         onPinContext?(item)
@@ -840,7 +886,7 @@ struct MainframeSourceWorkbenchView: View {
             kind: .selection,
             authority: .filesystemSource,
             sourceReference: relativePath,
-            revisionIdentity: headBlobIdentity,
+            revisionIdentity: workingTreeBlobIdentity,
             lineRange: line...line,
             estimatedTokens: line > 0 && line <= lines.count
                 ? max(1, lines[line - 1].count / 4)
@@ -851,6 +897,10 @@ struct MainframeSourceWorkbenchView: View {
     }
 
     private func copyLineHandoff(_ line: Int) {
+        guard !editor.hasUnsavedChanges else {
+            lastContextAction = "Save or discard the edit buffer before drafting exact source context."
+            return
+        }
         guard line > 0, line <= lines.count else { return }
         var items: [AgentContextItem] = [contextItem(for: line)]
         if let snapshot = gitSnapshot {
@@ -873,6 +923,7 @@ struct MainframeSourceWorkbenchView: View {
                         kind: .gitDiff,
                         authority: .gitWorkingTree,
                         sourceReference: repositoryRelativePath ?? relativePath,
+                        revisionIdentity: workingTreeBlobIdentity,
                         freshness: .current
                     )
                 )
@@ -901,7 +952,7 @@ struct MainframeSourceWorkbenchView: View {
             items: items
         )
         let handoff = AgentContextHandoff(
-            objective: "Inspect this exact source location in context. Do not assume the working-tree file matches Git HEAD when no exact blob identity is listed.",
+            objective: "Inspect this exact source location in context. The filesystem item identity refers to current on-disk bytes when available; Git HEAD remains a separate immutable identity.",
             bundle: bundle
         )
         NSPasteboard.general.clearContents()
