@@ -4,8 +4,8 @@ import Foundation
 import SwiftUI
 
 /// Ephemeral derived state shared by Explore's Find, Graph, and Workstation
-/// surfaces. MainFrame files remain source truth; nothing here is persisted as
-/// project/knowledge authority.
+/// surfaces. MainFrame files remain source truth; none of these projections is
+/// persisted as project, knowledge, lifecycle, or verification authority.
 @MainActor
 final class MainframeKnowledgeProjectionModel: ObservableObject {
     @Published private(set) var contentIndex: MainframeContentIndex?
@@ -22,7 +22,7 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
     func ensureLoaded(root: URL) {
         let normalized = root.standardizedFileURL
         if configuredRoot?.standardizedFileURL == normalized,
-           (isLoading || (contentIndex != nil && graphSnapshot != nil && workstation != nil)) {
+           isLoading || (contentIndex != nil && graphSnapshot != nil && workstation != nil) {
             return
         }
 
@@ -86,19 +86,18 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
         contentIndex?.linkIndex.incoming[path] ?? []
     }
 
-    /// Converts explicit MindGraph retrieval output into graph nominations only
-    /// when the returned path can be matched exactly to the current bounded
-    /// filesystem/content index. Unmatched paths remain outside the graph rather
-    /// than being guessed into existence.
+    /// Semantic retrieval is admitted only as a nomination layer and only when
+    /// a returned path resolves exactly to a path in the bounded MainFrame
+    /// index. Unknown paths are ignored rather than guessed into existence.
     func applyMindGraphHits(_ hits: [MindGraphHit], focusPath: String) {
         guard let baseGraphSnapshot,
               baseGraphSnapshot.nodeByID[focusPath] != nil,
               let contentIndex else { return }
 
-        let known = Set(contentIndex.filesystemEntries.map(\.relativePath))
+        let knownPaths = Set(contentIndex.filesystemEntries.map(\.relativePath))
             .union(contentIndex.records.map(\.path))
         let nominations = hits.compactMap { hit -> MainframeSemanticNomination? in
-            guard let target = resolveMindGraphPath(hit.displayPath, knownPaths: known),
+            guard let target = resolveMindGraphPath(hit.displayPath, knownPaths: knownPaths),
                   target != focusPath else { return nil }
             let score = hit.rrfScore.map { String(format: "%.3f", $0) } ?? "unreported"
             return MainframeSemanticNomination(
@@ -120,6 +119,7 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
         guard !trimmed.isEmpty else { return nil }
         if knownPaths.contains(trimmed) { return trimmed }
         guard let configuredRoot else { return nil }
+
         let rootPath = configuredRoot.standardizedFileURL.path
         let candidate = URL(fileURLWithPath: trimmed).standardizedFileURL.path
         let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
@@ -128,6 +128,8 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
         return knownPaths.contains(relative) ? relative : nil
     }
 }
+
+// MARK: - Deterministic Find
 
 struct MainframeFindSheet: View {
     @EnvironmentObject private var themeStore: ThemeStore
@@ -154,9 +156,7 @@ struct MainframeFindSheet: View {
                 Label("Find in MainFrame", systemImage: "text.magnifyingglass")
                     .font(.headline)
                 Spacer()
-                if projection.isLoading {
-                    ProgressView().controlSize(.small)
-                }
+                if projection.isLoading { ProgressView().controlSize(.small) }
             }
             .padding(14)
 
@@ -225,7 +225,7 @@ struct MainframeFindSheet: View {
 
             Divider().overlay(palette.line)
             HStack {
-                Text("Deterministic Find. Semantic MindGraph nominations are intentionally separate.")
+                Text("Deterministic Find. Semantic MindGraph nominations stay separate.")
                     .font(.caption2)
                     .foregroundStyle(palette.faint)
                 Spacer()
@@ -248,6 +248,8 @@ struct MainframeFindSheet: View {
         }
     }
 }
+
+// MARK: - Graph
 
 struct MainframeGraphSurfaceView: View {
     @EnvironmentObject private var themeStore: ThemeStore
@@ -296,8 +298,7 @@ struct MainframeGraphSurfaceView: View {
         case .atlas:
             return MainframeGraphQuery.atlas(snapshot: snapshot, maxNodesPerZone: 26)
         case .pathfinder:
-            guard let start = pathStartID,
-                  let end = pathEndID else { return nil }
+            guard let start = pathStartID, let end = pathEndID else { return nil }
             return MainframeGraphQuery.shortestPath(
                 snapshot: snapshot,
                 from: start,
@@ -414,8 +415,7 @@ struct MainframeGraphSurfaceView: View {
                     }
                     .frame(maxWidth: 320)
 
-                    Image(systemName: "arrow.right")
-                        .foregroundStyle(palette.faint)
+                    Image(systemName: "arrow.right").foregroundStyle(palette.faint)
 
                     Picker("To", selection: $pathEndID) {
                         Text("Choose destination").tag(String?.none)
@@ -513,7 +513,8 @@ struct MainframeGraphSurfaceView: View {
                 }
             }
             .foregroundStyle(palette.text)
-            .frame(width: focus ? 154 : 136, minHeight: focus ? 72 : 58)
+            .frame(width: focus ? 154 : 136)
+            .frame(minHeight: focus ? 72 : 58)
             .padding(.vertical, 7)
             .background(focus ? palette.accentSoft : palette.surface)
             .overlay(
@@ -620,7 +621,7 @@ struct MainframeGraphSurfaceView: View {
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            Image(systemName: "point.3.filled.connected.trianglepath.dotted")
+            Image(systemName: "point.3.connected.trianglepath.dotted")
                 .font(.system(size: 38))
                 .foregroundStyle(palette.dim)
             Text("No graph scene available")
@@ -650,8 +651,7 @@ struct MainframeGraphSurfaceView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Graph unavailable", systemImage: "exclamationmark.triangle")
                 .font(.headline)
-            Text(error)
-                .foregroundStyle(palette.dim)
+            Text(error).foregroundStyle(palette.dim)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -670,7 +670,9 @@ struct MainframeGraphSurfaceView: View {
         }
     }
 
-    private func canvasGeometry(_ points: [String: MainframeGraphPoint]) -> (points: [String: CGPoint], width: CGFloat, height: CGFloat) {
+    private func canvasGeometry(
+        _ points: [String: MainframeGraphPoint]
+    ) -> (points: [String: CGPoint], width: CGFloat, height: CGFloat) {
         guard !points.isEmpty else { return ([:], 900, 520) }
         let xs = points.values.map(\.x)
         let ys = points.values.map(\.y)
@@ -748,6 +750,8 @@ struct MainframeGraphSurfaceView: View {
         }
     }
 }
+
+// MARK: - Workstation
 
 struct MainframeWorkstationSurfaceView: View {
     @EnvironmentObject private var themeStore: ThemeStore
@@ -946,7 +950,8 @@ struct MainframeWorkstationSurfaceView: View {
                         .lineLimit(signal.kind == .goal || signal.kind == .nextAction ? 3 : 1)
                     Spacer(minLength: 0)
                 }
-                .help(signal.sourcePath.map { "Source: \($0) · \(signal.authority.rawValue)" } ?? "Authority: \(signal.authority.rawValue)")
+                .help(signal.sourcePath.map { "Source: \($0) · \(signal.authority.rawValue)" }
+                    ?? "Authority: \(signal.authority.rawValue)")
             }
 
             if !station.issues.isEmpty {
