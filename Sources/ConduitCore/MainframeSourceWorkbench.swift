@@ -171,8 +171,18 @@ public enum MainframeSourceOutlineExtractor {
     ) -> (String, MainframeSourceOutlineKind)? {
         switch kind {
         case .swift:
-            return firstPrefix(
+            let candidate = strippingLeadingTokens(
                 line,
+                tokens: [
+                    "public", "internal", "private", "fileprivate", "open",
+                    "final", "static", "nonisolated", "override", "mutating",
+                    "nonmutating", "required", "convenience", "indirect"
+                ],
+                stripAttributes: true
+            )
+            return firstPrefix(
+                candidate,
+                title: line,
                 rules: [
                     ("struct ", .type), ("class ", .type), ("enum ", .type),
                     ("protocol ", .type), ("actor ", .type),
@@ -185,27 +195,42 @@ public enum MainframeSourceOutlineExtractor {
                 rules: [("class ", .type), ("async def ", .function), ("def ", .function)]
             )
         case .javascript, .typescript:
-            return firstPrefix(
+            let candidate = strippingLeadingTokens(
                 line,
+                tokens: ["export", "default", "declare", "abstract", "public", "private", "protected", "static", "readonly"]
+            )
+            return firstPrefix(
+                candidate,
+                title: line,
                 rules: [
                     ("class ", .type), ("interface ", .type), ("type ", .type),
-                    ("function ", .function), ("export function ", .function),
-                    ("export class ", .type), ("export interface ", .type)
+                    ("function ", .function)
                 ]
             )
         case .rust:
-            return firstPrefix(
+            let candidate = strippingLeadingTokens(
                 line,
+                tokens: ["pub", "async", "unsafe"],
+                tokenPrefix: "pub("
+            )
+            return firstPrefix(
+                candidate,
+                title: line,
                 rules: [
                     ("struct ", .type), ("enum ", .type), ("trait ", .type),
-                    ("impl ", .extensionDecl), ("fn ", .function), ("pub fn ", .function)
+                    ("impl ", .extensionDecl), ("fn ", .function)
                 ]
             )
         case .go:
             return firstPrefix(line, rules: [("type ", .type), ("func ", .function)])
         case .java, .cFamily:
-            return firstPrefix(
+            let candidate = strippingLeadingTokens(
                 line,
+                tokens: ["public", "private", "protected", "static", "final", "abstract", "sealed", "non-sealed"]
+            )
+            return firstPrefix(
+                candidate,
+                title: line,
                 rules: [("class ", .type), ("struct ", .type), ("enum ", .type), ("interface ", .type)]
             )
         case .shell:
@@ -220,12 +245,31 @@ public enum MainframeSourceOutlineExtractor {
 
     private static func firstPrefix(
         _ line: String,
+        title: String? = nil,
         rules: [(String, MainframeSourceOutlineKind)]
     ) -> (String, MainframeSourceOutlineKind)? {
         for (prefix, kind) in rules where line.hasPrefix(prefix) {
-            return (line, kind)
+            return (title ?? line, kind)
         }
         return nil
+    }
+
+    /// Removes only a small allowlist of declaration modifiers. This improves
+    /// navigation coverage without pretending to parse a language grammar.
+    private static func strippingLeadingTokens(
+        _ line: String,
+        tokens: Set<String>,
+        stripAttributes: Bool = false,
+        tokenPrefix: String? = nil
+    ) -> String {
+        var parts = line.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        while let first = parts.first {
+            let isAttribute = stripAttributes && first.hasPrefix("@")
+            let hasAllowedPrefix = tokenPrefix.map { first.hasPrefix($0) } ?? false
+            guard isAttribute || tokens.contains(first) || hasAllowedPrefix else { break }
+            parts.removeFirst()
+        }
+        return parts.joined(separator: " ")
     }
 }
 
