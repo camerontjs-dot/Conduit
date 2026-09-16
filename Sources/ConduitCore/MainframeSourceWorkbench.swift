@@ -245,26 +245,29 @@ public struct MainframeDiagnosticLocation: Equatable, Sendable {
 }
 
 public enum MainframeDiagnosticParser {
+    private static let locationExpression = try! NSRegularExpression(
+        pattern: #"^(.+?):([1-9][0-9]*)(?::([1-9][0-9]*))?(?::|$)"#
+    )
+
     public static func parseLocation(from text: String) -> MainframeDiagnosticLocation? {
         let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? text
-        let parts = firstLine.split(separator: ":", omittingEmptySubsequences: false)
-        guard parts.count >= 2 else { return nil }
-
-        // Work from the end so paths containing ':' are not accidentally split
-        // unless the trailing fields are valid positive integers.
-        if parts.count >= 3,
-           let column = Int(parts[parts.count - 1]), column > 0,
-           let line = Int(parts[parts.count - 2]), line > 0 {
-            let path = parts.dropLast(2).joined(separator: ":")
-            guard !path.isEmpty else { return nil }
-            return MainframeDiagnosticLocation(path: path, line: line, column: column)
+        let nsRange = NSRange(firstLine.startIndex..<firstLine.endIndex, in: firstLine)
+        guard let match = locationExpression.firstMatch(in: firstLine, range: nsRange),
+              let pathRange = Range(match.range(at: 1), in: firstLine),
+              let lineRange = Range(match.range(at: 2), in: firstLine),
+              let line = Int(firstLine[lineRange]), line > 0 else {
+            return nil
         }
 
-        if let line = Int(parts[parts.count - 1]), line > 0 {
-            let path = parts.dropLast().joined(separator: ":")
-            guard !path.isEmpty else { return nil }
-            return MainframeDiagnosticLocation(path: path, line: line)
+        let path = String(firstLine[pathRange])
+        guard !path.isEmpty else { return nil }
+
+        var column: Int?
+        if match.range(at: 3).location != NSNotFound,
+           let columnRange = Range(match.range(at: 3), in: firstLine),
+           let parsed = Int(firstLine[columnRange]), parsed > 0 {
+            column = parsed
         }
-        return nil
+        return MainframeDiagnosticLocation(path: path, line: line, column: column)
     }
 }
