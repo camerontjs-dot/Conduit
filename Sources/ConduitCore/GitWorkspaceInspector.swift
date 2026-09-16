@@ -90,6 +90,10 @@ public struct GitWorkspaceSnapshot: Equatable, Sendable {
     }
 
     public var isDirty: Bool { !status.isEmpty }
+
+    public func statusEntry(for relativePath: String) -> GitWorkspaceStatusEntry? {
+        status.first { $0.path == relativePath || $0.originalPath == relativePath }
+    }
 }
 
 public enum GitWorkspaceDiffBasis: String, Sendable {
@@ -108,6 +112,31 @@ public struct GitWorkspaceDiff: Equatable, Sendable {
         self.basis = basis
         self.text = text
         self.wasTruncated = wasTruncated
+    }
+}
+
+public struct GitWorkspaceBlame: Equatable, Sendable {
+    public let path: String
+    public let line: Int
+    public let commitSHA: String
+    public let author: String?
+    public let authorTime: Date?
+    public let summary: String?
+
+    public init(
+        path: String,
+        line: Int,
+        commitSHA: String,
+        author: String?,
+        authorTime: Date?,
+        summary: String?
+    ) {
+        self.path = path
+        self.line = line
+        self.commitSHA = commitSHA
+        self.author = author
+        self.authorTime = authorTime
+        self.summary = summary
     }
 }
 
@@ -148,9 +177,10 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
         }
         let rootURL = URL(fileURLWithPath: root, isDirectory: true)
 
+        let headArguments = ["rev-parse", "HEAD"]
         let head = try successful(
-            run(in: rootURL, arguments: ["rev-parse", "HEAD"]),
-            arguments: ["rev-parse", "HEAD"]
+            run(in: rootURL, arguments: headArguments),
+            arguments: headArguments
         ).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let branchResult = try run(
@@ -220,6 +250,46 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
         return result.stdout
             .split(separator: "\n", omittingEmptySubsequences: true)
             .map(String.init)
+    }
+
+    /// Returns the exact blob identity for `HEAD:path`, or nil when that path is
+    /// not represented by a blob at HEAD. Callers must still check working-tree
+    /// status before using this as the identity of the current on-disk content.
+    public func headBlobIdentity(
+        startingAt location: URL,
+        relativePath: String
+    ) throws -> String? {
+        let snapshot = try snapshot(startingAt: location)
+        let root = URL(fileURLWithPath: snapshot.repositoryRoot, isDirectory: true)
+        let normalizedPath = try Self.validateRelativePath(relativePath)
+        guard snapshot.statusEntry(for: normalizedPath) == nil else { return nil }
+
+        let arguments = ["rev-parse", "HEAD:\(normalizedPath)"]
+        let result = try run(in: root, arguments: arguments)
+        guard result.status == 0 else { return nil }
+        let identity = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return identity.isEmpty ? nil : identity
+    }
+
+    public func blame(
+        startingAt location: URL,
+        relativePath: String,
+        line: Int
+    ) throws -> GitWorkspaceBlame? {
+        guard line > 0 else { return nil }
+        let snapshot = try snapshot(startingAt: location)
+        let root = URL(fileURLWithPath: snapshot.repositoryRoot, isDirectory: true)
+        let normalizedPath = try Self.validateRelativePath(relativePath)
+        let arguments = [
+            "blame", "--porcelain", "-L", "\(line),\(line)", "--", normalizedPath
+        ]
+        let result = try run(in: root, arguments: arguments)
+        guard result.status == 0 else { return nil }
+        return Self.parseBlamePorcelain(
+            result.stdout,
+            path: normalizedPath,
+            requestedLine: line
+        )
     }
 
     private func directoryForInspection(_ location: URL) -> URL {
@@ -387,5 +457,41 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
             )
         }
         return rows
+    }
+
+    static func parseBlamePorcelain(
+        _ text: String,
+        path: String,
+        requestedLine: Int
+    ) -> GitWorkspaceBlame? {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let header = lines.first else { return nil }
+        let headerParts = header.split(separator: " ")
+        guard let shaPart = headerParts.first else { return nil }
+        let sha = String(shaPart)
+        guard sha.count >= 7 else { return nil }
+
+        var author: String?
+        var authorTime: Date?
+        var summary: String?
+        for line in lines.dropFirst() {
+            if line.hasPrefix("author ") {
+                author = String(line.dropFirst("author ".count))
+            } else if line.hasPrefix("author-time "),
+                      let seconds = TimeInterval(line.dropFirst("author-time ".count)) {
+                authorTime = Date(timeIntervalSince1970: seconds)
+            } else if line.hasPrefix("summary ") {
+                summary = String(line.dropFirst("summary ".count))
+            }
+        }
+
+        return GitWorkspaceBlame(
+            path: path,
+            line: requestedLine,
+            commitSHA: sha,
+            author: author,
+            authorTime: authorTime,
+            summary: summary
+        )
     }
 }
