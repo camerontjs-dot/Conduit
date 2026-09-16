@@ -321,14 +321,46 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
         var stderr: String { String(decoding: stderrData, as: UTF8.self) }
     }
 
-    private final class DataBox: @unchecked Sendable {
-        let lock = NSLock()
-        var value = Data()
+    /// Retains at most `limit` bytes while callers continue draining the pipe to
+    /// EOF. Keeping the drain separate from retention avoids the classic pipe
+    /// deadlock without letting an unexpectedly large diff/status grow memory
+    /// without bound.
+    private final class BoundedDataBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private let limit: Int
+        private var value = Data()
+        private var wasTruncated = false
 
-        func set(_ data: Data) {
+        init(limit: Int) {
+            self.limit = max(0, limit)
+        }
+
+        func append(_ chunk: Data) {
+            guard !chunk.isEmpty else { return }
             lock.lock()
-            value = data
-            lock.unlock()
+            defer { lock.unlock() }
+
+            let remaining = max(0, limit - value.count)
+            if remaining > 0 {
+                value.append(contentsOf: chunk.prefix(remaining))
+            }
+            if chunk.count > remaining {
+                wasTruncated = true
+            }
+        }
+
+        func snapshot() -> (data: Data, wasTruncated: Bool) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (value, wasTruncated)
+        }
+    }
+
+    private static func drain(_ handle: FileHandle, into box: BoundedDataBox) {
+        while true {
+            let chunk = handle.readData(ofLength: 64 * 1024)
+            guard !chunk.isEmpty else { return }
+            box.append(chunk)
         }
     }
 
@@ -352,17 +384,17 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        let stdoutBox = DataBox()
-        let stderrBox = DataBox()
+        let stdoutBox = BoundedDataBox(limit: maximumOutputBytes)
+        let stderrBox = BoundedDataBox(limit: min(maximumOutputBytes, 64_000))
         let group = DispatchGroup()
         group.enter()
         DispatchQueue.global(qos: .utility).async {
-            stdoutBox.set(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+            Self.drain(stdoutPipe.fileHandleForReading, into: stdoutBox)
             group.leave()
         }
         group.enter()
         DispatchQueue.global(qos: .utility).async {
-            stderrBox.set(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+            Self.drain(stderrPipe.fileHandleForReading, into: stderrBox)
             group.leave()
         }
 
@@ -396,16 +428,13 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
         process.waitUntilExit()
         group.wait()
 
-        let rawStdout = stdoutBox.value
-        let rawStderr = stderrBox.value
-        let truncated = rawStdout.count > maximumOutputBytes
-        let stdout = Data(rawStdout.prefix(maximumOutputBytes))
-        let stderr = Data(rawStderr.prefix(min(maximumOutputBytes, 64_000)))
+        let stdout = stdoutBox.snapshot()
+        let stderr = stderrBox.snapshot()
         let result = CommandResult(
             status: process.terminationStatus,
-            stdoutData: stdout,
-            stderrData: stderr,
-            stdoutWasTruncated: truncated
+            stdoutData: stdout.data,
+            stderrData: stderr.data,
+            stdoutWasTruncated: stdout.wasTruncated
         )
 
         if allowNotRepository { return result }
