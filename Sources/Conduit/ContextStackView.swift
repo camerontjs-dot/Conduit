@@ -3,13 +3,15 @@ import AppKit
 import ConduitCore
 import SwiftUI
 
-/// Read-only presentation of an explicit agent context bundle. This surface is
-/// intentionally inspectable before any future send/handoff action is wired.
+/// Read-only presentation of an explicit agent context bundle. Context may be
+/// inspected, snapshotted, or turned into a draft handoff, but this surface does
+/// not itself send anything to an agent.
 struct ContextStackView: View {
     let bundle: AgentContextBundle
     var title: String = "CONTEXT STACK"
 
     @State private var showOnlyPinned = false
+    @State private var showHandoff = false
 
     private var visibleItems: [AgentContextItem] {
         showOnlyPinned ? bundle.pinnedItems : bundle.items
@@ -28,6 +30,9 @@ struct ContextStackView: View {
         .frame(minWidth: 360, minHeight: 340)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Agent context stack")
+        .sheet(isPresented: $showHandoff) {
+            ContextHandoffView(bundle: bundle)
+        }
     }
 
     private var header: some View {
@@ -50,9 +55,8 @@ struct ContextStackView: View {
             Menu {
                 Toggle("Pinned only", isOn: $showOnlyPinned)
                 Divider()
-                Button("Copy Context Summary") {
-                    copySummary()
-                }
+                Button("Copy Context Summary") { copySummary() }
+                Button("Copy Agent Handoff Draft") { copyHandoff() }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -60,8 +64,8 @@ struct ContextStackView: View {
             .actionExplainer(
                 ActionExplainerSpec(
                     title: "Context options",
-                    summary: "Filters this preview or copies a provenance-labelled summary.",
-                    effect: "Changes only the local presentation or pasteboard.",
+                    summary: "Filter this preview or copy provenance-labelled context text.",
+                    effect: "Changes only local presentation or the pasteboard.",
                     nonEffect: "Does not send context to an agent or modify MainFrame."
                 )
             )
@@ -112,20 +116,33 @@ struct ContextStackView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Label(
-                "Preview only",
-                systemImage: "eye"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            Spacer()
+            Label("Preview only", systemImage: "eye")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if !bundle.nominationItems.isEmpty {
                 Text("\(bundle.nominationItems.count) semantic nomination\(bundle.nominationItems.count == 1 ? "" : "s")")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            Spacer()
+
+            Button("Draft Handoff") {
+                showHandoff = true
+            }
+            .buttonStyle(.bordered)
+            .disabled(bundle.items.isEmpty)
+            .actionExplainer(
+                ActionExplainerSpec(
+                    title: "Draft Agent Handoff",
+                    summary: "Turn this exact typed context into an inspectable agent handoff draft.",
+                    effect: "Opens a draft where you can choose a recipe, objective, and destination.",
+                    nonEffect: "Does not send, launch, or authorize any agent action.",
+                    target: bundle.scopePath,
+                    authority: "Operator-reviewed context"
+                )
+            )
         }
         .padding(10)
     }
@@ -152,6 +169,16 @@ struct ContextStackView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(ContextStackSummary.render(bundle), forType: .string)
+    }
+
+    private func copyHandoff() {
+        let handoff = AgentContextHandoff(
+            objective: bundle.taskTitle,
+            bundle: bundle
+        )
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(AgentContextHandoffRenderer.render(handoff), forType: .string)
     }
 }
 
