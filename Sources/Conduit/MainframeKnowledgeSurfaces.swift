@@ -16,8 +16,12 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
     @Published private(set) var semanticHitCount = 0
 
     private var baseGraphSnapshot: MainframeGraphSnapshot?
+    private var lifecycleScan: MainframeLifecycleScan?
     private var configuredRoot: URL?
     private var generation = UUID()
+    private var taskAssociations: [MainframeTaskAssociation] = []
+    private var semanticNominations: [MainframeSemanticNomination] = []
+    private var observedWorkFacts: [MainframeObservedWorkFact] = []
 
     func ensureLoaded(root: URL) {
         let normalized = root.standardizedFileURL
@@ -26,7 +30,14 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
             return
         }
 
+        let rootChanged = configuredRoot?.standardizedFileURL != normalized
         configuredRoot = normalized
+        if rootChanged {
+            taskAssociations = []
+            semanticNominations = []
+            observedWorkFacts = []
+        }
+
         let currentGeneration = UUID()
         generation = currentGeneration
         isLoading = true
@@ -34,6 +45,7 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
         contentIndex = nil
         graphSnapshot = nil
         baseGraphSnapshot = nil
+        lifecycleScan = nil
         workstation = nil
         semanticHitCount = 0
 
@@ -47,18 +59,14 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
                         content: content,
                         lifecycle: lifecycle
                     )
-                    let workstation = MainframeWorkstationBuilder.build(
-                        root: normalized,
-                        lifecycle: lifecycle
-                    )
-                    return (content, graph, workstation)
+                    return (lifecycle, content, graph)
                 }.value
 
                 guard let self, self.generation == currentGeneration else { return }
-                self.contentIndex = result.0
-                self.baseGraphSnapshot = result.1
-                self.graphSnapshot = result.1
-                self.workstation = result.2
+                self.lifecycleScan = result.0
+                self.contentIndex = result.1
+                self.baseGraphSnapshot = result.2
+                self.rebuildOverlays()
                 self.isLoading = false
             } catch {
                 guard let self, self.generation == currentGeneration else { return }
@@ -69,8 +77,19 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
     }
 
     func refresh(root: URL) {
+        semanticNominations = []
+        semanticHitCount = 0
         configuredRoot = nil
         ensureLoaded(root: root)
+    }
+
+    func setObservedContext(
+        taskAssociations: [MainframeTaskAssociation],
+        observedWorkFacts: [MainframeObservedWorkFact]
+    ) {
+        self.taskAssociations = taskAssociations
+        self.observedWorkFacts = observedWorkFacts
+        rebuildOverlays()
     }
 
     func deterministicSearch(_ query: String, limit: Int = 200) -> MainframeSearchResult? {
@@ -96,7 +115,7 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
 
         let knownPaths = Set(contentIndex.filesystemEntries.map(\.relativePath))
             .union(contentIndex.records.map(\.path))
-        let nominations = hits.compactMap { hit -> MainframeSemanticNomination? in
+        semanticNominations = hits.compactMap { hit -> MainframeSemanticNomination? in
             guard let target = resolveMindGraphPath(hit.displayPath, knownPaths: knownPaths),
                   target != focusPath else { return nil }
             let score = hit.rrfScore.map { String(format: "%.3f", $0) } ?? "unreported"
@@ -107,11 +126,24 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
                 provenance: "MindGraph nomination · \(hit.scope.displayName) · trust \(hit.trustProfile) · rrf \(score)"
             )
         }
-        graphSnapshot = MainframeGraphBuilder.addingSemanticNominations(
-            nominations,
-            to: baseGraphSnapshot
-        )
-        semanticHitCount = nominations.count
+        semanticHitCount = semanticNominations.count
+        rebuildOverlays()
+    }
+
+    private func rebuildOverlays() {
+        if let baseGraphSnapshot {
+            var graph = MainframeGraphBuilder.addingTaskAssociations(taskAssociations, to: baseGraphSnapshot)
+            graph = MainframeGraphBuilder.addingSemanticNominations(semanticNominations, to: graph)
+            graphSnapshot = graph
+        }
+
+        if let configuredRoot, let lifecycleScan {
+            workstation = MainframeWorkstationBuilder.build(
+                root: configuredRoot,
+                lifecycle: lifecycleScan,
+                observedFacts: observedWorkFacts
+            )
+        }
     }
 
     private func resolveMindGraphPath(_ raw: String, knownPaths: Set<String>) -> String? {
@@ -264,7 +296,9 @@ struct MainframeGraphSurfaceView: View {
     @State private var focusNodeID: String?
     @State private var selectedGraphNodeID: String?
     @State private var depth = 1
-    @State private var allowedKinds: Set<MainframeGraphEdgeKind> = [.authoredLink]
+    @State private var allowedKinds: Set<MainframeGraphEdgeKind> = [
+        .authoredLink, .containment, .taskSessionAssociation
+    ]
     @State private var pathStartID: String?
     @State private var pathEndID: String?
     @State private var showMindGraph = false
@@ -312,7 +346,7 @@ struct MainframeGraphSurfaceView: View {
                 snapshot: snapshot,
                 focusNodeID: focus,
                 depth: depth,
-                allowedKinds: [.authoredLink, .semanticNomination],
+                allowedKinds: [.authoredLink, .containment, .semanticNomination, .taskSessionAssociation],
                 maxNodes: 80
             )
         }
@@ -754,6 +788,7 @@ struct MainframeGraphSurfaceView: View {
 // MARK: - Workstation
 
 struct MainframeWorkstationSurfaceView: View {
+    @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
@@ -918,7 +953,14 @@ struct MainframeWorkstationSurfaceView: View {
     }
 
     private func stationCard(_ station: MainframeWorkstationStation) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let liveRuntimes = MainframeObservedTaskBridge.liveRuntimes(
+            for: station.id,
+            root: root,
+            tasks: model.taskSessions,
+            runtimes: model.sessions
+        )
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 Image(systemName: station.recordType == .operation ? "gearshape.2" : "hammer")
                     .foregroundStyle(palette.accent)
@@ -954,6 +996,10 @@ struct MainframeWorkstationSurfaceView: View {
                     ?? "Authority: \(signal.authority.rawValue)")
             }
 
+            if !liveRuntimes.isEmpty {
+                liveRuntimeCompanions(liveRuntimes)
+            }
+
             if !station.issues.isEmpty {
                 Text(station.issues.joined(separator: " · "))
                     .font(.caption2)
@@ -970,6 +1016,49 @@ struct MainframeWorkstationSurfaceView: View {
         .background(palette.surface)
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(palette.line, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func liveRuntimeCompanions(_ runtimes: [TerminalRuntime]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("OBSERVED LIVE RUNTIMES")
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .tracking(0.7)
+                .foregroundStyle(palette.faint)
+
+            HStack(spacing: 10) {
+                ForEach(Array(runtimes.prefix(4).enumerated()), id: \.offset) { _, runtime in
+                    TimelineView(.periodic(from: .now, by: 0.7)) { timeline in
+                        let state = runtime.controller.visualState(at: timeline.date)
+                        VStack(spacing: 3) {
+                            AgentSpriteView(
+                                profile: runtime.descriptor.agent,
+                                state: state,
+                                frameSize: CGSize(width: 38, height: 42)
+                            )
+                            Text(runtime.descriptor.agent.name)
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(palette.text)
+                                .lineLimit(1)
+                            Text(state.spriteCue.accessibilityPhrase)
+                                .font(.system(size: 7))
+                                .foregroundStyle(palette.faint)
+                                .lineLimit(1)
+                        }
+                        .help("Observed runtime for this exact task scope · \(state.spriteCue.accessibilityPhrase)")
+                    }
+                }
+                if runtimes.count > 4 {
+                    Text("+\(runtimes.count - 4)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(palette.faint)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(8)
+        .background(palette.sink.opacity(0.45))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(palette.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func regionSymbol(_ region: MainframeWorkstationRegion) -> String {
