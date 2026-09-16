@@ -453,7 +453,7 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
     }
 
     static func parsePorcelainV1Z(_ data: Data) -> [GitWorkspaceStatusEntry] {
-        let tokens = data.split(separator: 0, omittingEmptySubsequences: true).map(Data.init)
+        let tokens = nullSeparatedFields(data)
         var rows: [GitWorkspaceStatusEntry] = []
         var index = 0
 
@@ -486,6 +486,32 @@ public struct GitWorkspaceInspector: @unchecked Sendable {
             )
         }
         return rows
+    }
+
+    /// Foundation's `Data` conforms to both `Sequence` and `Collection`. Swift
+    /// 6.3 can therefore consider both generic `split` overloads equally valid
+    /// for a NUL-delimited byte buffer. Parse bytes directly so this protocol
+    /// representation detail cannot become a compiler-version compatibility
+    /// boundary for porcelain-v1 `-z` status output.
+    private static func nullSeparatedFields(_ data: Data) -> [Data] {
+        var fields: [Data] = []
+        var current: [UInt8] = []
+        current.reserveCapacity(min(data.count, 256))
+
+        for byte in data {
+            if byte == 0 {
+                if !current.isEmpty {
+                    fields.append(Data(current))
+                    current.removeAll(keepingCapacity: true)
+                }
+            } else {
+                current.append(byte)
+            }
+        }
+        if !current.isEmpty {
+            fields.append(Data(current))
+        }
+        return fields
     }
 
     static func parseBlamePorcelain(
