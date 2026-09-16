@@ -29,7 +29,12 @@ enum ContextIDEBridge {
                 revisionIdentity: nil,
                 estimatedTokens: estimatedTokens(for: document.url),
                 isPinned: false,
-                freshness: .current
+                // The legacy context-candidate list identifies the current path
+                // but does not carry an exact byte identity. Do not promote that
+                // absence into a claim that a persisted snapshot is still fresh.
+                // Source Workbench pins use an exact current Git blob identity
+                // when available and can therefore make a stronger claim.
+                freshness: .unknown
             )
         }
 
