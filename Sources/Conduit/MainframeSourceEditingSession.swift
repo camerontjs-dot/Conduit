@@ -14,7 +14,10 @@ final class MainframeSourceEditingSession: ObservableObject {
     @Published private(set) var relativePath: String?
     @Published private(set) var absolutePath: String?
     @Published private(set) var kind: MainframeSourceKind = .unsupported
-    @Published private(set) var permission: MainframeSourceEditPermission = .readOnly(reason: "No source loaded")
+    @Published private(set) var permission: MainframeSourceEditPermission = .readOnly(
+        kind: .unsupported,
+        reason: "No source loaded"
+    )
     @Published private(set) var statusMessage: String?
     @Published private(set) var hasConflict = false
 
@@ -31,15 +34,20 @@ final class MainframeSourceEditingSession: ObservableObject {
     }
 
     var readOnlyReason: String? {
-        if case .readOnly(let reason) = permission { return reason }
+        if case .readOnly(_, let reason) = permission { return reason }
         return nil
     }
 
     func load(relativePath: String, absolutePath: String, source: String) {
         self.relativePath = relativePath
         self.absolutePath = URL(fileURLWithPath: absolutePath).standardizedFileURL.path
-        kind = MainframeSourceKind.detect(path: relativePath)
-        permission = MainframeSourcePolicy.editPermission(relativePath: relativePath)
+        kind = MainframeSourcePolicy.classify(
+            fileName: URL(fileURLWithPath: relativePath).lastPathComponent
+        )
+        permission = MainframeSourcePolicy.editPermission(
+            relativePath: relativePath,
+            fileName: URL(fileURLWithPath: relativePath).lastPathComponent
+        )
         buffer = source
         baseline = source
         statusMessage = nil
@@ -52,7 +60,7 @@ final class MainframeSourceEditingSession: ObservableObject {
         buffer = ""
         baseline = nil
         kind = .unsupported
-        permission = .readOnly(reason: "No source loaded")
+        permission = .readOnly(kind: .unsupported, reason: "No source loaded")
         statusMessage = nil
         hasConflict = false
     }
