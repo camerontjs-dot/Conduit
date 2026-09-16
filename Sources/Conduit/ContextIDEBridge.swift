@@ -4,7 +4,9 @@ import Foundation
 
 /// Adapts Conduit's existing project-context candidates into the typed Context
 /// IDE model without changing their underlying authority. Candidate files stay
-/// filesystem sources; Git metadata is added only when it is actually observed.
+/// filesystem sources; Git metadata is added only when it has already been
+/// observed by a caller. Building a bundle is therefore deterministic and never
+/// launches Git as an incidental side effect of SwiftUI rendering.
 enum ContextIDEBridge {
     static func buildBundle(
         title: String,
@@ -12,10 +14,10 @@ enum ContextIDEBridge {
         scopePath: URL?,
         candidates: [ContextDocument],
         selectedIDs: Set<String>,
-        pinnedItems: [AgentContextItem] = []
+        pinnedItems: [AgentContextItem] = [],
+        gitSnapshot: GitWorkspaceSnapshot? = nil
     ) -> AgentContextBundle {
         let selected = candidates.filter { selectedIDs.contains($0.id) }
-        let git = scopePath.flatMap { try? GitWorkspaceInspector().snapshot(startingAt: $0) }
 
         let items = selected.map { document in
             AgentContextItem(
@@ -24,19 +26,19 @@ enum ContextIDEBridge {
                 kind: .file,
                 authority: .filesystemSource,
                 sourceReference: displayPath(document.url, mainframeRoot: mainframeRoot),
-                revisionIdentity: revisionIdentity(for: document.url, snapshot: git),
+                revisionIdentity: revisionIdentity(for: document.url, snapshot: gitSnapshot),
                 estimatedTokens: estimatedTokens(for: document.url),
                 isPinned: false,
-                freshness: git == nil ? .unknown : .current
+                freshness: gitSnapshot == nil ? .unknown : .current
             )
         } + pinnedItems
 
         return AgentContextBundle(
             taskTitle: title,
             scopePath: scopePath.map { displayPath($0, mainframeRoot: mainframeRoot) },
-            repository: git?.repositoryRoot,
-            branch: git?.branch,
-            commitSHA: git?.headSHA,
+            repository: gitSnapshot?.repositoryRoot,
+            branch: gitSnapshot?.branch,
+            commitSHA: gitSnapshot?.headSHA,
             items: deduplicated(items)
         )
     }
