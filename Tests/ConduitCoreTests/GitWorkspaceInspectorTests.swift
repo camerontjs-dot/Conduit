@@ -67,6 +67,38 @@ final class GitWorkspaceInspectorTests: XCTestCase {
         XCTAssertEqual(before, after, "read-only Git inspection must not mutate status")
     }
 
+    func testLargeDiffRetainsOnlyConfiguredBudgetWhileDrainingCommand() throws {
+        let repo = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let file = repo.appendingPathComponent("large.txt")
+        let original = (0..<3_000)
+            .map { "line-\($0)-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+            .joined(separator: "\n") + "\n"
+        let changed = (0..<3_000)
+            .map { "line-\($0)-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+            .joined(separator: "\n") + "\n"
+        try original.write(to: file, atomically: true, encoding: .utf8)
+        try git(repo, ["add", "large.txt"])
+        try git(repo, ["commit", "-m", "large baseline"])
+        try changed.write(to: file, atomically: true, encoding: .utf8)
+
+        let before = try git(repo, ["status", "--porcelain=v1"])
+        let diff = try GitWorkspaceInspector(
+            timeout: 10,
+            maximumOutputBytes: 4_096
+        ).diff(
+            startingAt: repo,
+            relativePath: "large.txt"
+        )
+        let after = try git(repo, ["status", "--porcelain=v1"])
+
+        XCTAssertTrue(diff.wasTruncated)
+        XCTAssertLessThanOrEqual(diff.text.utf8.count, 4_096)
+        XCTAssertTrue(diff.text.contains("large.txt"))
+        XCTAssertEqual(before, after, "bounded inspection must remain read-only")
+    }
+
     func testHeadBlobIdentityRequiresCleanTrackedPath() throws {
         let repo = try makeRepository()
         defer { try? FileManager.default.removeItem(at: repo) }
