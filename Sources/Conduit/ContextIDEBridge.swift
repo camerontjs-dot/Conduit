@@ -4,9 +4,9 @@ import Foundation
 
 /// Adapts Conduit's existing project-context candidates into the typed Context
 /// IDE model without changing their underlying authority. Candidate files stay
-/// filesystem sources; Git metadata is added only when it has already been
-/// observed by a caller. Building a bundle is therefore deterministic and never
-/// launches Git as an incidental side effect of SwiftUI rendering.
+/// filesystem sources. Git HEAD and working-tree observations are represented as
+/// separate context items rather than pretending every selected file is exactly
+/// the blob stored at HEAD.
 enum ContextIDEBridge {
     static func buildBundle(
         title: String,
@@ -19,19 +19,22 @@ enum ContextIDEBridge {
     ) -> AgentContextBundle {
         let selected = candidates.filter { selectedIDs.contains($0.id) }
 
-        let items = selected.map { document in
+        let sourceItems = selected.map { document in
             AgentContextItem(
                 id: "context-document:\(document.id)",
                 title: document.label,
                 kind: .file,
                 authority: .filesystemSource,
                 sourceReference: displayPath(document.url, mainframeRoot: mainframeRoot),
-                revisionIdentity: revisionIdentity(for: document.url, snapshot: gitSnapshot),
+                revisionIdentity: nil,
                 estimatedTokens: estimatedTokens(for: document.url),
                 isPinned: false,
-                freshness: gitSnapshot == nil ? .unknown : .current
+                freshness: .current
             )
-        } + pinnedItems
+        }
+
+        let gitItems = gitSnapshot.map(gitContextItems) ?? []
+        let items = sourceItems + gitItems + pinnedItems
 
         return AgentContextBundle(
             taskTitle: title,
@@ -53,16 +56,48 @@ enum ContextIDEBridge {
         return String(target.dropFirst(prefix.count))
     }
 
-    private static func revisionIdentity(
-        for file: URL,
-        snapshot: GitWorkspaceSnapshot?
-    ) -> String? {
-        guard let snapshot else { return nil }
-        let root = snapshot.repositoryRoot
-        let target = file.standardizedFileURL.path
-        let prefix = root.hasSuffix("/") ? root : root + "/"
-        guard target == root || target.hasPrefix(prefix) else { return nil }
-        return snapshot.headSHA
+    private static func gitContextItems(_ snapshot: GitWorkspaceSnapshot) -> [AgentContextItem] {
+        var rows: [AgentContextItem] = [
+            AgentContextItem(
+                id: "git-head:\(snapshot.repositoryRoot)",
+                title: snapshot.isDetached
+                    ? "Git HEAD (detached)"
+                    : "Git HEAD · \(snapshot.branch ?? "unknown branch")",
+                kind: .commit,
+                authority: .gitCommit,
+                sourceReference: snapshot.repositoryRoot,
+                revisionIdentity: snapshot.headSHA,
+                freshness: .current
+            )
+        ]
+
+        for entry in snapshot.status.prefix(120) {
+            rows.append(
+                AgentContextItem(
+                    id: "git-working-tree:\(entry.path):\(entry.indexStatus)\(entry.workTreeStatus)",
+                    title: "\(entry.statusLabel) · \(entry.path)",
+                    kind: .gitDiff,
+                    authority: .gitWorkingTree,
+                    sourceReference: entry.path,
+                    revisionIdentity: nil,
+                    freshness: .current
+                )
+            )
+        }
+
+        if snapshot.statusWasTruncated {
+            rows.append(
+                AgentContextItem(
+                    id: "git-working-tree:truncated:\(snapshot.repositoryRoot)",
+                    title: "Git status output truncated",
+                    kind: .note,
+                    authority: .gitWorkingTree,
+                    sourceReference: snapshot.repositoryRoot,
+                    freshness: .unknown
+                )
+            )
+        }
+        return rows
     }
 
     private static func estimatedTokens(for url: URL) -> Int? {
