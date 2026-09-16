@@ -67,6 +67,54 @@ final class GitWorkspaceInspectorTests: XCTestCase {
         XCTAssertEqual(before, after, "read-only Git inspection must not mutate status")
     }
 
+    func testHeadBlobIdentityRequiresCleanTrackedPath() throws {
+        let repo = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let file = repo.appendingPathComponent("File.swift")
+        try "let value = 1\n".write(to: file, atomically: true, encoding: .utf8)
+        try git(repo, ["add", "File.swift"])
+        try git(repo, ["commit", "-m", "baseline"])
+
+        let expectedBlob = try git(repo, ["rev-parse", "HEAD:File.swift"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let inspector = GitWorkspaceInspector()
+        XCTAssertEqual(
+            try inspector.headBlobIdentity(startingAt: file, relativePath: "File.swift"),
+            expectedBlob
+        )
+
+        try "let value = 2\n".write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertNil(
+            try inspector.headBlobIdentity(startingAt: file, relativePath: "File.swift"),
+            "a dirty working-tree file must not be labelled with the HEAD blob identity"
+        )
+    }
+
+    func testBlameReturnsExactCommitAndAuthorForRequestedLine() throws {
+        let repo = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let file = repo.appendingPathComponent("File.swift")
+        try "let first = 1\nlet second = 2\n".write(to: file, atomically: true, encoding: .utf8)
+        try git(repo, ["add", "File.swift"])
+        try git(repo, ["commit", "-m", "baseline blame"])
+        let expectedHead = try git(repo, ["rev-parse", "HEAD"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let blame = try GitWorkspaceInspector().blame(
+            startingAt: file,
+            relativePath: "File.swift",
+            line: 2
+        )
+
+        XCTAssertEqual(blame?.path, "File.swift")
+        XCTAssertEqual(blame?.line, 2)
+        XCTAssertEqual(blame?.commitSHA, expectedHead)
+        XCTAssertEqual(blame?.author, "Conduit Test")
+        XCTAssertEqual(blame?.summary, "baseline blame")
+    }
+
     func testStatusParserPreservesRenameOriginalPath() {
         let data = Data("R  new name.swift\0old name.swift\0?? loose.txt\0".utf8)
         let rows = GitWorkspaceInspector.parsePorcelainV1Z(data)
