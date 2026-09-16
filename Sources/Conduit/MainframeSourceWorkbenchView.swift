@@ -152,8 +152,17 @@ struct MainframeSourceWorkbenchView: View {
             Task { await refreshBlame() }
         }
         .onChange(of: mode) { newMode in
+            if newMode == .edit && !editor.canEdit {
+                mode = .inspect
+                return
+            }
             if newMode == .diff {
                 Task { await refreshGit() }
+            }
+        }
+        .onChange(of: editor.permission) { _ in
+            if mode == .edit && !editor.canEdit {
+                mode = .inspect
             }
         }
     }
@@ -207,8 +216,9 @@ struct MainframeSourceWorkbenchView: View {
         HStack(spacing: 9) {
             Picker("Source mode", selection: $mode) {
                 Text("Inspect").tag(MainframeSourceWorkbenchMode.inspect)
-                Text("Edit").tag(MainframeSourceWorkbenchMode.edit)
-                    .disabled(!editor.canEdit)
+                if editor.canEdit {
+                    Text("Edit").tag(MainframeSourceWorkbenchMode.edit)
+                }
                 Text("Diff").tag(MainframeSourceWorkbenchMode.diff)
             }
             .pickerStyle(.segmented)
@@ -241,7 +251,7 @@ struct MainframeSourceWorkbenchView: View {
 
             Spacer(minLength: 8)
 
-            if mode == .edit {
+            if mode == .edit && editor.canEdit {
                 TextField("Find", text: $findText)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 135)
@@ -321,10 +331,14 @@ struct MainframeSourceWorkbenchView: View {
                 syntaxReader
             }
         case .edit:
-            TextEditor(text: $editor.buffer)
-                .font(.system(size: 12.5, design: .monospaced))
-                .padding(8)
-                .background(palette.sink)
+            if editor.canEdit {
+                TextEditor(text: $editor.buffer)
+                    .font(.system(size: 12.5, design: .monospaced))
+                    .padding(8)
+                    .background(palette.sink)
+            } else {
+                syntaxReader
+            }
         case .diff:
             diffSurface
         }
