@@ -466,8 +466,39 @@ struct MainframeExplorerSidebarView: View {
     let root: URL
     @ObservedObject var explorer: MainframeExplorerWorkspaceModel
 
+    @State private var systemExpanded = false
+    @State private var focusedScopePath: String?
+    @State private var showMindGraph = false
+
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
+    }
+
+    private var primaryLifecycleRows: [MainframeExplorerWorkspaceModel.VisibleRow] {
+        explorer.lifecycleRootRows.filter { row in
+            let parts = row.node.relativePath.split(separator: "/", omittingEmptySubsequences: true)
+            guard let first = parts.first else { return true }
+            if first == "30_projects" || first == "40_operations" {
+                return row.depth <= 1
+            }
+            return true
+        }
+    }
+
+    private var focusedScopeNode: MainframeExplorerNode? {
+        guard let focusedScopePath else { return nil }
+        return explorer.lifecycleRootRows
+            .first(where: { $0.node.relativePath == focusedScopePath })?
+            .node
+    }
+
+    private var focusedScopeRows: [MainframeExplorerWorkspaceModel.VisibleRow] {
+        guard let focusedScopePath else { return [] }
+        var rows: [MainframeExplorerWorkspaceModel.VisibleRow] = []
+        for child in explorer.childrenByDirectory[focusedScopePath] ?? [] {
+            appendFocused(child, depth: 0, to: &rows)
+        }
+        return rows
     }
 
     var body: some View {
@@ -483,6 +514,15 @@ struct MainframeExplorerSidebarView: View {
                         .foregroundStyle(palette.dim)
                 }
                 Spacer()
+                Button {
+                    showMindGraph = true
+                } label: {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                }
+                .buttonStyle(.borderless)
+                .help("MindGraph related-material query")
+                .accessibilityLabel("MindGraph query")
+
                 Button {
                     explorer.isQuickOpenPresented = true
                 } label: {
@@ -503,15 +543,55 @@ struct MainframeExplorerSidebarView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 3) {
                         sectionLabel("LIFECYCLE")
-                        ForEach(explorer.lifecycleRootRows) { row in
-                            treeRow(row)
+                        ForEach(primaryLifecycleRows) { row in
+                            treeRow(row, canEnterScope: true)
+                        }
+
+                        if let focusedScopeNode {
+                            focusedScopeHeader(focusedScopeNode)
+                                .padding(.top, 10)
+                            if focusedScopeRows.isEmpty {
+                                Text("Open the scope to browse its files.")
+                                    .font(.caption2)
+                                    .foregroundStyle(palette.faint)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 4)
+                            } else {
+                                ForEach(focusedScopeRows) { row in
+                                    treeRow(row, canEnterScope: false)
+                                }
+                            }
                         }
 
                         if !explorer.systemRootRows.isEmpty {
-                            sectionLabel("SYSTEM")
-                                .padding(.top, 8)
-                            ForEach(explorer.systemRootRows) { row in
-                                treeRow(row)
+                            Button {
+                                systemExpanded.toggle()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: systemExpanded ? "chevron.down" : "chevron.right")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(palette.faint)
+                                    Text("SYSTEM FILES")
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        .tracking(1.0)
+                                        .foregroundStyle(palette.faint)
+                                    Spacer()
+                                    Text("\(explorer.systemRootRows.filter { $0.depth == 0 }.count)")
+                                        .font(.caption2.monospacedDigit())
+                                        .foregroundStyle(palette.faint)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 8)
+                            .help("System/configuration files remain available but are collapsed by default")
+
+                            if systemExpanded {
+                                ForEach(explorer.systemRootRows) { row in
+                                    treeRow(row, canEnterScope: false)
+                                }
                             }
                         }
                     }
@@ -535,6 +615,9 @@ struct MainframeExplorerSidebarView: View {
         }
         .sheet(isPresented: $explorer.isQuickOpenPresented) {
             quickOpenSheet
+        }
+        .sheet(isPresented: $showMindGraph) {
+            MindGraphQueryView(onOpenPath: revealMindGraphPath)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("MainFrame Explorer sidebar")
@@ -597,10 +680,18 @@ struct MainframeExplorerSidebarView: View {
         .frame(width: 680, height: 520)
     }
 
-    private func treeRow(_ row: MainframeExplorerWorkspaceModel.VisibleRow) -> some View {
+    private func treeRow(
+        _ row: MainframeExplorerWorkspaceModel.VisibleRow,
+        canEnterScope: Bool
+    ) -> some View {
         let selected = explorer.selectedNode?.id == row.node.id
         return Button {
-            explorer.toggle(row.node)
+            if canEnterScope && isValidatedWorkRecord(row) {
+                explorer.toggle(row.node)
+                focusedScopePath = row.node.relativePath
+            } else {
+                explorer.toggle(row.node)
+            }
         } label: {
             HStack(spacing: 6) {
                 if row.node.kind == .directory {
@@ -621,6 +712,14 @@ struct MainframeExplorerSidebarView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
+                if canEnterScope,
+                   let scope = explorer.scopePresentation(for: row.node),
+                   scope.isAuthoritative,
+                   row.depth == 1 {
+                    Text(scope.label)
+                        .font(.system(size: 7, weight: .bold, design: .monospaced))
+                        .foregroundStyle(palette.faint)
+                }
             }
             .padding(.leading, CGFloat(row.depth) * 14 + 8)
             .padding(.trailing, 8)
@@ -632,6 +731,12 @@ struct MainframeExplorerSidebarView: View {
         .buttonStyle(.plain)
         .help(row.node.relativePath)
         .contextMenu {
+            if isValidatedWorkRecord(row) {
+                Button("Focus Scope in Sidebar") {
+                    explorer.toggle(row.node)
+                    focusedScopePath = row.node.relativePath
+                }
+            }
             Button("Copy MainFrame-relative Path") {
                 copyToPasteboard(row.node.relativePath)
             }
@@ -643,6 +748,70 @@ struct MainframeExplorerSidebarView: View {
             }
         }
         .accessibilityLabel("\(row.node.name), \(row.node.kind.rawValue)")
+    }
+
+    private func focusedScopeHeader(_ node: MainframeExplorerNode) -> some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(explorer.scopePresentation(for: node)?.label ?? "CURRENT SCOPE")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(palette.faint)
+                Text(node.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.text)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button {
+                focusedScopePath = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(palette.faint)
+            }
+            .buttonStyle(.borderless)
+            .help("Close focused scope")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(palette.surface.opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .padding(.horizontal, 6)
+    }
+
+    private func appendFocused(
+        _ node: MainframeExplorerNode,
+        depth: Int,
+        to rows: inout [MainframeExplorerWorkspaceModel.VisibleRow]
+    ) {
+        rows.append(.init(node: node, depth: depth))
+        guard node.kind == .directory,
+              explorer.expandedPaths.contains(node.relativePath) else { return }
+        for child in explorer.childrenByDirectory[node.relativePath] ?? [] {
+            appendFocused(child, depth: depth + 1, to: &rows)
+        }
+    }
+
+    private func isValidatedWorkRecord(_ row: MainframeExplorerWorkspaceModel.VisibleRow) -> Bool {
+        guard row.depth == 1,
+              row.node.kind == .directory,
+              let scope = explorer.scopePresentation(for: row.node) else { return false }
+        return scope.isAuthoritative
+    }
+
+    private func revealMindGraphPath(_ displayPath: String) {
+        let trimmed = displayPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if let direct = explorer.quickOpenEntries.first(where: { $0.relativePath == trimmed }) {
+            explorer.revealAndSelect(direct)
+            return
+        }
+        let absolute = URL(fileURLWithPath: trimmed).standardizedFileURL.path
+        if let direct = explorer.quickOpenEntries.first(where: {
+            $0.url.standardizedFileURL.path == absolute
+        }) {
+            explorer.revealAndSelect(direct)
+        }
     }
 
     private func sectionLabel(_ text: String) -> some View {
@@ -687,6 +856,34 @@ struct MainframeExplorerSidebarView: View {
     }
 }
 
+private enum MainframeExploreSurface: String, CaseIterable {
+    case files
+    case graph
+    case workstation
+
+    var displayName: String {
+        switch self {
+        case .files: return "Files"
+        case .graph: return "Graph"
+        case .workstation: return "Workstation"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .files: return "doc.text"
+        case .graph: return "point.3.connected.trianglepath.dotted"
+        case .workstation: return "square.grid.2x2"
+        }
+    }
+}
+
+private struct MainframeExplorerTab: Identifiable, Equatable {
+    var id: String { path }
+    let path: String
+    let title: String
+}
+
 /// Reader/detail surface for the application-level Explore workspace. The file
 /// tree is intentionally not rendered here; RootView owns the primary sidebar.
 struct MainframeExplorerWorkspaceView: View {
@@ -695,7 +892,14 @@ struct MainframeExplorerWorkspaceView: View {
     let root: URL
     @ObservedObject var explorer: MainframeExplorerWorkspaceModel
     @ObservedObject private var editor: MainframeMarkdownEditingSession
-    @State private var readerMode: MainframeReaderMode = .rendered
+    @StateObject private var projection = MainframeKnowledgeProjectionModel()
+
+    @State private var surface: MainframeExploreSurface = .files
+    @State private var openTabs: [MainframeExplorerTab] = []
+    @State private var readerModes: [String: MainframeReaderMode] = [:]
+    @State private var showFind = false
+    @State private var showMindGraph = false
+    @State private var showLinks = false
 
     init(root: URL, explorer: MainframeExplorerWorkspaceModel) {
         self.root = root
@@ -707,18 +911,181 @@ struct MainframeExplorerWorkspaceView: View {
         themeStore.palette(for: colorScheme)
     }
 
+    private var selectedPath: String? { explorer.selectedNode?.relativePath }
+
+    private var currentReaderMode: MainframeReaderMode {
+        guard let selectedPath else { return .rendered }
+        return readerModes[selectedPath] ?? .rendered
+    }
+
+    private var readerModeBinding: Binding<MainframeReaderMode> {
+        Binding(
+            get: { currentReaderMode },
+            set: { value in
+                guard let selectedPath else { return }
+                readerModes[selectedPath] = value
+            }
+        )
+    }
+
     var body: some View {
-        reader
-            .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-            .background(palette.app)
-            .task(id: root.standardizedFileURL.path) {
-                explorer.configure(root: root)
+        VStack(spacing: 0) {
+            experienceToolbar
+            Divider().overlay(palette.line)
+
+            if surface == .files, !openTabs.isEmpty {
+                tabStrip
+                Divider().overlay(palette.line)
             }
-            .onChange(of: explorer.selectedNode?.id) { _ in
-                readerMode = .rendered
+
+            switch surface {
+            case .files:
+                reader
+            case .graph:
+                MainframeGraphSurfaceView(
+                    root: root,
+                    selectedPath: selectedPath,
+                    projection: projection,
+                    onOpenPath: openPathInFiles
+                )
+            case .workstation:
+                MainframeWorkstationSurfaceView(
+                    root: root,
+                    projection: projection,
+                    onOpenPath: openPathInFiles
+                )
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("MainFrame Explorer")
+        }
+        .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+        .background(palette.app)
+        .task(id: root.standardizedFileURL.path) {
+            explorer.configure(root: root)
+        }
+        .onChange(of: explorer.selectedNode?.id) { _ in
+            noteSelectedTab()
+        }
+        .onChange(of: surface) { newSurface in
+            if newSurface != .files {
+                projection.ensureLoaded(root: root)
+            }
+        }
+        .sheet(isPresented: $showFind) {
+            MainframeFindSheet(
+                root: root,
+                projection: projection,
+                onOpenPath: openPathInFiles
+            )
+        }
+        .sheet(isPresented: $showMindGraph) {
+            MindGraphQueryView(onOpenPath: { path in
+                openMindGraphPath(path)
+            })
+        }
+        .popover(isPresented: $showLinks, arrowEdge: .top) {
+            linksPopover
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("MainFrame Explorer")
+    }
+
+    private var experienceToolbar: some View {
+        HStack(spacing: 10) {
+            Picker("Explore surface", selection: $surface) {
+                ForEach(MainframeExploreSurface.allCases, id: \.self) { item in
+                    Label(item.displayName, systemImage: item.symbol).tag(item)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 330)
+            .accessibilityLabel("MainFrame surface")
+
+            Spacer()
+
+            Button {
+                projection.ensureLoaded(root: root)
+                showFind = true
+            } label: {
+                Label("Find", systemImage: "text.magnifyingglass")
+            }
+            .buttonStyle(.bordered)
+            .keyboardShortcut("f", modifiers: [.command, .shift])
+            .help("Deterministic full-text Find (Command-Shift-F)")
+
+            Button {
+                showMindGraph = true
+            } label: {
+                Label("MindGraph", systemImage: "point.3.connected.trianglepath.dotted")
+            }
+            .buttonStyle(.bordered)
+            .help("Semantic related-material nominations; separate from deterministic Find")
+
+            if isSelectedMarkdown {
+                Button {
+                    projection.ensureLoaded(root: root)
+                    showLinks = true
+                } label: {
+                    Label("Links", systemImage: "link")
+                }
+                .buttonStyle(.bordered)
+                .help("Incoming and outgoing authored links for the selected Markdown document")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(palette.surface)
+    }
+
+    private var tabStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(openTabs) { tab in
+                    let active = tab.path == selectedPath
+                    HStack(spacing: 5) {
+                        Button {
+                            surface = .files
+                            explorer.reveal(relativePath: tab.path)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "doc.text")
+                                    .font(.caption2)
+                                Text(tab.title)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(active ? palette.text : palette.dim)
+                        }
+                        .buttonStyle(.plain)
+                        .help(tab.path)
+
+                        if openTabs.count > 1 || !active {
+                            Button {
+                                closeTab(tab)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(palette.faint)
+                            }
+                            .buttonStyle(.borderless)
+                            .help(active && editor.hasUnsavedChanges
+                                ? "Save or discard before closing this tab"
+                                : "Close tab")
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(active ? palette.accentSoft : palette.surface.opacity(0.7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(active ? palette.accent.opacity(0.5) : palette.line, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .background(palette.rail)
+        .accessibilityLabel("Open document tabs")
     }
 
     private var reader: some View {
@@ -777,7 +1144,7 @@ struct MainframeExplorerWorkspaceView: View {
             Spacer(minLength: 8)
 
             if isSelectedMarkdown, explorer.documentText != nil {
-                Picker("Reader mode", selection: $readerMode) {
+                Picker("Reader mode", selection: readerModeBinding) {
                     ForEach(MainframeReaderMode.allCases, id: \.self) { mode in
                         Text(mode.displayName).tag(mode)
                     }
@@ -845,7 +1212,7 @@ struct MainframeExplorerWorkspaceView: View {
                     .accessibilityLabel(scope.label)
             }
 
-            if isSelectedMarkdown, readerMode == .edit {
+            if isSelectedMarkdown, currentReaderMode == .edit {
                 Text(editor.hasUnsavedChanges ? "UNSAVED" : "EDIT")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .tracking(0.8)
@@ -866,15 +1233,15 @@ struct MainframeExplorerWorkspaceView: View {
     private var readerContent: some View {
         if let text = explorer.documentText, let selected = explorer.selectedNode {
             if isMarkdown(selected) {
-                if readerMode == .edit {
+                if currentReaderMode == .edit {
                     markdownEditor(selected)
                 } else {
                     MainframeMarkdownReaderView(
                         source: editor.hasUnsavedChanges ? editor.buffer : text,
-                        mode: readerMode,
+                        mode: currentReaderMode,
                         palette: palette
                     )
-                    .accessibilityLabel("\(readerMode.displayName) view for \(selected.name)")
+                    .accessibilityLabel("\(currentReaderMode.displayName) view for \(selected.name)")
                 }
             } else {
                 plainTextReader(text, selected: selected)
@@ -894,10 +1261,10 @@ struct MainframeExplorerWorkspaceView: View {
                 Text("Browse MainFrame")
                     .font(.title2.bold())
                     .foregroundStyle(palette.text)
-                Text("Choose a file in the Explorer sidebar, or use Command-P for bounded Quick Open. Explorer follows the filesystem; lifecycle validity remains a separate authority check.")
+                Text("Choose a file in the Explorer sidebar, use Command-P for bounded Quick Open, Command-Shift-F for deterministic full-text Find, or query MindGraph for explicitly labelled semantic nominations.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(palette.dim)
-                    .frame(maxWidth: 520)
+                    .frame(maxWidth: 560)
             }
             .padding(36)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1029,6 +1396,92 @@ struct MainframeExplorerWorkspaceView: View {
         }
     }
 
+    private var linksPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Authored Links", systemImage: "link")
+                    .font(.headline)
+                Spacer()
+                if projection.isLoading { ProgressView().controlSize(.small) }
+            }
+
+            if let selectedPath {
+                let outgoing = projection.outgoingLinks(for: selectedPath)
+                let incoming = projection.incomingLinks(for: selectedPath)
+
+                linkSection("OUTGOING", outgoing.map { record in
+                    switch record.resolution {
+                    case .local(let path, _): return (path, record.link.label)
+                    case .sameDocumentAnchor(let anchor): return (selectedPath, "#\(anchor)")
+                    case .external(let url): return (url, record.link.label)
+                    case .unresolved(let reason): return ("Unresolved", "\(record.link.target) · \(reason)")
+                    }
+                })
+
+                linkSection("BACKLINKS", incoming.map { ($0.sourcePath, $0.link.label) })
+            } else {
+                Text("Select a Markdown document to inspect links.")
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
+            }
+
+            Text("Authored links and MindGraph nominations remain separate evidence classes.")
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
+        }
+        .padding(14)
+        .frame(width: 420, height: 420, alignment: .topLeading)
+        .background(palette.app)
+        .task { projection.ensureLoaded(root: root) }
+    }
+
+    @ViewBuilder
+    private func linkSection(_ title: String, _ rows: [(String, String)]) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundStyle(palette.faint)
+        if rows.isEmpty {
+            Text("None in the current bounded index.")
+                .font(.caption)
+                .foregroundStyle(palette.dim)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        if projection.contentIndex?.filesystemEntries.contains(where: { $0.relativePath == row.0 }) == true {
+                            Button {
+                                openPathInFiles(row.0)
+                                showLinks = false
+                            } label: {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(row.1.isEmpty ? row.0 : row.1)
+                                        .font(.caption)
+                                        .foregroundStyle(palette.text)
+                                    Text(row.0)
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(palette.faint)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(row.1.isEmpty ? row.0 : row.1)
+                                    .font(.caption)
+                                    .foregroundStyle(palette.dim)
+                                Text(row.0)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(palette.faint)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 120)
+        }
+    }
+
     private func symlinkFact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label.uppercased())
@@ -1069,6 +1522,55 @@ struct MainframeExplorerWorkspaceView: View {
         return monospacedExtensions.contains(ext)
             ? .system(.body, design: .monospaced)
             : .body
+    }
+
+    private func noteSelectedTab() {
+        guard let selected = explorer.selectedNode,
+              selected.kind == .file else { return }
+        if !openTabs.contains(where: { $0.path == selected.relativePath }) {
+            openTabs.append(.init(path: selected.relativePath, title: selected.name))
+        }
+        if readerModes[selected.relativePath] == nil {
+            readerModes[selected.relativePath] = .rendered
+        }
+    }
+
+    private func closeTab(_ tab: MainframeExplorerTab) {
+        let isActive = tab.path == selectedPath
+        if isActive && editor.hasUnsavedChanges {
+            editor.noteNavigationBlocked()
+            return
+        }
+        guard openTabs.count > 1 || !isActive else { return }
+        guard let index = openTabs.firstIndex(of: tab) else { return }
+        openTabs.remove(at: index)
+        readerModes[tab.path] = nil
+        if isActive, !openTabs.isEmpty {
+            let nextIndex = min(index, openTabs.count - 1)
+            explorer.reveal(relativePath: openTabs[nextIndex].path)
+        }
+    }
+
+    private func openPathInFiles(_ path: String) {
+        surface = .files
+        explorer.reveal(relativePath: path)
+    }
+
+    private func openMindGraphPath(_ path: String) {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if let direct = explorer.quickOpenEntries.first(where: { $0.relativePath == trimmed }) {
+            surface = .files
+            explorer.revealAndSelect(direct)
+            return
+        }
+        let absolute = URL(fileURLWithPath: trimmed).standardizedFileURL.path
+        if let direct = explorer.quickOpenEntries.first(where: {
+            $0.url.standardizedFileURL.path == absolute
+        }) {
+            surface = .files
+            explorer.revealAndSelect(direct)
+        }
     }
 }
 

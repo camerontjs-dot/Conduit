@@ -12,13 +12,26 @@ struct MindGraphQueryView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
-    @State private var question = ""
+    private let onOpenPath: ((String) -> Void)?
+    private let onResults: (([MindGraphHit]) -> Void)?
+
+    @State private var question: String
     @State private var scope: MindGraphScope = .knowledge
     @State private var topK = 8
     @State private var isRunning = false
     @State private var hits: [MindGraphHit] = []
     @State private var errorText: String?
     @State private var lastQueryLabel: String?
+
+    init(
+        initialQuestion: String? = nil,
+        onOpenPath: ((String) -> Void)? = nil,
+        onResults: (([MindGraphHit]) -> Void)? = nil
+    ) {
+        self.onOpenPath = onOpenPath
+        self.onResults = onResults
+        _question = State(initialValue: initialQuestion ?? "")
+    }
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -61,11 +74,29 @@ struct MindGraphQueryView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 260)
-                .help(scope.help)
+                .actionExplainer(
+                    ActionExplainerSpec(
+                        title: "MindGraph scope",
+                        summary: scope.help,
+                        effect: "Chooses which local MindGraph index this query searches.",
+                        nonEffect: "Does not merge Knowledge and Projects or change MainFrame files.",
+                        target: scope.displayName,
+                        authority: "Semantic retrieval nomination"
+                    )
+                )
 
                 Stepper("Top \(topK)", value: $topK, in: 3...20)
                     .font(.caption)
                     .foregroundStyle(palette.dim)
+                    .actionExplainer(
+                        ActionExplainerSpec(
+                            title: "Result limit",
+                            summary: "Caps the number of semantic nominations returned by this query.",
+                            effect: "Changes only the bounded retrieval request.",
+                            nonEffect: "Does not change ranking authority or verify any returned claim.",
+                            target: "Top \(topK)"
+                        )
+                    )
 
                 Spacer()
 
@@ -81,6 +112,17 @@ struct MindGraphQueryView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isRunning || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .keyboardShortcut(.defaultAction)
+                .actionExplainer(
+                    ActionExplainerSpec(
+                        title: "Query MindGraph",
+                        summary: "Searches the selected semantic index for related material.",
+                        effect: "Returns provenance-labelled retrieval nominations for inspection.",
+                        nonEffect: "Does not modify MainFrame and does not make returned material verified or authored relationships.",
+                        target: scope.displayName,
+                        authority: "MindGraph retrieval",
+                        shortcut: "Return"
+                    )
+                )
             }
 
             TextField(
@@ -148,7 +190,7 @@ struct MindGraphQueryView: View {
     }
 
     private func hitCard(_ hit: MindGraphHit) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(hit.title)
                     .font(.callout.weight(.semibold))
@@ -182,6 +224,26 @@ struct MindGraphQueryView: View {
                 if let signal = hit.signal {
                     Text(signal)
                 }
+                Spacer()
+                if let onOpenPath {
+                    Button {
+                        onOpenPath(hit.displayPath)
+                        dismiss()
+                    } label: {
+                        Label("Open in Explorer", systemImage: "arrow.forward.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .actionExplainer(
+                        ActionExplainerSpec(
+                            title: "Open nominated source",
+                            summary: "Attempts to reveal this nominated path in the current MainFrame Explorer.",
+                            effect: "Opens only when the path resolves inside the current bounded MainFrame index.",
+                            nonEffect: "Does not make the MindGraph nomination an authored link or verified fact.",
+                            target: hit.displayPath,
+                            authority: "Semantic nomination routed to filesystem lookup"
+                        )
+                    )
+                }
             }
             .font(.caption2)
             .foregroundStyle(palette.faint)
@@ -198,7 +260,7 @@ struct MindGraphQueryView: View {
 
     private var footer: some View {
         HStack {
-            Text("Uses ~/.mindgraph indexes via bin/mindgraph. Knowledge and Projects stay separate.")
+            Text("Uses ~/.mindgraph indexes via bin/mindgraph. Knowledge and Projects stay separate. Results are nominations, not verified claims.")
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
             Spacer()
@@ -230,6 +292,7 @@ struct MindGraphQueryView: View {
                 switch result {
                 case .success(let rows):
                     hits = rows
+                    onResults?(rows)
                     if rows.isEmpty {
                         errorText = nil
                     }

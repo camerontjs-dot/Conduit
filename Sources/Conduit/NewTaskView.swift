@@ -12,6 +12,7 @@ struct NewTaskView: View {
     @State private var selectedProjectID: String?
     @State private var selectedAgentID: UUID?
     @State private var selectedModelID: String?
+    @State private var isCreating = false
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -28,7 +29,8 @@ struct NewTaskView: View {
     }
 
     private var canCreate: Bool {
-        selectedProject != nil
+        !isCreating
+            && selectedProject != nil
             && selectedAgent != nil
             && !(selectedAgent?.modelLaunchStyle == .ollamaRun && selectedModelID == nil)
     }
@@ -227,14 +229,24 @@ struct NewTaskView: View {
 
     private var footer: some View {
         HStack {
-            Text("Starting opens a live local process.")
-                .font(.caption)
-                .foregroundStyle(palette.faint)
+            if isCreating {
+                HStack(spacing: 7) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking durable sessions…")
+                        .font(.caption)
+                        .foregroundStyle(palette.faint)
+                }
+            } else {
+                Text("Starting opens a live local process.")
+                    .font(.caption)
+                    .foregroundStyle(palette.faint)
+            }
             Spacer()
             Button("Cancel") {
                 model.showNewTask = false
             }
             .keyboardShortcut(.cancelAction)
+            .disabled(isCreating)
             Button("Create Task", action: createTask)
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -279,7 +291,21 @@ struct NewTaskView: View {
         launchAgent.contextWindowTokens = model.modelOptions(for: agent)
             .first(where: { $0.id == selectedModelID })?.contextWindowTokens
             ?? agent.contextWindowTokens
-        _ = model.createTask(agent: launchAgent, project: project)
+
+        isCreating = true
+        Task { @MainActor in
+            // `nextInstanceNumber` allocates against Conduit's current durable
+            // discovery. Refresh immediately before a UI New Task launch so a
+            // tmux session that survived a prior app process cannot be missed
+            // by stale in-memory discovery and mistaken for a free generated
+            // name. Discovery is read-only; TmuxDriver still owns the final
+            // binding/race check and never overwrites a conflicting task.
+            if !launchAgent.prefersStructuredHost && model.settings.restoreSessions {
+                await model.refreshDiscoveredSessions()
+            }
+            defer { isCreating = false }
+            _ = model.createTask(agent: launchAgent, project: project)
+        }
     }
 }
 #endif
