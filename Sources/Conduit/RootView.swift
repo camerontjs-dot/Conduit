@@ -12,6 +12,7 @@ struct RootView: View {
     /// NavigationSplitView owns the rail only. The trailing Inspector has its
     /// own responsive overlay/pin policy and never changes this visibility.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @StateObject private var explorerModel = MainframeExplorerWorkspaceModel()
     @State private var inspectorFocusRequest = 0
     @State private var inspectorReturnFocusRequest = 0
     @State private var inspectorPriorWindow: NSWindow?
@@ -470,7 +471,7 @@ struct RootView: View {
                     .environmentObject(themeStore)
             } else if model.workspace == .explore,
                       let root = model.settings.mainframeRoot {
-                MainframeExplorerWorkspaceView(root: root)
+                MainframeExplorerWorkspaceView(root: root, explorer: explorerModel)
                     .environmentObject(themeStore)
             } else if let project = model.selectedTaskProject ?? model.selectedProject {
                 ProjectWorkspaceView(
@@ -537,8 +538,16 @@ struct RootView: View {
         )
     }
 
+    @ViewBuilder
     private var sidebar: some View {
-        TaskSidebarView()
+        if model.workspace == .explore,
+           let root = model.settings.mainframeRoot,
+           !model.rootAccessNeedsAuthorization {
+            MainframeExplorerSidebarView(root: root, explorer: explorerModel)
+                .environmentObject(themeStore)
+        } else {
+            TaskSidebarView()
+        }
     }
 
     private var onboarding: some View {

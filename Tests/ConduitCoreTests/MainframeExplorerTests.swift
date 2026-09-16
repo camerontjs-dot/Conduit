@@ -82,6 +82,51 @@ final class MainframeExplorerTests: XCTestCase {
         }
     }
 
+    func testSymlinkInspectionClassifiesInsideOutsideAndMissingWithoutTraversal() throws {
+        try withRoot { root in
+            let insideTarget = try write(root, "10_knowledge/inside.md", "inside")
+            let insideLink = root.appendingPathComponent("inside-link")
+            try fm.createSymbolicLink(
+                atPath: insideLink.path,
+                withDestinationPath: "10_knowledge/inside.md"
+            )
+
+            let outsideTarget = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try "outside".write(to: outsideTarget, atomically: true, encoding: .utf8)
+            defer { try? fm.removeItem(at: outsideTarget) }
+            let outsideLink = root.appendingPathComponent("outside-link")
+            try fm.createSymbolicLink(at: outsideLink, withDestinationURL: outsideTarget)
+
+            let missingLink = root.appendingPathComponent("missing-link")
+            try fm.createSymbolicLink(
+                atPath: missingLink.path,
+                withDestinationPath: "does-not-exist.md"
+            )
+
+            let scanner = MainframeExplorerScanner()
+            let inside = try scanner.inspectSymbolicLink(root: root, link: insideLink)
+            XCTAssertEqual(inside.location, .insideRoot)
+            XCTAssertEqual(inside.rawTarget, "10_knowledge/inside.md")
+            XCTAssertEqual(inside.relativeTargetPath, "10_knowledge/inside.md")
+            XCTAssertEqual(
+                inside.resolvedTargetPath,
+                insideTarget.resolvingSymlinksInPath().standardizedFileURL.path
+            )
+
+            let outside = try scanner.inspectSymbolicLink(root: root, link: outsideLink)
+            XCTAssertEqual(outside.location, .outsideRoot)
+            XCTAssertNil(outside.relativeTargetPath)
+            XCTAssertEqual(
+                outside.resolvedTargetPath,
+                outsideTarget.resolvingSymlinksInPath().standardizedFileURL.path
+            )
+
+            let missing = try scanner.inspectSymbolicLink(root: root, link: missingLink)
+            XCTAssertEqual(missing.location, .missing)
+            XCTAssertNil(missing.relativeTargetPath)
+        }
+    }
+
     func testIndexNeverFollowsSymbolicLinkAndReportsBound() throws {
         try withRoot { root in
             _ = try write(root, "30_projects/cal/README.md", "# CAL")

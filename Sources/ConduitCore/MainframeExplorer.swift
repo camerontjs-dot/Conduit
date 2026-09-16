@@ -108,11 +108,43 @@ public struct MainframeExplorerIndex: Sendable {
     }
 }
 
+/// Factual classification for a selected symbolic-link target. This does not
+/// authorize traversal; ordinary Explorer scans continue to treat links as
+/// leaves.
+public enum MainframeSymlinkTargetLocation: String, Codable, Sendable {
+    case insideRoot
+    case outsideRoot
+    case missing
+}
+
+public struct MainframeSymlinkInspection: Equatable, Sendable {
+    public let linkPath: String
+    public let rawTarget: String
+    public let resolvedTargetPath: String
+    public let location: MainframeSymlinkTargetLocation
+    public let relativeTargetPath: String?
+
+    public init(
+        linkPath: String,
+        rawTarget: String,
+        resolvedTargetPath: String,
+        location: MainframeSymlinkTargetLocation,
+        relativeTargetPath: String?
+    ) {
+        self.linkPath = linkPath
+        self.rawTarget = rawTarget
+        self.resolvedTargetPath = resolvedTargetPath
+        self.location = location
+        self.relativeTargetPath = relativeTargetPath
+    }
+}
+
 public enum MainframeExplorerError: LocalizedError, Equatable {
     case missingRoot(String)
     case unsafePath(String)
     case notDirectory(String)
     case notFile(String)
+    case notSymbolicLink(String)
     case symbolicLinkTraversal(String)
     case fileTooLarge(path: String, bytes: Int, limit: Int)
     case nonUTF8(String)
@@ -123,6 +155,7 @@ public enum MainframeExplorerError: LocalizedError, Equatable {
         case .unsafePath(let path): return "Path escapes the selected MainFrame root: \(path)"
         case .notDirectory(let path): return "Explorer path is not a directory: \(path)"
         case .notFile(let path): return "Explorer path is not a regular file: \(path)"
+        case .notSymbolicLink(let path): return "Explorer path is not a symbolic link: \(path)"
         case .symbolicLinkTraversal(let path): return "Explorer does not follow symbolic links: \(path)"
         case .fileTooLarge(let path, let bytes, let limit):
             return "File is too large for the Explorer reader (\(bytes) bytes; limit \(limit)): \(path)"
@@ -245,6 +278,53 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
             throw MainframeExplorerError.nonUTF8(file.path)
         }
         return text
+    }
+
+    /// Inspect a selected symbolic link without traversing it during ordinary
+    /// scanning. The result is presentation information only. Callers may offer
+    /// an explicit navigation action only when `relativeTargetPath` is present.
+    public func inspectSymbolicLink(root: URL, link: URL) throws -> MainframeSymlinkInspection {
+        let validatedRoot = try validateRoot(root)
+        let resolvedRoot = validatedRoot.resolvingSymlinksInPath().standardizedFileURL
+        let lexicalLink = link.standardizedFileURL
+        guard isLexicallyContained(lexicalLink, in: validatedRoot) else {
+            throw MainframeExplorerError.unsafePath(link.path)
+        }
+        let values = try lexicalLink.resourceValues(forKeys: [.isSymbolicLinkKey])
+        guard values.isSymbolicLink == true else {
+            throw MainframeExplorerError.notSymbolicLink(link.path)
+        }
+
+        let rawTarget = try fileManager.destinationOfSymbolicLink(atPath: lexicalLink.path)
+        let targetURL: URL
+        if rawTarget.hasPrefix("/") {
+            targetURL = URL(fileURLWithPath: rawTarget)
+        } else {
+            targetURL = lexicalLink.deletingLastPathComponent().appendingPathComponent(rawTarget)
+        }
+        let resolvedTarget = targetURL.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let exists = fileManager.fileExists(atPath: resolvedTarget.path)
+
+        let location: MainframeSymlinkTargetLocation
+        let relativeTargetPath: String?
+        if !exists {
+            location = .missing
+            relativeTargetPath = nil
+        } else if isResolvedContained(resolvedTarget, in: validatedRoot) {
+            location = .insideRoot
+            relativeTargetPath = relativePath(root: resolvedRoot, url: resolvedTarget)
+        } else {
+            location = .outsideRoot
+            relativeTargetPath = nil
+        }
+
+        return MainframeSymlinkInspection(
+            linkPath: relativePath(root: validatedRoot, url: lexicalLink),
+            rawTarget: rawTarget,
+            resolvedTargetPath: resolvedTarget.path,
+            location: location,
+            relativeTargetPath: relativeTargetPath
+        )
     }
 
     private func validateRoot(_ root: URL) throws -> URL {

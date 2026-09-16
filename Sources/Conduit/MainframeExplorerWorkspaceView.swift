@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import ConduitCore
 import Foundation
 import SwiftUI
@@ -27,6 +28,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     @Published private(set) var selectedNode: MainframeExplorerNode?
     @Published private(set) var documentText: String?
     @Published private(set) var documentMessage: String?
+    @Published private(set) var symlinkInspection: MainframeSymlinkInspection?
     @Published private(set) var rootError: String?
     @Published private(set) var lifecycleMessage: String?
     @Published private(set) var quickOpenEntries: [MainframeExplorerNode] = []
@@ -94,6 +96,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         selectedNode = nil
         documentText = nil
         documentMessage = nil
+        symlinkInspection = nil
         rootError = nil
         lifecycleMessage = nil
         quickOpenEntries = []
@@ -149,6 +152,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         }
         documentText = nil
         documentMessage = nil
+        symlinkInspection = nil
 
         guard let root else {
             documentMessage = "No MainFrame root is selected."
@@ -159,7 +163,12 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         case .directory:
             documentMessage = "Directory · read-only"
         case .symbolicLink:
-            documentMessage = "Symbolic link · Explorer does not follow links."
+            do {
+                symlinkInspection = try scanner.inspectSymbolicLink(root: root, link: node.url)
+                documentMessage = "Symbolic link · shown as a leaf; Explorer does not traverse links during scans."
+            } catch {
+                documentMessage = error.localizedDescription
+            }
         case .file:
             do {
                 documentText = try scanner.readUTF8Text(root: root, file: node.url)
@@ -185,11 +194,16 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         revealAndSelect(relativePath: node.relativePath, recordHistory: true)
     }
 
+    func reveal(relativePath: String) {
+        revealAndSelect(relativePath: relativePath, recordHistory: true)
+    }
+
     func selectBreadcrumb(_ relativePath: String) {
         if relativePath.isEmpty {
             selectedNode = nil
             documentText = nil
             documentMessage = "MainFrame root · read-only"
+            symlinkInspection = nil
             return
         }
         revealAndSelect(relativePath: relativePath, recordHistory: true)
@@ -233,7 +247,8 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
             select(discovered, recordHistory: recordHistory)
         } else {
             documentText = nil
-            documentMessage = "The previously visited path is no longer present in the current read-only scan."
+            symlinkInspection = nil
+            documentMessage = "The requested path is no longer present in the current read-only scan."
         }
     }
 
@@ -279,6 +294,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
             cache(nodes, forDirectoryPath: node.relativePath)
         } catch {
             documentText = nil
+            symlinkInspection = nil
             documentMessage = error.localizedDescription
         }
     }
@@ -365,37 +381,20 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     }
 }
 
-/// Self-contained v0 shell. RootView only needs to route the Explore workspace
-/// here; no task/runtime model is mutated or remounted.
-struct MainframeExplorerWorkspaceView: View {
+/// The application-level NavigationSplitView owns this rail. Explore therefore
+/// replaces the task/session rail instead of nesting a second primary sidebar
+/// inside the detail pane.
+struct MainframeExplorerSidebarView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     let root: URL
-    @StateObject private var explorer = MainframeExplorerWorkspaceModel()
+    @ObservedObject var explorer: MainframeExplorerWorkspaceModel
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
     }
 
     var body: some View {
-        HSplitView {
-            sidebar
-                .frame(minWidth: 250, idealWidth: 290, maxWidth: 360)
-            reader
-                .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(palette.app)
-        .task(id: root.standardizedFileURL.path) {
-            explorer.configure(root: root)
-        }
-        .sheet(isPresented: $explorer.isQuickOpenPresented) {
-            quickOpenSheet
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("MainFrame Explorer")
-    }
-
-    private var sidebar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -455,128 +454,14 @@ struct MainframeExplorerWorkspaceView: View {
             }
         }
         .background(palette.rail)
-    }
-
-    private var reader: some View {
-        VStack(spacing: 0) {
-            readerToolbar
-            Divider().overlay(palette.line)
-            readerContent
+        .task(id: root.standardizedFileURL.path) {
+            explorer.configure(root: root)
         }
-        .background(palette.sink)
-    }
-
-    private var readerToolbar: some View {
-        HStack(spacing: 8) {
-            Button(action: explorer.goBack) {
-                Image(systemName: "chevron.left")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!explorer.canGoBack)
-            .help("Back")
-            .accessibilityLabel("Back")
-
-            Button(action: explorer.goForward) {
-                Image(systemName: "chevron.right")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!explorer.canGoForward)
-            .help("Forward")
-            .accessibilityLabel("Forward")
-
-            Divider().frame(height: 20)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(explorer.breadcrumbPaths, id: \.self) { path in
-                        Button(explorer.breadcrumbLabel(for: path)) {
-                            explorer.selectBreadcrumb(path)
-                        }
-                        .buttonStyle(.plain)
-                        .font(.caption)
-                        .foregroundStyle(palette.dim)
-                        if path != explorer.breadcrumbPaths.last {
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(palette.faint)
-                                .accessibilityHidden(true)
-                        }
-                    }
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            if let selected = explorer.selectedNode,
-               let scope = explorer.scopePresentation(for: selected) {
-                Text(scope.label)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(0.8)
-                    .foregroundStyle(scope.isAuthoritative ? palette.dim : palette.faint)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .overlay(
-                        Capsule().strokeBorder(palette.line, lineWidth: 1)
-                    )
-                    .accessibilityLabel(scope.label)
-            }
-
-            Text("READ ONLY")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .tracking(0.8)
-                .foregroundStyle(palette.faint)
+        .sheet(isPresented: $explorer.isQuickOpenPresented) {
+            quickOpenSheet
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(palette.surface)
-    }
-
-    @ViewBuilder
-    private var readerContent: some View {
-        if let text = explorer.documentText, let selected = explorer.selectedNode {
-            ScrollView([.vertical, .horizontal]) {
-                Text(text)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(palette.text)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(18)
-            }
-            .accessibilityLabel("Read-only source for \(selected.name)")
-        } else if let selected = explorer.selectedNode {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(selected.name, systemImage: symbol(for: selected))
-                    .font(.title2.bold())
-                    .foregroundStyle(palette.text)
-                Text(selected.relativePath)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(palette.dim)
-                    .textSelection(.enabled)
-                if let message = explorer.documentMessage {
-                    Text(message)
-                        .foregroundStyle(palette.dim)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-            }
-            .padding(28)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        } else {
-            VStack(spacing: 12) {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: 42))
-                    .foregroundStyle(palette.dim)
-                Text("Browse MainFrame")
-                    .font(.title2.bold())
-                    .foregroundStyle(palette.text)
-                Text("Choose a file in the read-only tree, or use Command-P for bounded Quick Open. Explorer follows the filesystem; lifecycle validity remains a separate authority check.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(palette.dim)
-                    .frame(maxWidth: 520)
-            }
-            .padding(36)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("MainFrame Explorer sidebar")
     }
 
     private var quickOpenSheet: some View {
@@ -670,6 +555,17 @@ struct MainframeExplorerWorkspaceView: View {
         }
         .buttonStyle(.plain)
         .help(row.node.relativePath)
+        .contextMenu {
+            Button("Copy MainFrame-relative Path") {
+                copyToPasteboard(row.node.relativePath)
+            }
+            Button("Copy Absolute Path") {
+                copyToPasteboard(row.node.url.path)
+            }
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([row.node.url])
+            }
+        }
         .accessibilityLabel("\(row.node.name), \(row.node.kind.rawValue)")
     }
 
@@ -711,23 +607,339 @@ struct MainframeExplorerWorkspaceView: View {
     }
 
     private func symbol(for node: MainframeExplorerNode) -> String {
-        if !node.relativePath.contains("/") {
-            switch node.zone {
-            case .inbox: return "tray"
-            case .ingest: return "arrow.down.doc"
-            case .knowledge: return "books.vertical"
-            case .live: return "dot.radiowaves.left.and.right"
-            case .projects: return "hammer"
-            case .operations: return "gearshape.2"
-            case .archive: return "archivebox"
-            case .system: break
+        explorerSymbol(for: node)
+    }
+}
+
+/// Reader/detail surface for the application-level Explore workspace. The file
+/// tree is intentionally not rendered here; RootView owns the primary sidebar.
+struct MainframeExplorerWorkspaceView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+    let root: URL
+    @ObservedObject var explorer: MainframeExplorerWorkspaceModel
+    @State private var readerMode: MainframeReaderMode = .rendered
+
+    private var palette: ConduitPalette {
+        themeStore.palette(for: colorScheme)
+    }
+
+    var body: some View {
+        reader
+            .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+            .background(palette.app)
+            .task(id: root.standardizedFileURL.path) {
+                explorer.configure(root: root)
             }
+            .onChange(of: explorer.selectedNode?.id) { _ in
+                readerMode = .rendered
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("MainFrame Explorer")
+    }
+
+    private var reader: some View {
+        VStack(spacing: 0) {
+            readerToolbar
+            Divider().overlay(palette.line)
+            readerContent
         }
-        switch node.kind {
-        case .directory: return "folder"
-        case .file: return "doc.text"
-        case .symbolicLink: return "link"
+        .background(palette.sink)
+    }
+
+    private var readerToolbar: some View {
+        HStack(spacing: 8) {
+            Button(action: explorer.goBack) {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!explorer.canGoBack)
+            .help("Back")
+            .accessibilityLabel("Back")
+
+            Button(action: explorer.goForward) {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!explorer.canGoForward)
+            .help("Forward")
+            .accessibilityLabel("Forward")
+
+            Divider().frame(height: 20)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(explorer.breadcrumbPaths, id: \.self) { path in
+                        Button(explorer.breadcrumbLabel(for: path)) {
+                            explorer.selectBreadcrumb(path)
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                        if path != explorer.breadcrumbPaths.last {
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(palette.faint)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if let selected = explorer.selectedNode, isMarkdown(selected), explorer.documentText != nil {
+                Picker("Reader mode", selection: $readerMode) {
+                    ForEach(MainframeReaderMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 130)
+                .accessibilityLabel("Markdown reader mode")
+            }
+
+            if let selected = explorer.selectedNode {
+                Menu {
+                    Button("Copy MainFrame-relative Path") {
+                        copyToPasteboard(selected.relativePath)
+                    }
+                    Button("Copy Absolute Path") {
+                        copyToPasteboard(selected.url.path)
+                    }
+                    Divider()
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([selected.url])
+                    }
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .menuStyle(.borderlessButton)
+                .help("Path actions")
+                .accessibilityLabel("Path actions")
+            }
+
+            if let selected = explorer.selectedNode,
+               let scope = explorer.scopePresentation(for: selected) {
+                Text(scope.label)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(scope.isAuthoritative ? palette.dim : palette.faint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .overlay(
+                        Capsule().strokeBorder(palette.line, lineWidth: 1)
+                    )
+                    .accessibilityLabel(scope.label)
+            }
+
+            Text("READ ONLY")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .tracking(0.8)
+                .foregroundStyle(palette.faint)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(palette.surface)
+    }
+
+    @ViewBuilder
+    private var readerContent: some View {
+        if let text = explorer.documentText, let selected = explorer.selectedNode {
+            if isMarkdown(selected) {
+                MainframeMarkdownReaderView(
+                    source: text,
+                    mode: readerMode,
+                    palette: palette
+                )
+                .accessibilityLabel("\(readerMode.displayName) view for \(selected.name)")
+            } else {
+                plainTextReader(text, selected: selected)
+            }
+        } else if let selected = explorer.selectedNode {
+            if selected.kind == .symbolicLink,
+               let inspection = explorer.symlinkInspection {
+                symlinkDetail(selected: selected, inspection: inspection)
+            } else {
+                selectedNodeDetail(selected)
+            }
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 42))
+                    .foregroundStyle(palette.dim)
+                Text("Browse MainFrame")
+                    .font(.title2.bold())
+                    .foregroundStyle(palette.text)
+                Text("Choose a file in the Explorer sidebar, or use Command-P for bounded Quick Open. Explorer follows the filesystem; lifecycle validity remains a separate authority check.")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(palette.dim)
+                    .frame(maxWidth: 520)
+            }
+            .padding(36)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
+
+    private func plainTextReader(_ text: String, selected: MainframeExplorerNode) -> some View {
+        ScrollView(.vertical) {
+            Text(text)
+                .font(plainTextFont(for: selected))
+                .foregroundStyle(palette.text)
+                .lineSpacing(3)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 980, alignment: .topLeading)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
+                .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .accessibilityLabel("Read-only text for \(selected.name)")
+    }
+
+    private func selectedNodeDetail(_ selected: MainframeExplorerNode) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(selected.name, systemImage: explorerSymbol(for: selected))
+                .font(.title2.bold())
+                .foregroundStyle(palette.text)
+            Text(selected.relativePath)
+                .font(.caption.monospaced())
+                .foregroundStyle(palette.dim)
+                .textSelection(.enabled)
+                .contextMenu {
+                    Button("Copy MainFrame-relative Path") {
+                        copyToPasteboard(selected.relativePath)
+                    }
+                    Button("Copy Absolute Path") {
+                        copyToPasteboard(selected.url.path)
+                    }
+                }
+            if let message = explorer.documentMessage {
+                Text(message)
+                    .foregroundStyle(palette.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func symlinkDetail(
+        selected: MainframeExplorerNode,
+        inspection: MainframeSymlinkInspection
+    ) -> some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
+                Label(selected.name, systemImage: "link")
+                    .font(.title2.bold())
+                    .foregroundStyle(palette.text)
+
+                Text(selected.relativePath)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(palette.dim)
+                    .textSelection(.enabled)
+
+                HStack(spacing: 8) {
+                    Text(symlinkStatusLabel(inspection.location))
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(palette.dim)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .overlay(Capsule().strokeBorder(palette.line, lineWidth: 1))
+                    Text("Explorer will not traverse this link during ordinary scans.")
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                }
+
+                symlinkFact("Link target", inspection.rawTarget)
+                symlinkFact("Resolved target", inspection.resolvedTargetPath)
+
+                if let target = inspection.relativeTargetPath {
+                    Button {
+                        explorer.reveal(relativePath: target)
+                    } label: {
+                        Label("Open Target in MainFrame", systemImage: "arrow.forward.square")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .help("Navigate explicitly to the resolved target inside the selected MainFrame root")
+                }
+
+                if let message = explorer.documentMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .padding(28)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func symlinkFact(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .tracking(0.8)
+                .foregroundStyle(palette.faint)
+            Text(value)
+                .font(.caption.monospaced())
+                .foregroundStyle(palette.text)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func symlinkStatusLabel(_ location: MainframeSymlinkTargetLocation) -> String {
+        switch location {
+        case .insideRoot: return "TARGET INSIDE MAINFRAME"
+        case .outsideRoot: return "TARGET OUTSIDE MAINFRAME"
+        case .missing: return "TARGET MISSING"
+        }
+    }
+
+    private func isMarkdown(_ node: MainframeExplorerNode) -> Bool {
+        ["md", "markdown", "mdown", "mkd"].contains(node.url.pathExtension.lowercased())
+    }
+
+    private func plainTextFont(for node: MainframeExplorerNode) -> Font {
+        let ext = node.url.pathExtension.lowercased()
+        let monospacedExtensions: Set<String> = [
+            "swift", "py", "js", "ts", "tsx", "jsx", "json", "yaml", "yml",
+            "toml", "sh", "zsh", "bash", "sql", "css", "html", "xml", "csv"
+        ]
+        return monospacedExtensions.contains(ext)
+            ? .system(.body, design: .monospaced)
+            : .body
+    }
+}
+
+private func explorerSymbol(for node: MainframeExplorerNode) -> String {
+    if !node.relativePath.contains("/") {
+        switch node.zone {
+        case .inbox: return "tray"
+        case .ingest: return "arrow.down.doc"
+        case .knowledge: return "books.vertical"
+        case .live: return "dot.radiowaves.left.and.right"
+        case .projects: return "hammer"
+        case .operations: return "gearshape.2"
+        case .archive: return "archivebox"
+        case .system: break
+        }
+    }
+    switch node.kind {
+    case .directory: return "folder"
+    case .file: return "doc.text"
+    case .symbolicLink: return "link"
+    }
+}
+
+private func copyToPasteboard(_ value: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(value, forType: .string)
 }
 #endif
