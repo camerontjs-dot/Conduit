@@ -284,6 +284,7 @@ struct MainframeFindSheet: View {
 // MARK: - Graph
 
 struct MainframeGraphSurfaceView: View {
+    @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
@@ -370,7 +371,16 @@ struct MainframeGraphSurfaceView: View {
             }
         }
         .background(palette.sink)
-        .task { projection.ensureLoaded(root: root) }
+        .task {
+            projection.ensureLoaded(root: root)
+            syncObservedContext()
+        }
+        .onReceive(model.$taskSessions) { _ in
+            syncObservedContext()
+        }
+        .onReceive(model.$sessions) { _ in
+            syncObservedContext()
+        }
         .onChange(of: selectedPath) { newPath in
             guard let newPath,
                   projection.graphSnapshot?.nodeByID[newPath] != nil else { return }
@@ -428,15 +438,32 @@ struct MainframeGraphSurfaceView: View {
                     Label("MindGraph", systemImage: "point.3.connected.trianglepath.dotted")
                 }
                 .buttonStyle(.bordered)
-                .help("Add explicit semantic nominations as a distinct Radar layer")
+                .actionExplainer(
+                    ActionExplainerSpec(
+                        title: "MindGraph Radar",
+                        summary: "Query semantic project knowledge and overlay returned material as explicit nominations.",
+                        nonEffect: "Does not convert semantic retrieval into authored links or filesystem authority.",
+                        target: effectiveFocusID,
+                        authority: "MindGraph nomination"
+                    )
+                )
 
                 Button {
                     projection.refresh(root: root)
+                    syncObservedContext()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
-                .help("Rebuild derived graph from MainFrame")
+                .actionExplainer(
+                    ActionExplainerSpec(
+                        title: "Refresh Graph",
+                        summary: "Rebuild the derived graph from the current MainFrame and reapply observed task bindings.",
+                        nonEffect: "Does not modify MainFrame, Git, tasks, or agent runtimes.",
+                        target: root.path,
+                        authority: "Filesystem + observed task projection"
+                    )
+                )
             }
 
             if mode == .pathfinder, let snapshot {
@@ -748,6 +775,18 @@ struct MainframeGraphSurfaceView: View {
             : nil
     }
 
+    private func syncObservedContext() {
+        let observed = MainframeObservedTaskBridge.build(
+            root: root,
+            tasks: model.taskSessions,
+            runtimes: model.sessions
+        )
+        projection.setObservedContext(
+            taskAssociations: observed.taskAssociations,
+            observedWorkFacts: observed.observedWorkFacts
+        )
+    }
+
     private func modeName(_ mode: MainframeGraphMode) -> String {
         switch mode {
         case .orbit: return "Orbit"
@@ -838,7 +877,16 @@ struct MainframeWorkstationSurfaceView: View {
             }
         }
         .background(palette.sink)
-        .task { projection.ensureLoaded(root: root) }
+        .task {
+            projection.ensureLoaded(root: root)
+            syncObservedContext()
+        }
+        .onReceive(model.$taskSessions) { _ in
+            syncObservedContext()
+        }
+        .onReceive(model.$sessions) { _ in
+            syncObservedContext()
+        }
     }
 
     private var workstationToolbar: some View {
@@ -858,10 +906,20 @@ struct MainframeWorkstationSurfaceView: View {
                 .frame(width: 240)
             Button {
                 projection.refresh(root: root)
+                syncObservedContext()
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
+            .actionExplainer(
+                ActionExplainerSpec(
+                    title: "Refresh Workstation",
+                    summary: "Re-read lifecycle authority and reapply current observed task/runtime facts.",
+                    nonEffect: "Does not change lifecycle records or agent runtime state.",
+                    target: root.path,
+                    authority: "Lifecycle records + observed runtime facts"
+                )
+            )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -1010,6 +1068,15 @@ struct MainframeWorkstationSurfaceView: View {
                 Spacer()
                 Button("Open Scope") { onOpenPath(station.id) }
                     .buttonStyle(.bordered)
+                    .actionExplainer(
+                        ActionExplainerSpec(
+                            title: "Open Work Scope",
+                            summary: "Open this validated project or operation path in Explorer.",
+                            nonEffect: "Does not activate an agent or imply the scope is complete, healthy, or prioritized.",
+                            target: station.id,
+                            authority: station.isAuthoritative ? "Validated lifecycle identity" : "Unverified lifecycle record"
+                        )
+                    )
             }
         }
         .padding(12)
@@ -1059,6 +1126,18 @@ struct MainframeWorkstationSurfaceView: View {
         .background(palette.sink.opacity(0.45))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(palette.line, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func syncObservedContext() {
+        let observed = MainframeObservedTaskBridge.build(
+            root: root,
+            tasks: model.taskSessions,
+            runtimes: model.sessions
+        )
+        projection.setObservedContext(
+            taskAssociations: observed.taskAssociations,
+            observedWorkFacts: observed.observedWorkFacts
+        )
     }
 
     private func regionSymbol(_ region: MainframeWorkstationRegion) -> String {
