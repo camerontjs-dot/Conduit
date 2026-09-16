@@ -14,13 +14,15 @@ public enum MainframeTextEditError: LocalizedError, Equatable {
     }
 }
 
-/// Bounded exact-file writer for Explorer's first Markdown editing slice.
+/// Bounded exact-file UTF-8 writer shared by Explorer and the Context IDE.
 ///
-/// The caller supplies the exact source text observed when the edit buffer was
-/// opened. Save re-reads the authoritative file immediately before replacement
-/// and refuses to write if that source changed. The replacement is staged in
-/// the same directory and performed through FileManager's item replacement so
-/// a failed staging/replacement does not intentionally mutate adjacent files.
+/// Editability is a caller policy. This writer supplies the mutation boundary:
+/// the caller names one exact file and the exact source text observed when the
+/// edit buffer was opened. Save re-reads that authoritative file immediately
+/// before replacement and refuses to write if the source changed. Replacement
+/// is staged in the same directory and performed through FileManager's item
+/// replacement so a failed staging/replacement does not intentionally mutate
+/// adjacent files.
 public struct MainframeTextFileWriter: @unchecked Sendable {
     private let fileManager: FileManager
     private let scanner: MainframeExplorerScanner
