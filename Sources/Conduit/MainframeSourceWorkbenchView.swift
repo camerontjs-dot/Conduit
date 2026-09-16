@@ -9,13 +9,7 @@ private enum MainframeSourceWorkbenchMode: String, CaseIterable {
     case edit
     case diff
 
-    var displayName: String {
-        switch self {
-        case .inspect: return "Inspect"
-        case .edit: return "Edit"
-        case .diff: return "Diff"
-        }
-    }
+    var displayName: String { rawValue.capitalized }
 }
 
 private enum MainframeSourceInspectorTab: String, CaseIterable {
@@ -26,11 +20,21 @@ private enum MainframeSourceInspectorTab: String, CaseIterable {
     var displayName: String { rawValue.capitalized }
 }
 
-/// A deliberately small code workbench for the Context IDE.
+private struct SourceGitEvidence: Sendable {
+    let snapshot: GitWorkspaceSnapshot?
+    let workingDiff: GitWorkspaceDiff?
+    let stagedDiff: GitWorkspaceDiff?
+    let history: [String]
+    let headBlobIdentity: String?
+    let error: String?
+}
+
+/// A compact source workbench for Conduit's Context IDE.
 ///
-/// It is not trying to be VS Code. The useful boundary is inspectable source,
-/// exact file/line identity, safe explicit edits, read-only Git evidence, and
-/// turning a source location into explicit agent context.
+/// The important object is not "code editing" by itself. It is an exact source
+/// location plus its repository identity, history, diff, diagnostics, and the
+/// context that can be handed to an agent. Writes reuse the same explicit,
+/// conflict-aware exact-file boundary as Explorer's qualified Markdown editor.
 struct MainframeSourceWorkbenchView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
@@ -55,8 +59,11 @@ struct MainframeSourceWorkbenchView: View {
     @State private var stagedDiff: GitWorkspaceDiff?
     @State private var gitHistory: [String] = []
     @State private var gitError: String?
+    @State private var headBlobIdentity: String?
+    @State private var selectedLineBlame: GitWorkspaceBlame?
     @State private var gitRefreshing = false
-    @State private var lastPinnedLabel: String?
+    @State private var showSideDiff = false
+    @State private var lastContextAction: String?
 
     init(
         root: URL,
@@ -88,13 +95,18 @@ struct MainframeSourceWorkbenchView: View {
     }
 
     private var repositoryRelativePath: String? {
-        guard let gitSnapshot else { return nil }
-        let rootPath = URL(fileURLWithPath: gitSnapshot.repositoryRoot, isDirectory: true)
+        guard let snapshot = gitSnapshot else { return nil }
+        let repository = URL(fileURLWithPath: snapshot.repositoryRoot, isDirectory: true)
             .standardizedFileURL.path
-        let filePath = file.standardizedFileURL.path
-        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
-        guard filePath.hasPrefix(prefix) else { return nil }
-        return String(filePath.dropFirst(prefix.count))
+        let target = file.standardizedFileURL.path
+        let prefix = repository.hasSuffix("/") ? repository : repository + "/"
+        guard target.hasPrefix(prefix) else { return nil }
+        return String(target.dropFirst(prefix.count))
+    }
+
+    private var selectedGitStatus: GitWorkspaceStatusEntry? {
+        guard let path = repositoryRelativePath else { return nil }
+        return gitSnapshot?.statusEntry(for: path)
     }
 
     var body: some View {
@@ -116,18 +128,22 @@ struct MainframeSourceWorkbenchView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 HSplitView {
-                    mainSurface
-                        .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+                    sourceSurface
+                        .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
                     inspector
-                        .frame(minWidth: 250, idealWidth: 300, maxWidth: 390, maxHeight: .infinity)
+                        .frame(minWidth: 270, idealWidth: 320, maxWidth: 410, maxHeight: .infinity)
                 }
             }
         }
-        .frame(minWidth: 980, minHeight: 680)
+        .frame(minWidth: 1020, minHeight: 700)
         .background(palette.app)
         .task(id: file.standardizedFileURL.path) {
             loadSource()
             await refreshGit()
+            await refreshBlame()
+        }
+        .onChange(of: selectedLine) { _ in
+            Task { await refreshBlame() }
         }
         .onChange(of: mode) { newMode in
             if newMode == .diff {
@@ -151,6 +167,11 @@ struct MainframeSourceWorkbenchView: View {
                     Text(editor.kind.displayName.uppercased())
                         .font(.system(size: 8, weight: .bold, design: .monospaced))
                         .foregroundStyle(palette.faint)
+                    if let status = selectedGitStatus {
+                        Text(status.statusLabel.uppercased())
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(palette.faint)
+                    }
                 }
             }
             Spacer()
@@ -185,7 +206,24 @@ struct MainframeSourceWorkbenchView: View {
                 Text("Diff").tag(MainframeSourceWorkbenchMode.diff)
             }
             .pickerStyle(.segmented)
-            .frame(width: 260)
+            .frame(width: 250)
+
+            if mode == .inspect {
+                Toggle(isOn: $showSideDiff) {
+                    Label("Side Diff", systemImage: "rectangle.split.2x1")
+                }
+                .toggleStyle(.button)
+                .disabled(workingDiff == nil)
+                .actionExplainer(
+                    ActionExplainerSpec(
+                        title: "Source + Diff",
+                        summary: "Show the current source beside its read-only working-tree diff.",
+                        nonEffect: "Does not stage or modify Git state.",
+                        target: repositoryRelativePath,
+                        authority: "Git observation"
+                    )
+                )
+            }
 
             if !editor.canEdit, let reason = editor.readOnlyReason {
                 Text(reason)
@@ -195,18 +233,19 @@ struct MainframeSourceWorkbenchView: View {
                     .help(reason)
             }
 
-            Spacer(minLength: 10)
+            Spacer(minLength: 8)
 
             if mode == .edit {
                 TextField("Find", text: $findText)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 150)
+                    .frame(width: 135)
                 TextField("Replace", text: $replaceText)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 150)
-                Text("\(matchCount) matches")
+                    .frame(width: 135)
+                Text("\(matchCount)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(palette.faint)
+                    .help("Exact matches in the current edit buffer")
                 Button("Replace All") {
                     _ = editor.replaceAll(find: findText, replacement: replaceText)
                 }
@@ -225,14 +264,16 @@ struct MainframeSourceWorkbenchView: View {
 
                 if editor.hasUnsavedChanges {
                     Button("Save") {
-                        _ = editor.save(root: root, file: file)
+                        if editor.save(root: root, file: file) {
+                            Task { await refreshGit() }
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut("s", modifiers: [.command])
                     .actionExplainer(
                         ActionExplainerSpec(
                             title: "Save Source",
-                            summary: "Write only this exact allowlisted UTF-8 file after checking its baseline.",
+                            summary: "Write only this exact allowlisted UTF-8 file after checking its observed baseline.",
                             effect: "Conflict-checks and replaces the selected file.",
                             nonEffect: "Does not rename, move, delete, stage, commit, or touch adjacent files.",
                             target: relativePath,
@@ -243,9 +284,12 @@ struct MainframeSourceWorkbenchView: View {
                     Button("Discard") { editor.discard() }
                         .buttonStyle(.bordered)
                 }
+
                 if editor.hasConflict {
                     Button("Reload from Disk") {
-                        _ = editor.reload(root: root, file: file)
+                        if editor.reload(root: root, file: file) {
+                            Task { await refreshGit() }
+                        }
                     }
                     .buttonStyle(.bordered)
                 }
@@ -257,14 +301,22 @@ struct MainframeSourceWorkbenchView: View {
     }
 
     @ViewBuilder
-    private var mainSurface: some View {
+    private var sourceSurface: some View {
         switch mode {
         case .inspect:
-            syntaxReader
+            if showSideDiff {
+                HSplitView {
+                    syntaxReader
+                        .frame(minWidth: 380)
+                    sideDiff
+                        .frame(minWidth: 330)
+                }
+            } else {
+                syntaxReader
+            }
         case .edit:
             TextEditor(text: $editor.buffer)
                 .font(.system(size: 12.5, design: .monospaced))
-                .textSelection(.enabled)
                 .padding(8)
                 .background(palette.sink)
         case .diff:
@@ -311,6 +363,7 @@ struct MainframeSourceWorkbenchView: View {
             .contextMenu {
                 Button("Copy Path:Line") { copyPathLine(number) }
                 Button("Pin Line to Context") { pinLine(number) }
+                Button("Copy Agent Handoff for Line") { copyLineHandoff(number) }
             }
 
             SyntaxLineView(source: source, kind: editor.kind, palette: palette)
@@ -320,6 +373,24 @@ struct MainframeSourceWorkbenchView: View {
         .background(number == selectedLine ? palette.accent.opacity(0.07) : Color.clear)
     }
 
+    private var sideDiff: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("WORKING TREE ↔ HEAD")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(palette.faint)
+                .padding(9)
+            Divider().overlay(palette.line)
+            ScrollView([.horizontal, .vertical]) {
+                Text(workingDiff?.text.isEmpty == false ? workingDiff!.text : "No working-tree diff for this file.")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(palette.text)
+                    .textSelection(.enabled)
+                    .padding(10)
+            }
+            .background(palette.sink)
+        }
+    }
+
     private var diffSurface: some View {
         VStack(spacing: 0) {
             HStack {
@@ -327,13 +398,14 @@ struct MainframeSourceWorkbenchView: View {
                     .font(.caption.monospaced())
                     .foregroundStyle(palette.dim)
                 Spacer()
+                if gitRefreshing { ProgressView().controlSize(.small) }
                 Button("Refresh") { Task { await refreshGit() } }
                     .buttonStyle(.borderless)
                     .disabled(gitRefreshing)
                     .actionExplainer(
                         ActionExplainerSpec(
                             title: "Refresh Git Evidence",
-                            summary: "Re-read HEAD, branch, status, and this file's diffs using fixed read-only Git commands.",
+                            summary: "Re-read HEAD, branch, status, exact HEAD blob identity, history, and this file's diffs using fixed read-only Git commands.",
                             nonEffect: "Does not stage, commit, checkout, reset, clean, stash, merge, or rebase.",
                             target: gitSnapshot?.repositoryRoot,
                             authority: "Git observation"
@@ -390,12 +462,9 @@ struct MainframeSourceWorkbenchView: View {
             Divider().overlay(palette.line)
 
             switch inspectorTab {
-            case .outline:
-                outlineInspector
-            case .git:
-                gitInspector
-            case .context:
-                contextInspector
+            case .outline: outlineInspector
+            case .git: gitInspector
+            case .context: contextInspector
             }
         }
         .background(palette.surface)
@@ -461,15 +530,34 @@ struct MainframeSourceWorkbenchView: View {
                     inspectorFact("HEAD", snapshot.headSHA)
                     inspectorFact("BRANCH", snapshot.branch ?? "detached HEAD")
                     inspectorFact("WORKTREE", snapshot.isDirty ? "modified" : "clean")
-                    if snapshot.statusWasTruncated {
-                        Text("Status output was truncated by the bounded inspector.")
+                    if let path = repositoryRelativePath {
+                        inspectorFact("THIS FILE", selectedGitStatus?.statusLabel ?? "clean")
+                        inspectorFact("REPO PATH", path)
+                    }
+                    if let headBlobIdentity {
+                        inspectorFact("HEAD BLOB", headBlobIdentity)
+                    } else if repositoryRelativePath != nil {
+                        Text("Current file is not being labelled with a HEAD blob identity because it is modified/untracked or absent from HEAD.")
                             .font(.caption2)
-                            .foregroundStyle(palette.dim)
+                            .foregroundStyle(palette.faint)
                     }
 
-                    if let path = repositoryRelativePath {
-                        let row = snapshot.status.first { $0.path == path || $0.originalPath == path }
-                        inspectorFact("THIS FILE", row?.statusLabel ?? "clean")
+                    Divider().overlay(palette.line)
+                    Text("SELECTED LINE BLAME")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(palette.faint)
+                    if let blame = selectedLineBlame {
+                        inspectorFact("LINE", "\(blame.line)")
+                        inspectorFact("COMMIT", blame.commitSHA)
+                        if let author = blame.author { inspectorFact("AUTHOR", author) }
+                        if let authorTime = blame.authorTime {
+                            inspectorFact("DATE", authorTime.formatted(date: .abbreviated, time: .shortened))
+                        }
+                        if let summary = blame.summary { inspectorFact("SUMMARY", summary) }
+                    } else {
+                        Text("No committed blame fact for this line.")
+                            .font(.caption)
+                            .foregroundStyle(palette.dim)
                     }
 
                     if !gitHistory.isEmpty {
@@ -506,8 +594,11 @@ struct MainframeSourceWorkbenchView: View {
                 inspectorFact("LOCATION", "\(relativePath):\(selectedLine)")
                 inspectorFact("TYPE", editor.kind.displayName)
                 if let snapshot = gitSnapshot {
-                    inspectorFact("GIT", snapshot.headSHA)
+                    inspectorFact("REPO HEAD", snapshot.headSHA)
                     inspectorFact("BRANCH", snapshot.branch ?? "detached")
+                }
+                if let headBlobIdentity {
+                    inspectorFact("EXACT HEAD BLOB", headBlobIdentity)
                 }
 
                 Divider().overlay(palette.line)
@@ -520,8 +611,8 @@ struct MainframeSourceWorkbenchView: View {
                     .actionExplainer(
                         ActionExplainerSpec(
                             title: "Pin File Context",
-                            summary: "Nominate this exact source path for the current context preview.",
-                            effect: "Adds a provenance-labelled file item to the calling context stack when available.",
+                            summary: "Nominate this exact source path for the current Context IDE preview.",
+                            effect: "Adds a provenance-labelled file item when a calling context stack is available.",
                             nonEffect: "Does not send anything to an agent by itself.",
                             target: relativePath,
                             authority: "Filesystem source"
@@ -531,8 +622,21 @@ struct MainframeSourceWorkbenchView: View {
                 Button("Pin Selected Line") { pinLine(selectedLine) }
                     .buttonStyle(.bordered)
 
-                if let lastPinnedLabel {
-                    Text(lastPinnedLabel)
+                Button("Copy Agent Handoff for Line") { copyLineHandoff(selectedLine) }
+                    .buttonStyle(.bordered)
+                    .actionExplainer(
+                        ActionExplainerSpec(
+                            title: "Draft from Source Line",
+                            summary: "Copy a provenance-labelled agent handoff draft for this exact source location.",
+                            effect: "Writes a draft to the pasteboard.",
+                            nonEffect: "Does not send it, launch an agent, or claim the line is unchanged from Git HEAD.",
+                            target: "\(relativePath):\(selectedLine)",
+                            authority: "Filesystem source + observed Git identity"
+                        )
+                    )
+
+                if let lastContextAction {
+                    Text(lastContextAction)
                         .font(.caption2)
                         .foregroundStyle(palette.dim)
                 }
@@ -547,7 +651,7 @@ struct MainframeSourceWorkbenchView: View {
                 Button("Jump") { jumpFromDiagnostic() }
                     .buttonStyle(.bordered)
                     .disabled(diagnosticText.isEmpty)
-                Text("Compiler/test locations are navigation hints only; the source path still has to match this file.")
+                Text("Compiler/test locations are navigation hints only; the parsed source path still has to match this exact file.")
                     .font(.caption2)
                     .foregroundStyle(palette.faint)
             }
@@ -614,7 +718,7 @@ struct MainframeSourceWorkbenchView: View {
     private func refreshGit() async {
         gitRefreshing = true
         let fileURL = file
-        let result = await Task.detached(priority: .utility) { () -> Result<(GitWorkspaceSnapshot, GitWorkspaceDiff?, GitWorkspaceDiff?, [String]), Error> in
+        let evidence = await Task.detached(priority: .utility) { () -> SourceGitEvidence in
             do {
                 let inspector = GitWorkspaceInspector()
                 let snapshot = try inspector.snapshot(startingAt: fileURL)
@@ -622,7 +726,14 @@ struct MainframeSourceWorkbenchView: View {
                 let filePath = fileURL.standardizedFileURL.path
                 let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
                 guard filePath.hasPrefix(prefix) else {
-                    return .success((snapshot, nil, nil, []))
+                    return SourceGitEvidence(
+                        snapshot: snapshot,
+                        workingDiff: nil,
+                        stagedDiff: nil,
+                        history: [],
+                        headBlobIdentity: nil,
+                        error: nil
+                    )
                 }
                 let path = String(filePath.dropFirst(prefix.count))
                 let working = try inspector.diff(
@@ -640,32 +751,59 @@ struct MainframeSourceWorkbenchView: View {
                     relativePath: path,
                     limit: 12
                 )
-                return .success((snapshot, working, staged, history))
+                let blob = try inspector.headBlobIdentity(
+                    startingAt: fileURL,
+                    relativePath: path
+                )
+                return SourceGitEvidence(
+                    snapshot: snapshot,
+                    workingDiff: working,
+                    stagedDiff: staged,
+                    history: history,
+                    headBlobIdentity: blob,
+                    error: nil
+                )
             } catch {
-                return .failure(error)
+                return SourceGitEvidence(
+                    snapshot: nil,
+                    workingDiff: nil,
+                    stagedDiff: nil,
+                    history: [],
+                    headBlobIdentity: nil,
+                    error: error.localizedDescription
+                )
             }
         }.value
 
-        switch result {
-        case .success(let payload):
-            gitSnapshot = payload.0
-            workingDiff = payload.1
-            stagedDiff = payload.2
-            gitHistory = payload.3
-            gitError = nil
-        case .failure(let error):
-            gitSnapshot = nil
-            workingDiff = nil
-            stagedDiff = nil
-            gitHistory = []
-            gitError = error.localizedDescription
-        }
+        gitSnapshot = evidence.snapshot
+        workingDiff = evidence.workingDiff
+        stagedDiff = evidence.stagedDiff
+        gitHistory = evidence.history
+        headBlobIdentity = evidence.headBlobIdentity
+        gitError = evidence.error
         gitRefreshing = false
+    }
+
+    private func refreshBlame() async {
+        guard let path = repositoryRelativePath else {
+            selectedLineBlame = nil
+            return
+        }
+        let fileURL = file
+        let line = selectedLine
+        selectedLineBlame = await Task.detached(priority: .utility) {
+            try? GitWorkspaceInspector().blame(
+                startingAt: fileURL,
+                relativePath: path,
+                line: line
+            )
+        }.value
     }
 
     private func copyPathLine(_ line: Int) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("\(relativePath):\(line)", forType: .string)
+        lastContextAction = "Copied \(relativePath):\(line)."
     }
 
     private func pinFile() {
@@ -675,35 +813,110 @@ struct MainframeSourceWorkbenchView: View {
             kind: .file,
             authority: .filesystemSource,
             sourceReference: relativePath,
-            revisionIdentity: gitSnapshot?.headSHA,
+            revisionIdentity: headBlobIdentity,
             estimatedTokens: max(1, editor.buffer.count / 4),
             isPinned: true,
-            freshness: gitSnapshot == nil ? .unknown : .current
+            freshness: .current
         )
         onPinContext?(item)
-        lastPinnedLabel = "Pinned file context: \(relativePath)"
+        lastContextAction = onPinContext == nil
+            ? "No parent Context Stack is attached to this standalone workbench. Use Copy Agent Handoff instead."
+            : "Pinned file context: \(relativePath)"
     }
 
     private func pinLine(_ line: Int) {
         guard line > 0, line <= lines.count else { return }
-        let item = AgentContextItem(
+        let item = contextItem(for: line)
+        onPinContext?(item)
+        lastContextAction = onPinContext == nil
+            ? "No parent Context Stack is attached to this standalone workbench. Use Copy Agent Handoff instead."
+            : "Pinned source line: \(relativePath):\(line)"
+    }
+
+    private func contextItem(for line: Int) -> AgentContextItem {
+        AgentContextItem(
             id: "line:\(relativePath):\(line)",
             title: "\(file.lastPathComponent):\(line)",
             kind: .selection,
             authority: .filesystemSource,
             sourceReference: relativePath,
-            revisionIdentity: gitSnapshot?.headSHA,
+            revisionIdentity: headBlobIdentity,
             lineRange: line...line,
-            estimatedTokens: max(1, lines[line - 1].count / 4),
+            estimatedTokens: line > 0 && line <= lines.count
+                ? max(1, lines[line - 1].count / 4)
+                : nil,
             isPinned: true,
-            freshness: gitSnapshot == nil ? .unknown : .current
+            freshness: .current
         )
-        onPinContext?(item)
-        lastPinnedLabel = "Pinned source line: \(relativePath):\(line)"
+    }
+
+    private func copyLineHandoff(_ line: Int) {
+        guard line > 0, line <= lines.count else { return }
+        var items: [AgentContextItem] = [contextItem(for: line)]
+        if let snapshot = gitSnapshot {
+            items.append(
+                AgentContextItem(
+                    id: "git-head:\(snapshot.repositoryRoot)",
+                    title: "Git HEAD",
+                    kind: .commit,
+                    authority: .gitCommit,
+                    sourceReference: snapshot.repositoryRoot,
+                    revisionIdentity: snapshot.headSHA,
+                    freshness: .current
+                )
+            )
+            if let status = selectedGitStatus {
+                items.append(
+                    AgentContextItem(
+                        id: "git-status:\(relativePath)",
+                        title: "\(status.statusLabel) · \(relativePath)",
+                        kind: .gitDiff,
+                        authority: .gitWorkingTree,
+                        sourceReference: repositoryRelativePath ?? relativePath,
+                        freshness: .current
+                    )
+                )
+            }
+        }
+        if let blame = selectedLineBlame {
+            items.append(
+                AgentContextItem(
+                    id: "blame:\(relativePath):\(line)",
+                    title: "Blame · \(blame.author ?? "unknown author")",
+                    kind: .commit,
+                    authority: .gitCommit,
+                    sourceReference: "\(relativePath):\(line)",
+                    revisionIdentity: blame.commitSHA,
+                    freshness: .current
+                )
+            )
+        }
+
+        let bundle = AgentContextBundle(
+            taskTitle: "Inspect \(file.lastPathComponent):\(line)",
+            scopePath: relativePath,
+            repository: gitSnapshot?.repositoryRoot,
+            branch: gitSnapshot?.branch,
+            commitSHA: gitSnapshot?.headSHA,
+            items: items
+        )
+        let handoff = AgentContextHandoff(
+            objective: "Inspect this exact source location in context. Do not assume the working-tree file matches Git HEAD when no exact blob identity is listed.",
+            bundle: bundle
+        )
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(
+            AgentContextHandoffRenderer.render(handoff),
+            forType: .string
+        )
+        lastContextAction = "Copied provenance-labelled agent handoff for \(relativePath):\(line)."
     }
 
     private func jumpFromDiagnostic() {
-        guard let location = MainframeDiagnosticParser.parseLocation(from: diagnosticText) else { return }
+        guard let location = MainframeDiagnosticParser.parseLocation(from: diagnosticText) else {
+            lastContextAction = "No path:line diagnostic location detected."
+            return
+        }
         let diagnosticURL: URL
         if location.path.hasPrefix("/") {
             diagnosticURL = URL(fileURLWithPath: location.path).standardizedFileURL
@@ -715,7 +928,7 @@ struct MainframeSourceWorkbenchView: View {
             diagnosticURL = root.appendingPathComponent(location.path).standardizedFileURL
         }
         guard diagnosticURL.path == file.standardizedFileURL.path else {
-            lastPinnedLabel = "Diagnostic points to a different file: \(location.path)"
+            lastContextAction = "Diagnostic points to a different file: \(location.path)"
             return
         }
         mode = .inspect
@@ -747,9 +960,8 @@ private struct SyntaxLineView: View {
         switch role {
         case .plain: return palette.text
         case .keyword: return palette.accent
-        case .string: return palette.dim
+        case .string, .number: return palette.dim
         case .comment: return palette.faint
-        case .number: return palette.dim
         }
     }
 }
@@ -776,7 +988,10 @@ private struct SyntaxToken {
 
         func flush(_ role: Role = .plain) {
             guard !current.isEmpty else { return }
-            result.append(SyntaxToken(text: current, role: roleFor(current, kind: kind, fallback: role)))
+            result.append(SyntaxToken(
+                text: current,
+                role: roleFor(current, kind: kind, fallback: role)
+            ))
             current = ""
         }
 
@@ -793,9 +1008,7 @@ private struct SyntaxToken {
                 flush()
                 current.append(char)
                 inString = char
-                continue
-            }
-            if char.isLetter || char.isNumber || char == "_" {
+            } else if char.isLetter || char.isNumber || char == "_" || char == "." {
                 current.append(char)
             } else {
                 flush()
@@ -808,7 +1021,8 @@ private struct SyntaxToken {
 
     private static func roleFor(_ token: String, kind: MainframeSourceKind, fallback: Role) -> Role {
         if fallback == .string { return .string }
-        if token.allSatisfy({ $0.isNumber || $0 == "." }), token.contains(where: \Character.isNumber) {
+        if token.allSatisfy({ $0.isNumber || $0 == "." }),
+           token.contains(where: { $0.isNumber }) {
             return .number
         }
         return keywords(for: kind).contains(token) ? .keyword : fallback
