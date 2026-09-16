@@ -91,6 +91,45 @@ final class GitWorkspaceInspectorTests: XCTestCase {
         )
     }
 
+    func testWorkingTreeBlobIdentityTracksExactOnDiskBytesWithoutMutatingGit() throws {
+        let repo = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let file = repo.appendingPathComponent("File.swift")
+        try "let value = 1\n".write(to: file, atomically: true, encoding: .utf8)
+        try git(repo, ["add", "File.swift"])
+        try git(repo, ["commit", "-m", "baseline"])
+
+        let headBlob = try git(repo, ["rev-parse", "HEAD:File.swift"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try "let value = 99\n".write(to: file, atomically: true, encoding: .utf8)
+        let before = try git(repo, ["status", "--porcelain=v1"])
+        let expectedWorkingBlob = try git(repo, ["hash-object", "--no-filters", "--", "File.swift"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let actual = try GitWorkspaceInspector().workingTreeBlobIdentity(
+            startingAt: file,
+            relativePath: "File.swift"
+        )
+        let after = try git(repo, ["status", "--porcelain=v1"])
+
+        XCTAssertEqual(actual, expectedWorkingBlob)
+        XCTAssertNotEqual(actual, headBlob)
+        XCTAssertEqual(before, after, "content identity inspection must not mutate Git state")
+    }
+
+    func testWorkingTreeBlobIdentityRejectsTraversal() throws {
+        let repo = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        XCTAssertThrowsError(
+            try GitWorkspaceInspector().workingTreeBlobIdentity(
+                startingAt: repo,
+                relativePath: "../outside.txt"
+            )
+        )
+    }
+
     func testBlameReturnsExactCommitAndAuthorForRequestedLine() throws {
         let repo = try makeRepository()
         defer { try? FileManager.default.removeItem(at: repo) }
