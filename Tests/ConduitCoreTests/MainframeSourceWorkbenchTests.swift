@@ -62,6 +62,38 @@ final class MainframeSourceWorkbenchTests: XCTestCase {
         XCTAssertEqual(outline.entries.map(\.kind), [.type, .function, .extensionDecl, .function])
     }
 
+    func testSwiftOutlineRecognizesCommonModifiersAndAttributes() {
+        let source = """
+        @MainActor public final class Coordinator {
+            private func run() {}
+        }
+
+        public extension Coordinator {
+            nonisolated func status() {}
+        }
+        """
+
+        let outline = MainframeSourceOutlineExtractor.extract(source: source, kind: .swift)
+
+        XCTAssertEqual(outline.entries.map(\.line), [1, 2, 5, 6])
+        XCTAssertEqual(outline.entries.map(\.kind), [.type, .function, .extensionDecl, .function])
+        XCTAssertEqual(outline.entries[0].title, "@MainActor public final class Coordinator {")
+        XCTAssertEqual(outline.entries[1].title, "private func run() {}")
+    }
+
+    func testTypeScriptOutlineRecognizesExportAndDeclarationModifiers() {
+        let source = """
+        export default class Client {}
+        export interface Options {}
+        declare function connect(): void
+        """
+
+        let outline = MainframeSourceOutlineExtractor.extract(source: source, kind: .typescript)
+
+        XCTAssertEqual(outline.entries.map(\.line), [1, 2, 3])
+        XCTAssertEqual(outline.entries.map(\.kind), [.type, .type, .function])
+    }
+
     func testNonCodeOutlineIsEmptyAndNotClaimedIncomplete() {
         let outline = MainframeSourceOutlineExtractor.extract(
             source: "{\"ok\": true}",
