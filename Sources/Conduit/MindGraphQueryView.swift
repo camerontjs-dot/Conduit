@@ -12,13 +12,26 @@ struct MindGraphQueryView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
-    @State private var question = ""
+    private let onOpenPath: ((String) -> Void)?
+    private let onResults: (([MindGraphHit]) -> Void)?
+
+    @State private var question: String
     @State private var scope: MindGraphScope = .knowledge
     @State private var topK = 8
     @State private var isRunning = false
     @State private var hits: [MindGraphHit] = []
     @State private var errorText: String?
     @State private var lastQueryLabel: String?
+
+    init(
+        initialQuestion: String? = nil,
+        onOpenPath: ((String) -> Void)? = nil,
+        onResults: (([MindGraphHit]) -> Void)? = nil
+    ) {
+        self.onOpenPath = onOpenPath
+        self.onResults = onResults
+        _question = State(initialValue: initialQuestion ?? "")
+    }
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -148,7 +161,7 @@ struct MindGraphQueryView: View {
     }
 
     private func hitCard(_ hit: MindGraphHit) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(hit.title)
                     .font(.callout.weight(.semibold))
@@ -182,6 +195,17 @@ struct MindGraphQueryView: View {
                 if let signal = hit.signal {
                     Text(signal)
                 }
+                Spacer()
+                if let onOpenPath {
+                    Button {
+                        onOpenPath(hit.displayPath)
+                        dismiss()
+                    } label: {
+                        Label("Open in Explorer", systemImage: "arrow.forward.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Open this nominated source path in Explorer when it resolves inside the current MainFrame")
+                }
             }
             .font(.caption2)
             .foregroundStyle(palette.faint)
@@ -198,7 +222,7 @@ struct MindGraphQueryView: View {
 
     private var footer: some View {
         HStack {
-            Text("Uses ~/.mindgraph indexes via bin/mindgraph. Knowledge and Projects stay separate.")
+            Text("Uses ~/.mindgraph indexes via bin/mindgraph. Knowledge and Projects stay separate. Results are nominations, not verified claims.")
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
             Spacer()
@@ -230,6 +254,7 @@ struct MindGraphQueryView: View {
                 switch result {
                 case .success(let rows):
                     hits = rows
+                    onResults?(rows)
                     if rows.isEmpty {
                         errorText = nil
                     }
