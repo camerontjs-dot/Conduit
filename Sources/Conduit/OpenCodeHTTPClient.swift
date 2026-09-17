@@ -218,6 +218,10 @@ final class OpenCodeHTTPClient: ObservableObject {
     @Published private(set) var isTurnActive = false
     @Published private(set) var lastTurnStatus: String?
     @Published private(set) var lastError: String?
+    /// Provider-reported tool/patch activity for the current OpenCode turn.
+    /// This intentionally excludes arbitrary tool output and does not claim
+    /// that an operation succeeded beyond the provider status that was emitted.
+    @Published private(set) var conversationActivities: [OpenCodeConversationActivity] = []
     /// Set only when a failure ends a turn that was still running.
     ///
     /// A `.failed` effect that arrives after the turn already completed does
@@ -237,6 +241,9 @@ final class OpenCodeHTTPClient: ObservableObject {
     private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
 
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    /// Optional presentation-only observation channel for structured activity.
+    /// Runtime semantics do not depend on this callback.
+    var onConversationActivity: ((OpenCodeConversationActivity) -> Void)?
     /// Fired once the host can accept a turn.
     ///
     /// Conduit holds a prompt that arrives before this point rather than
@@ -250,6 +257,7 @@ final class OpenCodeHTTPClient: ObservableObject {
     private let resumeSessionID: String?
     private var lease: OpenCodeServeLeaseRecord?
     private var mapper = OpenCodeEventMapper()
+    private var activityIndexByID: [String: Int] = [:]
     private var sseTask: Task<Void, Never>?
     private var stopped = false
 
@@ -279,7 +287,7 @@ final class OpenCodeHTTPClient: ObservableObject {
         } else {
             // Unlike the ACP and app-server clients this one checks first, so
             // a miss here is a definite refusal rather than a swallowed error
-            // -- but the session it creates is just as empty.
+            // but the session it creates is just as empty.
             if askedToResume { attempt = .refused }
             let created = try await createSession(base: base, password: lease.password)
             guard let sessionID = OpenCodeHTTPContract.sessionID(in: created) else {
@@ -306,6 +314,8 @@ final class OpenCodeHTTPClient: ObservableObject {
             throw ClientError.notReady
         }
         mapper.resetTurn()
+        conversationActivities.removeAll(keepingCapacity: true)
+        activityIndexByID.removeAll(keepingCapacity: true)
         isTurnActive = true
         // A new turn must not inherit the previous turn's failure. lastError
         // is what marks a turn failed rather than completed, so leaving it set
@@ -426,9 +436,28 @@ final class OpenCodeHTTPClient: ObservableObject {
     }
 
     private func handleEvent(_ json: CodexJSON) {
+        if let sessionID,
+           let activity = OpenCodeConversationActivityExtractor.activity(
+                from: json,
+                boundSessionID: sessionID
+           ) {
+            upsertConversationActivity(activity)
+        }
         for effect in mapper.apply(json) {
             emit(effect)
         }
+    }
+
+    private func upsertConversationActivity(
+        _ activity: OpenCodeConversationActivity
+    ) {
+        if let index = activityIndexByID[activity.id] {
+            conversationActivities[index] = activity
+        } else {
+            activityIndexByID[activity.id] = conversationActivities.count
+            conversationActivities.append(activity)
+        }
+        onConversationActivity?(activity)
     }
 
     private func emit(_ effect: StructuredAdapterEffect) {
