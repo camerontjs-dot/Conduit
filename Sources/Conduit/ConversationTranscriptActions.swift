@@ -195,8 +195,14 @@ struct ConversationSelectableDocument: View {
     }
 }
 
-/// Cache immutable assistant projections so a growing live turn does not force
-/// completed turns to repeatedly scrub terminal chrome and parse Markdown.
+/// Cache assistant presentation so a growing live turn does not force completed
+/// turns to repeatedly scrub terminal chrome and parse Markdown.
+///
+/// Closed turns retain their fully parsed Markdown presentation. The live turn
+/// keeps only one revision cache and is rendered as plain attributed text until
+/// it closes. That avoids repeatedly reparsing an ever-growing Markdown document
+/// for token-sized provider updates while preserving one continuous selectable
+/// text node. The final closed revision is parsed once into Markdown styling.
 final class ConversationPresentationCache: ObservableObject {
     struct Presentation {
         let sourceText: String
@@ -207,11 +213,18 @@ final class ConversationPresentationCache: ObservableObject {
     }
 
     private var entries: [UUID: Presentation] = [:]
+    private var liveEntry: (eventID: UUID, presentation: Presentation)?
 
     func presentation(
         eventID: UUID,
         output: AgentVisibleOutput
     ) -> Presentation {
+        if output.state == .live,
+           let liveEntry,
+           liveEntry.eventID == eventID,
+           liveEntry.presentation.sourceText == output.text {
+            return liveEntry.presentation
+        }
         if output.state != .live,
            let cached = entries[eventID],
            cached.sourceText == output.text {
@@ -219,13 +232,18 @@ final class ConversationPresentationCache: ObservableObject {
         }
 
         let display = ConversationDisplayText.workstationDerived(output.text)
-        let attributed = (try? AttributedString(
-            markdown: display,
-            options: AttributedString.MarkdownParsingOptions(
-                interpretedSyntax: .full,
-                failurePolicy: .returnPartiallyParsedIfPossible
-            )
-        )) ?? AttributedString(display)
+        let attributed: AttributedString
+        if output.state == .live {
+            attributed = AttributedString(display)
+        } else {
+            attributed = (try? AttributedString(
+                markdown: display,
+                options: AttributedString.MarkdownParsingOptions(
+                    interpretedSyntax: .full,
+                    failurePolicy: .returnPartiallyParsedIfPossible
+                )
+            )) ?? AttributedString(display)
+        }
         let presentation = Presentation(
             sourceText: output.text,
             displayText: display,
@@ -233,14 +251,20 @@ final class ConversationPresentationCache: ObservableObject {
             menuOptions: TerminalMenuParser.options(in: display),
             looksLikeInteractiveMenu: TerminalMenuParser.looksLikeInteractiveMenu(display)
         )
-        if output.state != .live {
+        if output.state == .live {
+            liveEntry = (eventID, presentation)
+        } else {
             entries[eventID] = presentation
+            if liveEntry?.eventID == eventID {
+                liveEntry = nil
+            }
         }
         return presentation
     }
 
     func removeAll() {
         entries.removeAll(keepingCapacity: true)
+        liveEntry = nil
     }
 }
 
