@@ -100,6 +100,16 @@ struct ConversationView: View {
                             turnView(turn)
                                 .id(turn.id)
                         }
+                        // OpenCode exposes typed provider activity separately
+                        // from assistant prose. Keep the activity inline in the
+                        // thread while letting the child observe its own client,
+                        // so tool-state updates do not invalidate old turns.
+                        if let openCode = runtime.openCode {
+                            OpenCodeConversationActivityView(
+                                client: openCode,
+                                projectRoot: runtime.descriptor.projectPath
+                            )
+                        }
                         if runtime.isAwaitingAgentOutput,
                            runtime.activeOutputEventID == nil {
                             waitingForVisibleOutputCard
