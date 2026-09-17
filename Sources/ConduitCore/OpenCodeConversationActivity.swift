@@ -71,9 +71,11 @@ public enum OpenCodeConversationActivityExtractor {
 
         let properties = json["properties"] ?? json
         guard let part = properties["part"] else { return nil }
-        let sessionID = part["sessionID"]?.stringValue
+        let observedSessionID = part["sessionID"]?.stringValue
             ?? properties["sessionID"]?.stringValue
-        guard sessionID == boundSessionID else { return nil }
+        guard let sessionID = observedSessionID,
+              sessionID == boundSessionID
+        else { return nil }
 
         let partType = part["type"]?.stringValue ?? ""
         switch partType {
