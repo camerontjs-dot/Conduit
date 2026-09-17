@@ -492,7 +492,9 @@ struct RootView: View {
                 model.showProjectBrowser = true
             }
             Button("Build Context Bundle", action: model.prepareContextBundle)
-            Button("Open Project Shell", action: model.launchDefaultShell)
+            Button("Open Project Shell") {
+                _ = model.launchDefaultShell()
+            }
             Button("Resume Durable Session…") {
                 model.showResumeSessions = true
             }
