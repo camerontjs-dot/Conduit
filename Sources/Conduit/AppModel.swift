@@ -94,13 +94,21 @@ final class AppModel: ObservableObject {
     static let outputActivePulseEnabledKey = "conduit.outputActivePulse.enabled"
     static let companionChromeEnabledKey = "conduit.companionChrome.enabled"
 
-    @Published var settings = ConduitSettings()
+    @Published var settings = ConduitSettings() {
+        didSet { refreshTaskSidebarProjection() }
+    }
     /// App-level navigation. Orchestrate is intentionally not a third surface
     /// over a worker terminal; Conversation and Raw remain session-only.
     @Published var workspace: ConduitWorkspace = .sessions
-    @Published var projects: [MainframeProject] = []
-    @Published var rootAccessNeedsAuthorization = false
-    @Published var isScanningProjects = false
+    @Published var projects: [MainframeProject] = [] {
+        didSet { refreshTaskSidebarProjection() }
+    }
+    @Published var rootAccessNeedsAuthorization = false {
+        didSet { refreshTaskSidebarProjection() }
+    }
+    @Published var isScanningProjects = false {
+        didSet { refreshTaskSidebarProjection() }
+    }
     @Published var selectedProjectID: String?
     @Published var orchestrationProjectID: String?
     @Published var orchestrationRequest = ""
@@ -112,19 +120,33 @@ final class AppModel: ObservableObject {
     /// Explicit planner requests use only Ollama's fixed loopback API. The
     /// planner has no worker, filesystem, shell, MCP, or approval interface.
     let orchestrationBackendLabel = LocalOllamaPlanner.backendLabel
-    @Published var sessions: [TerminalRuntime] = []
+    @Published var sessions: [TerminalRuntime] = [] {
+        didSet { refreshTaskSidebarProjection() }
+    }
     @Published var activeSessionID: UUID?
     /// Durable, metadata-only task histories. MainFrame's current project scan
     /// remains authoritative for project names, paths, and lifecycle state.
-    @Published private(set) var taskSessions: [TaskSessionSnapshot] = []
-    @Published var selectedTaskSessionID: TaskSessionID?
-    @Published var taskSearchText = ""
-    @Published var showArchivedTasks = false
+    @Published private(set) var taskSessions: [TaskSessionSnapshot] = [] {
+        didSet { refreshTaskSidebarProjection() }
+    }
+    @Published var selectedTaskSessionID: TaskSessionID? {
+        didSet { refreshTaskSidebarProjection() }
+    }
+    @Published var taskSearchText = "" {
+        didSet { refreshTaskSidebarProjection() }
+    }
+    @Published var showArchivedTasks = false {
+        didSet { refreshTaskSidebarProjection() }
+    }
     /// Nil means all task histories under the selected MainFrame root.
-    @Published var taskScopeProjectID: String?
+    @Published var taskScopeProjectID: String? {
+        didSet { refreshTaskSidebarProjection() }
+    }
     @Published var showNewTask = false
     @Published var showProjectBrowser = false
-    @Published private(set) var taskSessionDiagnostics: [TaskSessionEventLogDiagnostic] = []
+    @Published private(set) var taskSessionDiagnostics: [TaskSessionEventLogDiagnostic] = [] {
+        didSet { refreshTaskSidebarProjection() }
+    }
     /// Source-labelled conversation content retained separately from task
     /// metadata. MainFrame files and work-session receipts remain independent.
     @Published private(set) var conversationHistoryByTask:
@@ -137,6 +159,9 @@ final class AppModel: ObservableObject {
     /// observations. It must not rebuild SessionCatalog for an unrelated
     /// conversation presentation publication.
     private var taskCatalogProjection = TaskCatalogProjection()
+    /// Sidebar presentation observes this narrow model rather than AppModel's
+    /// application-wide publisher. AppModel remains the action authority.
+    let taskSidebarModel = TaskSidebarModel()
     /// Reconnect of a known task used to abort until history finished loading.
     /// Finish the reconnect automatically once the JSONL is in memory.
     private var reconnectAfterHistoryLoad: Set<TaskSessionID> = []
@@ -144,12 +169,16 @@ final class AppModel: ObservableObject {
     /// conversation log, but must resume the same task rather than take the
     /// ordinary UI reconnect path.
     private var reconcileAfterHistoryLoad: Set<TaskSessionID> = []
-    @Published private(set) var taskReconnectabilityObservation: ExternalReconnectabilityObservation = .notChecked
+    @Published private(set) var taskReconnectabilityObservation: ExternalReconnectabilityObservation = .notChecked {
+        didSet { refreshTaskSidebarProjection() }
+    }
     /// Completed observed-usage records for this root, loaded from the log at
     /// bootstrap and appended to as sessions end.
     @Published private(set) var completedUsage: [SessionUsageRecord] = []
     /// Durable tmux sessions found on the server, refreshed on demand.
-    @Published private(set) var discoveredSessions: [DiscoveredSession] = []
+    @Published private(set) var discoveredSessions: [DiscoveredSession] = [] {
+        didSet { refreshTaskSidebarProjection() }
+    }
     @Published var showResumeSessions = false
     /// Why discovery came back empty, when it did. Nil means a plain empty.
     @Published private(set) var discoveryNote: String?
@@ -236,6 +265,7 @@ final class AppModel: ObservableObject {
                 companionScaleStored.rawValue,
                 forKey: Self.companionScaleKey
             )
+            refreshTaskSidebarProjection()
         }
     }
 
@@ -249,6 +279,7 @@ final class AppModel: ObservableObject {
                 companionShelfEnabled,
                 forKey: Self.companionShelfEnabledKey
             )
+            refreshTaskSidebarProjection()
         }
     }
 
@@ -262,6 +293,7 @@ final class AppModel: ObservableObject {
                 railSpritesForAllRows,
                 forKey: Self.railSpritesForAllRowsKey
             )
+            refreshTaskSidebarProjection()
         }
     }
 
@@ -275,6 +307,7 @@ final class AppModel: ObservableObject {
                 juicyFeedbackEnabled,
                 forKey: Self.juicyFeedbackEnabledKey
             )
+            refreshTaskSidebarProjection()
         }
     }
 
@@ -288,6 +321,7 @@ final class AppModel: ObservableObject {
                 outputActivePulseEnabled,
                 forKey: Self.outputActivePulseEnabledKey
             )
+            refreshTaskSidebarProjection()
         }
     }
 
@@ -375,7 +409,9 @@ final class AppModel: ObservableObject {
     /// Lazy, CLI-owned model catalogs keyed by saved profile identity.
     @Published private(set) var modelOptionsByAgentID: [UUID: [AgentModelOption]] = [:]
     @Published private(set) var modelCatalogRefreshingAgentIDs: Set<UUID> = []
-    @Published var taskSearchFocusRequest = 0
+    @Published var taskSearchFocusRequest = 0 {
+        didSet { refreshTaskSidebarProjection() }
+    }
     @Published var healthResults: [AgentHealthResult] = []
     @Published var resourceSnapshot = ResourceSnapshot.empty
     @Published var contextCandidates: [ContextDocument] = []
@@ -402,6 +438,7 @@ final class AppModel: ObservableObject {
             if !inspectorCardsCustomized {
                 applyInspectorCardDefaults(for: density)
             }
+            refreshTaskSidebarProjection()
         }
     }
 
@@ -448,6 +485,7 @@ final class AppModel: ObservableObject {
         if !companionScaleCustomized {
             companionScaleCustomized = true
             UserDefaults.standard.set(true, forKey: Self.companionScaleCustomizedKey)
+            refreshTaskSidebarProjection()
         }
     }
 
@@ -455,6 +493,7 @@ final class AppModel: ObservableObject {
         companionScaleCustomized = false
         UserDefaults.standard.set(false, forKey: Self.companionScaleCustomizedKey)
         companionScaleStored = CompanionScale.defaultFor(density: density)
+        refreshTaskSidebarProjection()
     }
 
     func toggleOperatorPeekAgent(_ id: UUID) {
@@ -509,6 +548,10 @@ final class AppModel: ObservableObject {
     /// live `sessions` array and is never persisted as project truth.
     private var lastSelectedSessionIDByProject: [String: UUID] = [:]
     private var explicitlyFinalizedRuntimeAttempts = Set<RuntimeAttemptID>()
+
+    init() {
+        refreshTaskSidebarProjection()
+    }
 
     /// Load density from UserDefaults; rewrite Focused when missing or invalid.
     private static func loadPersistedDensity() -> Density {
@@ -1491,6 +1534,10 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: - Task history
+
+    private func refreshTaskSidebarProjection() {
+        taskSidebarModel.refresh(from: self)
+    }
 
     private func applyTaskSessionLoad(_ result: TaskSessionEventStoreLoadResult) {
         taskSessions = result.snapshots

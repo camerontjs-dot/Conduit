@@ -1529,14 +1529,18 @@ without making the rest of the application observe a new retention state.
    Revisions in the conversation log are not catalog inputs. Task topology,
    availability, scope, search, archive, and sort changes still invalidate and
    rebuild the catalog.
-4. `TaskSidebarView` continues to use AppModel for existing lifecycle actions;
-   this change does not redesign Conversation, move provider/runtime authority,
-   or reinterpret a provider turn as completion.
+4. `TaskSidebarView` observes a narrow `TaskSidebarModel` projection refreshed
+   only by real sidebar inputs (task/session topology, metadata, availability,
+   scope/search/archive, diagnostics, and sidebar presentation preferences).
+   It retains AppModel only as an unobserved action authority for the existing
+   lifecycle operations. This change does not redesign Conversation, move
+   provider/runtime authority, or reinterpret a provider turn as completion.
 
 **Consequences:** Ordinary structured streaming keeps its high-frequency view
    updates local to the conversation surface. The application-wide retention
    publisher and repeated catalog work are reduced to semantic transitions and
-   genuine catalog-input changes. The intentional, low-frequency task-event
+   genuine catalog-input changes. The sidebar itself is not invalidated by a
+   live conversation revision. The intentional, low-frequency task-event
    reloads used to record content-free activity and the retention marker remain
    in place, so Recent ordering and task-history continuity do not regress.
 

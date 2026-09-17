@@ -29,9 +29,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 - Structured OpenCode streaming no longer publishes an application-wide
   retention state for every live output fragment. Conversation persistence
-  remains append-only and current, while the sidebar catalog rebuilds only for
-  task metadata, operational availability, or query changes; live revisions
-  remain local to the conversation surface until a non-live retention boundary.
+  remains append-only and current, while the sidebar observes a narrow
+  projection and rebuilds only for task metadata, operational availability, or
+  query changes; live revisions remain local to the conversation surface until
+  a non-live retention boundary.
 
 - A structured session that was **restarted** after a refused resume is no
   longer reported as one that was **resumed**. Every structured client accepts a
