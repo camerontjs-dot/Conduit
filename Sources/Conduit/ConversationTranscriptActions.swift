@@ -145,20 +145,27 @@ struct ConversationTranscriptMenu: View {
     }
 }
 
-/// Small, explicit whole-turn copy control. Partial selection continues to use
-/// normal macOS text selection and Command-C.
+/// Small, explicit whole-turn copy control. The autoclosure is intentional:
+/// callers can pass `ConversationTranscript.copyText(for:)` without paying for
+/// terminal scrubbing / turn serialization during every SwiftUI body update.
+/// Partial selection continues to use normal macOS text selection and Command-C.
 struct ConversationCopyTurnButton: View {
-    let text: String
+    private let textProvider: () -> String
+
+    init(text: @autoclosure @escaping () -> String) {
+        self.textProvider = text
+    }
 
     var body: some View {
         Button {
+            let text = textProvider()
+            guard !text.isEmpty else { return }
             ConversationTranscriptActions.copy(text)
         } label: {
             Image(systemName: "doc.on.doc")
                 .font(.caption2)
         }
         .buttonStyle(.borderless)
-        .disabled(text.isEmpty)
         .help("Copy turn")
         .accessibilityLabel("Copy turn")
     }
