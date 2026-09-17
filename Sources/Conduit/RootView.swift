@@ -546,7 +546,10 @@ struct RootView: View {
             MainframeExplorerSidebarView(root: root, explorer: explorerModel)
                 .environmentObject(themeStore)
         } else {
-            TaskSidebarView()
+            TaskSidebarView(
+                model: model,
+                sidebarModel: model.taskSidebarModel
+            )
         }
     }
 

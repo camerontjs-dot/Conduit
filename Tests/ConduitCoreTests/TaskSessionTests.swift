@@ -652,6 +652,88 @@ final class SessionCatalogTests: XCTestCase {
         )
     }
 
+    func testCatalogProjectionIgnoresConversationRevisionsAndCachesRows() throws {
+        let task = try makeSnapshot(
+            id: "00000000-0000-0000-0000-000000000031",
+            title: "Stable catalog task",
+            at: 1_800_002_000
+        )
+        var projection = TaskCatalogProjection()
+        let context = TaskSessionAvailabilityContext()
+
+        XCTAssertTrue(
+            projection.update(
+                sessions: [task],
+                availabilityContext: context
+            )
+        )
+        let initialRows = projection.rows
+
+        // A live conversation revision is written to a different source and
+        // does not alter the task snapshot, availability, or query inputs.
+        _ = SessionPresentation.agentOutputEvent(
+            promptEventID: nil,
+            text: "new fragment",
+            state: .live,
+            extraction: .structuredAdapter,
+            truncated: false
+        )
+        XCTAssertFalse(
+            projection.update(
+                sessions: [task],
+                availabilityContext: context
+            )
+        )
+        XCTAssertEqual(projection.rows, initialRows)
+    }
+
+    func testCatalogProjectionRebuildsForTopologyAndAvailabilityChanges() throws {
+        let task = try makeSnapshot(
+            id: "00000000-0000-0000-0000-000000000032",
+            title: "Reconnectable catalog task",
+            at: 1_800_002_100,
+            operationalState: .closed(.runtimeEnded),
+            operationalAuthority: .processObserved
+        )
+        let attempt = RuntimeAttemptID(
+            rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000033")!
+        )
+        var projection = TaskCatalogProjection()
+
+        XCTAssertTrue(
+            projection.update(
+                sessions: [task],
+                availabilityContext: TaskSessionAvailabilityContext()
+            )
+        )
+        XCTAssertEqual(projection.rows.first?.availability.kind, .recentClosed)
+
+        XCTAssertTrue(
+            projection.update(
+                sessions: [task],
+                availabilityContext: TaskSessionAvailabilityContext(
+                    liveRuntimeAttempts: [task.id: attempt]
+                )
+            )
+        )
+        XCTAssertEqual(projection.rows.first?.availability.kind, .running)
+
+        let secondTask = try makeSnapshot(
+            id: "00000000-0000-0000-0000-000000000034",
+            title: "New topology task",
+            at: 1_800_002_200
+        )
+        XCTAssertTrue(
+            projection.update(
+                sessions: [task, secondTask],
+                availabilityContext: TaskSessionAvailabilityContext(
+                    liveRuntimeAttempts: [task.id: attempt]
+                )
+            )
+        )
+        XCTAssertEqual(projection.rows.map(\.id), [secondTask.id, task.id])
+    }
+
     private func makeSnapshot(
         id: String,
         title: String,

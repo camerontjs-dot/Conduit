@@ -10,7 +10,11 @@ import SwiftUI
 /// history only. Reconnecting, leaving, and ending a runtime remain separate
 /// operator actions.
 struct TaskSidebarView: View {
-    @EnvironmentObject private var model: AppModel
+    /// AppModel is retained for action authority only. Presentation reads from
+    /// the narrow sidebar model so live conversation revisions cannot
+    /// invalidate this view.
+    private let model: AppModel
+    @ObservedObject private var sidebar: TaskSidebarModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -19,6 +23,11 @@ struct TaskSidebarView: View {
     @State private var taskToEnd: TaskSessionSnapshot?
     @State private var showTaskHistoryDiagnostics = false
     @FocusState private var isTaskSearchFocused: Bool
+
+    init(model: AppModel, sidebarModel: TaskSidebarModel) {
+        self.model = model
+        self._sidebar = ObservedObject(wrappedValue: sidebarModel)
+    }
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -36,13 +45,13 @@ struct TaskSidebarView: View {
 
     private var playJuicyChrome: Bool {
         JuicyFeedbackPolicy.shouldPlayChromeMotion(
-            juicyEnabled: model.juicyFeedbackEnabled,
+            juicyEnabled: sidebar.juicyFeedbackEnabled,
             reduceMotion: reduceMotion
         )
     }
 
     private var pinnedRows: [TaskSessionCatalogRow] {
-        model.taskCatalogRows.filter {
+        sidebar.taskCatalogRows.filter {
             $0.session.isPinned && !$0.session.isArchived
         }.sorted { lhs, rhs in
             let leftActive = lhs.availability.kind == .running
@@ -57,7 +66,7 @@ struct TaskSidebarView: View {
     }
 
     private var activeRows: [TaskSessionCatalogRow] {
-        model.taskCatalogRows.filter {
+        sidebar.taskCatalogRows.filter {
             !$0.session.isPinned
                 && !$0.session.isArchived
                 && ($0.availability.kind == .running
@@ -66,7 +75,7 @@ struct TaskSidebarView: View {
     }
 
     private var recentRows: [TaskSessionCatalogRow] {
-        model.taskCatalogRows.filter {
+        sidebar.taskCatalogRows.filter {
             !$0.session.isPinned
                 && !$0.session.isArchived
                 && $0.availability.kind != .running
@@ -75,19 +84,19 @@ struct TaskSidebarView: View {
     }
 
     private var archivedRows: [TaskSessionCatalogRow] {
-        model.taskCatalogRows.filter(\.session.isArchived)
+        sidebar.taskCatalogRows.filter(\.session.isArchived)
     }
 
     /// Durable sessions are a recovery surface, not another task-history
     /// authority. A discovered row disappears when its task identity is
     /// already represented by loaded history or an open runtime.
     private var discoveredRows: [ResumableSession] {
-        var representedTaskIDs = Set(model.taskSessions.map(\.id))
+        var representedTaskIDs = Set(sidebar.taskSessions.map(\.id))
         representedTaskIDs.formUnion(
-            model.sessions.compactMap(\.descriptor.taskSessionID)
+            sidebar.sessions.compactMap(\.descriptor.taskSessionID)
         )
 
-        return model.resumableSessions.filter { row in
+        return sidebar.resumableSessions.filter { row in
             if case .alreadyOpen = row.relation {
                 return false
             }
@@ -109,7 +118,7 @@ struct TaskSidebarView: View {
     }
 
     private var usesExpandedLabels: Bool {
-        model.density != .focused
+        sidebar.density != .focused
     }
 
     var body: some View {
@@ -142,7 +151,7 @@ struct TaskSidebarView: View {
                         rows: recentRows,
                         emphasis: .tertiary
                     )
-                    if model.showArchivedTasks {
+                    if sidebar.showArchivedTasks {
                         taskSection(
                             "Archived",
                             rows: archivedRows,
@@ -201,7 +210,7 @@ struct TaskSidebarView: View {
         } message: {
             Text(taskHistoryDiagnosticSummary)
         }
-        .onChange(of: model.taskSearchFocusRequest) { _ in
+        .onChange(of: sidebar.taskSearchFocusRequest) { _ in
             isTaskSearchFocused = true
         }
     }
@@ -212,7 +221,7 @@ struct TaskSidebarView: View {
                 model.showProjectBrowser = true
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: model.taskScopeProjectID == nil ? "square.grid.2x2" : "folder")
+                    Image(systemName: sidebar.taskScopeProjectID == nil ? "square.grid.2x2" : "folder")
                         .accessibilityHidden(true)
                     Text(scopeTitle)
                         .lineLimit(1)
@@ -254,12 +263,18 @@ struct TaskSidebarView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(palette.faint)
                 .accessibilityHidden(true)
-            TextField("Search tasks", text: $model.taskSearchText)
+            TextField(
+                "Search tasks",
+                text: Binding(
+                    get: { sidebar.taskSearchText },
+                    set: { model.taskSearchText = $0 }
+                )
+            )
                 .textFieldStyle(.plain)
                 .foregroundStyle(palette.text)
                 .focused($isTaskSearchFocused)
                 .accessibilityLabel("Search task history")
-            if !model.taskSearchText.isEmpty {
+            if !sidebar.taskSearchText.isEmpty {
                 Button {
                     model.taskSearchText = ""
                 } label: {
@@ -340,9 +355,9 @@ struct TaskSidebarView: View {
                 )
                 ForEach(rows) { row in
                     taskRow(row)
-                    if model.companionShelfEnabled,
-                       model.density != .focused,
-                       model.selectedTaskSessionID == row.id {
+                    if sidebar.companionShelfEnabled,
+                       sidebar.density != .focused,
+                       sidebar.selectedTaskSessionID == row.id {
                         selectedCompanionShelf(for: row)
                     }
                 }
@@ -394,7 +409,7 @@ struct TaskSidebarView: View {
     }
 
     private func taskRow(_ row: TaskSessionCatalogRow) -> some View {
-        let isSelected = model.selectedTaskSessionID == row.id
+        let isSelected = sidebar.selectedTaskSessionID == row.id
         return HStack(alignment: .center, spacing: 7) {
             Button {
                 model.selectTask(row.id)
@@ -466,7 +481,7 @@ struct TaskSidebarView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, model.density == .focused ? 7 : 9)
+        .padding(.vertical, sidebar.density == .focused ? 7 : 9)
         .background(isSelected ? palette.accentSoft : Color.clear)
         .overlay(
             RoundedRectangle(cornerRadius: 9)
@@ -665,7 +680,7 @@ struct TaskSidebarView: View {
                 availability: row.availability,
                 prominence: .selected
             )
-        } else if model.railSpritesForAllRows,
+        } else if sidebar.railSpritesForAllRows,
                   let profile = recordedGenericProfile(for: row.session),
                   let state = retainedCompanionState(for: row.availability)
                     ?? (row.availability.kind == .running ? .running : nil) {
@@ -700,18 +715,18 @@ struct TaskSidebarView: View {
         let side: CGFloat = {
             switch prominence {
             case .row:
-                return CGFloat(model.companionScale.railSpriteSide)
+                return CGFloat(sidebar.companionScale.railSpriteSide)
             case .selected:
-                return CGFloat(max(model.companionScale.railSpriteSide, 26))
+                return CGFloat(max(sidebar.companionScale.railSpriteSide, 26))
             case .shelf:
-                return CGFloat(model.companionScale.spriteSide)
+                return CGFloat(sidebar.companionScale.spriteSide)
             }
         }()
         let pulse =
-            model.outputActivePulseEnabled
+            sidebar.outputActivePulseEnabled
             && state == .working
             && JuicyFeedbackPolicy.shouldPlayChromeMotion(
-                juicyEnabled: model.juicyFeedbackEnabled,
+                juicyEnabled: sidebar.juicyFeedbackEnabled,
                 reduceMotion: reduceMotion
             )
         return ZStack(alignment: .bottomTrailing) {
@@ -815,7 +830,7 @@ struct TaskSidebarView: View {
     }
 
     private func matchingRuntime(for row: TaskSessionCatalogRow) -> TerminalRuntime? {
-        let matches = model.sessions.filter {
+        let matches = sidebar.sessions.filter {
             $0.descriptor.taskSessionID == row.id
         }
         return matches.first(where: { !$0.controller.lifecycle.isTerminal })
@@ -869,14 +884,14 @@ struct TaskSidebarView: View {
 
     private var emptyState: some View {
         VStack(spacing: 7) {
-            Image(systemName: model.taskSearchText.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass")
+            Image(systemName: sidebar.taskSearchText.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass")
                 .font(.system(size: 24))
                 .foregroundStyle(palette.faint)
-            Text(model.taskSearchText.isEmpty ? "No task history in this scope" : "No tasks match this search")
+            Text(sidebar.taskSearchText.isEmpty ? "No task history in this scope" : "No tasks match this search")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(palette.dim)
                 .multilineTextAlignment(.center)
-            if model.taskSearchText.isEmpty {
+            if sidebar.taskSearchText.isEmpty {
                 Button("New Task") {
                     model.showNewTask = true
                 }
@@ -911,7 +926,7 @@ struct TaskSidebarView: View {
                 } label: {
                     Label("Refresh Projects & Sessions", systemImage: "arrow.clockwise")
                 }
-                .disabled(model.isScanningProjects || model.rootAccessNeedsAuthorization)
+                .disabled(sidebar.isScanningProjects || sidebar.rootAccessNeedsAuthorization)
             }
 
             Section("Tools") {
@@ -938,11 +953,11 @@ struct TaskSidebarView: View {
             }
 
             Section("Task history") {
-                Button(model.showArchivedTasks ? "Hide Archived Tasks" : "Show Archived Tasks") {
+                Button(sidebar.showArchivedTasks ? "Hide Archived Tasks" : "Show Archived Tasks") {
                     model.showArchivedTasks.toggle()
                 }
-                if !model.taskSessionDiagnostics.isEmpty {
-                    Button("Task History Issues (\(model.taskSessionDiagnostics.count))…") {
+                if !sidebar.taskSessionDiagnostics.isEmpty {
+                    Button("Task History Issues (\(sidebar.taskSessionDiagnostics.count))…") {
                         showTaskHistoryDiagnostics = true
                     }
                 }
@@ -972,8 +987,8 @@ struct TaskSidebarView: View {
     }
 
     private var scopeTitle: String {
-        guard let scopeID = model.taskScopeProjectID,
-              let project = model.projects.first(where: { $0.id == scopeID })
+        guard let scopeID = sidebar.taskScopeProjectID,
+              let project = sidebar.projects.first(where: { $0.id == scopeID })
         else {
             return "All MainFrame"
         }
@@ -983,7 +998,7 @@ struct TaskSidebarView: View {
     }
 
     private var taskHistoryDiagnosticSummary: String {
-        let diagnostics = model.taskSessionDiagnostics
+        let diagnostics = sidebar.taskSessionDiagnostics
         guard !diagnostics.isEmpty else {
             return "No task-history issues were found."
         }
@@ -1008,7 +1023,7 @@ struct TaskSidebarView: View {
 
     private func resolvedWorkspaceTitle(_ snapshot: WorkspaceScopeSnapshot) -> String {
         let expectedPath = snapshot.projectPath ?? snapshot.rootPath
-        if let current = model.projects.first(where: {
+        if let current = sidebar.projects.first(where: {
             $0.path.standardizedFileURL.path == expectedPath
         }) {
             return current.metadata.title
@@ -1064,8 +1079,8 @@ struct TaskSidebarView: View {
     }
 
     private func discoveredRowMatchesScope(_ row: ResumableSession) -> Bool {
-        guard let scopeID = model.taskScopeProjectID else { return true }
-        guard let project = model.projects.first(where: { $0.id == scopeID }),
+        guard let scopeID = sidebar.taskScopeProjectID else { return true }
+        guard let project = sidebar.projects.first(where: { $0.id == scopeID }),
               let discoveredPath = row.session.projectPath
         else {
             return false
@@ -1075,7 +1090,7 @@ struct TaskSidebarView: View {
     }
 
     private func discoveredRowMatchesSearch(_ row: ResumableSession) -> Bool {
-        let query = Self.normalized(model.taskSearchText)
+        let query = Self.normalized(sidebar.taskSearchText)
         guard !query.isEmpty else { return true }
         let session = row.session
         let text = [
