@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Streaming scrub of long assistant turns recompiled two regular
+  expressions for every line of every revision, making per-update display
+  work quadratic with a large constant (measured ~44ms mean per revision
+  at ~135KB of live text). The patterns are compiled once and reused;
+  same patterns, same scrub results. Measured per-revision mean at the
+  same workload is now ~35ms; typical turns (3–11KB) scrub in 1–5ms and
+  whole-thread 25/100/250-turn serialization costs 4/16/39ms linearly.
 - Copy turn, Copy transcript, and Markdown export no longer mangle fenced
   code blocks. The workstation display-text projection treated a lone
   ` ``` ` fence as decorative terminal chrome and reflowed code lines into
