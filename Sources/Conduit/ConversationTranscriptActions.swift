@@ -146,26 +146,19 @@ struct ConversationTranscriptMenu: View {
 }
 
 /// Small, explicit whole-turn copy control. Partial selection continues to use
-/// normal macOS text selection and Command-C. The text projection is an
-/// autoclosure so completed assistant turns do not pay projection cost merely
-/// because SwiftUI reevaluated their headers during a later streaming turn.
+/// normal macOS text selection and Command-C.
 struct ConversationCopyTurnButton: View {
-    private let textProvider: () -> String
-
-    init(text: @autoclosure @escaping () -> String) {
-        self.textProvider = text
-    }
+    let text: String
 
     var body: some View {
         Button {
-            let text = textProvider()
-            guard !text.isEmpty else { return }
             ConversationTranscriptActions.copy(text)
         } label: {
             Image(systemName: "doc.on.doc")
                 .font(.caption2)
         }
         .buttonStyle(.borderless)
+        .disabled(text.isEmpty)
         .help("Copy turn")
         .accessibilityLabel("Copy turn")
     }
