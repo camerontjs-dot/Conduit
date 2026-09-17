@@ -3,14 +3,15 @@ import AppKit
 import ConduitCore
 import SwiftUI
 
-/// Conversation-first daily-driver surface. Runtime/control semantics stay in
-/// TerminalRuntime/AppModel; this file owns only presentation and explicit
-/// operator actions such as copying or exporting already-retained text.
+/// Chat-first daily-driver presentation over one unchanged TerminalRuntime.
+/// Raw, task/runtime identity, capture, persistence, and provider semantics are
+/// intentionally owned elsewhere; this view only projects and exposes explicit
+/// operator actions over already-observed conversation data.
 struct ConversationFirstView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
-    @EnvironmentObject private var explorerModel: MainframeExplorerWorkspaceModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject private var runtime: TerminalRuntime
     @ObservedObject private var controller: TerminalSessionController
 
@@ -33,22 +34,22 @@ struct ConversationFirstView: View {
         SessionPresentation.conversationTurns(from: runtime.presentationEvents)
     }
 
-    /// O(1) tail signature used only to coalesce follow-latest work. Completed
-    /// turns are cached by event identity and do not participate in this scan.
+    /// Tail-only signal for follow-latest. It avoids scanning the whole stream
+    /// every time the active answer gains a few characters.
     private var streamRevision: String {
-        var components = [String(runtime.presentationEvents.count)]
+        var parts = [String(runtime.presentationEvents.count)]
         if let last = runtime.presentationEvents.last {
-            components.append(last.id.uuidString)
+            parts.append(last.id.uuidString)
             if case .agentOutput(let output) = last.kind {
-                components.append(String(output.text.count))
-                components.append(output.state.rawValue)
+                parts.append(String(output.text.count))
+                parts.append(output.state.rawValue)
             }
         }
         if let active = runtime.activeOutputEventID {
-            components.append(active.uuidString)
+            parts.append(active.uuidString)
         }
-        components.append(runtime.isAwaitingAgentOutput ? "waiting" : "idle")
-        return components.joined(separator: ":")
+        parts.append(runtime.isAwaitingAgentOutput ? "waiting" : "idle")
+        return parts.joined(separator: ":")
     }
 
     var body: some View {
@@ -59,13 +60,7 @@ struct ConversationFirstView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
-                        if !model.selectedTaskConversationDiagnostics.isEmpty {
-                            retainedHistoryDiagnosticCard
-                        }
-                        if case .failed(let detail)? =
-                            model.selectedTaskConversationRetentionState {
-                            retentionFailureCard(detail)
-                        }
+                        diagnostics
 
                         ForEach(turns) { turn in
                             turnView(turn)
@@ -74,11 +69,11 @@ struct ConversationFirstView: View {
 
                         if runtime.isAwaitingAgentOutput,
                            runtime.activeOutputEventID == nil {
-                            waitingForVisibleOutputCard
+                            waitingForOutput
                         }
 
                         if let notice = runtime.conversationCaptureNotice {
-                            captureNoticeCard(notice)
+                            captureNotice(notice)
                         }
 
                         Color.clear
@@ -120,13 +115,17 @@ struct ConversationFirstView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: Header
 
     private var compactHeader: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
             HStack(spacing: 10) {
                 Circle()
-                    .fill(palette.color(forTerminalState: controller.visualState(at: timeline.date)))
+                    .fill(
+                        palette.color(
+                            forTerminalState: controller.visualState(at: timeline.date)
+                        )
+                    )
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
 
@@ -145,14 +144,32 @@ struct ConversationFirstView: View {
                 Button {
                     followLatest.toggle()
                 } label: {
-                    Image(systemName: followLatest ? "arrow.down.to.line.compact" : "arrow.down.to.line")
+                    Image(
+                        systemName: followLatest
+                            ? "arrow.down.to.line.compact"
+                            : "arrow.down.to.line"
+                    )
                 }
                 .buttonStyle(.borderless)
-                .help(followLatest ? "Following latest output" : "Resume following latest output")
-                .accessibilityLabel(followLatest ? "Following latest" : "Not following latest")
+                .help(
+                    followLatest
+                        ? "Following latest output"
+                        : "Resume following latest output"
+                )
+                .accessibilityLabel(
+                    followLatest ? "Following latest" : "Not following latest"
+                )
 
                 sessionControlsMenu
-                threadActionsMenu
+
+                ConversationThreadActionsMenu(
+                    title: model.selectedTaskSnapshot?.displayTitle
+                        ?? runtime.descriptor.title,
+                    agentName: runtime.descriptor.agent.name,
+                    taskSessionID: runtime.descriptor.taskSessionID,
+                    events: runtime.presentationEvents,
+                    onError: { model.errorMessage = $0 }
+                )
 
                 Button {
                     runtime.selectedSurface = .raw
@@ -192,7 +209,6 @@ struct ConversationFirstView: View {
             .disabled(agent.kind == .shell)
 
             Divider()
-
             Menu("Reply") {
                 ForEach(["1", "2", "3", "4"], id: \.self) { choice in
                     Button(choice) {
@@ -224,17 +240,6 @@ struct ConversationFirstView: View {
         .accessibilityLabel("Agent controls")
     }
 
-    private var threadActionsMenu: some View {
-        ConversationThreadActionsMenu(
-            title: model.selectedTaskSnapshot?.displayTitle
-                ?? runtime.descriptor.title,
-            agentName: runtime.descriptor.agent.name,
-            taskSessionID: runtime.descriptor.taskSessionID,
-            events: runtime.presentationEvents,
-            onError: { model.errorMessage = $0 }
-        )
-    }
-
     private var jumpToLatestBar: some View {
         HStack {
             Spacer()
@@ -252,7 +257,7 @@ struct ConversationFirstView: View {
         .background(palette.surface)
     }
 
-    // MARK: - Turns
+    // MARK: Turns
 
     @ViewBuilder
     private func turnView(_ turn: ConversationTurn) -> some View {
@@ -313,13 +318,18 @@ struct ConversationFirstView: View {
             role: "You",
             timestamp: event.occurredAt,
             accent: true,
-            copyText: ConversationFirstCopy.turn(turn, agentName: runtime.descriptor.agent.name),
+            copyText: ConversationFirstCopy.turn(
+                turn,
+                agentName: runtime.descriptor.agent.name
+            ),
             palette: palette
         ) {
             VStack(alignment: .leading, spacing: 8) {
                 if !prompt.text.isEmpty {
                     SelectableConversationDocument(
-                        attributedString: ConversationFirstDocumentFormatter.plain(prompt.text)
+                        attributedString: ConversationFirstDocumentFormatter.plain(
+                            prompt.text
+                        )
                     )
                 }
                 if !prompt.attachmentPaths.isEmpty {
@@ -337,7 +347,9 @@ struct ConversationFirstView: View {
                 if prompt.delivery != .delivered {
                     Text(prompt.delivery.displayName)
                         .font(.caption2)
-                        .foregroundStyle(prompt.delivery == .failed ? Color.red : palette.faint)
+                        .foregroundStyle(
+                            prompt.delivery == .failed ? Color.red : palette.faint
+                        )
                 }
             }
         }
@@ -348,10 +360,7 @@ struct ConversationFirstView: View {
         event: SessionPresentationEvent,
         turn: ConversationTurn
     ) -> some View {
-        let rendered = renderCache.renderedOutput(
-            event: event,
-            output: output
-        )
+        let rendered = renderCache.renderedOutput(event: event, output: output)
         let isCurrentCapture = runtime.activeOutputEventID == event.id
         let showLive = isCurrentCapture && output.state == .live
 
@@ -360,14 +369,19 @@ struct ConversationFirstView: View {
             timestamp: event.occurredAt,
             accent: false,
             isLive: showLive,
-            copyText: ConversationFirstCopy.turn(turn, agentName: runtime.descriptor.agent.name),
+            copyText: ConversationFirstCopy.turn(
+                turn,
+                agentName: runtime.descriptor.agent.name
+            ),
             palette: palette
         ) {
             VStack(alignment: .leading, spacing: 9) {
                 if let thinking = rendered.thinking, !thinking.isEmpty {
                     DisclosureGroup("Thinking") {
                         SelectableConversationDocument(
-                            attributedString: ConversationFirstDocumentFormatter.muted(thinking)
+                            attributedString: ConversationFirstDocumentFormatter.muted(
+                                thinking
+                            )
                         )
                         .padding(.top, 4)
                     }
@@ -382,7 +396,9 @@ struct ConversationFirstView: View {
                     switch segment.kind {
                     case .prose(let attributed):
                         if attributed.length > 0 {
-                            SelectableConversationDocument(attributedString: attributed)
+                            SelectableConversationDocument(
+                                attributedString: attributed
+                            )
                         }
                     case .activity(let activity):
                         providerActivityCard(activity)
@@ -405,7 +421,9 @@ struct ConversationFirstView: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(palette.faint.opacity(0.82))
-                .help("\(output.extraction.displayName). This is presentation evidence, not task verification.")
+                .help(
+                    "\(output.extraction.displayName). This is presentation evidence, not task verification."
+                )
             }
         }
     }
@@ -414,9 +432,10 @@ struct ConversationFirstView: View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 8) {
                 SelectableConversationDocument(
-                    attributedString: ConversationFirstDocumentFormatter.code(activity.detail)
+                    attributedString: ConversationFirstDocumentFormatter.code(
+                        activity.detail
+                    )
                 )
-
                 HStack(spacing: 8) {
                     Text("provider reported")
                         .font(.caption2)
@@ -488,7 +507,9 @@ struct ConversationFirstView: View {
                     .padding(.vertical, 7)
                 }
                 .buttonStyle(.plain)
-                .background(option.isSelected ? palette.accentSoft : palette.lineSoft)
+                .background(
+                    option.isSelected ? palette.accentSoft : palette.lineSoft
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 7))
             }
         }
@@ -497,33 +518,35 @@ struct ConversationFirstView: View {
         .clipShape(RoundedRectangle(cornerRadius: 9))
     }
 
-    // MARK: - Diagnostics / state
+    // MARK: Diagnostics
 
-    private var retainedHistoryDiagnosticCard: some View {
-        Label(
-            "\(model.selectedTaskConversationDiagnostics.count) retained-history record(s) could not be projected. Valid records remain visible; source bytes were preserved.",
-            systemImage: "exclamationmark.triangle"
-        )
-        .font(.caption)
-        .foregroundStyle(palette.dim)
-        .padding(12)
-        .background(palette.lineSoft)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+    @ViewBuilder
+    private var diagnostics: some View {
+        if !model.selectedTaskConversationDiagnostics.isEmpty {
+            Label(
+                "\(model.selectedTaskConversationDiagnostics.count) retained-history record(s) could not be projected. Valid records remain visible; source bytes were preserved.",
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(palette.dim)
+            .padding(12)
+            .background(palette.lineSoft)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        if case .failed(let detail)? = model.selectedTaskConversationRetentionState {
+            Label(
+                "\(detail) This thread may include volatile on-screen events that have not been confirmed retained.",
+                systemImage: "externaldrive.badge.exclamationmark"
+            )
+            .font(.caption)
+            .foregroundStyle(palette.dim)
+            .padding(12)
+            .background(palette.lineSoft)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
     }
 
-    private func retentionFailureCard(_ detail: String) -> some View {
-        Label(
-            "\(detail) This thread may include volatile on-screen events that have not been confirmed retained.",
-            systemImage: "externaldrive.badge.exclamationmark"
-        )
-        .font(.caption)
-        .foregroundStyle(palette.dim)
-        .padding(12)
-        .background(palette.lineSoft)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private var waitingForVisibleOutputCard: some View {
+    private var waitingForOutput: some View {
         HStack(spacing: 7) {
             ProgressView().controlSize(.mini)
             Text("Waiting for visible output…")
@@ -533,7 +556,7 @@ struct ConversationFirstView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func captureNoticeCard(_ notice: String) -> some View {
+    private func captureNotice(_ notice: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.caption)
@@ -570,14 +593,14 @@ struct ConversationFirstView: View {
         }
     }
 
-    // MARK: - Workbench deep link
+    // MARK: Workbench deep link
 
     private func openActivityInWorkbench(_ activity: ConversationFirstActivity) {
         guard let rawPath = activity.possiblePath,
               let root = model.settings.mainframeRoot
         else { return }
 
-        let standardizedRoot = root.standardizedFileURL
+        let standardRoot = root.standardizedFileURL
         let project = model.selectedTaskProject ?? model.selectedProject
         let candidate: URL
         if rawPath.hasPrefix("/") {
@@ -587,28 +610,25 @@ struct ConversationFirstView: View {
                 .appendingPathComponent(rawPath)
                 .standardizedFileURL
         } else {
-            candidate = standardizedRoot
+            candidate = standardRoot
                 .appendingPathComponent(rawPath)
                 .standardizedFileURL
         }
 
-        let rootPath = standardizedRoot.path
+        let rootPath = standardRoot.path
         let candidatePath = candidate.path
         guard candidatePath == rootPath
                 || candidatePath.hasPrefix(rootPath + "/")
         else {
-            model.errorMessage = "That provider-reported path is outside the selected MainFrame root."
+            model.errorMessage =
+                "That provider-reported path is outside the selected MainFrame root."
             return
         }
 
-        var relative = String(candidatePath.dropFirst(rootPath.count))
-        if relative.hasPrefix("/") { relative.removeFirst() }
-        explorerModel.configure(root: standardizedRoot)
-        explorerModel.reveal(relativePath: relative)
-        model.workspace = .explore
+        openWindow(id: "source-workbench", value: candidatePath)
     }
 
-    // MARK: - Coalesced follow-latest
+    // MARK: Coalesced follow-latest
 
     private func scheduleFollowLatest(_ proxy: ScrollViewProxy) {
         guard followLatest else { return }
@@ -620,7 +640,7 @@ struct ConversationFirstView: View {
         }
     }
 
-    // MARK: - Key routing
+    // MARK: Menu-key routing
 
     private func installKeyMonitor() {
         removeKeyMonitor()
@@ -646,7 +666,9 @@ struct ConversationFirstView: View {
             return event
         }
 
-        let flags = event.modifierFlags.intersection([.command, .control, .option])
+        let flags = event.modifierFlags.intersection([
+            .command, .control, .option
+        ])
         guard flags.isEmpty else { return event }
 
         switch event.keyCode {
@@ -681,10 +703,10 @@ struct ConversationFirstView: View {
     }
 }
 
-// MARK: - Historical conversation
+// MARK: Retained history
 
-/// Same document/copy/log affordances for retained history. This view performs
-/// no launch, attach, reconnect, or mutation of task lifecycle state.
+/// Read-only retained conversation. Selecting/history actions never launch,
+/// reconnect, or mutate runtime state.
 struct ConversationFirstHistoryView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
@@ -736,8 +758,10 @@ struct ConversationFirstHistoryView: View {
             if case .sessionOpened(let entry) = event.kind {
                 let label: String
                 switch entry {
-                case .started(let name, _): label = "Started \(name)"
-                case .resumed(let name, let tmux, _): label = "Reattached \(name) · \(tmux)"
+                case .started(let name, _):
+                    label = "Started \(name)"
+                case .resumed(let name, let tmux, _):
+                    label = "Reattached \(name) · \(tmux)"
                 }
                 Text(label)
                     .font(.caption2)
@@ -751,45 +775,72 @@ struct ConversationFirstHistoryView: View {
                         role: "You",
                         timestamp: user.occurredAt,
                         accent: true,
-                        copyText: ConversationFirstCopy.turn(turn, agentName: agentName),
+                        copyText: ConversationFirstCopy.turn(
+                            turn,
+                            agentName: agentName
+                        ),
                         palette: palette
                     ) {
                         SelectableConversationDocument(
-                            attributedString: ConversationFirstDocumentFormatter.plain(prompt.text)
+                            attributedString: ConversationFirstDocumentFormatter.plain(
+                                prompt.text
+                            )
                         )
                     }
                 }
+
                 ForEach(outputs) { event in
                     if case .agentOutput(let output) = event.kind {
-                        let rendered = renderCache.renderedOutput(event: event, output: output)
+                        let rendered = renderCache.renderedOutput(
+                            event: event,
+                            output: output
+                        )
                         ConversationTurnCard(
                             role: agentName,
                             timestamp: event.occurredAt,
                             accent: false,
-                            copyText: ConversationFirstCopy.turn(turn, agentName: agentName),
+                            copyText: ConversationFirstCopy.turn(
+                                turn,
+                                agentName: agentName
+                            ),
                             palette: palette
                         ) {
                             VStack(alignment: .leading, spacing: 9) {
                                 ForEach(rendered.segments) { segment in
                                     switch segment.kind {
                                     case .prose(let attributed):
-                                        SelectableConversationDocument(attributedString: attributed)
+                                        SelectableConversationDocument(
+                                            attributedString: attributed
+                                        )
                                     case .activity(let activity):
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Label(activity.displayTitle, systemImage: activity.symbol)
-                                                .font(.caption.weight(.semibold))
-                                            SelectableConversationDocument(
-                                                attributedString: ConversationFirstDocumentFormatter.code(activity.detail)
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Label(
+                                                activity.displayTitle,
+                                                systemImage: activity.symbol
                                             )
+                                            .font(.caption.weight(.semibold))
+                                            SelectableConversationDocument(
+                                                attributedString:
+                                                    ConversationFirstDocumentFormatter.code(
+                                                        activity.detail
+                                                    )
+                                            )
+                                            Text("provider reported")
+                                                .font(.caption2)
+                                                .foregroundStyle(palette.faint)
                                         }
                                         .padding(9)
                                         .background(palette.sink.opacity(0.55))
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                     }
                                 }
-                                Text(event.authority == .derivedFromRaw ? "from Raw" : "adapter")
-                                    .font(.caption2)
-                                    .foregroundStyle(palette.faint)
+                                Text(
+                                    event.authority == .derivedFromRaw
+                                        ? "from Raw"
+                                        : "adapter"
+                                )
+                                .font(.caption2)
+                                .foregroundStyle(palette.faint)
                             }
                         }
                     }
@@ -799,7 +850,7 @@ struct ConversationFirstHistoryView: View {
     }
 }
 
-// MARK: - Turn chrome
+// MARK: Turn chrome
 
 private struct ConversationTurnCard<Content: View>: View {
     let role: String
@@ -856,11 +907,10 @@ private struct ConversationTurnCard<Content: View>: View {
     }
 }
 
-// MARK: - Selectable document
+// MARK: Continuous native text selection
 
-/// One NSTextView per logical body keeps native selection continuous across
-/// rendered paragraphs, headings, lists, and code instead of fragmenting the
-/// selection at every SwiftUI Text node.
+/// One NSTextView per logical body keeps selection continuous across headings,
+/// paragraphs, lists, and code instead of breaking at every SwiftUI Text node.
 private struct SelectableConversationDocument: NSViewRepresentable {
     let attributedString: NSAttributedString
 
@@ -897,6 +947,7 @@ private struct SelectableConversationDocument: NSViewRepresentable {
         guard let textContainer = nsView.textContainer,
               let layoutManager = nsView.layoutManager
         else { return CGSize(width: width, height: 20) }
+
         textContainer.containerSize = NSSize(
             width: width,
             height: .greatestFiniteMagnitude
@@ -908,7 +959,7 @@ private struct SelectableConversationDocument: NSViewRepresentable {
     }
 }
 
-// MARK: - Render cache / provider activity
+// MARK: Render cache and structured activity
 
 private final class ConversationFirstRenderCache {
     private struct Entry {
@@ -933,17 +984,19 @@ private final class ConversationFirstRenderCache {
 
         let display = ConversationDisplayText.workstationDerived(output.text)
         let split = splitPreservedThinking(display)
-        let segmentInputs = ConversationFirstActivityParser.segments(
+        let inputs = ConversationFirstActivityParser.segments(
             text: split.answer,
             structured: event.authority == .toolReported
                 && output.extraction == .structuredAdapter
         )
-        let segments = segmentInputs.enumerated().map { index, input in
+        let segments = inputs.enumerated().map { index, input in
             switch input {
             case .prose(let text):
                 return ConversationFirstRenderSegment(
                     id: "\(event.id.uuidString)-p-\(index)",
-                    kind: .prose(ConversationFirstDocumentFormatter.markdown(text))
+                    kind: .prose(
+                        ConversationFirstDocumentFormatter.markdown(text)
+                    )
                 )
             case .activity(let activity):
                 return ConversationFirstRenderSegment(
@@ -956,8 +1009,9 @@ private final class ConversationFirstRenderCache {
         let rendered = ConversationFirstRenderedOutput(
             thinking: split.thinking,
             segments: segments,
-            interactiveMenu: TerminalMenuParser.looksLikeInteractiveMenu(split.answer)
-                && !menuOptions.isEmpty,
+            interactiveMenu:
+                TerminalMenuParser.looksLikeInteractiveMenu(split.answer)
+                    && !menuOptions.isEmpty,
             menuOptions: menuOptions
         )
         entries[event.id] = Entry(
@@ -969,11 +1023,14 @@ private final class ConversationFirstRenderCache {
         return rendered
     }
 
-    private func splitPreservedThinking(_ text: String) -> (thinking: String?, answer: String) {
+    private func splitPreservedThinking(
+        _ text: String
+    ) -> (thinking: String?, answer: String) {
         let header = ConversationCaptureMerge.thinkingHeader
         guard text.contains(header) else { return (nil, text) }
         let parts = text.components(separatedBy: "\n—\n")
         guard parts.count >= 2 else { return (nil, text) }
+
         var thinking = parts[0]
         if let range = thinking.range(of: header) {
             thinking = String(thinking[range.upperBound...])
@@ -1009,14 +1066,13 @@ private struct ConversationFirstActivity: Identifiable {
     let possiblePath: String?
 
     var displayTitle: String {
-        var output = ""
-        for scalar in type.unicodeScalars {
+        let spaced = type.unicodeScalars.reduce(into: "") { output, scalar in
             if CharacterSet.uppercaseLetters.contains(scalar), !output.isEmpty {
                 output.append(" ")
             }
             output.append(String(scalar))
         }
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = spaced.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Agent activity" : trimmed.capitalized
     }
 
@@ -1028,7 +1084,8 @@ private struct ConversationFirstActivity: Identifiable {
         if lower.contains("search") || lower.contains("grep") {
             return "magnifyingglass"
         }
-        if lower.contains("file") || lower.contains("patch") || lower.contains("change") {
+        if lower.contains("file") || lower.contains("patch")
+            || lower.contains("change") {
             return "doc.text.magnifyingglass"
         }
         return "gearshape.2"
@@ -1051,6 +1108,7 @@ private enum ConversationFirstActivityParser {
 
         var result: [ConversationFirstActivitySegmentInput] = []
         var proseLines: [String] = []
+        var priorActivityKey: String?
 
         func flushProse() {
             let prose = proseLines.joined(separator: "\n")
@@ -1065,9 +1123,14 @@ private enum ConversationFirstActivityParser {
         ).map(String.init).enumerated() {
             if let activity = parseActivity(rawLine, index: index) {
                 flushProse()
-                result.append(.activity(activity))
+                let key = "\(activity.type)\n\(activity.detail)"
+                if key != priorActivityKey {
+                    result.append(.activity(activity))
+                }
+                priorActivityKey = key
             } else {
                 proseLines.append(rawLine)
+                priorActivityKey = nil
             }
         }
         flushProse()
@@ -1100,12 +1163,17 @@ private enum ConversationFirstActivityParser {
     }
 
     private static func probablePath(_ detail: String) -> String? {
-        var candidate = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-        candidate = candidate.trimmingCharacters(in: CharacterSet(charactersIn: "`\"'"))
-        if let colon = candidate.lastIndex(of: ":"),
-           candidate[candidate.index(after: colon)...].allSatisfy(\.isNumber) {
-            candidate = String(candidate[..<colon])
+        var candidate = detail
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "`\"'"))
+
+        if let colon = candidate.lastIndex(of: ":") {
+            let suffix = candidate[candidate.index(after: colon)...]
+            if !suffix.isEmpty, suffix.allSatisfy(\.isNumber) {
+                candidate = String(candidate[..<colon])
+            }
         }
+
         guard !candidate.isEmpty,
               !candidate.contains("\n"),
               !candidate.contains("\t"),
@@ -1116,21 +1184,32 @@ private enum ConversationFirstActivityParser {
     }
 }
 
-// MARK: - Unified attributed document formatting
+// MARK: One selectable attributed document per body
 
 private enum ConversationFirstDocumentFormatter {
     static func plain(_ text: String) -> NSAttributedString {
-        make(text, font: NSFont.systemFont(ofSize: 14), color: .labelColor)
+        make(
+            text,
+            font: NSFont.systemFont(ofSize: 14),
+            color: .labelColor
+        )
     }
 
     static func muted(_ text: String) -> NSAttributedString {
-        make(text, font: NSFont.systemFont(ofSize: 12.5), color: .secondaryLabelColor)
+        make(
+            text,
+            font: NSFont.systemFont(ofSize: 12.5),
+            color: .secondaryLabelColor
+        )
     }
 
     static func code(_ text: String) -> NSAttributedString {
         make(
             text,
-            font: NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular),
+            font: NSFont.monospacedSystemFont(
+                ofSize: 12.5,
+                weight: .regular
+            ),
             color: .labelColor
         )
     }
@@ -1138,27 +1217,33 @@ private enum ConversationFirstDocumentFormatter {
     static func markdown(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let blocks = ConversationDisplayText.proseBlocks(in: text)
-        if blocks.isEmpty {
-            return plain(text)
-        }
+        if blocks.isEmpty { return plain(text) }
 
         for (index, block) in blocks.enumerated() {
-            if index > 0 { result.append(NSAttributedString(string: "\n\n")) }
+            if index > 0 {
+                result.append(NSAttributedString(string: "\n\n"))
+            }
             switch block {
             case .heading(let level, let value):
-                let size: CGFloat = level == 1 ? 17 : (level == 2 ? 15.5 : 14.5)
+                let size: CGFloat = level == 1
+                    ? 17
+                    : (level == 2 ? 15.5 : 14.5)
                 result.append(
                     make(
                         value,
-                        font: NSFont.systemFont(ofSize: size, weight: .semibold),
+                        font: NSFont.systemFont(
+                            ofSize: size,
+                            weight: .semibold
+                        ),
                         color: .labelColor
                     )
                 )
             case .paragraph(let value):
                 result.append(plain(value))
             case .bullets(let items):
-                let value = items.map { "• \($0)" }.joined(separator: "\n")
-                result.append(plain(value))
+                result.append(
+                    plain(items.map { "• \($0)" }.joined(separator: "\n"))
+                )
             case .code(_, let body):
                 result.append(code(body))
             }
@@ -1173,7 +1258,6 @@ private enum ConversationFirstDocumentFormatter {
     ) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 2
-        paragraph.paragraphSpacing = 0
         return NSAttributedString(
             string: text,
             attributes: [
@@ -1185,7 +1269,7 @@ private enum ConversationFirstDocumentFormatter {
     }
 }
 
-// MARK: - Copy / export / retained-log access
+// MARK: Conversation actions and retained-log access
 
 private struct ConversationThreadActionsMenu: View {
     let title: String
@@ -1218,7 +1302,6 @@ private struct ConversationThreadActionsMenu: View {
             }
 
             Divider()
-
             if let taskSessionID {
                 Button("Reveal Conduit chat log") {
                     if let error = ConversationFirstCopy.revealLog(taskSessionID) {
@@ -1253,8 +1336,10 @@ private enum ConversationFirstCopy {
         case .boundary(let event):
             if case .sessionOpened(let entry) = event.kind {
                 switch entry {
-                case .started(let name, _): return "Started \(name)"
-                case .resumed(let name, let tmux, _): return "Reattached \(name) · \(tmux)"
+                case .started(let name, _):
+                    return "Started \(name)"
+                case .resumed(let name, let tmux, _):
+                    return "Reattached \(name) · \(tmux)"
                 }
             }
             return ""
@@ -1263,14 +1348,22 @@ private enum ConversationFirstCopy {
             if let user, case .userPrompt(let prompt) = user.kind {
                 var body = prompt.text
                 if !prompt.attachmentPaths.isEmpty {
-                    let attachments = prompt.attachmentPaths.map { "- \($0)" }.joined(separator: "\n")
-                    body += (body.isEmpty ? "" : "\n\n") + "Attachments:\n" + attachments
+                    let attachments = prompt.attachmentPaths
+                        .map { "- \($0)" }
+                        .joined(separator: "\n")
+                    body += (body.isEmpty ? "" : "\n\n")
+                        + "Attachments:\n"
+                        + attachments
                 }
                 sections.append("You\n\n\(body)")
             }
             for outputEvent in outputs {
-                guard case .agentOutput(let output) = outputEvent.kind else { continue }
-                let visible = ConversationDisplayText.workstationDerived(output.text)
+                guard case .agentOutput(let output) = outputEvent.kind else {
+                    continue
+                }
+                let visible = ConversationDisplayText.workstationDerived(
+                    output.text
+                )
                 sections.append("\(agentName)\n\n\(visible)")
             }
             return sections.joined(separator: "\n\n")
@@ -1282,14 +1375,14 @@ private enum ConversationFirstCopy {
         agentName: String,
         events: [SessionPresentationEvent]
     ) -> String {
-        var output = "# \(title)\n\n"
-        output += "Exported from Conduit. Conversation content preserves its recorded presentation authority; it is not task verification.\n\n"
+        var result = "# \(title)\n\n"
+        result += "Exported from Conduit. Conversation content preserves its recorded presentation authority; it is not task verification.\n\n"
         for turn in SessionPresentation.conversationTurns(from: events) {
-            let text = self.turn(turn, agentName: agentName)
-            guard !text.isEmpty else { continue }
-            output += text + "\n\n"
+            let rendered = self.turn(turn, agentName: agentName)
+            guard !rendered.isEmpty else { continue }
+            result += rendered + "\n\n"
         }
-        return output.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        return result.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
     }
 
     static func exportMarkdown(
@@ -1303,14 +1396,20 @@ private enum ConversationFirstCopy {
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try transcript(title: title, agentName: agentName, events: events)
-            .write(to: url, atomically: true, encoding: .utf8)
+        try transcript(
+            title: title,
+            agentName: agentName,
+            events: events
+        ).write(to: url, atomically: true, encoding: .utf8)
     }
 
     static func logURL(_ taskSessionID: TaskSessionID) -> URL {
         ConversationEventLog(
             directory: FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".conduit/conversations", isDirectory: true),
+                .appendingPathComponent(
+                    ".conduit/conversations",
+                    isDirectory: true
+                ),
             taskSessionID: taskSessionID
         ).url
     }
@@ -1329,8 +1428,11 @@ private enum ConversationFirstCopy {
     }
 
     private static func safeFilename(_ value: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_ "))
-        let mapped = value.unicodeScalars.map { allowed.contains($0) ? Character(String($0)) : "-" }
+        let allowed = CharacterSet.alphanumerics
+            .union(CharacterSet(charactersIn: "-_ "))
+        let mapped = value.unicodeScalars.map {
+            allowed.contains($0) ? Character(String($0)) : "-"
+        }
         let collapsed = String(mapped)
             .split(whereSeparator: { $0 == " " || $0 == "-" })
             .map(String.init)
