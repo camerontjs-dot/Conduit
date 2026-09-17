@@ -7,6 +7,9 @@ import Foundation
 /// The type only represents structured events OpenCode actually emitted. It
 /// does not infer a tool call from natural-language output and it does not turn
 /// a tool completion into an independent verification claim.
+/// Codable conformance permits a later append-only retained-history envelope,
+/// but PR #37 currently presents these snapshots only for the live OpenCode
+/// turn and does not claim historical activity retention.
 public struct OpenCodeConversationActivity: Identifiable, Codable, Equatable, Sendable {
     public enum Kind: String, Codable, Equatable, Sendable {
         case tool
