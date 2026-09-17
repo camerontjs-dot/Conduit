@@ -27,7 +27,6 @@ enum ConversationTranscriptActions {
         ).url
     }
 
-    @MainActor
     static func revealLog(taskSessionID: TaskSessionID) throws {
         let url = logURL(taskSessionID: taskSessionID)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -36,7 +35,6 @@ enum ConversationTranscriptActions {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    @MainActor
     static func exportMarkdown(
         events: [SessionPresentationEvent],
         agentLabel: String,
@@ -89,16 +87,17 @@ struct ConversationTranscriptMenu: View {
 
     @State private var errorMessage: String?
 
-    private var transcript: String {
-        ConversationTranscript.markdown(events: events, agentLabel: agentLabel)
-    }
-
     var body: some View {
         Menu {
             Button("Copy transcript") {
+                let transcript = ConversationTranscript.markdown(
+                    events: events,
+                    agentLabel: agentLabel
+                )
+                guard !transcript.isEmpty else { return }
                 ConversationTranscriptActions.copy(transcript)
             }
-            .disabled(transcript.isEmpty)
+            .disabled(events.isEmpty)
 
             Button("Export transcript…") {
                 do {
@@ -111,7 +110,7 @@ struct ConversationTranscriptMenu: View {
                     errorMessage = error.localizedDescription
                 }
             }
-            .disabled(transcript.isEmpty)
+            .disabled(events.isEmpty)
 
             Divider()
 
@@ -198,7 +197,6 @@ struct ConversationSelectableDocument: View {
 
 /// Cache immutable assistant projections so a growing live turn does not force
 /// completed turns to repeatedly scrub terminal chrome and parse Markdown.
-@MainActor
 final class ConversationPresentationCache: ObservableObject {
     struct Presentation {
         let sourceText: String
