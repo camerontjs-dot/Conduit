@@ -51,6 +51,14 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
 
+    /// Canonical Explorer tree. Lifecycle roots are ordered first for spatial
+    /// familiarity, but no non-lifecycle root is hidden behind another mode.
+    var allRootRows: [VisibleRow] {
+        visibleRows(from: orderedRootNodes)
+    }
+
+    /// Retained for callers/tests that need the lifecycle subset. The primary
+    /// sidebar no longer uses this subset as a replacement for the filesystem.
     var lifecycleRootRows: [VisibleRow] {
         visibleRows(
             from: orderedRootNodes.filter {
@@ -59,6 +67,8 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         )
     }
 
+    /// Retained as a derived subset only. These rows are visible in All Files
+    /// by default and are not collapsed into a separate System Files section.
     var systemRootRows: [VisibleRow] {
         visibleRows(
             from: orderedRootNodes.filter {
@@ -73,6 +83,10 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
             query: quickOpenQuery,
             limit: 80
         )
+    }
+
+    func filterMatches(_ query: String, limit: Int = 160) -> [MainframeExplorerNode] {
+        MainframeExplorerTreeFilter.matches(quickOpenEntries, query: query, limit: limit)
     }
 
     var breadcrumbPaths: [String] {
@@ -466,30 +480,19 @@ struct MainframeExplorerSidebarView: View {
     let root: URL
     @ObservedObject var explorer: MainframeExplorerWorkspaceModel
 
-    @State private var systemExpanded = false
     @State private var focusedScopePath: String?
+    @State private var showingFocusedScope = false
+    @State private var treeFilter = ""
     @State private var showMindGraph = false
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
     }
 
-    private var primaryLifecycleRows: [MainframeExplorerWorkspaceModel.VisibleRow] {
-        explorer.lifecycleRootRows.filter { row in
-            let parts = row.node.relativePath.split(separator: "/", omittingEmptySubsequences: true)
-            guard let first = parts.first else { return true }
-            if first == "30_projects" || first == "40_operations" {
-                return row.depth <= 1
-            }
-            return true
-        }
-    }
-
     private var focusedScopeNode: MainframeExplorerNode? {
         guard let focusedScopePath else { return nil }
-        return explorer.lifecycleRootRows
-            .first(where: { $0.node.relativePath == focusedScopePath })?
-            .node
+        return explorer.quickOpenEntries.first(where: { $0.relativePath == focusedScopePath })
+            ?? explorer.allRootRows.first(where: { $0.node.relativePath == focusedScopePath })?.node
     }
 
     private var focusedScopeRows: [MainframeExplorerWorkspaceModel.VisibleRow] {
@@ -499,6 +502,10 @@ struct MainframeExplorerSidebarView: View {
             appendFocused(child, depth: 0, to: &rows)
         }
         return rows
+    }
+
+    private var filterMatches: [MainframeExplorerNode] {
+        explorer.filterMatches(treeFilter)
     }
 
     var body: some View {
@@ -533,65 +540,76 @@ struct MainframeExplorerSidebarView: View {
                 .help("Quick Open (Command-P)")
                 .accessibilityLabel("Quick Open")
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.caption)
+                    .foregroundStyle(palette.faint)
+                TextField("Filter files", text: $treeFilter)
+                    .textFieldStyle(.plain)
+                    .font(.caption)
+                if !treeFilter.isEmpty {
+                    Button {
+                        treeFilter = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(palette.faint)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Clear file filter")
+                }
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(palette.surface.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
 
             Divider().overlay(palette.line)
 
             if let rootError = explorer.rootError {
                 explorerError(rootError)
+            } else if !treeFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                filteredFileList
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 3) {
-                        sectionLabel("LIFECYCLE")
-                        ForEach(primaryLifecycleRows) { row in
-                            treeRow(row, canEnterScope: true)
+                        HStack(spacing: 6) {
+                            sectionLabel(showingFocusedScope ? "CURRENT SCOPE" : "ALL FILES")
+                            Spacer()
+                            if let focusedScopeNode {
+                                Button(showingFocusedScope ? "All Files" : "Scope") {
+                                    showingFocusedScope.toggle()
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.caption2.weight(.semibold))
+                                .help(showingFocusedScope
+                                    ? "Return to the complete MainFrame tree"
+                                    : "Temporarily focus \(focusedScopeNode.name)")
+                            }
                         }
+                        .padding(.trailing, 8)
 
-                        if let focusedScopeNode {
+                        if showingFocusedScope, let focusedScopeNode {
                             focusedScopeHeader(focusedScopeNode)
-                                .padding(.top, 10)
                             if focusedScopeRows.isEmpty {
-                                Text("Open the scope to browse its files.")
+                                Text("This scope has no loaded children.")
                                     .font(.caption2)
                                     .foregroundStyle(palette.faint)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 4)
                             } else {
                                 ForEach(focusedScopeRows) { row in
-                                    treeRow(row, canEnterScope: false)
+                                    treeRow(row)
                                 }
                             }
-                        }
-
-                        if !explorer.systemRootRows.isEmpty {
-                            Button {
-                                systemExpanded.toggle()
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: systemExpanded ? "chevron.down" : "chevron.right")
-                                        .font(.system(size: 9, weight: .semibold))
-                                        .foregroundStyle(palette.faint)
-                                    Text("SYSTEM FILES")
-                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                        .tracking(1.0)
-                                        .foregroundStyle(palette.faint)
-                                    Spacer()
-                                    Text("\(explorer.systemRootRows.filter { $0.depth == 0 }.count)")
-                                        .font(.caption2.monospacedDigit())
-                                        .foregroundStyle(palette.faint)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 8)
-                            .help("System/configuration files remain available but are collapsed by default")
-
-                            if systemExpanded {
-                                ForEach(explorer.systemRootRows) { row in
-                                    treeRow(row, canEnterScope: false)
-                                }
+                        } else {
+                            ForEach(explorer.allRootRows) { row in
+                                treeRow(row)
                             }
                         }
                     }
@@ -621,6 +639,45 @@ struct MainframeExplorerSidebarView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("MainFrame Explorer sidebar")
+    }
+
+    private var filteredFileList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    sectionLabel("FILTERED FILES")
+                    Spacer()
+                    if explorer.isIndexing {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Text("\(filterMatches.count)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(palette.faint)
+                            .padding(.trailing, 10)
+                    }
+                }
+
+                if explorer.quickOpenTruncated {
+                    Text("Bounded index: matches may be incomplete after 20,000 entries.")
+                        .font(.caption2)
+                        .foregroundStyle(palette.faint)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 4)
+                }
+
+                if !explorer.isIndexing && filterMatches.isEmpty {
+                    Text("No path or filename matches this lexical filter.")
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                        .padding(12)
+                } else {
+                    ForEach(filterMatches) { node in
+                        filterRow(node)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+        }
     }
 
     private var quickOpenSheet: some View {
@@ -656,14 +713,14 @@ struct MainframeExplorerSidebarView: View {
                     explorer.revealAndSelect(node)
                     explorer.isQuickOpenPresented = false
                     explorer.quickOpenQuery = ""
+                    showingFocusedScope = false
+                    treeFilter = ""
                 } label: {
                     HStack(spacing: 9) {
-                        Image(systemName: symbol(for: node))
-                            .foregroundStyle(palette.dim)
-                            .frame(width: 18)
+                        pixelGlyph(for: node)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(node.name)
-                                .foregroundStyle(palette.text)
+                                .foregroundStyle(rowTextColor(for: node))
                             Text(node.relativePath)
                                 .font(.caption2.monospaced())
                                 .foregroundStyle(palette.faint)
@@ -680,18 +737,42 @@ struct MainframeExplorerSidebarView: View {
         .frame(width: 680, height: 520)
     }
 
-    private func treeRow(
-        _ row: MainframeExplorerWorkspaceModel.VisibleRow,
-        canEnterScope: Bool
-    ) -> some View {
+    private func filterRow(_ node: MainframeExplorerNode) -> some View {
+        Button {
+            showingFocusedScope = false
+            explorer.revealAndSelect(node)
+        } label: {
+            HStack(spacing: 7) {
+                Color.clear.frame(width: 10, height: 1)
+                pixelGlyph(for: node)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(rootDisplayName(node))
+                        .font(.caption)
+                        .foregroundStyle(rowTextColor(for: node))
+                        .lineLimit(1)
+                    Text(node.relativePath)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(palette.faint)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(node.relativePath)
+        .contextMenu {
+            pathContextMenu(node)
+        }
+    }
+
+    private func treeRow(_ row: MainframeExplorerWorkspaceModel.VisibleRow) -> some View {
         let selected = explorer.selectedNode?.id == row.node.id
         return Button {
-            if canEnterScope && isValidatedWorkRecord(row) {
-                explorer.toggle(row.node)
-                focusedScopePath = row.node.relativePath
-            } else {
-                explorer.toggle(row.node)
-            }
+            explorer.toggle(row.node)
         } label: {
             HStack(spacing: 6) {
                 if row.node.kind == .directory {
@@ -704,18 +785,15 @@ struct MainframeExplorerSidebarView: View {
                 } else {
                     Color.clear.frame(width: 10, height: 1)
                 }
-                Image(systemName: symbol(for: row.node))
-                    .foregroundStyle(palette.dim)
-                    .frame(width: 16)
+                pixelGlyph(for: row.node)
                 Text(rootDisplayName(row.node))
-                    .foregroundStyle(palette.text)
+                    .foregroundStyle(rowTextColor(for: row.node))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
-                if canEnterScope,
+                if isValidatedWorkRecord(row),
                    let scope = explorer.scopePresentation(for: row.node),
-                   scope.isAuthoritative,
-                   row.depth == 1 {
+                   scope.isAuthoritative {
                     Text(scope.label)
                         .font(.system(size: 7, weight: .bold, design: .monospaced))
                         .foregroundStyle(palette.faint)
@@ -732,26 +810,35 @@ struct MainframeExplorerSidebarView: View {
         .help(row.node.relativePath)
         .contextMenu {
             if isValidatedWorkRecord(row) {
-                Button("Focus Scope in Sidebar") {
-                    explorer.toggle(row.node)
+                Button("Focus Scope") {
+                    if !explorer.expandedPaths.contains(row.node.relativePath) {
+                        explorer.toggle(row.node)
+                    }
                     focusedScopePath = row.node.relativePath
+                    showingFocusedScope = true
                 }
             }
-            Button("Copy MainFrame-relative Path") {
-                copyToPasteboard(row.node.relativePath)
-            }
-            Button("Copy Absolute Path") {
-                copyToPasteboard(row.node.url.path)
-            }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([row.node.url])
-            }
+            pathContextMenu(row.node)
         }
         .accessibilityLabel("\(row.node.name), \(row.node.kind.rawValue)")
     }
 
+    @ViewBuilder
+    private func pathContextMenu(_ node: MainframeExplorerNode) -> some View {
+        Button("Copy MainFrame-relative Path") {
+            copyToPasteboard(node.relativePath)
+        }
+        Button("Copy Absolute Path") {
+            copyToPasteboard(node.url.path)
+        }
+        Button("Reveal in Finder") {
+            NSWorkspace.shared.activateFileViewerSelecting([node.url])
+        }
+    }
+
     private func focusedScopeHeader(_ node: MainframeExplorerNode) -> some View {
         HStack(spacing: 6) {
+            pixelGlyph(for: node)
             VStack(alignment: .leading, spacing: 1) {
                 Text(explorer.scopePresentation(for: node)?.label ?? "CURRENT SCOPE")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
@@ -764,13 +851,13 @@ struct MainframeExplorerSidebarView: View {
             }
             Spacer()
             Button {
-                focusedScopePath = nil
+                showingFocusedScope = false
             } label: {
-                Image(systemName: "xmark.circle.fill")
+                Image(systemName: "arrow.uturn.backward.circle.fill")
                     .foregroundStyle(palette.faint)
             }
             .buttonStyle(.borderless)
-            .help("Close focused scope")
+            .help("Return to All Files")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -793,16 +880,36 @@ struct MainframeExplorerSidebarView: View {
     }
 
     private func isValidatedWorkRecord(_ row: MainframeExplorerWorkspaceModel.VisibleRow) -> Bool {
-        guard row.depth == 1,
+        let parts = row.node.relativePath.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count == 2,
               row.node.kind == .directory,
+              let first = parts.first,
+              first == "30_projects" || first == "40_operations",
               let scope = explorer.scopePresentation(for: row.node) else { return false }
         return scope.isAuthoritative
+    }
+
+    private func pixelGlyph(for node: MainframeExplorerNode) -> some View {
+        let kind = MainframeExplorerVisualClassifier.classify(node)
+        return MainframePixelGlyph(
+            kind: kind,
+            primary: kind.isDeemphasized ? palette.faint : palette.dim,
+            accent: kind.isDeemphasized ? palette.faint : palette.accent
+        )
+        .frame(width: 17)
+    }
+
+    private func rowTextColor(for node: MainframeExplorerNode) -> Color {
+        MainframeExplorerVisualClassifier.classify(node).isDeemphasized
+            ? palette.dim
+            : palette.text
     }
 
     private func revealMindGraphPath(_ displayPath: String) {
         let trimmed = displayPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if let direct = explorer.quickOpenEntries.first(where: { $0.relativePath == trimmed }) {
+            showingFocusedScope = false
             explorer.revealAndSelect(direct)
             return
         }
@@ -810,6 +917,7 @@ struct MainframeExplorerSidebarView: View {
         if let direct = explorer.quickOpenEntries.first(where: {
             $0.url.standardizedFileURL.path == absolute
         }) {
+            showingFocusedScope = false
             explorer.revealAndSelect(direct)
         }
     }
@@ -850,10 +958,6 @@ struct MainframeExplorerSidebarView: View {
         default: return node.name
         }
     }
-
-    private func symbol(for node: MainframeExplorerNode) -> String {
-        explorerSymbol(for: node)
-    }
 }
 
 private enum MainframeExploreSurface: String, CaseIterable {
@@ -864,7 +968,7 @@ private enum MainframeExploreSurface: String, CaseIterable {
     var displayName: String {
         switch self {
         case .files: return "Files"
-        case .graph: return "Graph"
+        case .graph: return "Related"
         case .workstation: return "Workstation"
         }
     }
