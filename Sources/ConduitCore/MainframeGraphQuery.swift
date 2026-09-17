@@ -1,6 +1,23 @@
 import Foundation
 
 public enum MainframeGraphQuery {
+    /// Ordinary relationship view used by Explore. It is deliberately one hop
+    /// and small enough to stay legible. Advanced graph modes remain separate.
+    public static func related(
+        snapshot: MainframeGraphSnapshot,
+        focusNodeID: String,
+        allowedKinds: Set<MainframeGraphEdgeKind> = [.authoredLink, .containment, .taskSessionAssociation],
+        maxNodes: Int = 24
+    ) -> MainframeGraphScene {
+        orbit(
+            snapshot: snapshot,
+            focusNodeID: focusNodeID,
+            depth: 1,
+            allowedKinds: allowedKinds,
+            maxNodes: min(max(1, maxNodes), 40)
+        )
+    }
+
     public static func orbit(
         snapshot: MainframeGraphSnapshot,
         focusNodeID: String,
