@@ -1,6 +1,6 @@
 # Conduit conversation-first UI plan
 
-Status: planning candidate
+Status: implementation in progress in Draft PR #37
 
 Tracking issue: #34
 
@@ -23,18 +23,31 @@ This pass also owns four usability problems that are now part of the same intera
 
 The target is not a visual clone of another product. The target is the interaction hierarchy that mature chat and coding-agent products have converged on: conversation in the center, navigation on the left, contextual inspection from the side or inline, and history treated as a first-class object.
 
-## Current live state
+## Implementation status
+
+Draft PR #37 now contains the first implementation of the plan. The following items are implemented in code but remain unqualified until the exact PR head is compiled, tested, and exercised in the installed macOS app:
+
+- the permanent full-width Conversation / Raw segmented strip is removed; Conversation remains the default and Raw has a compact switch-back action;
+- completed assistant presentation is cached, live follow-latest scrolling is coalesced, and whole-transcript / whole-turn projection is deferred until the operator invokes a copy/export action;
+- assistant documents are rendered through one selectable attributed document rather than separate selectable nodes for every heading/list/code block;
+- Copy turn, Copy transcript, explicit Markdown export, and Reveal retained JSONL in Finder are available from live and historical thread surfaces;
+- OpenCode structured tool/patch events are projected through a fail-closed, session-bound typed activity model and displayed as expandable activity cards in Conversation;
+- OpenCode activity cards never parse assistant prose, do not retain arbitrary tool output, label provider status as non-independent evidence, and deep-link exact in-project paths into the existing Source Workbench when such a path is available.
+
+The remaining material work is qualification, broader shell/rail polish where the installed-app review still shows excess chrome, and any follow-up required by measured streaming performance. Activity persistence across closed/relaunched historical threads is not yet claimed by PR #37.
+
+## Current live state at planning baseline
 
 PR #33 merged the Context IDE / Graph / Workstation / source-workbench batch into `main` at the pinned base above.
 
-The current workspace is capable but vertically expensive:
+The workspace at that baseline was capable but vertically expensive:
 
-- `ProjectWorkspaceView` stacks `WorkspaceHeader`, optional operator state, optional multi-agent peek, then `SessionSurfaceView`;
-- `WorkspaceHeader` can show task identity, resource summary, New Task, Forward, Tools, and Inspector actions;
-- `SessionSurfaceView` adds a permanent Conversation / Raw strip before the transcript;
-- `ConversationView` adds an activity header and optional terminal-control strip before the turn stream;
-- the right Inspector is already independently collapsible and overlay-capable;
-- Raw intentionally stays mounted behind Conversation so PTY continuity survives surface switching.
+- `ProjectWorkspaceView` stacked `WorkspaceHeader`, optional operator state, optional multi-agent peek, then `SessionSurfaceView`;
+- `WorkspaceHeader` could show task identity, resource summary, New Task, Forward, Tools, and Inspector actions;
+- `SessionSurfaceView` added a permanent Conversation / Raw strip before the transcript;
+- `ConversationView` added an activity header and optional terminal-control strip before the turn stream;
+- the right Inspector was already independently collapsible and overlay-capable;
+- Raw intentionally stayed mounted behind Conversation so PTY continuity survived surface switching.
 
 That architecture gives us a useful constraint: simplify presentation without breaking runtime continuity.
 
@@ -157,7 +170,7 @@ The operator reports that Conduit becomes visibly laggy while an agent is respon
 
 ### Current plausible mechanisms
 
-The current `ConversationView` gives several testable hypotheses:
+The baseline `ConversationView` gave several testable hypotheses:
 
 - `turns` is derived from the full `runtime.presentationEvents` collection during view evaluation;
 - `streamContentSignature` traverses presentation state and changes as live output grows;
@@ -171,7 +184,7 @@ Conversation persistence is already dispatched to a utility queue, so disk I/O s
 
 ### Measurement first
 
-Before optimizing, create a reproducible workload and preserve the result.
+Before declaring the performance work complete, preserve a reproducible workload and result.
 
 At minimum exercise:
 
@@ -195,125 +208,68 @@ Collect practical evidence such as:
 
 Do not choose an arbitrary frame-time target before seeing the baseline. The acceptance claim should be tied to the tested workload and before/after receipt.
 
-### Candidate implementation directions
+### Implemented candidate directions
 
-These are hypotheses to test, not mandatory architecture:
+PR #37 currently implements several candidate reductions in work rather than claiming a measured performance result:
 
-- give completed turns stable presentation models and cached parsed content;
-- isolate the active streaming turn from immutable completed turns;
-- update only the live turn when provider output extends an existing event revision;
-- move pure projection/parsing into Core where it can be deterministically tested and measured;
-- coalesce follow-latest scrolling rather than scrolling on every tiny text update;
-- avoid recomputing menu/prose structure for completed output;
-- keep hidden Raw attached while minimizing hidden visual work if SwiftTerm allows it safely;
-- use lazy transcript loading / paging for very long retained history if profiling shows the visible view tree is itself the limit.
+- completed assistant projections cache their scrubbed/attributed presentation;
+- the active streaming turn remains mutable while completed projections are reused;
+- follow-latest scrolling is coalesced over short streaming bursts;
+- transcript and whole-turn serialization is invoked by copy/export actions rather than eagerly during ordinary rendering;
+- the multi-node Markdown view used for completed assistant prose was replaced by one selectable attributed document.
 
 A performance change is successful only if it improves the installed app under the reproduced workload without weakening capture or authority semantics.
 
 ## Workstream B: turn selection and copy
 
-### Current problem
+### Baseline problem
 
-Assistant prose is rendered as many independent SwiftUI `Text` nodes for headings, paragraphs, bullets, and code. Each node has selection enabled independently. That makes macOS selection stop at view boundaries instead of behaving like one normal document.
+Assistant prose was rendered as many independent SwiftUI `Text` nodes for headings, paragraphs, bullets, and code. Each node had selection enabled independently. That made macOS selection stop at view boundaries instead of behaving like one normal document.
 
-### Required behavior
+### Implemented behavior in PR #37
 
-For both live and retained threads:
+For live and retained threads the candidate now provides:
 
-- dragging selection across a paragraph/list/code boundary inside one turn behaves naturally;
-- standard Command-C copies the selected subsection;
-- every user and assistant turn exposes a compact `Copy turn` action;
-- whole-turn copy preserves readable line breaks and code fences/indentation;
-- code blocks may expose their own copy action;
-- copy actions stay out of the permanent visual hierarchy and can appear on hover/context menu;
-- visible turn text is the default copy payload;
-- provenance/debug metadata is excluded unless the operator explicitly chooses a richer diagnostic copy.
+- one selectable attributed assistant document for normal Markdown output;
+- standard macOS selection and Command-C within that document;
+- explicit whole-turn copy controls for user and assistant turns;
+- explicit whole-transcript copy and Markdown export;
+- visible turn text as the default copy payload;
+- hidden provenance/debug metadata excluded from default copy/export.
 
-### Implementation boundary
-
-The plan does not prescribe SwiftUI `Text`, `AttributedString`, `NSTextView`, or another concrete implementation. Choose the lightest representation that simultaneously supports:
-
-- continuous native selection;
-- Markdown/code presentation;
-- stable layout during streaming;
-- accessibility;
-- good performance on long threads.
-
-The implementation should avoid fixing selection by introducing a more expensive per-line view hierarchy.
+Installed-app selection behavior still requires direct macOS verification before merge.
 
 ## Workstream C: inline code / tool activity
 
 ### Product goal
 
-The new source workbench should feel connected to the agent thread.
+The source workbench should feel connected to the agent thread.
 
-When a structured provider reports useful activity, Conversation should be able to show compact, expandable activity inside the relevant turn, for example:
+When a structured provider reports useful activity, Conversation should be able to show compact, expandable activity inside the relevant live thread.
 
-- searched repository;
-- read `path:line`;
-- edited a file;
-- working-tree diff changed;
-- ran a command;
-- ran tests;
-- opened/reviewed a PR or issue;
-- produced an artifact/reference.
+### Implemented OpenCode boundary in PR #37
 
-The chat should not become a raw event dump.
+OpenCode now has a typed provider-reported activity projection for structured `tool` and `patch` parts. The implementation:
 
-### Inline card behavior
+- requires an exact matching OpenCode session identity;
+- rejects foreign-session or session-less activity;
+- does not parse assistant prose;
+- excludes reasoning/text/step chrome from activity;
+- records compact tool identity/status/title and exact provider-reported file paths when present;
+- deliberately does not retain arbitrary successful tool output in the card model because tool output may contain source contents or secrets;
+- bounds error detail;
+- displays activity as expandable cards in Conversation;
+- labels the status as provider-reported, not independently verified;
+- offers Copy path and Source Workbench deep links only for exact paths that resolve inside the task project scope;
+- keeps the full Source Workbench as the real source inspection/editor surface.
 
-A good default card contains only the useful summary:
-
-```text
-▸ Edited  Sources/Conduit/ConversationView.swift   +24 -11
-```
-
-Expanding may show a bounded diff or excerpt. Actions can include:
-
-- Open in Workbench;
-- Open Diff;
-- Copy path;
-- Copy snippet/diff;
-- Inspect provenance.
-
-The existing source workbench remains the full inspection/editor surface. Conversation only provides the context bridge.
-
-### Authority boundary
-
-This is consequential.
-
-The current canonical Conversation event model primarily represents session boundaries, user prompts, interrupts, and agent output. Do not infer structured tool history by parsing prose such as "I edited file X".
-
-If provider adapters expose tool/file/command activity, introduce an additive typed activity/event representation with explicit source/authority.
-
-Examples of authority classes that may matter:
-
-- provider/tool reported;
-- Conduit-recorded local action;
-- Git/workbench observed state;
-- Derived from Raw.
-
-PTY-only agents remain allowed to have less structured UI. Missing provider telemetry stays missing.
-
-### Context IDE integration
-
-Inline activity should deep-link into PR #33 surfaces by exact identity when possible:
-
-- exact path;
-- line/range;
-- current on-disk blob identity where known;
-- working-tree diff;
-- relevant Context Stack item;
-- PR/issue reference;
-- local artifact path.
-
-Do not manufacture an exact target from fuzzy text.
+This is intentionally narrower than inventing generic structured history for every provider. PTY agents still have no fabricated tool history. Persistence of these cards into historical/relaunched threads is not yet claimed.
 
 ## Workstream D: accessible logs and retained history
 
 ### Existing durable source
 
-Conduit already stores one private append-only JSONL conversation source per task under:
+Conduit stores one private append-only JSONL conversation source per task under:
 
 ```text
 ~/.conduit/conversations/
@@ -321,153 +277,46 @@ Conduit already stores one private append-only JSONL conversation source per tas
 
 The log retains source-labelled prompts and bounded visible output revisions. It is separate from MainFrame project files and work-session receipts.
 
-### Required operator access
+### Implemented operator access in PR #37
 
-From an active or historical task, provide obvious actions for:
+From live and historical task surfaces the candidate now exposes:
 
-- Open retained transcript in Conduit;
 - Copy transcript;
-- Export rendered transcript;
-- Reveal source log in Finder;
-- Open/reveal diagnostics for malformed or unavailable retained history;
-- optionally export the underlying JSONL explicitly for debugging.
+- Export rendered transcript through an explicit save panel;
+- Reveal the exact retained JSONL source in Finder;
+- existing retained Conversation history remains directly viewable inside Conduit.
 
-A top-level hidden-by-default `Logs`/`History` route under sidebar More or Inspector is acceptable, but the selected thread itself must expose the common actions without requiring filesystem knowledge.
-
-### Export contract
-
-Human-readable export should be derived from the projected retained Conversation events and clearly identify source labels where useful.
-
-The export must not:
-
-- rewrite the source JSONL;
-- imply a complete Raw terminal transcript;
-- silently copy into MainFrame;
-- silently commit to Git;
-- include secrets from unrelated local state.
-
-Choose destination explicitly through the operator-facing save/reveal flow.
+The human-readable export is derived from projected Conversation events and does not rewrite the JSONL, silently copy into MainFrame, or commit to Git.
 
 ## Workstream E: chrome reduction
 
-### Central surface to remove or collapse
+### Implemented reduction
 
-Candidates to reduce from permanent central layout:
+PR #37 removes the permanent Conversation / Raw segmented strip. Conversation is still the product default, Raw remains mounted/authoritative where required for PTY continuity, and Raw exposes a compact Conversation return control.
 
-- full resource summary in `WorkspaceHeader`;
-- permanent Conversation / Raw segmented bar;
-- work-session deck when not in Operator mode;
-- multi-agent peek when not explicitly enabled;
-- redundant authority labels that can move into Inspector/provenance affordances;
-- tool controls that only matter during an interactive menu.
-
-### Central surface to keep
-
-Default central workspace should retain only what helps answer:
-
-- which task/thread am I in?
-- which agent is this?
-- is it currently working / waiting / stopped?
-- where do I type?
-- how do I get to Raw or context if I need it?
-
-Everything else should earn its screen space contextually.
-
-## Proposed implementation slices
-
-### Slice 1: projection, performance, and copy foundation
-
-Scope:
-
-- reproduce streaming lag;
-- establish before measurement;
-- introduce stable/cached turn presentation if justified;
-- isolate live-turn updates if justified;
-- repair continuous per-turn selection;
-- add Copy turn;
-- preserve tests for transcript projection/copy serialization.
-
-Exit:
-
-- long-thread installed-app streaming is materially more responsive under the same workload;
-- copy/selection behavior works without changing runtime semantics.
-
-### Slice 2: conversation-first shell
-
-Scope:
-
-- simplify WorkspaceHeader;
-- remove/reduce permanent Conversation/Raw bar;
-- make transcript + composer dominant;
-- strengthen left-rail collapse behavior;
-- keep Inspector contextual/overlay-first;
-- preserve Operator density for dense telemetry.
-
-Exit:
-
-- daily-driver screenshot reads as an agent chat first;
-- side surfaces hide/show without runtime remount or state loss.
-
-### Slice 3: inline provider/source activity
-
-Scope:
-
-- define the smallest honest typed activity model needed;
-- connect available structured provider events;
-- render compact expandable activity cards;
-- deep-link exact source/diff targets into the existing workbench;
-- retain less-structured fallback for PTY agents.
-
-Exit:
-
-- a structured coding-agent turn can show what it inspected/changed without forcing a workspace switch;
-- no prose-derived fake tool history.
-
-### Slice 4: log/history accessibility
-
-Scope:
-
-- selected-task transcript actions;
-- reveal exact JSONL source;
-- Copy transcript;
-- explicit human-readable export;
-- historical task parity.
-
-Exit:
-
-- an operator can find and use one task's retained chat log entirely from Conduit.
-
-### Slice 5: installed-app acceptance and polish
-
-Scope:
-
-- long-thread workload rerun;
-- structured + PTY smoke;
-- Inspector/rail/Raw transitions;
-- selection/copy/export;
-- source-card -> workbench navigation;
-- VoiceOver/keyboard pass;
-- final visual cleanup only after behavior is stable.
+Focused-mode header and side-surface polish should be judged again in the installed app before deciding whether additional chrome needs to move. Do not remove useful features merely to satisfy a screenshot target.
 
 ## Testing and evidence
 
-### Deterministic coverage
+### Deterministic coverage added
 
-Add Core tests where practical for:
+PR #37 adds Core coverage for:
 
-- turn projection stability;
-- copy-turn serialization;
-- transcript export serialization;
-- any additive activity authority/event types;
-- workbench deep-link identity resolution;
-- log-path derivation / fail-closed behavior;
-- long-history paging or cache policy if introduced.
+- turn/transcript copy serialization;
+- prompt attachments and role-labelled Markdown export;
+- exclusion of hidden source metadata from default export;
+- OpenCode activity session binding;
+- rejection of foreign/session-less activity;
+- exclusion of reasoning/text parts from tool activity;
+- tool status/title/path projection;
+- omission of arbitrary successful tool output;
+- bounded failure detail;
+- patch file-list projection;
+- Codable round-trip of the bounded activity snapshot.
 
-Keep `ConduitSelfTest` and XCTest coverage aligned when Core behavior changes.
+These tests are implementation evidence only after they are actually run on the exact candidate.
 
-### Installed-app evidence
-
-The implementation cannot be qualified by unit tests alone.
+### Installed-app evidence required before merge
 
 Preserve:
 
@@ -481,7 +330,7 @@ Preserve:
 - one long-thread interactive acceptance record;
 - selection/copy receipt;
 - log reveal/export receipt;
-- structured inline-activity/workbench deep-link receipt;
+- structured OpenCode activity/workbench deep-link receipt;
 - any failure or remaining unknown.
 
 Hosted CI infrastructure failures remain infrastructure unknowns, not product failures or passes.
@@ -517,9 +366,3 @@ This plan does not authorize:
 - changing control-plane lifecycle semantics for layout convenience;
 - turning every diagnostic into permanent visible chrome;
 - reproducing another product's visual design pixel-for-pixel.
-
-## Decision rule
-
-Prefer the smallest implementation that makes Conversation feel native and responsive while preserving the existing authority boundaries.
-
-If a UI simplification requires runtime/control-plane semantic change, stop that slice and review the boundary separately rather than hiding the change inside presentation work.
