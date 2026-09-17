@@ -10,6 +10,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Check tunnel script syntax
+        shell: bash
+        run: bash -n scripts/chatgpt-tunnel scripts/chatgpt-tunnel-status
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
       - name: Selftest
