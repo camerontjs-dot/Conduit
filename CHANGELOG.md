@@ -25,7 +25,25 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Added
+
+- MainFrame Explorer now has a lexical file/path filter and semantic pixel glyphs
+  for lifecycle roots, project/operation scopes, source, tests, docs, assets,
+  configuration, generated/dependency material, scripts, common file classes,
+  and symbolic links. The glyphs are presentation-only navigation landmarks and
+  do not carry task, lifecycle, verification, health, priority, or Git status.
+
 ### Fixed
+
+- Explorer's default rail no longer hides non-lifecycle roots behind a collapsed
+  `SYSTEM FILES` section or truncates project/operation descendants. `All Files`
+  is the canonical tree, validated scope identity annotates the real directory,
+  and Focus Scope is an explicit temporary view instead of a replacement tree.
+- The ordinary Explore graph is now a bounded one-hop `Related` view instead of
+  presenting four graph-analysis modes up front. Atlas, Pathfinder, and Radar
+  remain available under Advanced, while identical visible graph topologies
+  reuse layout and unchanged projected task/runtime facts no longer deliberately
+  republish both Graph and Workstation.
 
 - Structured OpenCode streaming no longer publishes an application-wide
   retention state for every live output fragment. Conversation persistence
