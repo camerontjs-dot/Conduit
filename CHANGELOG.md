@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Copy turn, Copy transcript, and Markdown export no longer mangle fenced
+  code blocks. The workstation display-text projection treated a lone
+  ` ``` ` fence as decorative terminal chrome and reflowed code lines into
+  prose, so an assistant turn containing a fenced block exported as a single
+  collapsed line with the fence destroyed. Fenced regions now pass through
+  the projection verbatim.
 - A structured session that was **restarted** after a refused resume is no
   longer reported as one that was **resumed**. Every structured client accepts a
   resume id and every one of them substitutes a new session when it does not

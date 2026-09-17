@@ -644,6 +644,7 @@ public enum ConversationDisplayText {
         var kept: [String] = []
         var blankRun = 0
         var droppedOnlyChrome = true
+        var inFence = false
         for line in columnStripped {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
@@ -654,6 +655,18 @@ public enum ConversationDisplayText {
                 continue
             }
             blankRun = 0
+            if trimmed.hasPrefix("```") || inFence {
+                // Fenced code is operator-authored Markdown, never TUI chrome.
+                // Keep it verbatim (indentation is significant) so Copy/export
+                // preserves the block instead of scrubbing the fence or
+                // reflowing code lines into prose.
+                if trimmed.hasPrefix("```") {
+                    inFence.toggle()
+                }
+                droppedOnlyChrome = false
+                kept.append(line)
+                continue
+            }
             if isPresentationChromeLine(line) || isAgentAppChromeLine(trimmed) {
                 continue
             }
@@ -887,12 +900,22 @@ public enum ConversationDisplayText {
     }
 
     /// Join soft-wrapped terminal lines into readable paragraphs.
+    /// Fenced code blocks pass through untouched: reflow must never join a
+    /// fence delimiter onto prose or merge code lines with spaces.
     private static func reflowSoftWrappedProse(_ lines: [String]) -> [String] {
         var out: [String] = []
+        var inFence = false
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
                 out.append("")
+                continue
+            }
+            if trimmed.hasPrefix("```") || inFence {
+                if trimmed.hasPrefix("```") {
+                    inFence.toggle()
+                }
+                out.append(line)
                 continue
             }
             if let last = out.last, !last.isEmpty {
