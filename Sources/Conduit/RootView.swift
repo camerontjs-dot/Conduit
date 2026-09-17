@@ -3,69 +3,59 @@ import ConduitCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Conduit's default shell is the conversation canvas.
+///
+/// Tasks and Inspector are secondary presentation surfaces. They overlay the
+/// conversation by default and shrink it only when the operator explicitly pins
+/// them and enough room remains. Runtime/session identity lives below this shell
+/// and is never recreated by opening or closing chrome.
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.layoutDirection) private var layoutDirection
-    /// NavigationSplitView owns the rail only. The trailing Inspector has its
-    /// own responsive overlay/pin policy and never changes this visibility.
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
     @StateObject private var explorerModel = MainframeExplorerWorkspaceModel()
+    @State private var isTaskDrawerPresented = false
     @State private var inspectorFocusRequest = 0
-    @State private var inspectorReturnFocusRequest = 0
-    @State private var inspectorPriorWindow: NSWindow?
-    @State private var inspectorPriorResponder: NSResponder?
-    @AppStorage("conduit.inspectorWidth") private var storedInspectorWidth = 0.0
-    @State private var inspectorDragStartWidth: Double?
-    @State private var inspectorTransientWidth: Double?
-    @State private var inspectorResizeCursorIsPushed = false
-    @State private var inspectorResizeHandleHovered = false
-    @FocusState private var inspectorResizeHandleFocused: Bool
+
+    @AppStorage("conduit.taskDrawerPinned") private var taskDrawerPinned = false
+    @AppStorage("conduit.inspectorPinned") private var inspectorPinned = false
+    @AppStorage("conduit.taskDrawerWidth") private var storedTaskDrawerWidth = 304.0
+    @AppStorage("conduit.inspectorWidth") private var storedInspectorWidth = 360.0
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
     }
 
-    /// Deterministic rail visibility for every density (never `.automatic`).
-    private var densityColumnVisibility: NavigationSplitViewVisibility {
-        switch model.density {
-        case .focused:
-            return .all
-        case .balanced, .operator:
-            return .all
-        }
-    }
-
     var body: some View {
-        // Left rail collapses via NavigationSplitView. Right inspector is our
-        // own trailing panel so it can hide independently without remounting
-        // the workspace (terminals stay attached).
-        collapsibleWorkspaceLayout
+        GeometryReader { proxy in
+            let geometry = ConversationRootShellPolicy.resolve(
+                windowWidth: proxy.size.width,
+                taskDrawerPresented: isTaskDrawerPresented,
+                taskDrawerPinned: taskDrawerPinned,
+                inspectorPresented: model.isContextInspectorPresented,
+                inspectorPinned: inspectorPinned,
+                preferredTaskDrawerWidth: storedTaskDrawerWidth,
+                preferredInspectorWidth: storedInspectorWidth
+            )
+
+            conversationRoot(geometry: geometry)
+        }
         .tint(palette.accent)
         .background(palette.app)
-        .conduitSurfaceChrome(finish: themeStore.surfaceFinish, colorScheme: colorScheme)
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Picker("Workspace", selection: $model.workspace) {
-                    ForEach(ConduitWorkspace.allCases, id: \.self) { workspace in
-                        Label(workspace.displayName, systemImage: workspace.symbolName)
-                            .tag(workspace)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityLabel("Conduit workspace")
-                .accessibilityValue(model.workspace.displayName)
-            }
-            ToolbarItem(placement: .automatic) {
-                paletteMenu
-            }
-        }
-        .alert("Conduit", isPresented: Binding(
-            get: { model.errorMessage != nil },
-            set: { if !$0 { model.errorMessage = nil } }
-        )) {
+        .conduitSurfaceChrome(
+            finish: themeStore.surfaceFinish,
+            colorScheme: colorScheme
+        )
+        .toolbar { conversationToolbar }
+        .alert(
+            "Conduit",
+            isPresented: Binding(
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.errorMessage = nil } }
+            )
+        ) {
             Button("OK") { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "Unknown error")
@@ -133,19 +123,13 @@ struct RootView: View {
             if !recording { model.absorbSpeechTranscript() }
         }
         .onChange(of: model.taskSearchFocusRequest) { _ in
-            columnVisibility = densityColumnVisibility
-        }
-        .onChange(of: model.density) { _ in
-            columnVisibility = densityColumnVisibility
+            withPanelAnimation {
+                isTaskDrawerPresented = true
+            }
         }
         .onChange(of: model.isContextInspectorPresented) { presented in
             if presented {
-                inspectorPriorWindow = NSApp.keyWindow
-                inspectorPriorResponder = inspectorPriorWindow?.firstResponder
                 inspectorFocusRequest += 1
-            } else {
-                cancelInspectorResize()
-                restoreInspectorOriginFocus()
             }
         }
         .task {
@@ -154,388 +138,242 @@ struct RootView: View {
         }
     }
 
-    /// Sidebar + workspace, with an independently collapsible trailing inspector.
-    private var collapsibleWorkspaceLayout: some View {
-        GeometryReader { proxy in
-            let geometry = WorkspaceGeometryPolicy.resolve(
-                windowWidth: proxy.size.width,
-                density: model.density,
-                isInspectorPresented: model.isContextInspectorPresented,
-                preferredInspectorWidth: inspectorTransientWidth
-                    ?? (storedInspectorWidth > 0 ? storedInspectorWidth : nil)
-            )
-            NavigationSplitView(columnVisibility: $columnVisibility) {
-                sidebarColumn(geometry: geometry)
-            } detail: {
-                responsiveWorkspace(geometry: geometry)
-            }
-        }
-    }
+    // MARK: - Conversation-root composition
 
-    private func responsiveWorkspace(
-        geometry: WorkspaceGeometry
+    private func conversationRoot(
+        geometry: ConversationRootShellGeometry
     ) -> some View {
-        ZStack(alignment: .trailing) {
-            workspaceColumn
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(
-                    .trailing,
-                    geometry.inspectorLayout == .pinned
-                        ? CGFloat(geometry.inspectorWidth + 1)
-                        : 0
-                )
-
-            if geometry.inspectorLayout != .hidden {
-                HStack(spacing: 0) {
-                    inspectorDivider
-                    inspectorPanel(width: geometry.inspectorWidth)
-                }
-                .frame(width: CGFloat(geometry.inspectorWidth + 1))
-                .overlay(alignment: .leading) {
-                    inspectorResizeHandle(geometry: geometry)
-                        .offset(
-                            x: layoutDirection == .leftToRight ? -4.5 : 4.5
+        workspaceColumn
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.leading, CGFloat(geometry.contentLeadingInset))
+            .padding(.trailing, CGFloat(geometry.contentTrailingInset))
+            .overlay(alignment: .leading) {
+                if geometry.taskDrawer != .hidden {
+                    taskDrawer(geometry: geometry)
+                        .transition(
+                            reduceMotion
+                                ? .identity
+                                : .move(edge: .leading).combined(with: .opacity)
                         )
+                        .zIndex(3)
                 }
-                .shadow(
-                    color: geometry.inspectorLayout == .overlay
-                        ? Color.black.opacity(0.28)
-                        : .clear,
-                    radius: 18,
-                    x: -6,
-                    y: 0
-                )
-                .transition(
-                    reduceMotion
-                        ? .identity
-                        : .move(edge: .trailing).combined(with: .opacity)
-                )
-                .zIndex(1)
             }
-        }
-        .animation(
-            reduceMotion ? nil : .easeInOut(duration: 0.18),
-            value: model.isContextInspectorPresented
-        )
+            .overlay(alignment: .trailing) {
+                if geometry.inspector != .hidden {
+                    inspectorPanel(geometry: geometry)
+                        .transition(
+                            reduceMotion
+                                ? .identity
+                                : .move(edge: .trailing).combined(with: .opacity)
+                        )
+                        .zIndex(2)
+                }
+            }
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: 0.18),
+                value: geometry
+            )
     }
 
-    private var inspectorDivider: some View {
-        Rectangle()
-            .fill(palette.line)
-            .frame(width: 1)
-            .accessibilityHidden(true)
-    }
+    private func taskDrawer(
+        geometry: ConversationRootShellGeometry
+    ) -> some View {
+        VStack(spacing: 0) {
+            secondaryPanelHeader(
+                title: model.workspace == .explore ? "Files" : "Tasks",
+                systemImage: model.workspace == .explore ? "folder" : "sidebar.left",
+                isPinned: taskDrawerPinned,
+                effectivePlacement: geometry.taskDrawer,
+                onTogglePin: { taskDrawerPinned.toggle() },
+                onClose: { isTaskDrawerPresented = false }
+            )
 
-    /// A presentation-only splitter. It changes panel geometry and the saved
-    /// preference, never density, task selection, or terminal/runtime identity.
-    private func inspectorResizeHandle(geometry: WorkspaceGeometry) -> some View {
-        Button {
-            inspectorResizeHandleFocused = true
-        } label: {
-            ZStack {
-                Color.clear
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(
-                        inspectorResizeHandleFocused || inspectorResizeHandleHovered
-                            ? palette.accent.opacity(0.85)
-                            : Color.clear
-                    )
-                    .frame(width: 2)
-            }
+            Divider().overlay(palette.line)
+
+            sidebar
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(.plain)
-        .frame(width: 10)
+        .frame(width: CGFloat(geometry.taskDrawerWidth))
         .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .focused($inspectorResizeHandleFocused)
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { value in
-                    inspectorResizeHandleFocused = true
-                    updateInspectorDrag(value, geometry: geometry)
-                }
-                .onEnded { value in
-                    finishInspectorDrag(value, geometry: geometry)
-                }
-        )
-        .simultaneousGesture(
-            TapGesture(count: 2)
-                .onEnded { resetInspectorWidth() }
-        )
-        .onMoveCommand { direction in
-            switch direction {
-            case .left:
-                adjustInspectorWidth(
-                    by: layoutDirection == .leftToRight ? 24 : -24,
-                    geometry: geometry
-                )
-            case .right:
-                adjustInspectorWidth(
-                    by: layoutDirection == .leftToRight ? -24 : 24,
-                    geometry: geometry
-                )
-            default:
-                break
-            }
-        }
-        .onExitCommand {
-            if model.isContextInspectorPresented {
-                model.dismissContextInspector()
-            }
-        }
-        .onHover { hovering in
-            inspectorResizeHandleHovered = hovering
-            if hovering, !inspectorResizeCursorIsPushed {
-                NSCursor.resizeLeftRight.push()
-                inspectorResizeCursorIsPushed = true
-            } else if !hovering, inspectorResizeCursorIsPushed {
-                NSCursor.pop()
-                inspectorResizeCursorIsPushed = false
-            }
-        }
-        .onDisappear {
-            inspectorResizeHandleHovered = false
-            if inspectorResizeCursorIsPushed {
-                NSCursor.pop()
-                inspectorResizeCursorIsPushed = false
-            }
-        }
-        .help("Drag to resize Inspector. Double-click to restore the responsive default.")
-        .contextMenu {
-            Button("Restore responsive Inspector width") {
-                resetInspectorWidth()
-            }
-        }
-        // A transparent custom splitter did not consistently enter the macOS
-        // accessibility tree even when exposed as a Button. SwiftUI Slider
-        // entered as AXSlider but left AXTitle empty. An AppKit NSSlider
-        // representation supplies real adjustable semantics and a stable
-        // VoiceOver name without changing pointer/keyboard surface or
-        // workspace topology.
-        .accessibilityRepresentation {
-            InspectorResizeAXSlider(
-                value: geometry.inspectorWidth,
-                range: geometry.inspectorMinimumWidth...geometry.inspectorMaximumWidth,
-                step: 24,
-                onChange: { width in
-                    setInspectorWidth(width, geometry: geometry)
-                },
-                onReset: {
-                    resetInspectorWidth()
-                }
-            )
-        }
-    }
-
-    private func updateInspectorDrag(
-        _ value: DragGesture.Value,
-        geometry: WorkspaceGeometry
-    ) {
-        if inspectorDragStartWidth == nil {
-            inspectorDragStartWidth = geometry.inspectorWidth
-        }
-        let start = inspectorDragStartWidth ?? geometry.inspectorWidth
-        let translation = Double(value.translation.width)
-            * (layoutDirection == .leftToRight ? 1 : -1)
-        inspectorTransientWidth = WorkspaceGeometryPolicy.clampInspectorWidth(
-            start - translation,
-            minimum: geometry.inspectorMinimumWidth,
-            maximum: geometry.inspectorMaximumWidth
-        )
-    }
-
-    private func finishInspectorDrag(
-        _ value: DragGesture.Value,
-        geometry: WorkspaceGeometry
-    ) {
-        let start = inspectorDragStartWidth ?? geometry.inspectorWidth
-        updateInspectorDrag(value, geometry: geometry)
-        if let inspectorTransientWidth,
-           WorkspaceGeometryPolicy.shouldCommitInspectorWidth(
-               currentEffectiveWidth: start,
-               proposedWidth: inspectorTransientWidth
-           )
-        {
-            storedInspectorWidth = inspectorTransientWidth
-        }
-        inspectorTransientWidth = nil
-        inspectorDragStartWidth = nil
-    }
-
-    private func adjustInspectorWidth(
-        by delta: Double,
-        geometry: WorkspaceGeometry
-    ) {
-        setInspectorWidth(
-            geometry.inspectorWidth + delta,
-            geometry: geometry
-        )
-    }
-
-    private func setInspectorWidth(
-        _ proposedWidth: Double,
-        geometry: WorkspaceGeometry
-    ) {
-        let adjustedWidth = WorkspaceGeometryPolicy.clampInspectorWidth(
-            proposedWidth,
-            minimum: geometry.inspectorMinimumWidth,
-            maximum: geometry.inspectorMaximumWidth
-        )
-        guard WorkspaceGeometryPolicy.shouldCommitInspectorWidth(
-            currentEffectiveWidth: geometry.inspectorWidth,
-            proposedWidth: adjustedWidth
-        ) else { return }
-        storedInspectorWidth = adjustedWidth
-        inspectorTransientWidth = nil
-        inspectorDragStartWidth = nil
-    }
-
-    private func resetInspectorWidth() {
-        storedInspectorWidth = 0
-        cancelInspectorResize()
-    }
-
-    private func cancelInspectorResize() {
-        inspectorTransientWidth = nil
-        inspectorDragStartWidth = nil
-    }
-
-    private func inspectorPanel(width: Double) -> some View {
-        InspectorView(
-            project: model.selectedTaskProject ?? model.selectedProject,
-            showsCloseButton: true,
-            focusRequest: inspectorFocusRequest,
-            onClose: { model.dismissContextInspector() }
-        )
-        .frame(width: CGFloat(width))
-        .frame(maxHeight: .infinity)
-    }
-
-    private func restoreInspectorOriginFocus() {
-        let window = inspectorPriorWindow
-        let responder = inspectorPriorResponder
-        inspectorPriorWindow = nil
-        inspectorPriorResponder = nil
-        DispatchQueue.main.async {
-            let restored: Bool
-            if let window, let responder, window.isVisible,
-               (responder as? NSView)?.window === window
-            {
-                restored = window.makeFirstResponder(responder)
-                    && window.firstResponder === responder
-            } else {
-                restored = false
-            }
-            if !restored {
-                let hasWorkspaceInspectorToggle = model.settings.mainframeRoot != nil
-                    && !model.rootAccessNeedsAuthorization
-                    && (
-                        model.selectedTaskProject != nil
-                            || model.selectedProject != nil
-                            || model.selectedTaskSnapshot != nil
-                    )
-                if hasWorkspaceInspectorToggle {
-                    inspectorReturnFocusRequest += 1
-                } else {
-                    model.requestTaskSearchFocus()
-                }
-            }
-        }
-    }
-
-    private func sidebarColumn(geometry: WorkspaceGeometry) -> some View {
-        sidebar
-            .navigationSplitViewColumnWidth(
-                min: CGFloat(geometry.railMinimumWidth),
-                ideal: CGFloat(geometry.railIdealWidth),
-                max: CGFloat(geometry.railMaximumWidth)
-            )
-            .background(
-                ConduitFinishedFill(
-                    base: palette.rail,
-                    finish: themeStore.surfaceFinish,
-                    colorScheme: colorScheme
-                )
-            )
-    }
-
-    private var workspaceColumn: some View {
-        Group {
-            if model.settings.mainframeRoot == nil {
-                onboarding
-            } else if model.rootAccessNeedsAuthorization {
-                rootAuthorization
-            } else if model.workspace == .orchestrate {
-                OrchestrateWorkspaceView()
-                    .environmentObject(model)
-                    .environmentObject(themeStore)
-            } else if model.workspace == .explore,
-                      let root = model.settings.mainframeRoot {
-                MainframeExplorerWorkspaceView(root: root, explorer: explorerModel)
-                    .environmentObject(themeStore)
-            } else if let project = model.selectedTaskProject ?? model.selectedProject {
-                ProjectWorkspaceView(
-                    project: project,
-                    inspectorFocusRequest: inspectorReturnFocusRequest
-                )
-            } else if let task = model.selectedTaskSnapshot {
-                HistoricalTaskWorkspaceView(
-                    task: task,
-                    inspectorFocusRequest: inspectorReturnFocusRequest
-                )
-            } else {
-                EmptyStateView(
-                    title: "No task selected",
-                    systemImage: "bubble.left.and.bubble.right",
-                    description: "Start a new task or choose one from task history."
-                )
-            }
-        }
         .background(
             ConduitFinishedFill(
-                base: palette.app,
+                base: palette.rail,
                 finish: themeStore.surfaceFinish,
                 colorScheme: colorScheme
             )
         )
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(palette.line)
+                .frame(width: 1)
+                .accessibilityHidden(true)
+        }
+        .shadow(
+            color: geometry.taskDrawer == .overlay
+                ? Color.black.opacity(0.30)
+                : .clear,
+            radius: 18,
+            x: 7,
+            y: 0
+        )
+        .onExitCommand {
+            isTaskDrawerPresented = false
+        }
     }
 
-    /// Always-reachable palette + surface-finish picker.
-    private var paletteMenu: some View {
-        Menu {
-            ForEach(PaletteID.allCases, id: \.self) { id in
-                Button {
-                    themeStore.select(id)
-                } label: {
-                    Label {
-                        Text(id.displayName)
-                    } icon: {
-                        Image(systemName: themeStore.selectedPalette == id ? "checkmark.circle.fill" : "circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(
-                                themeStore.accentSwatch(for: id, colorScheme: colorScheme),
-                                themeStore.accentSwatch(for: id, colorScheme: colorScheme)
-                            )
+    private func inspectorPanel(
+        geometry: ConversationRootShellGeometry
+    ) -> some View {
+        VStack(spacing: 0) {
+            secondaryPanelHeader(
+                title: "Inspector",
+                systemImage: "sidebar.right",
+                isPinned: inspectorPinned,
+                effectivePlacement: geometry.inspector,
+                onTogglePin: { inspectorPinned.toggle() },
+                onClose: { model.dismissContextInspector() }
+            )
+
+            Divider().overlay(palette.line)
+
+            InspectorView(
+                project: model.selectedTaskProject ?? model.selectedProject,
+                showsCloseButton: false,
+                focusRequest: inspectorFocusRequest,
+                onClose: { model.dismissContextInspector() }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: CGFloat(geometry.inspectorWidth))
+        .frame(maxHeight: .infinity)
+        .background(
+            ConduitFinishedFill(
+                base: palette.surface,
+                finish: themeStore.surfaceFinish,
+                colorScheme: colorScheme
+            )
+        )
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(palette.line)
+                .frame(width: 1)
+                .accessibilityHidden(true)
+        }
+        .shadow(
+            color: geometry.inspector == .overlay
+                ? Color.black.opacity(0.30)
+                : .clear,
+            radius: 18,
+            x: -7,
+            y: 0
+        )
+        .onExitCommand {
+            model.dismissContextInspector()
+        }
+    }
+
+    private func secondaryPanelHeader(
+        title: String,
+        systemImage: String,
+        isPinned: Bool,
+        effectivePlacement: ConversationRootPanelPlacement,
+        onTogglePin: @escaping () -> Void,
+        onClose: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.text)
+            Spacer(minLength: 8)
+            Button(action: onTogglePin) {
+                Image(systemName: isPinned ? "pin.fill" : "pin")
+            }
+            .buttonStyle(.borderless)
+            .help(
+                effectivePlacement == .pinned
+                    ? "Unpin \(title)"
+                    : "Pin \(title) when the window has room"
+            )
+            .accessibilityLabel(isPinned ? "Unpin \(title)" : "Pin \(title)")
+
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help("Close \(title)")
+            .accessibilityLabel("Close \(title)")
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(palette.surface.opacity(0.92))
+    }
+
+    // MARK: - Primary canvas
+
+    @ViewBuilder
+    private var workspaceColumn: some View {
+        if model.settings.mainframeRoot == nil {
+            onboarding
+        } else if model.rootAccessNeedsAuthorization {
+            rootAuthorization
+        } else if model.workspace == .orchestrate {
+            OrchestrateWorkspaceView()
+                .environmentObject(model)
+                .environmentObject(themeStore)
+        } else if model.workspace == .explore,
+                  let root = model.settings.mainframeRoot {
+            MainframeExplorerWorkspaceView(root: root, explorer: explorerModel)
+                .environmentObject(themeStore)
+        } else {
+            conversationCanvas
+        }
+    }
+
+    private var conversationCanvas: some View {
+        SessionSurfaceView(runtime: model.selectedTaskRuntime)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(palette.sink)
+            .onDrop(
+                of: [UTType.fileURL.identifier],
+                isTargeted: $model.isDropTargeted,
+                perform: handleFileDrop
+            )
+            .overlay {
+                if model.isDropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(
+                            palette.accent,
+                            style: StrokeStyle(lineWidth: 3, dash: [8])
+                        )
+                        .padding(12)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+
+    private func handleFileDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard model.selectedTaskProject != nil || model.selectedProject != nil else {
+            return false
+        }
+        for provider in providers {
+            provider.loadItem(
+                forTypeIdentifier: UTType.fileURL.identifier,
+                options: nil
+            ) { item, _ in
+                let url: URL?
+                if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else {
+                    url = item as? URL
+                }
+                if let url {
+                    Task { @MainActor in
+                        model.addAttachments([url])
                     }
                 }
             }
-            Divider()
-            Button {
-                themeStore.surfaceFinish = themeStore.surfaceFinish == .matte ? .sheen : .matte
-            } label: {
-                Label(
-                    themeStore.surfaceFinish == .sheen ? "Sheen finish on" : "Sheen finish off",
-                    systemImage: themeStore.surfaceFinish == .sheen ? "sparkles" : "circle.dashed"
-                )
-            }
-        } label: {
-            Label("Palette", systemImage: "paintpalette")
         }
-        .help("Choose color palette and surface finish")
-        .accessibilityLabel("Palette")
-        .accessibilityValue(
-            "\(themeStore.selectedPalette.displayName), \(themeStore.surfaceFinish.displayName)"
-        )
+        return !providers.isEmpty
     }
 
     @ViewBuilder
@@ -553,16 +391,191 @@ struct RootView: View {
         }
     }
 
+    // MARK: - Minimal window chrome
+
+    @ToolbarContentBuilder
+    private var conversationToolbar: some ToolbarContent {
+        ToolbarItem(placement: .automatic) {
+            Button {
+                withPanelAnimation {
+                    isTaskDrawerPresented.toggle()
+                }
+            } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .help(isTaskDrawerPresented ? "Hide tasks" : "Show tasks")
+            .accessibilityLabel(isTaskDrawerPresented ? "Hide tasks" : "Show tasks")
+        }
+
+        ToolbarItem(placement: .principal) {
+            Text(toolbarTitle)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(toolbarTitle)
+        }
+
+        ToolbarItem(placement: .automatic) {
+            Button {
+                model.showNewTask = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .help("New task")
+            .accessibilityLabel("New task")
+        }
+
+        ToolbarItem(placement: .automatic) {
+            toolsMenu
+        }
+
+        ToolbarItem(placement: .automatic) {
+            Button {
+                model.toggleContextPresentation()
+            } label: {
+                Image(
+                    systemName: model.isContextInspectorPresented
+                        ? "sidebar.right"
+                        : "rectangle.righthalf.inset.filled"
+                )
+            }
+            .help(
+                model.isContextInspectorPresented
+                    ? "Hide Inspector"
+                    : "Show Inspector"
+            )
+            .accessibilityLabel(
+                model.isContextInspectorPresented
+                    ? "Hide Inspector"
+                    : "Show Inspector"
+            )
+        }
+    }
+
+    private var toolbarTitle: String {
+        if let task = model.selectedTaskSnapshot {
+            return task.displayTitle
+        }
+        if let project = model.selectedTaskProject ?? model.selectedProject {
+            return project.metadata.title
+        }
+        switch model.workspace {
+        case .sessions:
+            return "Conduit"
+        case .explore:
+            return "Files"
+        case .orchestrate:
+            return "Orchestrate"
+        }
+    }
+
+    private var toolsMenu: some View {
+        Menu {
+            Menu("Workspace") {
+                ForEach(ConduitWorkspace.allCases, id: \.self) { workspace in
+                    Button {
+                        model.workspace = workspace
+                    } label: {
+                        Label(
+                            workspace.displayName,
+                            systemImage: model.workspace == workspace
+                                ? "checkmark.circle.fill"
+                                : workspace.symbolName
+                        )
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("Browse Projects…") {
+                model.showProjectBrowser = true
+            }
+            Button("Build Context Bundle", action: model.prepareContextBundle)
+            Button("Open Project Shell", action: model.launchDefaultShell)
+            Button("Resume Durable Session…") {
+                model.showResumeSessions = true
+            }
+
+            Menu("Forward") {
+                Button("Move selection to composer", action: model.beginForwardingToComposer)
+                Divider()
+                ForEach(model.forwardableAgents) { agent in
+                    Button("Send to \(agent.name)") {
+                        model.beginForwarding(to: agent)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("Resources…") { model.showResources = true }
+            Button("Agent Usage…") { model.showAgentUsage = true }
+            Button("Focus Board…") { model.showFocusBoardSheet = true }
+            Button("MindGraph…") { model.showMindGraph = true }
+            Button("Conduit Doctor…") { model.showDiagnostics = true }
+
+            Divider()
+
+            Menu("Appearance") {
+                ForEach(PaletteID.allCases, id: \.self) { id in
+                    Button {
+                        themeStore.select(id)
+                    } label: {
+                        Label(
+                            id.displayName,
+                            systemImage: themeStore.selectedPalette == id
+                                ? "checkmark"
+                                : "circle.fill"
+                        )
+                    }
+                }
+                Divider()
+                Button {
+                    themeStore.surfaceFinish =
+                        themeStore.surfaceFinish == .matte ? .sheen : .matte
+                } label: {
+                    Label(
+                        themeStore.surfaceFinish == .sheen
+                            ? "Sheen finish on"
+                            : "Sheen finish off",
+                        systemImage: themeStore.surfaceFinish == .sheen
+                            ? "sparkles"
+                            : "circle.dashed"
+                    )
+                }
+            }
+
+            Button("Settings…") { model.showSettingsSheet = true }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .help("Tools")
+        .accessibilityLabel("Tools")
+    }
+
+    private func withPanelAnimation(_ changes: () -> Void) {
+        if reduceMotion {
+            changes()
+        } else {
+            withAnimation(.easeInOut(duration: 0.18), changes)
+        }
+    }
+
+    // MARK: - Root setup states
+
     private var onboarding: some View {
         VStack(spacing: 18) {
             PixelOnboardingMark()
             Text("Connect Conduit to MainFrame")
                 .font(.largeTitle.bold())
                 .foregroundStyle(palette.text)
-            Text("Choose the folder containing 00_inbox, 10_knowledge, 20_live, and 30_projects. Conduit keeps your files as the source of truth.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(palette.dim)
-                .frame(maxWidth: 560)
+            Text(
+                "Choose the folder containing 00_inbox, 10_knowledge, 20_live, and 30_projects. Conduit keeps your files as the source of truth."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(palette.dim)
+            .frame(maxWidth: 560)
             Button("Choose MainFrame Root", action: model.chooseMainframeRoot)
                 .buttonStyle(.borderedProminent)
                 .accessibilityLabel("Choose MainFrame Root")
@@ -573,6 +586,7 @@ struct RootView: View {
             }
         }
         .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var rootAuthorization: some View {
@@ -583,10 +597,12 @@ struct RootView: View {
             Text("Renew MainFrame Access")
                 .font(.title2.bold())
                 .foregroundStyle(palette.text)
-            Text("macOS no longer recognizes this build's access to the saved folder. Choose the same MainFrame root once; Conduit will preserve that authorization for future launches.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(palette.dim)
-                .frame(maxWidth: 520)
+            Text(
+                "macOS no longer recognizes this build's access to the saved folder. Choose the same MainFrame root once; Conduit will preserve that authorization for future launches."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(palette.dim)
+            .frame(maxWidth: 520)
             if let root = model.settings.mainframeRoot {
                 Text(root.path)
                     .font(.caption.monospaced())
@@ -604,158 +620,8 @@ struct RootView: View {
             }
         }
         .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
-    }
-}
-
-private struct ProjectWorkspaceView: View {
-    @EnvironmentObject private var model: AppModel
-    @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.colorScheme) private var colorScheme
-    let project: MainframeProject
-    let inspectorFocusRequest: Int
-
-    private var palette: ConduitPalette {
-        themeStore.palette(for: colorScheme)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            WorkspaceHeader(
-                project: project,
-                inspectorFocusRequest: inspectorFocusRequest
-            )
-            Divider()
-            // Operator-only observed-state deck (above session strip / terminal).
-            if model.density == .operator {
-                OperatorOpsDeck(project: project)
-                Divider()
-            }
-            // Optional multi-agent peek — density default or operator override.
-            if model.showsOperatorPeek {
-                OperatorPeekBar()
-                Divider()
-            }
-            SessionSurfaceView(runtime: selectedTaskRuntime)
-                .frame(minHeight: 240)
-        }
-        .onDrop(of: [UTType.fileURL.identifier], isTargeted: $model.isDropTargeted) { providers in
-            for provider in providers {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                    let url: URL?
-                    if let data = item as? Data {
-                        url = URL(dataRepresentation: data, relativeTo: nil)
-                    } else {
-                        url = item as? URL
-                    }
-                    if let url {
-                        Task { @MainActor in model.addAttachments([url]) }
-                    }
-                }
-            }
-            return !providers.isEmpty
-        }
-        .overlay {
-            if model.isDropTargeted {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(palette.accent, style: StrokeStyle(lineWidth: 3, dash: [8]))
-                    .padding(12)
-                    .allowsHitTesting(false)
-            }
-        }
-    }
-
-    private var selectedTaskRuntime: TerminalRuntime? {
-        model.selectedTaskRuntime
-    }
-}
-
-private struct HistoricalTaskWorkspaceView: View {
-    @EnvironmentObject private var model: AppModel
-    @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.colorScheme) private var colorScheme
-    @FocusState private var inspectorButtonFocused: Bool
-    @AccessibilityFocusState private var inspectorButtonAccessibilityFocused: Bool
-    let task: TaskSessionSnapshot
-    let inspectorFocusRequest: Int
-
-    private var palette: ConduitPalette {
-        themeStore.palette(for: colorScheme)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(task.displayTitle)
-                        .font(.headline)
-                        .foregroundStyle(palette.text)
-                    Text("\(task.metadata.workspace.fallbackTitle) is not in the current MainFrame scan")
-                        .font(.caption)
-                        .foregroundStyle(palette.dim)
-                }
-                Spacer()
-                Button("Browse Projects") {
-                    model.showProjectBrowser = true
-                }
-                .buttonStyle(.bordered)
-                Button {
-                    model.toggleContextPresentation()
-                } label: {
-                    Label("Inspector", systemImage: "sidebar.right")
-                }
-                .buttonStyle(.bordered)
-                .focused($inspectorButtonFocused)
-                .accessibilityFocused($inspectorButtonAccessibilityFocused)
-                .accessibilityLabel(
-                    model.isContextInspectorPresented
-                        ? "Hide inspector"
-                        : "Show inspector"
-                )
-                .help("Show or hide Inspector (Command-Backslash)")
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            Divider().overlay(palette.line)
-            SessionSurfaceView(runtime: model.selectedTaskRuntime)
-        }
-        .background(palette.app)
-        .onChange(of: inspectorFocusRequest) { request in
-            if request > 0 {
-                DispatchQueue.main.async {
-                    inspectorButtonFocused = true
-                    inspectorButtonAccessibilityFocused = true
-                }
-            }
-        }
-    }
-}
-
-private struct EmptyStateView: View {
-    @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.colorScheme) private var colorScheme
-    let title: String
-    let systemImage: String
-    let description: String
-
-    private var palette: ConduitPalette {
-        themeStore.palette(for: colorScheme)
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 42))
-                .foregroundStyle(palette.dim)
-            Text(title)
-                .font(.title2.bold())
-                .foregroundStyle(palette.text)
-            Text(description)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(palette.dim)
-                .frame(maxWidth: 420)
-        }
-        .padding(32)
     }
 }
 
@@ -770,8 +636,24 @@ private struct PixelOnboardingMark: View {
     var body: some View {
         Canvas { context, size in
             let unit = min(size.width / 12, size.height / 12)
-            func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: Color) {
-                context.fill(Path(CGRect(x: CGFloat(x) * unit, y: CGFloat(y) * unit, width: CGFloat(w) * unit, height: CGFloat(h) * unit)), with: .color(color))
+            func fill(
+                _ x: Int,
+                _ y: Int,
+                _ w: Int,
+                _ h: Int,
+                _ color: Color
+            ) {
+                context.fill(
+                    Path(
+                        CGRect(
+                            x: CGFloat(x) * unit,
+                            y: CGFloat(y) * unit,
+                            width: CGFloat(w) * unit,
+                            height: CGFloat(h) * unit
+                        )
+                    ),
+                    with: .color(color)
+                )
             }
             fill(5, 0, 2, 2, palette.accent)
             fill(5, 2, 2, 1, palette.dim)
@@ -786,104 +668,6 @@ private struct PixelOnboardingMark: View {
         }
         .frame(width: 88, height: 88)
         .accessibilityHidden(true)
-    }
-}
-
-/// Accessibility-only representation of the custom Inspector splitter.
-/// Pointer/keyboard resizing stays on the SwiftUI handle; this supplies an
-/// AXSlider with a stable VoiceOver name that SwiftUI Slider left empty.
-private struct InspectorResizeAXSlider: NSViewRepresentable {
-    var value: Double
-    var range: ClosedRange<Double>
-    var step: Double
-    var onChange: (Double) -> Void
-    var onReset: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(step: step, onChange: onChange, onReset: onReset)
-    }
-
-    func makeNSView(context: Context) -> NSSlider {
-        let slider = NSSlider()
-        slider.minValue = range.lowerBound
-        slider.maxValue = range.upperBound
-        slider.doubleValue = value
-        slider.isContinuous = true
-        slider.target = context.coordinator
-        slider.action = #selector(Coordinator.valueChanged(_:))
-        context.coordinator.applyAccessibility(to: slider, value: value)
-        context.coordinator.installCustomActions(on: slider)
-        return slider
-    }
-
-    func updateNSView(_ slider: NSSlider, context: Context) {
-        context.coordinator.step = step
-        context.coordinator.onChange = onChange
-        context.coordinator.onReset = onReset
-        slider.minValue = range.lowerBound
-        slider.maxValue = range.upperBound
-        if abs(slider.doubleValue - value) > 0.01 {
-            slider.doubleValue = value
-        }
-        context.coordinator.applyAccessibility(to: slider, value: value)
-        context.coordinator.installCustomActions(on: slider)
-    }
-
-    final class Coordinator: NSObject {
-        var step: Double
-        var onChange: (Double) -> Void
-        var onReset: () -> Void
-
-        init(
-            step: Double,
-            onChange: @escaping (Double) -> Void,
-            onReset: @escaping () -> Void
-        ) {
-            self.step = step
-            self.onChange = onChange
-            self.onReset = onReset
-        }
-
-        @objc func valueChanged(_ sender: NSSlider) {
-            let snapped = snap(sender.doubleValue, min: sender.minValue, max: sender.maxValue)
-            if abs(sender.doubleValue - snapped) > 0.01 {
-                sender.doubleValue = snapped
-            }
-            sender.setAccessibilityValue("\(Int(snapped.rounded())) points" as NSString)
-            onChange(snapped)
-        }
-
-        func applyAccessibility(to slider: NSSlider, value: Double) {
-            slider.setAccessibilityElement(true)
-            slider.setAccessibilityRole(.slider)
-            slider.setAccessibilityLabel("Resize Inspector")
-            slider.setAccessibilityIdentifier("inspector-resize-handle")
-            slider.setAccessibilityHelp(
-                "Adjusts Inspector width without changing workspace density."
-            )
-            slider.setAccessibilityValue(
-                "\(Int(value.rounded())) points" as NSString
-            )
-        }
-
-        func installCustomActions(on slider: NSSlider) {
-            slider.setAccessibilityCustomActions([
-                NSAccessibilityCustomAction(
-                    name: "Restore responsive Inspector width"
-                ) { [weak self] in
-                    self?.onReset()
-                    return true
-                }
-            ])
-        }
-
-        private func snap(_ raw: Double, min lower: Double, max upper: Double) -> Double {
-            guard step > 0 else {
-                return min(max(raw, lower), upper)
-            }
-            let snapped = (raw / step).rounded() * step
-            return min(max(snapped, lower), upper)
-        }
     }
 }
 #endif
