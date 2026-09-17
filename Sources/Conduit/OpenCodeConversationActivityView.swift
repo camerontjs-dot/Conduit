@@ -1,5 +1,6 @@
 #if os(macOS)
 import ConduitCore
+import Foundation
 import SwiftUI
 
 /// Compact provider-reported activity embedded at the bottom of the current
