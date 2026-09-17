@@ -46,10 +46,11 @@ private struct ActiveSessionSurface: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            surfacePicker
-            Divider().overlay(palette.line)
             // Keep the live PTY mounted under Conversation so capture and
-            // buffer continuity survive surface switches. Raw only raises it.
+            // buffer continuity survive surface switches. The old permanent
+            // segmented picker is intentionally gone: Conversation owns the
+            // default canvas and each surface carries one compact switch-back
+            // action instead.
             ZStack {
                 rawTerminal
                     .opacity(runtime.selectedSurface == .raw ? 1 : 0)
@@ -179,60 +180,6 @@ private struct ActiveSessionSurface: View {
         }
     }
 
-    private var surfacePicker: some View {
-        HStack(spacing: 10) {
-            Picker("Session view", selection: $runtime.selectedSurface) {
-                ForEach(SessionSurface.allCases, id: \.self) { surface in
-                    Text(surface.displayName).tag(surface)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 230)
-            .accessibilityLabel("Session view")
-
-            Text(surfaceAuthorityLabel)
-                .font(.caption2)
-                .foregroundStyle(palette.faint)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(palette.rail)
-    }
-
-    private var surfaceAuthorityLabel: String {
-        guard runtime.selectedSurface == .raw else {
-            if runtime.usesStructuredHost {
-                return "Conversation · \(runtime.descriptor.agent.preferredSessionBackend.displayName) events"
-            }
-            return "Conversation · Raw authoritative"
-        }
-
-        if runtime.usesAppServer {
-            return runtime.appServer?.socketPath == nil
-                ? "Raw · app-server host (stdio; no TUI socket)"
-                : "Raw · app-server + optional remote TUI"
-        }
-
-        if controller.launchIssue != nil {
-            return "Raw · launch blocked buffer"
-        }
-
-        switch controller.visualState(at: Date()) {
-        case .launching:
-            return "Raw · PTY starting"
-        case .working, .running:
-            return "Raw · live PTY authority"
-        case .detached:
-            return "Raw · detached buffer"
-        case .exited:
-            return "Raw · exited buffer"
-        case .failed:
-            return "Raw · failed exit buffer"
-        }
-    }
-
     private var rawTerminal: some View {
         ZStack {
             TerminalHostView(
@@ -270,6 +217,21 @@ private struct ActiveSessionSurface: View {
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(palette.surface.opacity(0.96))
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if runtime.selectedSurface == .raw {
+                Button {
+                    runtime.selectedSurface = .conversation
+                } label: {
+                    Label("Conversation", systemImage: "bubble.left.and.bubble.right")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(10)
+                .help("Return to Conversation without restarting this runtime")
+                .accessibilityHint("Returns to the conversation for this same runtime")
             }
         }
         .padding(.horizontal, 14)
@@ -428,6 +390,11 @@ private struct TaskHistorySurface: View {
                             .foregroundStyle(palette.faint)
                     }
                     Spacer(minLength: 0)
+                    ConversationTranscriptMenu(
+                        events: model.selectedTaskConversationEvents,
+                        agentLabel: task.metadata.agentName ?? "Agent",
+                        taskSessionID: task.id
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -499,7 +466,9 @@ private struct TaskHistorySurface: View {
                         .font(.headline)
                         .foregroundStyle(palette.text)
                     ConversationHistoryView(
-                        events: model.selectedTaskConversationEvents
+                        events: model.selectedTaskConversationEvents,
+                        agentLabel: task.metadata.agentName ?? "Agent",
+                        taskSessionID: task.id
                     )
                 }
 
