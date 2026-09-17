@@ -7,7 +7,7 @@ import Foundation
 /// The type only represents structured events OpenCode actually emitted. It
 /// does not infer a tool call from natural-language output and it does not turn
 /// a tool completion into an independent verification claim.
-public struct OpenCodeConversationActivity: Identifiable, Equatable, Sendable {
+public struct OpenCodeConversationActivity: Identifiable, Codable, Equatable, Sendable {
     public enum Kind: String, Codable, Equatable, Sendable {
         case tool
         case patch
