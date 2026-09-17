@@ -46,8 +46,11 @@ private struct ActiveSessionSurface: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            surfacePicker
-            Divider().overlay(palette.line)
+            if runtime.selectedSurface == .raw {
+                rawHeader
+                Divider().overlay(palette.line)
+            }
+
             // Keep the live PTY mounted under Conversation so capture and
             // buffer continuity survive surface switches. Raw only raises it.
             ZStack {
@@ -57,10 +60,11 @@ private struct ActiveSessionSurface: View {
                     .accessibilityHidden(runtime.selectedSurface != .raw)
 
                 if runtime.selectedSurface == .conversation {
-                    ConversationView(runtime: runtime)
+                    ConversationFirstView(runtime: runtime)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
             if runtime.selectedSurface == .conversation {
                 Divider().overlay(palette.line)
                 if controller.lifecycle.isTerminal {
@@ -99,6 +103,30 @@ private struct ActiveSessionSurface: View {
         } message: {
             Text(runtime.structuredPendingApprovalSummary ?? "The agent requested approval.")
         }
+    }
+
+    private var rawHeader: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "terminal")
+                .foregroundStyle(palette.dim)
+                .accessibilityHidden(true)
+            Text(surfaceAuthorityLabel)
+                .font(.caption)
+                .foregroundStyle(palette.dim)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button {
+                runtime.selectedSurface = .conversation
+            } label: {
+                Label("Conversation", systemImage: "bubble.left.and.bubble.right")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Return to Conversation (Command-1)")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(palette.surface)
     }
 
     private var terminalRuntimeFooter: some View {
@@ -179,36 +207,7 @@ private struct ActiveSessionSurface: View {
         }
     }
 
-    private var surfacePicker: some View {
-        HStack(spacing: 10) {
-            Picker("Session view", selection: $runtime.selectedSurface) {
-                ForEach(SessionSurface.allCases, id: \.self) { surface in
-                    Text(surface.displayName).tag(surface)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 230)
-            .accessibilityLabel("Session view")
-
-            Text(surfaceAuthorityLabel)
-                .font(.caption2)
-                .foregroundStyle(palette.faint)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(palette.rail)
-    }
-
     private var surfaceAuthorityLabel: String {
-        guard runtime.selectedSurface == .raw else {
-            if runtime.usesStructuredHost {
-                return "Conversation · \(runtime.descriptor.agent.preferredSessionBackend.displayName) events"
-            }
-            return "Conversation · Raw authoritative"
-        }
-
         if runtime.usesAppServer {
             return runtime.appServer?.socketPath == nil
                 ? "Raw · app-server host (stdio; no TUI socket)"
@@ -495,11 +494,12 @@ private struct TaskHistorySurface: View {
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 } else {
-                    Text("Conversation history")
-                        .font(.headline)
-                        .foregroundStyle(palette.text)
-                    ConversationHistoryView(
-                        events: model.selectedTaskConversationEvents
+                    ConversationFirstHistoryView(
+                        events: model.selectedTaskConversationEvents,
+                        taskSessionID: task.id,
+                        title: task.displayTitle,
+                        agentName: task.metadata.agentName ?? "Agent",
+                        onError: { model.errorMessage = $0 }
                     )
                 }
 
@@ -533,7 +533,7 @@ private struct TaskHistorySurface: View {
                 }
             }
             .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: 860, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .background(palette.canvas)
