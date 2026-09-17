@@ -15,9 +15,12 @@ struct ConversationView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var runtime: TerminalRuntime
     @ObservedObject private var controller: TerminalSessionController
+    @StateObject private var presentationCache = ConversationPresentationCache()
     /// When true, the whole stream pins to the latest content.
     @State private var followLatest = true
     @State private var didApplyFollowDefault = false
+    /// Coalesces follow-latest scrolling while a model streams small deltas.
+    @State private var pendingFollowScrollID = UUID()
     /// Local key monitor for agent menu shortcuts (no focus ring on the stream).
     @State private var keyMonitor: Any?
 
@@ -53,9 +56,12 @@ struct ConversationView: View {
               let event = runtime.presentationEvents.first(where: { $0.id == eventID }),
               case .agentOutput(let output) = event.kind
         else { return false }
-        let display = ConversationDisplayText.workstationDerived(output.text)
-        return TerminalMenuParser.looksLikeInteractiveMenu(display)
-            && !TerminalMenuParser.options(in: display).isEmpty
+        let presentation = presentationCache.presentation(
+            eventID: event.id,
+            output: output
+        )
+        return presentation.looksLikeInteractiveMenu
+            && !presentation.menuOptions.isEmpty
     }
 
     private var showsControlStrip: Bool {
@@ -66,7 +72,6 @@ struct ConversationView: View {
     }
 
     /// Density-aware conversation metrics (Focused Flow + progressive disclosure).
-    /// Knowledge: hide non-action chrome; denser stream for scanning SA.
     private var layout: ConversationLayoutMetrics {
         ConversationLayoutMetrics(density: model.density)
     }
@@ -113,7 +118,17 @@ struct ConversationView: View {
                 }
                 .onChange(of: streamContentSignature) { _ in
                     guard followLatest else { return }
-                    proxy.scrollTo("conversation-bottom", anchor: .bottom)
+                    let requestID = UUID()
+                    pendingFollowScrollID = requestID
+                    // Scroll at most once per short burst instead of on every
+                    // token-sized view update. This keeps composer/selection
+                    // interactions responsive during long streaming turns.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.075) {
+                        guard followLatest,
+                              pendingFollowScrollID == requestID
+                        else { return }
+                        proxy.scrollTo("conversation-bottom", anchor: .bottom)
+                    }
                 }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8)
@@ -140,6 +155,7 @@ struct ConversationView: View {
         }
         .onDisappear {
             removeKeyMonitor()
+            presentationCache.removeAll()
         }
     }
 
@@ -333,6 +349,11 @@ struct ConversationView: View {
                     .accessibilityHint("Opens Session inspector. Does not launch or reconnect.")
 
                     Spacer(minLength: 4)
+                    ConversationTranscriptMenu(
+                        events: runtime.presentationEvents,
+                        agentLabel: runtime.descriptor.agent.name,
+                        taskSessionID: runtime.descriptor.taskSessionID
+                    )
                     Button {
                         followLatest.toggle()
                     } label: {
@@ -371,6 +392,11 @@ struct ConversationView: View {
                         .foregroundStyle(palette.dim)
                         .lineLimit(1)
                     Spacer(minLength: 4)
+                    ConversationTranscriptMenu(
+                        events: runtime.presentationEvents,
+                        agentLabel: runtime.descriptor.agent.name,
+                        taskSessionID: runtime.descriptor.taskSessionID
+                    )
                     Button("Raw") {
                         runtime.selectedSurface = .raw
                     }
@@ -559,6 +585,9 @@ struct ConversationView: View {
                     deliveryMark(prompt.delivery)
                 }
                 Spacer(minLength: 4)
+                ConversationCopyTurnButton(
+                    text: ConversationTranscript.copyText(for: event)
+                )
                 Text(relativeOrClock(event.occurredAt))
                     .font(.caption2)
                     .foregroundStyle(palette.faint)
@@ -593,7 +622,7 @@ struct ConversationView: View {
         }
         .padding(.leading, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     private func assistantBlock(
@@ -601,13 +630,23 @@ struct ConversationView: View {
         event: SessionPresentationEvent
     ) -> some View {
         let isCurrentCapture = runtime.activeOutputEventID == event.id
-        let displayText = ConversationDisplayText.workstationDerived(output.text)
+        let presentation = presentationCache.presentation(
+            eventID: event.id,
+            output: output
+        )
+        let displayText = presentation.displayText
         let split = splitPreservedThinking(displayText)
-        let menuOptions = TerminalMenuParser.options(in: split.answer)
-        let interactiveMenu = TerminalMenuParser.looksLikeInteractiveMenu(split.answer)
+        let canUseCachedDocument = split.thinking == nil && split.answer == displayText
+        let menuOptions = canUseCachedDocument
+            ? presentation.menuOptions
+            : TerminalMenuParser.options(in: split.answer)
+        let interactiveMenu = (
+            canUseCachedDocument
+                ? presentation.looksLikeInteractiveMenu
+                : TerminalMenuParser.looksLikeInteractiveMenu(split.answer)
+        )
             && !menuOptions.isEmpty
             && !controller.lifecycle.isTerminal
-        let blocks = ConversationDisplayText.proseBlocks(in: split.answer)
         let showLive = isCurrentCapture && output.state == .live
 
         return VStack(alignment: .leading, spacing: layout.blockSpacing) {
@@ -627,6 +666,9 @@ struct ConversationView: View {
                         .foregroundStyle(palette.faint)
                 }
                 Spacer(minLength: 4)
+                ConversationCopyTurnButton(
+                    text: ConversationTranscript.copyText(for: event)
+                )
                 Text(relativeOrClock(event.occurredAt))
                     .font(.caption2)
                     .foregroundStyle(palette.faint)
@@ -642,19 +684,23 @@ struct ConversationView: View {
                         .font(.callout)
                         .foregroundStyle(palette.faint)
                 }
-            } else if interactiveMenu {
-                ConversationProseView(
-                    blocks: ConversationDisplayText.proseBlocks(in: split.answer),
-                    palette: palette,
-                    layout: layout
-                )
-                interactiveMenuPanel(options: menuOptions)
             } else {
-                ConversationProseView(
-                    blocks: blocks,
-                    palette: palette,
-                    layout: layout
-                )
+                if canUseCachedDocument {
+                    ConversationCachedSelectableDocument(
+                        attributed: presentation.attributedText,
+                        foreground: palette.text,
+                        lineSpacing: layout.lineSpacing
+                    )
+                } else {
+                    ConversationSelectableDocument(
+                        text: split.answer,
+                        foreground: palette.text,
+                        lineSpacing: layout.lineSpacing
+                    )
+                }
+                if interactiveMenu {
+                    interactiveMenuPanel(options: menuOptions)
+                }
             }
 
             // Progressive disclosure: one faint provenance line, not a footer stack.
@@ -941,9 +987,6 @@ struct ConversationView: View {
 
 // MARK: - Density metrics
 
-/// Conversation stream metrics keyed to Focused Flow density.
-/// Synthesized from Conduit usability notes (progressive disclosure, SA without
-/// chrome overload) and Focused Flow compact rules.
 private struct ConversationLayoutMetrics {
     let density: Density
 
@@ -968,14 +1011,6 @@ private struct ConversationLayoutMetrics {
         case .focused: return 3
         case .balanced: return 4
         case .operator: return 5
-        }
-    }
-
-    var proseSpacing: CGFloat {
-        switch density {
-        case .focused: return 5
-        case .balanced: return 6
-        case .operator: return 8
         }
     }
 
@@ -1012,80 +1047,10 @@ private struct ConversationLayoutMetrics {
     }
 
     var contentMaxWidth: CGFloat {
-        // Wider usable column — less empty side margin on workstation displays.
         switch density {
         case .focused: return 880
         case .balanced: return 920
         case .operator: return 980
-        }
-    }
-}
-
-// MARK: - Document prose
-
-private struct ConversationProseView: View {
-    let blocks: [ConversationProseBlock]
-    let palette: ConduitPalette
-    var layout: ConversationLayoutMetrics = ConversationLayoutMetrics(density: .focused)
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: layout.proseSpacing) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .heading(let level, let text):
-                    Text(text)
-                        .font(headingFont(level))
-                        .foregroundStyle(palette.text)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .paragraph(let text):
-                    Text(text)
-                        .font(.callout)
-                        .foregroundStyle(palette.text)
-                        .textSelection(.enabled)
-                        .lineSpacing(layout.lineSpacing)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                case .bullets(let items):
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text("•")
-                                    .font(.callout)
-                                    .foregroundStyle(palette.dim)
-                                Text(item)
-                                    .font(.callout)
-                                    .foregroundStyle(palette.text)
-                                    .textSelection(.enabled)
-                                    .lineSpacing(layout.lineSpacing)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                case .code(_, let body):
-                    Text(body)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(palette.text)
-                        .textSelection(.enabled)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(palette.sink.opacity(0.65))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(palette.line, lineWidth: 1)
-                        )
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func headingFont(_ level: Int) -> Font {
-        switch level {
-        case 1: return .headline
-        case 2: return .subheadline.weight(.semibold)
-        default: return .callout.weight(.semibold)
         }
     }
 }
@@ -1097,7 +1062,10 @@ private struct ConversationProseView: View {
 struct ConversationHistoryView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var presentationCache = ConversationPresentationCache()
     let events: [SessionPresentationEvent]
+    var agentLabel: String = "Agent"
+    var taskSessionID: TaskSessionID? = nil
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -1108,18 +1076,30 @@ struct ConversationHistoryView: View {
     }
 
     private var layout: ConversationLayoutMetrics {
-        // History has no live density binding; use Focused compact defaults.
         ConversationLayoutMetrics(density: .focused)
     }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: layout.turnSpacing) {
-            ForEach(turns) { turn in
-                historyTurn(turn)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Spacer(minLength: 0)
+                ConversationTranscriptMenu(
+                    events: events,
+                    agentLabel: agentLabel,
+                    taskSessionID: taskSessionID
+                )
+            }
+            LazyVStack(alignment: .leading, spacing: layout.turnSpacing) {
+                ForEach(turns) { turn in
+                    historyTurn(turn)
+                }
             }
         }
         .frame(maxWidth: layout.contentMaxWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onDisappear {
+            presentationCache.removeAll()
+        }
     }
 
     @ViewBuilder
@@ -1189,6 +1169,9 @@ struct ConversationHistoryView: View {
                     historicalDeliveryMark(prompt.delivery)
                 }
                 Spacer(minLength: 4)
+                ConversationCopyTurnButton(
+                    text: ConversationTranscript.copyText(for: event)
+                )
                 Text(
                     event.occurredAt.formatted(
                         date: .abbreviated,
@@ -1227,14 +1210,20 @@ struct ConversationHistoryView: View {
         _ output: AgentVisibleOutput,
         event: SessionPresentationEvent
     ) -> some View {
-        let displayText = ConversationDisplayText.workstationDerived(output.text)
-        let blocks = ConversationDisplayText.proseBlocks(in: displayText)
+        let presentation = presentationCache.presentation(
+            eventID: event.id,
+            output: output
+        )
+        let displayText = presentation.displayText
         return VStack(alignment: .leading, spacing: layout.blockSpacing) {
             HStack {
-                Text("Agent")
+                Text(agentLabel)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.ink)
                 Spacer(minLength: 4)
+                ConversationCopyTurnButton(
+                    text: ConversationTranscript.copyText(for: event)
+                )
                 Text(
                     event.occurredAt.formatted(
                         date: .abbreviated,
@@ -1249,10 +1238,10 @@ struct ConversationHistoryView: View {
                     .font(.callout)
                     .foregroundStyle(palette.faint)
             } else {
-                ConversationProseView(
-                    blocks: blocks,
-                    palette: palette,
-                    layout: layout
+                ConversationCachedSelectableDocument(
+                    attributed: presentation.attributedText,
+                    foreground: palette.text,
+                    lineSpacing: layout.lineSpacing
                 )
             }
             Text(event.authority == .derivedFromRaw ? "from Raw" : event.authority.displayName)
