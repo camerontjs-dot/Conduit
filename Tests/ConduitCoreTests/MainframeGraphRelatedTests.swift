@@ -3,12 +3,16 @@ import XCTest
 @testable import ConduitCore
 
 final class MainframeGraphRelatedTests: XCTestCase {
-    private func node(_ id: String) -> MainframeGraphNode {
+    private func node(
+        _ id: String,
+        kind: MainframeGraphNodeKind = .document,
+        path: String? = nil
+    ) -> MainframeGraphNode {
         MainframeGraphNode(
             id: id,
             label: id,
-            path: id,
-            kind: .document,
+            path: path ?? id,
+            kind: kind,
             zone: .projects,
             isAuthoritative: true
         )
@@ -120,5 +124,59 @@ final class MainframeGraphRelatedTests: XCTestCase {
             sourceMayBeIncomplete: false
         )
         XCTAssertNotEqual(MainframeGraphSceneSignature(scene: first), MainframeGraphSceneSignature(scene: changed))
+    }
+
+    func testFocusResolverPrefersExactSourceBackedNode() {
+        let snapshot = MainframeGraphSnapshot(
+            nodes: [
+                node("30_projects/demo", kind: .project),
+                node("30_projects/demo/Sources/App.swift"),
+            ],
+            edges: [],
+            sourceMayBeIncomplete: false
+        )
+
+        XCTAssertEqual(
+            MainframeGraphFocusResolver.focusNodeID(
+                selectedPath: "30_projects/demo/Sources/App.swift",
+                snapshot: snapshot
+            ),
+            "30_projects/demo/Sources/App.swift"
+        )
+    }
+
+    func testFocusResolverFallsBackToNearestContainingWorkScope() {
+        let snapshot = MainframeGraphSnapshot(
+            nodes: [
+                node("30_projects", kind: .project, path: "30_projects"),
+                node("30_projects/demo", kind: .project, path: "30_projects/demo"),
+                node("30_projects/demo/subscope", kind: .operation, path: "30_projects/demo/subscope"),
+            ],
+            edges: [],
+            sourceMayBeIncomplete: true
+        )
+
+        XCTAssertEqual(
+            MainframeGraphFocusResolver.focusNodeID(
+                selectedPath: "30_projects/demo/subscope/Sources/Skipped.swift",
+                snapshot: snapshot
+            ),
+            "30_projects/demo/subscope"
+        )
+    }
+
+    func testFocusResolverReturnsNilWhenSelectionHasNoGraphOrScopeIdentity() {
+        let snapshot = MainframeGraphSnapshot(
+            nodes: [node("30_projects/demo", kind: .project)],
+            edges: [],
+            sourceMayBeIncomplete: false
+        )
+
+        XCTAssertNil(
+            MainframeGraphFocusResolver.focusNodeID(
+                selectedPath: "10_knowledge/unindexed.bin",
+                snapshot: snapshot
+            )
+        )
     }
 }
