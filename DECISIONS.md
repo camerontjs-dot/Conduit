@@ -1499,3 +1499,51 @@ from one that never checked; recording provenance only in the log, which leaves
 the orchestrator that must decide with nothing to branch on; and refusing the
 store write outright, which would leave the pointer naming a thread the runtime
 is not driving.
+
+## D-048: Structured conversation revisions do not invalidate the task catalog
+
+**Status:** Accepted (2026-09-17)
+
+**Context:** A structured OpenCode output fragment takes two publication paths.
+`TerminalRuntime.presentationEvents` is the intended high-frequency path and is
+observed by the selected conversation surface. The same fragment was also sent
+through `AppModel.recordConversationRevision`, which published
+`conversationRetentionStateByTask` as `.pending` and then `.persisted` for every
+append completion. Because SwiftUI environment-object invalidation is broad,
+those retention publications caused the root and task sidebar to rebuild their
+catalog over the full task-session set. A successful append can be durable
+without making the rest of the application observe a new retention state.
+
+**Decision:**
+
+1. Every presentation revision continues to append to the separate,
+   append-only conversation log through `ConversationPersistenceCoordinator`.
+   Persistence ordering, source labels, and failure reporting are unchanged.
+2. A successful live agent-output append leaves retention in `.pending`; it does
+   not publish `.persisted` for that fragment. `.pending` is published only when
+   the task first enters that state. `.persisted` is published at a non-live
+   boundary such as a prompt, settled output, or closed output. Failures still
+   publish `.failed` and remain visible to the operator.
+3. The pure task catalog retains a value cache keyed by its actual inputs:
+   task snapshots, operational availability observations, and catalog query.
+   Revisions in the conversation log are not catalog inputs. Task topology,
+   availability, scope, search, archive, and sort changes still invalidate and
+   rebuild the catalog.
+4. `TaskSidebarView` continues to use AppModel for existing lifecycle actions;
+   this change does not redesign Conversation, move provider/runtime authority,
+   or reinterpret a provider turn as completion.
+
+**Consequences:** Ordinary structured streaming keeps its high-frequency view
+   updates local to the conversation surface. The application-wide retention
+   publisher and repeated catalog work are reduced to semantic transitions and
+   genuine catalog-input changes. The intentional, low-frequency task-event
+   reloads used to record content-free activity and the retention marker remain
+   in place, so Recent ordering and task-history continuity do not regress.
+
+The intermittent post-completion pin remains a separate observation. This
+decision makes no claim about its publisher or resolution.
+
+**Rejected alternatives:** Dropping conversation revisions, batching or
+   rewriting the append-only log, hiding persistence failures, moving provider
+   completion authority into the catalog, or optimizing the sidebar while
+   retaining a per-fragment AppModel publication.

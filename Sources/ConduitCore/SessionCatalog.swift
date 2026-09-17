@@ -145,6 +145,46 @@ public struct TaskSessionCatalogRow: Identifiable, Codable, Equatable, Sendable 
     }
 }
 
+/// Cached catalog projection keyed only by the inputs that can change a row.
+/// Conversation presentation revisions are intentionally not accepted here:
+/// they belong to the selected runtime surface, while task metadata and
+/// operational observations belong to the sidebar catalog.
+public struct TaskCatalogProjection: Sendable {
+    private struct Inputs: Equatable, Sendable {
+        let sessions: [TaskSessionSnapshot]
+        let availabilityContext: TaskSessionAvailabilityContext
+        let query: TaskSessionCatalogQuery
+    }
+
+    private var inputs: Inputs?
+    public private(set) var rows: [TaskSessionCatalogRow] = []
+
+    public init() {}
+
+    /// Rebuilds the catalog only when a real catalog input changed.
+    /// Returns `true` when `SessionCatalog.rows` was evaluated.
+    @discardableResult
+    public mutating func update(
+        sessions: [TaskSessionSnapshot],
+        availabilityContext: TaskSessionAvailabilityContext,
+        query: TaskSessionCatalogQuery = TaskSessionCatalogQuery()
+    ) -> Bool {
+        let nextInputs = Inputs(
+            sessions: sessions,
+            availabilityContext: availabilityContext,
+            query: query
+        )
+        guard inputs != nextInputs else { return false }
+        inputs = nextInputs
+        rows = SessionCatalog.rows(
+            sessions: sessions,
+            availabilityContext: availabilityContext,
+            query: query
+        )
+        return true
+    }
+}
+
 /// Pure, rebuildable index over TaskSession metadata plus current availability
 /// observations. MainFrame project data is never authored here.
 public enum SessionCatalog {

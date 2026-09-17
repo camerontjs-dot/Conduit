@@ -68,19 +68,6 @@ struct ForwardingDraft: Identifiable, Equatable, Sendable {
     var characterCount: Int { selection.count }
 }
 
-/// What Conduit can honestly claim about one task's local conversation file.
-///
-/// This is presentation/control state only. It never upgrades rendered terminal
-/// prose into verification or MainFrame project truth.
-enum ConversationRetentionState: Equatable, Sendable {
-    case legacyPreRetention
-    case loading
-    case pending
-    case persisted
-    case missingExpected
-    case failed(String)
-}
-
 private enum ProjectScanResult: Sendable {
     case success([MainframeProject])
     case failure(String)
@@ -146,6 +133,10 @@ final class AppModel: ObservableObject {
         [TaskSessionID: [ConversationEventLogDiagnostic]] = [:]
     @Published private(set) var conversationRetentionStateByTask:
         [TaskSessionID: ConversationRetentionState] = [:]
+    /// The sidebar catalog is a projection of task metadata and operational
+    /// observations. It must not rebuild SessionCatalog for an unrelated
+    /// conversation presentation publication.
+    private var taskCatalogProjection = TaskCatalogProjection()
     /// Reconnect of a known task used to abort until history finished loading.
     /// Finish the reconnect automatically once the JSONL is in memory.
     private var reconnectAfterHistoryLoad: Set<TaskSessionID> = []
@@ -873,16 +864,7 @@ final class AppModel: ObservableObject {
     }
 
     var taskCatalogRows: [TaskSessionCatalogRow] {
-        let rootURL = settings.mainframeRoot
-        let baseRows = SessionCatalog.rows(
-            sessions: taskSessions,
-            availabilityContext: taskAvailabilityContext,
-            query: TaskSessionCatalogQuery(
-                workspaceRootURL: rootURL,
-                searchText: taskSearchText,
-                includeArchived: showArchivedTasks
-            )
-        )
+        let baseRows = catalogRows(includeArchived: showArchivedTasks)
         guard let scopeID = taskScopeProjectID,
               let project = projects.first(where: { $0.id == scopeID })
         else { return baseRows }
@@ -895,6 +877,22 @@ final class AppModel: ObservableObject {
         return baseRows.filter {
             $0.session.metadata.workspace.projectPath == path
         }
+    }
+
+    private func catalogRows(
+        includeArchived: Bool
+    ) -> [TaskSessionCatalogRow] {
+        let rootURL = settings.mainframeRoot
+        taskCatalogProjection.update(
+            sessions: taskSessions,
+            availabilityContext: taskAvailabilityContext,
+            query: TaskSessionCatalogQuery(
+                workspaceRootURL: rootURL,
+                searchText: taskSearchText,
+                includeArchived: includeArchived
+            )
+        )
+        return taskCatalogProjection.rows
     }
 
     var enabledAgents: [AgentProfile] {
@@ -1509,7 +1507,7 @@ final class AppModel: ObservableObject {
         let retentionWasExpected = taskSessions.first {
             $0.id == taskSessionID
         }?.conversationRetentionEnabled == true
-        conversationRetentionStateByTask[taskSessionID] = .loading
+        setConversationRetentionState(.loading, for: taskSessionID)
         conversationPersistence.read(
             taskSessionID: taskSessionID
         ) { [weak self] result in
@@ -1523,17 +1521,25 @@ final class AppModel: ObservableObject {
                 if result.log.diagnostics.contains(where: {
                     $0.kind == .unreadableLog
                 }) {
-                    self.conversationRetentionStateByTask[taskSessionID] =
-                        .failed("The local conversation file could not be read.")
+                    self.setConversationRetentionState(
+                        .failed("The local conversation file could not be read."),
+                        for: taskSessionID
+                    )
                 } else if result.fileWasPresent {
-                    self.conversationRetentionStateByTask[taskSessionID] =
-                        .persisted
+                    self.setConversationRetentionState(
+                        .persisted,
+                        for: taskSessionID
+                    )
                 } else if retentionWasExpected {
-                    self.conversationRetentionStateByTask[taskSessionID] =
-                        .missingExpected
+                    self.setConversationRetentionState(
+                        .missingExpected,
+                        for: taskSessionID
+                    )
                 } else {
-                    self.conversationRetentionStateByTask[taskSessionID] =
-                        .legacyPreRetention
+                    self.setConversationRetentionState(
+                        .legacyPreRetention,
+                        for: taskSessionID
+                    )
                 }
 
                 if self.reconcileAfterHistoryLoad.remove(taskSessionID) != nil {
@@ -1549,23 +1555,31 @@ final class AppModel: ObservableObject {
         _ event: SessionPresentationEvent,
         taskSessionID: TaskSessionID
     ) {
-        conversationRetentionStateByTask[taskSessionID] = .pending
+        setConversationRetentionState(.pending, for: taskSessionID)
         conversationPersistence.append(
             event,
             taskSessionID: taskSessionID
         ) { [weak self] errorDescription in
             Task { @MainActor in
                 guard let self else { return }
-                if let errorDescription {
-                    self.conversationRetentionStateByTask[taskSessionID] =
-                        .failed(errorDescription)
+                let retentionState = ConversationRetentionPolicy.stateAfterAppend(
+                    event,
+                    errorDescription: errorDescription
+                )
+                if case .failed(let description) = retentionState {
+                    self.setConversationRetentionState(
+                        .failed(description),
+                        for: taskSessionID
+                    )
                     self.errorMessage =
-                        "Conversation is visible but could not be retained locally: \(errorDescription)"
+                        "Conversation is visible but could not be retained locally: \(description)"
                     return
                 }
 
-                self.conversationRetentionStateByTask[taskSessionID] =
-                    .persisted
+                self.setConversationRetentionState(
+                    retentionState,
+                    for: taskSessionID
+                )
                 if self.taskSessions.first(where: {
                     $0.id == taskSessionID
                 })?.conversationRetentionEnabled != true,
@@ -1585,6 +1599,16 @@ final class AppModel: ObservableObject {
                 )
             }
         }
+    }
+
+    private func setConversationRetentionState(
+        _ state: ConversationRetentionState,
+        for taskSessionID: TaskSessionID
+    ) {
+        guard conversationRetentionStateByTask[taskSessionID] != state else {
+            return
+        }
+        conversationRetentionStateByTask[taskSessionID] = state
     }
 
     private func recordConversationActivityIfNeeded(
@@ -2017,11 +2041,7 @@ final class AppModel: ObservableObject {
     }
 
     private func taskCatalogRow(id: TaskSessionID) -> TaskSessionCatalogRow? {
-        SessionCatalog.rows(
-            sessions: taskSessions,
-            availabilityContext: taskAvailabilityContext,
-            query: TaskSessionCatalogQuery(includeArchived: true)
-        ).first { $0.id == id }
+        catalogRows(includeArchived: true).first { $0.id == id }
     }
 
     func selectProject(_ project: MainframeProject) {
