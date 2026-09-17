@@ -189,4 +189,24 @@ final class OpenCodeConversationActivityTests: XCTestCase {
             )
         }
     }
+
+    func testActivityRoundTripsWithoutToolOutput() throws {
+        let source = OpenCodeConversationActivity(
+            id: "opencode-tool:prt_tool_roundtrip",
+            sessionID: "ses_current",
+            messageID: "msg_asst",
+            kind: .tool,
+            state: .completed,
+            title: "Read source",
+            toolName: "read",
+            paths: ["Sources/Conduit/ConversationView.swift"]
+        )
+        let data = try JSONEncoder().encode(source)
+        let decoded = try JSONDecoder().decode(
+            OpenCodeConversationActivity.self,
+            from: data
+        )
+        XCTAssertEqual(decoded, source)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("output"))
+    }
 }
