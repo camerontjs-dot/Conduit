@@ -9,9 +9,12 @@ struct RootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.layoutDirection) private var layoutDirection
-    /// NavigationSplitView owns the rail only. The trailing Inspector has its
-    /// own responsive overlay/pin policy and never changes this visibility.
+
+    /// NavigationSplitView owns the leading rail. Its operator choice is
+    /// persisted independently from density so Focused can stay chat-first
+    /// without taking navigation away.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @AppStorage("conduit.sidebarVisible") private var storedSidebarVisible = true
     @StateObject private var explorerModel = MainframeExplorerWorkspaceModel()
     @State private var inspectorFocusRequest = 0
     @State private var inspectorReturnFocusRequest = 0
@@ -28,30 +31,30 @@ struct RootView: View {
         themeStore.palette(for: colorScheme)
     }
 
-    /// Deterministic rail visibility for every density (never `.automatic`).
-    private var densityColumnVisibility: NavigationSplitViewVisibility {
-        switch model.density {
-        case .focused:
-            return .all
-        case .balanced, .operator:
-            return .all
-        }
+    private var storedColumnVisibility: NavigationSplitViewVisibility {
+        storedSidebarVisible ? .all : .detailOnly
     }
 
     var body: some View {
-        // Left rail collapses via NavigationSplitView. Right inspector is our
-        // own trailing panel so it can hide independently without remounting
-        // the workspace (terminals stay attached).
+        // The leading rail and trailing Inspector collapse independently. The
+        // workspace/terminal stays mounted while either navigation surface is
+        // hidden or shown.
         collapsibleWorkspaceLayout
         .tint(palette.accent)
         .background(palette.app)
-        .conduitSurfaceChrome(finish: themeStore.surfaceFinish, colorScheme: colorScheme)
+        .conduitSurfaceChrome(
+            finish: themeStore.surfaceFinish,
+            colorScheme: colorScheme
+        )
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Picker("Workspace", selection: $model.workspace) {
                     ForEach(ConduitWorkspace.allCases, id: \.self) { workspace in
-                        Label(workspace.displayName, systemImage: workspace.symbolName)
-                            .tag(workspace)
+                        Label(
+                            workspace.displayName,
+                            systemImage: workspace.symbolName
+                        )
+                        .tag(workspace)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -62,10 +65,13 @@ struct RootView: View {
                 paletteMenu
             }
         }
-        .alert("Conduit", isPresented: Binding(
-            get: { model.errorMessage != nil },
-            set: { if !$0 { model.errorMessage = nil } }
-        )) {
+        .alert(
+            "Conduit",
+            isPresented: Binding(
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.errorMessage = nil } }
+            )
+        ) {
             Button("OK") { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "Unknown error")
@@ -129,14 +135,27 @@ struct RootView: View {
             }
             .frame(width: 700, height: 580)
         }
+        .onAppear {
+            columnVisibility = storedColumnVisibility
+        }
         .onChange(of: model.speech.isRecording) { recording in
             if !recording { model.absorbSpeechTranscript() }
         }
         .onChange(of: model.taskSearchFocusRequest) { _ in
-            columnVisibility = densityColumnVisibility
+            storedSidebarVisible = true
+            columnVisibility = .all
         }
-        .onChange(of: model.density) { _ in
-            columnVisibility = densityColumnVisibility
+        .onChange(of: columnVisibility) { visibility in
+            switch visibility {
+            case .detailOnly:
+                storedSidebarVisible = false
+            case .all, .doubleColumn:
+                storedSidebarVisible = true
+            case .automatic:
+                break
+            @unknown default:
+                break
+            }
         }
         .onChange(of: model.isContextInspectorPresented) { presented in
             if presented {
@@ -228,7 +247,9 @@ struct RootView: View {
 
     /// A presentation-only splitter. It changes panel geometry and the saved
     /// preference, never density, task selection, or terminal/runtime identity.
-    private func inspectorResizeHandle(geometry: WorkspaceGeometry) -> some View {
+    private func inspectorResizeHandle(
+        geometry: WorkspaceGeometry
+    ) -> some View {
         Button {
             inspectorResizeHandleFocused = true
         } label: {
@@ -300,22 +321,19 @@ struct RootView: View {
                 inspectorResizeCursorIsPushed = false
             }
         }
-        .help("Drag to resize Inspector. Double-click to restore the responsive default.")
+        .help(
+            "Drag to resize Inspector. Double-click to restore the responsive default."
+        )
         .contextMenu {
             Button("Restore responsive Inspector width") {
                 resetInspectorWidth()
             }
         }
-        // A transparent custom splitter did not consistently enter the macOS
-        // accessibility tree even when exposed as a Button. SwiftUI Slider
-        // entered as AXSlider but left AXTitle empty. An AppKit NSSlider
-        // representation supplies real adjustable semantics and a stable
-        // VoiceOver name without changing pointer/keyboard surface or
-        // workspace topology.
         .accessibilityRepresentation {
             InspectorResizeAXSlider(
                 value: geometry.inspectorWidth,
-                range: geometry.inspectorMinimumWidth...geometry.inspectorMaximumWidth,
+                range:
+                    geometry.inspectorMinimumWidth...geometry.inspectorMaximumWidth,
                 step: 24,
                 onChange: { width in
                     setInspectorWidth(width, geometry: geometry)
@@ -354,8 +372,7 @@ struct RootView: View {
            WorkspaceGeometryPolicy.shouldCommitInspectorWidth(
                currentEffectiveWidth: start,
                proposedWidth: inspectorTransientWidth
-           )
-        {
+           ) {
             storedInspectorWidth = inspectorTransientWidth
         }
         inspectorTransientWidth = nil
@@ -418,9 +435,10 @@ struct RootView: View {
         inspectorPriorResponder = nil
         DispatchQueue.main.async {
             let restored: Bool
-            if let window, let responder, window.isVisible,
-               (responder as? NSView)?.window === window
-            {
+            if let window,
+               let responder,
+               window.isVisible,
+               (responder as? NSView)?.window === window {
                 restored = window.makeFirstResponder(responder)
                     && window.firstResponder === responder
             } else {
@@ -471,9 +489,13 @@ struct RootView: View {
                     .environmentObject(themeStore)
             } else if model.workspace == .explore,
                       let root = model.settings.mainframeRoot {
-                MainframeExplorerWorkspaceView(root: root, explorer: explorerModel)
-                    .environmentObject(themeStore)
-            } else if let project = model.selectedTaskProject ?? model.selectedProject {
+                MainframeExplorerWorkspaceView(
+                    root: root,
+                    explorer: explorerModel
+                )
+                .environmentObject(themeStore)
+            } else if let project = model.selectedTaskProject
+                ?? model.selectedProject {
                 ProjectWorkspaceView(
                     project: project,
                     inspectorFocusRequest: inspectorReturnFocusRequest
@@ -487,10 +509,12 @@ struct RootView: View {
                 EmptyStateView(
                     title: "No task selected",
                     systemImage: "bubble.left.and.bubble.right",
-                    description: "Start a new task or choose one from task history."
+                    description:
+                        "Start a new task or choose one from task history."
                 )
             }
         }
+        .environmentObject(explorerModel)
         .background(
             ConduitFinishedFill(
                 base: palette.app,
@@ -510,22 +534,39 @@ struct RootView: View {
                     Label {
                         Text(id.displayName)
                     } icon: {
-                        Image(systemName: themeStore.selectedPalette == id ? "checkmark.circle.fill" : "circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(
-                                themeStore.accentSwatch(for: id, colorScheme: colorScheme),
-                                themeStore.accentSwatch(for: id, colorScheme: colorScheme)
+                        Image(
+                            systemName:
+                                themeStore.selectedPalette == id
+                                    ? "checkmark.circle.fill"
+                                    : "circle.fill"
+                        )
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(
+                            themeStore.accentSwatch(
+                                for: id,
+                                colorScheme: colorScheme
+                            ),
+                            themeStore.accentSwatch(
+                                for: id,
+                                colorScheme: colorScheme
                             )
+                        )
                     }
                 }
             }
             Divider()
             Button {
-                themeStore.surfaceFinish = themeStore.surfaceFinish == .matte ? .sheen : .matte
+                themeStore.surfaceFinish =
+                    themeStore.surfaceFinish == .matte ? .sheen : .matte
             } label: {
                 Label(
-                    themeStore.surfaceFinish == .sheen ? "Sheen finish on" : "Sheen finish off",
-                    systemImage: themeStore.surfaceFinish == .sheen ? "sparkles" : "circle.dashed"
+                    themeStore.surfaceFinish == .sheen
+                        ? "Sheen finish on"
+                        : "Sheen finish off",
+                    systemImage:
+                        themeStore.surfaceFinish == .sheen
+                            ? "sparkles"
+                            : "circle.dashed"
                 )
             }
         } label: {
@@ -543,8 +584,11 @@ struct RootView: View {
         if model.workspace == .explore,
            let root = model.settings.mainframeRoot,
            !model.rootAccessNeedsAuthorization {
-            MainframeExplorerSidebarView(root: root, explorer: explorerModel)
-                .environmentObject(themeStore)
+            MainframeExplorerSidebarView(
+                root: root,
+                explorer: explorerModel
+            )
+            .environmentObject(themeStore)
         } else {
             TaskSidebarView()
         }
@@ -556,10 +600,12 @@ struct RootView: View {
             Text("Connect Conduit to MainFrame")
                 .font(.largeTitle.bold())
                 .foregroundStyle(palette.text)
-            Text("Choose the folder containing 00_inbox, 10_knowledge, 20_live, and 30_projects. Conduit keeps your files as the source of truth.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(palette.dim)
-                .frame(maxWidth: 560)
+            Text(
+                "Choose the folder containing 00_inbox, 10_knowledge, 20_live, and 30_projects. Conduit keeps your files as the source of truth."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(palette.dim)
+            .frame(maxWidth: 560)
             Button("Choose MainFrame Root", action: model.chooseMainframeRoot)
                 .buttonStyle(.borderedProminent)
                 .accessibilityLabel("Choose MainFrame Root")
@@ -580,10 +626,12 @@ struct RootView: View {
             Text("Renew MainFrame Access")
                 .font(.title2.bold())
                 .foregroundStyle(palette.text)
-            Text("macOS no longer recognizes this build's access to the saved folder. Choose the same MainFrame root once; Conduit will preserve that authorization for future launches.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(palette.dim)
-                .frame(maxWidth: 520)
+            Text(
+                "macOS no longer recognizes this build's access to the saved folder. Choose the same MainFrame root once; Conduit will preserve that authorization for future launches."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(palette.dim)
+            .frame(maxWidth: 520)
             if let root = model.settings.mainframeRoot {
                 Text(root.path)
                     .font(.caption.monospaced())
@@ -616,6 +664,18 @@ private struct ProjectWorkspaceView: View {
         themeStore.palette(for: colorScheme)
     }
 
+    private var selectedTaskRuntime: TerminalRuntime? {
+        model.selectedTaskRuntime
+    }
+
+    /// The dense operator decks remain available with Raw, where terminal and
+    /// instrumentation inspection is the point. Conversation keeps them folded
+    /// away so the transcript/composer own the workspace.
+    private var showsOperatorChrome: Bool {
+        guard model.density == .operator else { return false }
+        return selectedTaskRuntime?.selectedSurface == .raw
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             WorkspaceHeader(
@@ -623,22 +683,30 @@ private struct ProjectWorkspaceView: View {
                 inspectorFocusRequest: inspectorFocusRequest
             )
             Divider()
-            // Operator-only observed-state deck (above session strip / terminal).
-            if model.density == .operator {
+
+            if showsOperatorChrome {
                 OperatorOpsDeck(project: project)
                 Divider()
             }
-            // Optional multi-agent peek — density default or operator override.
-            if model.showsOperatorPeek {
+
+            if model.showsOperatorPeek,
+               selectedTaskRuntime?.selectedSurface == .raw {
                 OperatorPeekBar()
                 Divider()
             }
+
             SessionSurfaceView(runtime: selectedTaskRuntime)
                 .frame(minHeight: 240)
         }
-        .onDrop(of: [UTType.fileURL.identifier], isTargeted: $model.isDropTargeted) { providers in
+        .onDrop(
+            of: [UTType.fileURL.identifier],
+            isTargeted: $model.isDropTargeted
+        ) { providers in
             for provider in providers {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                provider.loadItem(
+                    forTypeIdentifier: UTType.fileURL.identifier,
+                    options: nil
+                ) { item, _ in
                     let url: URL?
                     if let data = item as? Data {
                         url = URL(dataRepresentation: data, relativeTo: nil)
@@ -655,15 +723,14 @@ private struct ProjectWorkspaceView: View {
         .overlay {
             if model.isDropTargeted {
                 RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(palette.accent, style: StrokeStyle(lineWidth: 3, dash: [8]))
+                    .strokeBorder(
+                        palette.accent,
+                        style: StrokeStyle(lineWidth: 3, dash: [8])
+                    )
                     .padding(12)
                     .allowsHitTesting(false)
             }
         }
-    }
-
-    private var selectedTaskRuntime: TerminalRuntime? {
-        model.selectedTaskRuntime
     }
 }
 
@@ -687,9 +754,11 @@ private struct HistoricalTaskWorkspaceView: View {
                     Text(task.displayTitle)
                         .font(.headline)
                         .foregroundStyle(palette.text)
-                    Text("\(task.metadata.workspace.fallbackTitle) is not in the current MainFrame scan")
-                        .font(.caption)
-                        .foregroundStyle(palette.dim)
+                    Text(
+                        "\(task.metadata.workspace.fallbackTitle) is not in the current MainFrame scan"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(palette.dim)
                 }
                 Spacer()
                 Button("Browse Projects") {
@@ -703,7 +772,9 @@ private struct HistoricalTaskWorkspaceView: View {
                 }
                 .buttonStyle(.bordered)
                 .focused($inspectorButtonFocused)
-                .accessibilityFocused($inspectorButtonAccessibilityFocused)
+                .accessibilityFocused(
+                    $inspectorButtonAccessibilityFocused
+                )
                 .accessibilityLabel(
                     model.isContextInspectorPresented
                         ? "Hide inspector"
@@ -767,8 +838,24 @@ private struct PixelOnboardingMark: View {
     var body: some View {
         Canvas { context, size in
             let unit = min(size.width / 12, size.height / 12)
-            func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: Color) {
-                context.fill(Path(CGRect(x: CGFloat(x) * unit, y: CGFloat(y) * unit, width: CGFloat(w) * unit, height: CGFloat(h) * unit)), with: .color(color))
+            func fill(
+                _ x: Int,
+                _ y: Int,
+                _ w: Int,
+                _ h: Int,
+                _ color: Color
+            ) {
+                context.fill(
+                    Path(
+                        CGRect(
+                            x: CGFloat(x) * unit,
+                            y: CGFloat(y) * unit,
+                            width: CGFloat(w) * unit,
+                            height: CGFloat(h) * unit
+                        )
+                    ),
+                    with: .color(color)
+                )
             }
             fill(5, 0, 2, 2, palette.accent)
             fill(5, 2, 2, 1, palette.dim)
@@ -797,7 +884,11 @@ private struct InspectorResizeAXSlider: NSViewRepresentable {
     var onReset: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(step: step, onChange: onChange, onReset: onReset)
+        Coordinator(
+            step: step,
+            onChange: onChange,
+            onReset: onReset
+        )
     }
 
     func makeNSView(context: Context) -> NSSlider {
@@ -842,11 +933,17 @@ private struct InspectorResizeAXSlider: NSViewRepresentable {
         }
 
         @objc func valueChanged(_ sender: NSSlider) {
-            let snapped = snap(sender.doubleValue, min: sender.minValue, max: sender.maxValue)
+            let snapped = snap(
+                sender.doubleValue,
+                min: sender.minValue,
+                max: sender.maxValue
+            )
             if abs(sender.doubleValue - snapped) > 0.01 {
                 sender.doubleValue = snapped
             }
-            sender.setAccessibilityValue("\(Int(snapped.rounded())) points" as NSString)
+            sender.setAccessibilityValue(
+                "\(Int(snapped.rounded())) points" as NSString
+            )
             onChange(snapped)
         }
 
@@ -874,7 +971,11 @@ private struct InspectorResizeAXSlider: NSViewRepresentable {
             ])
         }
 
-        private func snap(_ raw: Double, min lower: Double, max upper: Double) -> Double {
+        private func snap(
+            _ raw: Double,
+            min lower: Double,
+            max upper: Double
+        ) -> Double {
             guard step > 0 else {
                 return min(max(raw, lower), upper)
             }
