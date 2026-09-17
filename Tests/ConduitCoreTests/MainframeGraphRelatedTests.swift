@@ -54,6 +54,26 @@ final class MainframeGraphRelatedTests: XCTestCase {
         })
     }
 
+    func testRelatedDefaultIncludesContainmentAndTaskAssociationsButNotSemanticNominations() {
+        let snapshot = MainframeGraphSnapshot(
+            nodes: [node("focus"), node("authored"), node("parent"), node("task"), node("semantic")],
+            edges: [
+                edge("focus", "authored"),
+                edge("focus", "parent", kind: .containment),
+                edge("focus", "task", kind: .taskSessionAssociation),
+                edge("focus", "semantic", kind: .semanticNomination),
+            ],
+            sourceMayBeIncomplete: false
+        )
+
+        let related = MainframeGraphQuery.related(snapshot: snapshot, focusNodeID: "focus")
+        XCTAssertEqual(Set(related.nodes.map(\.id)), Set(["focus", "authored", "parent", "task"]))
+        XCTAssertEqual(
+            Set(related.edges.map(\.kind)),
+            Set([.authoredLink, .containment, .taskSessionAssociation])
+        )
+    }
+
     func testRelatedUsesExplicitRelationshipClassesOnly() {
         let snapshot = MainframeGraphSnapshot(
             nodes: [node("focus"), node("authored"), node("semantic")],
