@@ -3,6 +3,7 @@ import AppKit
 import ConduitCore
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// UI-only helpers for explicit copy/reveal/export operations.
 ///
@@ -52,7 +53,7 @@ enum ConversationTranscriptActions {
         let panel = NSSavePanel()
         panel.title = "Export Conduit Transcript"
         panel.prompt = "Export"
-        panel.allowedContentTypes = [.plainText]
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         panel.canCreateDirectories = true
         if let taskSessionID {
             panel.nameFieldStringValue =
