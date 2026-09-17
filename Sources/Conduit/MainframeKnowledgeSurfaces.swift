@@ -83,13 +83,35 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
         ensureLoaded(root: root)
     }
 
+    /// Runtime/task publishers may fire for presentation-only state changes.
+    /// Normalize and compare the facts that actually feed Graph/Workstation so
+    /// unrelated terminal output does not continuously republish the graph.
     func setObservedContext(
         taskAssociations: [MainframeTaskAssociation],
         observedWorkFacts: [MainframeObservedWorkFact]
     ) {
-        self.taskAssociations = taskAssociations
-        self.observedWorkFacts = observedWorkFacts
-        rebuildOverlays()
+        let normalizedAssociations = taskAssociations.sorted {
+            if $0.scopePath != $1.scopePath { return $0.scopePath < $1.scopePath }
+            return $0.taskID < $1.taskID
+        }
+        let normalizedFacts = observedWorkFacts.sorted {
+            let left = [$0.scopePath, $0.kind.rawValue, $0.label, $0.value, $0.sourcePath ?? "", $0.authority.rawValue]
+            let right = [$1.scopePath, $1.kind.rawValue, $1.label, $1.value, $1.sourcePath ?? "", $1.authority.rawValue]
+            return left.lexicographicallyPrecedes(right)
+        }
+
+        let graphChanged = self.taskAssociations != normalizedAssociations
+        let workstationChanged = self.observedWorkFacts != normalizedFacts
+        guard graphChanged || workstationChanged else { return }
+
+        if graphChanged {
+            self.taskAssociations = normalizedAssociations
+            rebuildGraphOverlay()
+        }
+        if workstationChanged {
+            self.observedWorkFacts = normalizedFacts
+            rebuildWorkstation()
+        }
     }
 
     func deterministicSearch(_ query: String, limit: Int = 200) -> MainframeSearchResult? {
@@ -115,7 +137,7 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
 
         let knownPaths = Set(contentIndex.filesystemEntries.map(\.relativePath))
             .union(contentIndex.records.map(\.path))
-        semanticNominations = hits.compactMap { hit -> MainframeSemanticNomination? in
+        let nominations = hits.compactMap { hit -> MainframeSemanticNomination? in
             guard let target = resolveMindGraphPath(hit.displayPath, knownPaths: knownPaths),
                   target != focusPath else { return nil }
             let score = hit.rrfScore.map { String(format: "%.3f", $0) } ?? "unreported"
@@ -126,24 +148,31 @@ final class MainframeKnowledgeProjectionModel: ObservableObject {
                 provenance: "MindGraph nomination · \(hit.scope.displayName) · trust \(hit.trustProfile) · rrf \(score)"
             )
         }
-        semanticHitCount = semanticNominations.count
-        rebuildOverlays()
+        semanticHitCount = nominations.count
+        guard nominations != semanticNominations else { return }
+        semanticNominations = nominations
+        rebuildGraphOverlay()
     }
 
     private func rebuildOverlays() {
-        if let baseGraphSnapshot {
-            var graph = MainframeGraphBuilder.addingTaskAssociations(taskAssociations, to: baseGraphSnapshot)
-            graph = MainframeGraphBuilder.addingSemanticNominations(semanticNominations, to: graph)
-            graphSnapshot = graph
-        }
+        rebuildGraphOverlay()
+        rebuildWorkstation()
+    }
 
-        if let configuredRoot, let lifecycleScan {
-            workstation = MainframeWorkstationBuilder.build(
-                root: configuredRoot,
-                lifecycle: lifecycleScan,
-                observedFacts: observedWorkFacts
-            )
-        }
+    private func rebuildGraphOverlay() {
+        guard let baseGraphSnapshot else { return }
+        var graph = MainframeGraphBuilder.addingTaskAssociations(taskAssociations, to: baseGraphSnapshot)
+        graph = MainframeGraphBuilder.addingSemanticNominations(semanticNominations, to: graph)
+        graphSnapshot = graph
+    }
+
+    private func rebuildWorkstation() {
+        guard let configuredRoot, let lifecycleScan else { return }
+        workstation = MainframeWorkstationBuilder.build(
+            root: configuredRoot,
+            lifecycle: lifecycleScan,
+            observedFacts: observedWorkFacts
+        )
     }
 
     private func resolveMindGraphPath(_ raw: String, knownPaths: Set<String>) -> String? {
@@ -283,6 +312,33 @@ struct MainframeFindSheet: View {
 
 // MARK: - Graph
 
+@MainActor
+private final class MainframeGraphLayoutCache {
+    private var signature: MainframeGraphSceneSignature?
+    private var cached: [String: MainframeGraphPoint] = [:]
+
+    func layout(for scene: MainframeGraphScene) -> [String: MainframeGraphPoint] {
+        let next = MainframeGraphSceneSignature(scene: scene)
+        if signature == next { return cached }
+
+        let layout: [String: MainframeGraphPoint]
+        switch scene.mode {
+        case .orbit, .radar:
+            layout = MainframeGraphLayout.orbit(scene: scene, radius: 230)
+        case .atlas:
+            layout = MainframeGraphLayout.atlas(scene: scene, columnWidth: 280, rowHeight: 86)
+        case .pathfinder:
+            layout = Dictionary(uniqueKeysWithValues: scene.nodes.enumerated().map { index, node in
+                (node.id, MainframeGraphPoint(x: Double(index) * 220, y: 0))
+            })
+        }
+
+        signature = next
+        cached = layout
+        return layout
+    }
+}
+
 struct MainframeGraphSurfaceView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
@@ -303,6 +359,7 @@ struct MainframeGraphSurfaceView: View {
     @State private var pathStartID: String?
     @State private var pathEndID: String?
     @State private var showMindGraph = false
+    @State private var layoutCache = MainframeGraphLayoutCache()
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
@@ -323,12 +380,10 @@ struct MainframeGraphSurfaceView: View {
         switch mode {
         case .orbit:
             guard let focus = effectiveFocusID else { return nil }
-            return MainframeGraphQuery.orbit(
+            return MainframeGraphQuery.related(
                 snapshot: snapshot,
                 focusNodeID: focus,
-                depth: depth,
-                allowedKinds: allowedKinds,
-                maxNodes: 80
+                maxNodes: 24
             )
         case .atlas:
             return MainframeGraphQuery.atlas(snapshot: snapshot, maxNodesPerZone: 26)
@@ -348,7 +403,7 @@ struct MainframeGraphSurfaceView: View {
                 focusNodeID: focus,
                 depth: depth,
                 allowedKinds: [.authoredLink, .containment, .semanticNomination, .taskSessionAssociation],
-                maxNodes: 80
+                maxNodes: 40
             )
         }
     }
@@ -385,6 +440,7 @@ struct MainframeGraphSurfaceView: View {
             guard let newPath,
                   projection.graphSnapshot?.nodeByID[newPath] != nil else { return }
             focusNodeID = newPath
+            if mode == .orbit { selectedGraphNodeID = nil }
         }
         .sheet(isPresented: $showMindGraph) {
             MindGraphQueryView(
@@ -406,29 +462,37 @@ struct MainframeGraphSurfaceView: View {
     private var controls: some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                Picker("Graph mode", selection: $mode) {
-                    ForEach(MainframeGraphMode.allCases, id: \.self) { item in
-                        Text(modeName(item)).tag(item)
-                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode == .orbit ? "RELATED" : modeName(mode).uppercased())
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .tracking(1.0)
+                        .foregroundStyle(palette.faint)
+                    Text(mode == .orbit
+                        ? "One-hop relationships around the current source-backed item"
+                        : advancedModeDescription(mode))
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 440)
 
                 Spacer()
 
-                if mode == .orbit || mode == .radar {
-                    Stepper("Depth \(depth)", value: $depth, in: 1...3)
-                        .font(.caption)
+                if mode != .orbit {
+                    Button("Related") {
+                        mode = .orbit
+                        depth = 1
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Return to the small one-hop relationship view")
                 }
 
                 Menu {
-                    ForEach(MainframeGraphEdgeKind.allCases, id: \.self) { kind in
-                        Toggle(isOn: edgeBinding(kind)) {
-                            Text(edgeName(kind))
-                        }
-                    }
+                    Button("Atlas") { mode = .atlas }
+                    Button("Pathfinder") { mode = .pathfinder }
+                    Button("Radar / MindGraph") { mode = .radar }
+                    Divider()
+                    Text("Advanced views expose broader graph analysis.")
                 } label: {
-                    Label("Edges", systemImage: "line.diagonal")
+                    Label("Advanced", systemImage: "slider.horizontal.3")
                 }
                 .menuStyle(.borderlessButton)
 
@@ -466,6 +530,19 @@ struct MainframeGraphSurfaceView: View {
                 )
             }
 
+            if mode == .orbit {
+                HStack(spacing: 12) {
+                    Text("1 hop")
+                    Text("Authored links")
+                    Text("Contains / contained by")
+                    Text("Task associations")
+                    Spacer()
+                    Text("Up to 24 nodes")
+                }
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
+            }
+
             if mode == .pathfinder, let snapshot {
                 HStack(spacing: 10) {
                     Picker("From", selection: $pathStartID) {
@@ -487,14 +564,13 @@ struct MainframeGraphSurfaceView: View {
                     .frame(maxWidth: 320)
 
                     Spacer()
-                    Text("Shortest path over enabled edge classes")
-                        .font(.caption2)
-                        .foregroundStyle(palette.faint)
+                    edgeMenu
                 }
-            }
-
-            if mode == .radar {
-                HStack {
+            } else if mode == .radar {
+                HStack(spacing: 10) {
+                    Stepper("Depth \(depth)", value: $depth, in: 1...3)
+                        .font(.caption)
+                    edgeMenu
                     Text("Radar overlays MindGraph nominations as retrieval evidence, never authored relationships.")
                         .font(.caption2)
                         .foregroundStyle(palette.dim)
@@ -510,10 +586,23 @@ struct MainframeGraphSurfaceView: View {
         .background(palette.surface)
     }
 
+    private var edgeMenu: some View {
+        Menu {
+            ForEach(MainframeGraphEdgeKind.allCases, id: \.self) { kind in
+                Toggle(isOn: edgeBinding(kind)) {
+                    Text(edgeName(kind))
+                }
+            }
+        } label: {
+            Label("Edges", systemImage: "line.diagonal")
+        }
+        .menuStyle(.borderlessButton)
+    }
+
     private func graphScene(_ scene: MainframeGraphScene) -> some View {
         VStack(spacing: 0) {
             GeometryReader { _ in
-                let layout = graphLayout(scene)
+                let layout = layoutCache.layout(for: scene)
                 let canvas = canvasGeometry(layout)
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
@@ -592,9 +681,11 @@ struct MainframeGraphSurfaceView: View {
             if let path = node.path {
                 Button("Open in Explorer") { onOpenPath(path) }
             }
-            Button("Focus Orbit Here") {
+            Button("Center Related Here") {
                 focusNodeID = node.id
+                selectedGraphNodeID = node.id
                 mode = .orbit
+                depth = 1
             }
             Button("Use as Pathfinder Start") {
                 pathStartID = node.id
@@ -623,12 +714,20 @@ struct MainframeGraphSurfaceView: View {
                 Text(node.isAuthoritative ? "SOURCE-BACKED NODE" : "RETRIEVAL NOMINATION")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(palette.faint)
-                if let path = node.path {
-                    Button("Open in Explorer") { onOpenPath(path) }
-                        .buttonStyle(.bordered)
+                HStack(spacing: 6) {
+                    if let path = node.path {
+                        Button("Open in Explorer") { onOpenPath(path) }
+                            .buttonStyle(.bordered)
+                    }
+                    Button("Center here") {
+                        focusNodeID = node.id
+                        mode = .orbit
+                        depth = 1
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
-            .frame(width: 250, alignment: .leading)
+            .frame(width: 280, alignment: .leading)
 
             Divider()
 
@@ -654,7 +753,7 @@ struct MainframeGraphSurfaceView: View {
             }
         }
         .padding(12)
-        .frame(height: 130)
+        .frame(height: 138)
         .background(palette.surface)
     }
 
@@ -671,7 +770,7 @@ struct MainframeGraphSurfaceView: View {
     private var loadingState: some View {
         VStack(spacing: 10) {
             ProgressView()
-            Text("Building bounded graph from MainFrame…")
+            Text("Building bounded relationships from MainFrame…")
                 .foregroundStyle(palette.dim)
             Text("Derived state is ephemeral and does not replace files as authority.")
                 .font(.caption)
@@ -685,11 +784,13 @@ struct MainframeGraphSurfaceView: View {
             Image(systemName: "point.3.connected.trianglepath.dotted")
                 .font(.system(size: 38))
                 .foregroundStyle(palette.dim)
-            Text("No graph scene available")
+            Text("Nothing related is visible yet")
                 .font(.headline)
                 .foregroundStyle(palette.text)
-            Text("Choose a source-backed file or work record in Explorer, or switch to Atlas.")
+            Text("Choose a source-backed file, project, or operation in Explorer. Advanced views remain available from the menu above.")
+                .multilineTextAlignment(.center)
                 .foregroundStyle(palette.dim)
+                .frame(maxWidth: 560)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -716,19 +817,6 @@ struct MainframeGraphSurfaceView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private func graphLayout(_ scene: MainframeGraphScene) -> [String: MainframeGraphPoint] {
-        switch scene.mode {
-        case .orbit, .radar:
-            return MainframeGraphLayout.orbit(scene: scene, radius: 230)
-        case .atlas:
-            return MainframeGraphLayout.atlas(scene: scene, columnWidth: 280, rowHeight: 86)
-        case .pathfinder:
-            return Dictionary(uniqueKeysWithValues: scene.nodes.enumerated().map { index, node in
-                (node.id, MainframeGraphPoint(x: Double(index) * 220, y: 0))
-            })
-        }
     }
 
     private func canvasGeometry(
@@ -789,10 +877,19 @@ struct MainframeGraphSurfaceView: View {
 
     private func modeName(_ mode: MainframeGraphMode) -> String {
         switch mode {
-        case .orbit: return "Orbit"
+        case .orbit: return "Related"
         case .atlas: return "Atlas"
         case .pathfinder: return "Pathfinder"
         case .radar: return "Radar"
+        }
+    }
+
+    private func advancedModeDescription(_ mode: MainframeGraphMode) -> String {
+        switch mode {
+        case .orbit: return "One-hop relationships around the current item"
+        case .atlas: return "Bounded lifecycle-wide overview"
+        case .pathfinder: return "Shortest explicit path over selected edge classes"
+        case .radar: return "Broader neighborhood including explicit MindGraph nominations"
         }
     }
 
