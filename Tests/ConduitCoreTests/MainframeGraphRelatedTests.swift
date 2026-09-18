@@ -43,18 +43,20 @@ final class MainframeGraphRelatedTests: XCTestCase {
 
     func testRelatedCapsVisibleNodes() {
         let neighbors = (0..<40).map { "n\($0)" }
+        let neighborNodes = neighbors.map { id in node(id) }
         let snapshot = MainframeGraphSnapshot(
-            nodes: [node("focus")] + neighbors.map(node),
+            nodes: [node("focus")] + neighborNodes,
             edges: neighbors.map { edge("focus", $0) },
             sourceMayBeIncomplete: false
         )
 
         let related = MainframeGraphQuery.related(snapshot: snapshot, focusNodeID: "focus", maxNodes: 12)
+        let relatedNodeIDs = Set(related.nodes.map(\.id))
         XCTAssertEqual(related.nodes.count, 12)
-        XCTAssertTrue(related.nodes.contains { $0.id == "focus" })
+        XCTAssertTrue(relatedNodeIDs.contains("focus"))
         XCTAssertTrue(related.edges.allSatisfy { edge in
-            related.nodes.contains { $0.id == edge.sourceID }
-                && related.nodes.contains { $0.id == edge.targetID }
+            relatedNodeIDs.contains(edge.sourceID)
+                && relatedNodeIDs.contains(edge.targetID)
         })
     }
 
