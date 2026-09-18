@@ -630,6 +630,17 @@ public enum HostEnvelope {
 /// it only drops blank runs and common TUI chrome so Conversation can read as
 /// a turn stream instead of a terminal viewport.
 public enum ConversationDisplayText {
+    /// Compiled once: `stripSideColumn` and `compactLines` run per line over
+    /// ever-growing live turns, so recompiling these patterns per line made
+    /// streaming scrub quadratic with a large constant (measured 44–87ms per
+    /// revision at ~135KB). Same patterns, compiled once.
+    private static let trailingWhitespacePattern: NSRegularExpression? = try? NSRegularExpression(
+        pattern: "\\s+$"
+    )
+    private static let sideColumnPattern: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"^(.*?)  {2,}(\S.*)$"#
+    )
+
     /// Collapses long blank runs and trailing per-line whitespace so TUI chrome
     /// is less sparse without inventing content.
     public static func compactDerived(_ text: String) -> String {
@@ -644,6 +655,7 @@ public enum ConversationDisplayText {
         var kept: [String] = []
         var blankRun = 0
         var droppedOnlyChrome = true
+        var inFence = false
         for line in columnStripped {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
@@ -654,6 +666,18 @@ public enum ConversationDisplayText {
                 continue
             }
             blankRun = 0
+            if trimmed.hasPrefix("```") || inFence {
+                // Fenced code is operator-authored Markdown, never TUI chrome.
+                // Keep it verbatim (indentation is significant) so Copy/export
+                // preserves the block instead of scrubbing the fence or
+                // reflowing code lines into prose.
+                if trimmed.hasPrefix("```") {
+                    inFence.toggle()
+                }
+                droppedOnlyChrome = false
+                kept.append(line)
+                continue
+            }
             if isPresentationChromeLine(line) || isAgentAppChromeLine(trimmed) {
                 continue
             }
@@ -768,11 +792,17 @@ public enum ConversationDisplayText {
         var compacted: [String] = []
         var blankRun = 0
         for raw in lines {
-            let line = raw.replacingOccurrences(
-                of: "\\s+$",
-                with: "",
-                options: .regularExpression
-            )
+            let line: String
+            if let pattern = trailingWhitespacePattern {
+                let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+                line = pattern.stringByReplacingMatches(
+                    in: raw,
+                    range: range,
+                    withTemplate: ""
+                )
+            } else {
+                line = raw
+            }
             if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 blankRun += 1
                 if blankRun <= 1 {
@@ -797,9 +827,7 @@ public enum ConversationDisplayText {
     private static func stripSideColumn(_ line: String) -> String {
         // Split on a wide gap (2+ spaces) when the right fragment looks like
         // side-panel chrome rather than sentence continuation.
-        guard let regex = try? NSRegularExpression(
-            pattern: #"^(.*?)  {2,}(\S.*)$"#
-        ) else { return line }
+        guard let regex = sideColumnPattern else { return line }
         let range = NSRange(line.startIndex..<line.endIndex, in: line)
         guard let match = regex.firstMatch(in: line, range: range),
               match.numberOfRanges >= 3,
@@ -887,12 +915,22 @@ public enum ConversationDisplayText {
     }
 
     /// Join soft-wrapped terminal lines into readable paragraphs.
+    /// Fenced code blocks pass through untouched: reflow must never join a
+    /// fence delimiter onto prose or merge code lines with spaces.
     private static func reflowSoftWrappedProse(_ lines: [String]) -> [String] {
         var out: [String] = []
+        var inFence = false
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
                 out.append("")
+                continue
+            }
+            if trimmed.hasPrefix("```") || inFence {
+                if trimmed.hasPrefix("```") {
+                    inFence.toggle()
+                }
+                out.append(line)
                 continue
             }
             if let last = out.last, !last.isEmpty {

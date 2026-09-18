@@ -76,6 +76,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Changed
 
+- Sessions now open into a conversation-root shell: Conversation + composer own
+  the ordinary window, while Tasks and Inspector appear as temporary drawers
+  unless explicitly pinned. Raw remains on the same mounted runtime, and
+  transcript copy/export/log reveal plus provider-reported OpenCode activity
+  stay available without restoring the previous permanent dashboard stack.
+
 - `conduit_list_adapters` now states what `structured: false` costs an
   orchestrator: a PTY agent has no turn protocol, so its `turn.state` never
   becomes `completed` and polling one for completion waits forever. The honesty
