@@ -509,8 +509,8 @@ final class ConduitSessionAPIServer {
         }
         var payload = handle(
             command,
-            ConduitSessionCaller(
-                identity: peerIdentity,
+            ConduitSessionCaller.authenticatedBySharedBearer(
+                clientInfo: peerIdentity,
                 observedAt: peerObservedAt
             )
         )
