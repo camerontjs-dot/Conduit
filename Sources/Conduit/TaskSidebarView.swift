@@ -463,8 +463,7 @@ struct TaskSidebarView: View {
                     : "Selects this task"
             )
 
-            if row.availability.kind == .reconnectable
-                || model.canReconnectStructuredTask(row.id) {
+            if row.availability.kind == .reconnectable {
                 Button {
                     model.reconnectTask(row.id)
                 } label: {
@@ -478,22 +477,7 @@ struct TaskSidebarView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(palette.accent)
                 .accessibilityLabel("Reconnect \(row.session.displayTitle)")
-                .help("Explicitly reconnect this task's retained runtime or thread")
-            } else if model.canReleaseCodexThread(row.id) {
-                Button {
-                    model.releaseCodexThread(row.id)
-                } label: {
-                    if usesExpandedLabels {
-                        Text("Release")
-                    } else {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                    }
-                }
-                .buttonStyle(.borderless)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(palette.accent)
-                .accessibilityLabel("Release \(row.session.displayTitle) to another app")
-                .help("Stop Conduit's Codex writer so ChatGPT or Codex can open this thread")
+                .help("Explicitly reconnect to the observed tmux runtime")
             }
         }
         .padding(.horizontal, 8)
@@ -528,8 +512,7 @@ struct TaskSidebarView: View {
                 model.setTaskPinned(row.id, pinned: !row.session.isPinned)
             }
 
-            if row.availability.kind == .reconnectable
-                || model.canReconnectStructuredTask(row.id) {
+            if row.availability.kind == .reconnectable {
                 Button("Reconnect") {
                     model.reconnectTask(row.id)
                 }
@@ -542,11 +525,6 @@ struct TaskSidebarView: View {
                 }
             } else if row.availability.kind == .running {
                 Divider()
-                if model.canReleaseCodexThread(row.id) {
-                    Button("Release Codex Thread") {
-                        model.releaseCodexThread(row.id)
-                    }
-                }
                 Button("Leave Runtime") {
                     model.leaveTask(row.id)
                 }
