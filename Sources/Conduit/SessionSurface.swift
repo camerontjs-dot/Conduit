@@ -485,7 +485,8 @@ private struct TaskHistorySurface: View {
                 }
 
                 HStack(spacing: 10) {
-                    if availability.kind == .reconnectable {
+                    if availability.kind == .reconnectable
+                        || model.canReconnectStructuredTask(task.id) {
                         Button("Reconnect") {
                             model.reconnectTask(task.id)
                         }
