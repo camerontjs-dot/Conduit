@@ -2607,6 +2607,7 @@ final class AppModel: ObservableObject {
                         self.statusMessage =
                             "Codex thread is open in another app; Conduit left it unchanged."
                         self.errorMessage = failure
+                        self.mcpAdmission?.markTaskEnded(taskSessionID)
                         self.removeSessionTab(runtime)
                         return
                     }
