@@ -2111,6 +2111,15 @@ final class AppModel: ObservableObject {
                 "Wait for the Codex turn to finish and resolve any pending approval before releasing this thread."
             return
         }
+        if let threadID = runtime.structuredSessionID {
+            AdapterThreadStore(
+                directory: AdapterThreadStore.defaultDirectory()
+            ).save(
+                taskSessionID: id,
+                backend: AgentSessionBackend.appServer.workSessionLabel,
+                threadID: threadID
+            )
+        }
         mcpAdmission?.markTaskEnded(id)
         closeSession(runtime)
         statusMessage =
