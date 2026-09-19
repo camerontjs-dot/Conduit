@@ -371,7 +371,7 @@ final class ConduitSessionAPIServer {
                 "result": [
                     "protocolVersion": "2024-11-05",
                     "capabilities": ["tools": [String: Any]()],
-                    "serverInfo": ["name": "conduit-session", "version": "1.2"],
+                    "serverInfo": ["name": "conduit-session", "version": ConduitSessionToolCatalog.serverVersion],
                 ],
             ]
         case "ping":
@@ -494,21 +494,30 @@ final class ConduitSessionAPIServer {
             ]
         }
         if ConduitSessionAPI.isWrite(command) && !allowWrites {
+            let payload: [String: Any] = [
+                "error": "Write tools are disabled. Enable Session API writes in Conduit Settings.",
+                "mcp_contract": ConduitSessionToolCatalog.runtimeContractMetadata,
+            ]
+            let text = (try? String(
+                data: JSONSerialization.data(withJSONObject: payload),
+                encoding: .utf8
+            )) ?? "{}"
             return [
                 "isError": true,
-                "content": [[
-                    "type": "text",
-                    "text": "Write tools are disabled. Enable Session API writes in Conduit Settings.",
-                ]],
+                "content": [["type": "text", "text": text]],
             ]
         }
-        let payload = handle(
+        var payload = handle(
             command,
             ConduitSessionCaller(
                 identity: peerIdentity,
                 observedAt: peerObservedAt
             )
         )
+        // A hosted MCP client can cache an older tools/list description. Put
+        // the active contract identity in the tool result itself so callers can
+        // detect that mismatch before applying retry-sensitive semantics.
+        payload["mcp_contract"] = ConduitSessionToolCatalog.runtimeContractMetadata
         let text = (try? String(
             data: JSONSerialization.data(withJSONObject: payload),
             encoding: .utf8
