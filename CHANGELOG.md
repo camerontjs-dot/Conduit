@@ -35,6 +35,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Session API admission and rate limiting now use the authenticated shared bearer
+  credential as the caller principal instead of self-declared MCP `clientInfo`.
+  `clientInfo` remains available as audit metadata, but changing it no longer
+  creates a fresh per-caller write/create budget. The initialize handshake still
+  fails closed when no client label has been observed.
+
 - Hosted MCP callers can now identify the active caller-facing catalog contract
   from both published tool descriptions and runtime tool results. This makes a
   cached/stale hosted tool snapshot detectable before applying retry-sensitive
