@@ -35,6 +35,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Codex tasks can now release Conduit's private app-server writer after an
+  idle turn so the same synced thread can be opened in ChatGPT/Codex, while
+  retaining the provider thread id for explicit reconnect. Resume collisions
+  reporting an active writer now fail closed instead of falling through to a
+  replacement thread or PTY fallback.
+
 - Explorer's default rail no longer hides non-lifecycle roots behind a collapsed
   `SYSTEM FILES` section or truncates project/operation descendants. `All Files`
   is the canonical tree, validated scope identity annotates the real directory,
