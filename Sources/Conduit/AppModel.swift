@@ -2061,6 +2061,62 @@ final class AppModel: ObservableObject {
             .max(by: { $0.lastActivityAt < $1.lastActivityAt })
     }
 
+    /// True when this retained Codex task has a provider thread id and no
+    /// live Conduit runtime. Reconnect is still an attempt: the provider may
+    /// refuse while another app owns the writer lease.
+    func canReconnectStructuredTask(_ id: TaskSessionID) -> Bool {
+        guard let task = taskSessions.first(where: { $0.id == id }),
+              !task.isArchived,
+              !sessions.contains(where: {
+                  $0.descriptor.taskSessionID == id
+                      && !$0.controller.lifecycle.isTerminal
+              }),
+              project(for: task) != nil,
+              let agent = agentProfile(named: task.metadata.agentName),
+              agent.preferredSessionBackend == .appServer
+        else { return false }
+        return AdapterThreadStore(
+            directory: AdapterThreadStore.defaultDirectory()
+        ).threadID(for: id) != nil
+    }
+
+    /// A handoff is only safe after the current Codex turn is idle and Conduit
+    /// has no unresolved approval or queued prompt.
+    func canReleaseCodexThread(_ id: TaskSessionID) -> Bool {
+        guard let runtime = sessions.first(where: {
+            $0.descriptor.taskSessionID == id
+                && !$0.controller.lifecycle.isTerminal
+        }), runtime.usesAppServer else { return false }
+        return CodexThreadOwnershipPolicy.canRelease(
+            threadID: runtime.structuredSessionID,
+            turnActive: runtime.structuredTurnActive,
+            pendingApproval: runtime.structuredPendingApproval,
+            heldPromptCount: runtime.heldPromptCount
+        )
+    }
+
+    /// Stop Conduit's private Codex app-server so the provider thread can be
+    /// opened by ChatGPT/Codex elsewhere. The provider thread id and local
+    /// conversation history remain retained for an explicit later reconnect.
+    func releaseCodexThread(_ id: TaskSessionID) {
+        guard let runtime = sessions.first(where: {
+            $0.descriptor.taskSessionID == id
+                && !$0.controller.lifecycle.isTerminal
+        }), runtime.usesAppServer else {
+            errorMessage = "This task has no Conduit-owned Codex thread to release."
+            return
+        }
+        guard canReleaseCodexThread(id) else {
+            errorMessage =
+                "Wait for the Codex turn to finish and resolve any pending approval before releasing this thread."
+            return
+        }
+        mcpAdmission?.markTaskEnded(id)
+        closeSession(runtime)
+        statusMessage =
+            "Released the Codex thread to other apps. Reconnect this task when you want Conduit to take the writer again."
+    }
+
     func leaveTask(_ id: TaskSessionID) {
         guard let runtime = sessions.first(where: {
             $0.descriptor.taskSessionID == id
@@ -2520,6 +2576,31 @@ final class AppModel: ObservableObject {
                 self.statusMessage = "Starting \(descriptor.agent.name) on \(backend.displayName)…"
                 if let failure = await runtime.startStructuredAdapterIfNeeded() {
                     runtime.stopStructuredAdapter()
+                    if backend == .appServer,
+                       CodexThreadOwnershipPolicy.isActiveWriterConflict(failure) {
+                        // Another app still owns this exact Codex thread.
+                        // Do not turn an ownership collision into a fresh PTY
+                        // session or a replacement thread.
+                        _ = self.appendTaskEvent(
+                            TaskSessionEvent(
+                                taskSessionID: taskSessionID,
+                                authority: .conduitRecorded,
+                                kind: .operationalStateChanged(
+                                    .runtimeProvisioningFailed(
+                                        runtimeAttemptID,
+                                        tmuxSessionName: nil,
+                                        reason: failure,
+                                        recoverable: true
+                                    )
+                                )
+                            )
+                        )
+                        self.statusMessage =
+                            "Codex thread is open in another app; Conduit left it unchanged."
+                        self.errorMessage = failure
+                        self.removeSessionTab(runtime)
+                        return
+                    }
                     self.statusMessage =
                         "\(descriptor.agent.name) \(backend.displayName) failed (\(failure)). Falling back to PTY."
                     runtime.controller.preparePTYFallback()
