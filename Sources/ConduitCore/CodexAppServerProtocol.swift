@@ -343,6 +343,32 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     }
 }
 
+public enum CodexThreadOwnershipPolicy {
+    /// Current Codex thread storage permits only one active writer. A resume
+    /// collision means the thread still exists but another client owns the
+    /// writer lease; it is not evidence that history is missing.
+    public static func isActiveWriterConflict(_ message: String) -> Bool {
+        let normalized = message.lowercased()
+        return normalized.contains("already has an active writer")
+            || normalized.contains("open in another app")
+    }
+
+    /// Releasing a Conduit-owned Codex thread is safe only at an idle boundary.
+    /// Stopping the local app-server relinquishes writer ownership; the thread
+    /// id remains durable for an explicit later reconnect.
+    public static func canRelease(
+        threadID: String?,
+        turnActive: Bool,
+        pendingApproval: Bool,
+        heldPromptCount: Int
+    ) -> Bool {
+        guard let threadID,
+              !threadID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return false }
+        return !turnActive && !pendingApproval && heldPromptCount == 0
+    }
+}
+
 public enum CodexAppServerRequests {
     public static func initialize(id: Int) -> [String: Any] {
         [
