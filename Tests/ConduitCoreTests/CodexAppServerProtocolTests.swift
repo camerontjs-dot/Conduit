@@ -89,6 +89,67 @@ final class CodexAppServerProtocolTests: XCTestCase {
         XCTAssertEqual(request.acceptResult["decision"] as? String, "accept")
     }
 
+    func testActiveWriterConflictIsNotTreatedAsMissingThread() {
+        XCTAssertTrue(
+            CodexThreadOwnershipPolicy.isActiveWriterConflict(
+                "thread abc already has an active writer"
+            )
+        )
+        XCTAssertTrue(
+            CodexThreadOwnershipPolicy.isActiveWriterConflict(
+                "This is open in another app"
+            )
+        )
+        XCTAssertFalse(
+            CodexThreadOwnershipPolicy.isActiveWriterConflict(
+                "thread abc was not found"
+            )
+        )
+    }
+
+    func testCodexThreadReleaseRequiresIdleUnblockedThread() {
+        XCTAssertTrue(
+            CodexThreadOwnershipPolicy.canRelease(
+                threadID: "thr_1",
+                turnActive: false,
+                pendingApproval: false,
+                heldPromptCount: 0
+            )
+        )
+        XCTAssertFalse(
+            CodexThreadOwnershipPolicy.canRelease(
+                threadID: "thr_1",
+                turnActive: true,
+                pendingApproval: false,
+                heldPromptCount: 0
+            )
+        )
+        XCTAssertFalse(
+            CodexThreadOwnershipPolicy.canRelease(
+                threadID: "thr_1",
+                turnActive: false,
+                pendingApproval: true,
+                heldPromptCount: 0
+            )
+        )
+        XCTAssertFalse(
+            CodexThreadOwnershipPolicy.canRelease(
+                threadID: "thr_1",
+                turnActive: false,
+                pendingApproval: false,
+                heldPromptCount: 1
+            )
+        )
+        XCTAssertFalse(
+            CodexThreadOwnershipPolicy.canRelease(
+                threadID: nil,
+                turnActive: false,
+                pendingApproval: false,
+                heldPromptCount: 0
+            )
+        )
+    }
+
     func testCodexProfilePrefersAppServer() {
         XCTAssertEqual(
             AgentProfile(name: "Codex", command: "codex").preferredSessionBackend,
