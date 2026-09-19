@@ -35,6 +35,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Hosted MCP callers can now identify the active caller-facing catalog contract
+  from both published tool descriptions and runtime tool results. This makes a
+  cached/stale hosted tool snapshot detectable before applying retry-sensitive
+  semantics such as `conduit_create_task` objective delivery; queued objectives
+  remain Conduit-owned and must not be resent.
+
 - Explorer's default rail no longer hides non-lifecycle roots behind a collapsed
   `SYSTEM FILES` section or truncates project/operation descendants. `All Files`
   is the canonical tree, validated scope identity annotates the real directory,
