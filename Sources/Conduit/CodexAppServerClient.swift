@@ -224,10 +224,21 @@ final class CodexAppServerClient: ObservableObject {
                 )
                 attempt = .accepted
             } catch {
+                let message = error.localizedDescription
+                if CodexThreadOwnershipPolicy.isActiveWriterConflict(message) {
+                    // A writer collision proves the requested thread is still
+                    // live elsewhere. Starting a replacement here would fork
+                    // the task precisely when continuity still exists.
+                    throw ClientError.protocolError(
+                        "Codex thread \(resumeThreadID) is open in another app. "
+                            + "Close or release it there, then reconnect in Conduit. "
+                            + "Conduit did not create a replacement thread."
+                    )
+                }
                 // The replacement is a NEW, EMPTY thread. Starting one is the
-                // right recovery; reporting it as the resume the caller asked
-                // for is not, so the substitution is recorded rather than
-                // swallowed with the error.
+                // right recovery for an ordinary refused/missing resume;
+                // reporting it as the resume the caller asked for is not, so
+                // the substitution is recorded rather than swallowed.
                 attempt = .refused
                 started = try await request(
                     CodexAppServerRequests.threadStart(
