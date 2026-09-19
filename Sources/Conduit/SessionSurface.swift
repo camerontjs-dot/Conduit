@@ -67,7 +67,31 @@ private struct ActiveSessionSurface: View {
                 if controller.lifecycle.isTerminal {
                     terminalRuntimeFooter
                 } else {
-                    ComposerView()
+                    VStack(spacing: 0) {
+                        if runtime.usesAppServer,
+                           let taskSessionID = runtime.descriptor.taskSessionID,
+                           model.canReleaseCodexThread(taskSessionID) {
+                            HStack {
+                                Spacer(minLength: 0)
+                                Button {
+                                    model.releaseCodexThread(taskSessionID)
+                                } label: {
+                                    Label(
+                                        "Release to ChatGPT",
+                                        systemImage: "rectangle.portrait.and.arrow.right"
+                                    )
+                                }
+                                .buttonStyle(.borderless)
+                                .controlSize(.small)
+                                .help(
+                                    "Stop Conduit's Codex writer so this same thread can open in ChatGPT or Codex"
+                                )
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.top, 6)
+                        }
+                        ComposerView()
+                    }
                 }
             }
         }
