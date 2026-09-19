@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import platform
 import subprocess
@@ -343,8 +344,24 @@ def preflight(verbose: bool = True) -> dict:
     surface: dict = {}
     if ok:
         api = SessionAPI(load_token())
-        api.initialize()
+        initialized = api.initialize()
         tools = api.tools()
+        projects_payload = api.call("conduit_list_projects")
+        adapters_payload = api.call("conduit_list_adapters")
+
+        catalog_markers = set()
+        marker_pattern = re.compile(r"\\[Conduit MCP catalog ([^\\]]+)\\]$")
+        for tool in tools:
+            match = marker_pattern.search(tool.get("description") or "")
+            if match:
+                catalog_markers.add(match.group(1))
+        runtime_contract = projects_payload.get("mcp_contract") or {}
+        catalog_identity = runtime_contract.get("catalog_identity")
+        catalog_aligned = (
+            len(catalog_markers) == 1
+            and catalog_identity in catalog_markers
+        )
+
         surface = {
             "tool_count": len(tools),
             "read_tools": [
@@ -356,11 +373,15 @@ def preflight(verbose: bool = True) -> dict:
                 if not (t.get("annotations") or {}).get("readOnlyHint")
             ],
             "projects": [
-                p.get("slug") for p in (api.call("conduit_list_projects").get("projects") or [])
+                p.get("slug") for p in (projects_payload.get("projects") or [])
             ],
             "adapters": [
-                a.get("name") for a in (api.call("conduit_list_adapters").get("adapters") or [])
+                a.get("name") for a in (adapters_payload.get("adapters") or [])
             ],
+            "server_info": initialized.get("serverInfo") or {},
+            "catalog_markers": sorted(catalog_markers),
+            "runtime_contract": runtime_contract,
+            "catalog_aligned": catalog_aligned,
         }
     if verbose:
         print("=== Object under test (plan §1.1) ===")
@@ -374,6 +395,12 @@ def preflight(verbose: bool = True) -> dict:
             print(f"  write: {', '.join(surface['write_tools'])}")
             print(f"  projects: {len(surface['projects'])}")
             print(f"  adapters: {', '.join(a for a in surface['adapters'] if a)}")
+            print(f"  server_info: {surface['server_info']}")
+            print(f"  catalog_markers: {surface['catalog_markers']}")
+            print(f"  runtime_contract: {surface['runtime_contract']}")
+            print(f"  catalog_aligned: {surface['catalog_aligned']}")
+            if not surface["catalog_aligned"]:
+                print("  ! hosted/local caller contract identity is not internally aligned")
     return {"pin": pin, "listener_up": ok, "listener_detail": detail,
             "writes_enabled": gate, "surface": surface}
 
