@@ -1551,3 +1551,42 @@ decision makes no claim about its publisher or resolution.
    rewriting the append-only log, hiding persistence failures, moving provider
    completion authority into the catalog, or optimizing the sidebar while
    retaining a per-fragment AppModel publication.
+
+## D-049: Codex thread ownership is an explicit handoff boundary
+
+**Status:** Proposed (2026-09-19)
+
+**Context:** Conduit hosts Codex through a private long-lived `codex app-server`.
+A completed turn leaves that process alive, so the provider thread can remain the
+single active-writer target of Conduit. Current Codex clients surface the same
+condition as `already has an active writer` / `This is open in another app`.
+That collision means the requested thread still exists elsewhere; it is not the
+D-047 missing-history condition.
+
+**Decision:**
+
+1. Conduit may explicitly release an idle Codex thread by stopping its private
+   app-server after the current turn is inactive, no approval is pending, and no
+   prompt is being held. The provider thread id and local conversation history
+   remain retained for a later explicit reconnect.
+2. An active-writer error during `thread/resume` fails closed. Conduit must not
+   reinterpret it as a refused/missing resume, start a replacement thread, or
+   fall through to PTY.
+3. Released Codex tasks remain explicitly reconnectable from retained task
+   history. Reconnect attempts reacquire the same stored thread id and may still
+   be refused while another app owns the writer.
+4. Handoff is explicit for now. Conduit does not automatically relinquish every
+   Codex thread at `turn/completed`, because persistent ownership is still
+   useful for ordinary multi-turn Conduit operation.
+
+**Boundary:** Stopping Conduit's app-server is intended to relinquish its local
+writer process, but exact installed ChatGPT/Codex handoff remains a product
+acceptance boundary for this candidate. This decision does not adopt the managed
+shared-daemon topology, does not claim simultaneous multi-writer support, and
+does not change non-Codex structured adapters.
+
+**Reconsideration trigger:** Revisit explicit process handoff if Codex exposes a
+stable multi-client/read-only ownership primitive or a verified unload/release
+operation that lets Conduit and ChatGPT share the same thread without writer
+collisions.
+
