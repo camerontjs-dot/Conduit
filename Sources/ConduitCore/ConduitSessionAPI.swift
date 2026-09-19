@@ -45,22 +45,54 @@ public struct ConduitSessionSnapshot: Equatable, Sendable {
 
 /// Who is on the other end of a Session API request.
 ///
-/// The listener holds one bearer token and speaks MCP `2024-11-05`, which has
-/// no per-request session header, so identity is the `clientInfo` from the most
-/// recent `initialize` on this listener. That bounds the total write rate
-/// through the MCP surface; it is not proof of per-caller isolation between two
-/// clients sharing the token.
+/// The current listener has one exact bearer credential. That credential is
+/// the authenticated principal for admission/rate limits; MCP `clientInfo` is
+/// self-declared metadata and is retained only as an audit label.
+///
+/// Because MCP `2024-11-05` over this listener has no per-request session id,
+/// the audit label still comes from the most recent `initialize`. It MUST NOT
+/// be promoted into authorization or used to create independent rate buckets.
 public struct ConduitSessionCaller: Equatable, Sendable {
+    /// Authenticated admission principal. Nil until the MCP initialize
+    /// handshake has established a caller on this listener.
     public let identity: String?
+
+    /// Self-declared MCP clientInfo label. Audit/diagnostic metadata only.
+    public let clientInfo: String?
+
     public let observedAt: Date?
 
-    public init(identity: String?, observedAt: Date?) {
+    public init(
+        identity: String?,
+        clientInfo: String? = nil,
+        observedAt: Date?
+    ) {
         self.identity = identity
+        self.clientInfo = clientInfo
         self.observedAt = observedAt
+    }
+
+    /// Current shared-bearer principal. All clients with this credential share
+    /// one admission/rate-limit identity even if they change clientInfo.
+    public static let sharedBearerPrincipal = "session-api-shared-bearer-v1"
+
+    public static func authenticatedBySharedBearer(
+        clientInfo: String?,
+        observedAt: Date?
+    ) -> ConduitSessionCaller {
+        let label = clientInfo?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let label, !label.isEmpty else { return .unidentified }
+        return ConduitSessionCaller(
+            identity: sharedBearerPrincipal,
+            clientInfo: label,
+            observedAt: observedAt
+        )
     }
 
     public static let unidentified = ConduitSessionCaller(
         identity: nil,
+        clientInfo: nil,
         observedAt: nil
     )
 }
