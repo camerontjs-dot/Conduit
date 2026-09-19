@@ -5,6 +5,34 @@ import Foundation
 /// Dispatch and runtime writes remain app-target responsibilities. Keeping the
 /// catalog here makes the caller-facing contract testable without AppKit.
 public enum ConduitSessionToolCatalog {
+    /// Identity of the caller-facing MCP catalog contract.
+    ///
+    /// Hosted clients may snapshot tools/list metadata. This marker is not a
+    /// freshness claim by itself; it lets callers compare the runtime contract
+    /// they are actually talking to with a cached tool description.
+    ///
+    /// Bump whenever a caller-facing tool schema or description changes.
+    public static let catalogIdentity = "2026-09-19.1"
+
+    /// Server implementation identity returned during MCP initialize.
+    public static let serverVersion = "1.3"
+
+    /// High-risk create-task retry rule, exposed again in every runtime result
+    /// so a stale hosted description cannot silently become retry authority.
+    public static let createTaskObjectiveDeliveryContract =
+        "delivered=no-resend;queued=no-resend;failed=resend-required"
+
+    public static var runtimeContractMetadata: [String: Any] {
+        [
+            "catalog_identity": catalogIdentity,
+            "server_version": serverVersion,
+            "create_task_objective_delivery": createTaskObjectiveDeliveryContract,
+        ]
+    }
+
+    private static var catalogIdentityMarker: String {
+        "[Conduit MCP catalog \(catalogIdentity)]"
+    }
     /// The published catalog is deliberately independent of local write
     /// authorization. Some MCP clients snapshot tools/list and otherwise never
     /// discover a lifecycle action after the operator enables it. The server
@@ -279,7 +307,7 @@ public enum ConduitSessionToolCatalog {
         if !required.isEmpty { inputSchema["required"] = required }
         var result: [String: Any] = [
             "name": name,
-            "description": description,
+            "description": "\(description) \(catalogIdentityMarker)",
             "annotations": annotations,
             "inputSchema": inputSchema,
         ]
