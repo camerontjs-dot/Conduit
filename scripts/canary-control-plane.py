@@ -36,9 +36,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -118,8 +118,9 @@ class SessionAPI:
         return parsed.get("result", {})
 
     def initialize(self) -> dict:
-        # Writes fail closed until an initialize is seen: caller identity on
-        # this listener is the clientInfo from the most recent initialize.
+        # Writes fail closed until an initialize is seen. clientInfo supplies
+        # an audit label; admission identity is the authenticated shared bearer
+        # principal, so changing this label must not mint a fresh rate bucket.
         return self._rpc(
             "initialize",
             {
@@ -400,7 +401,7 @@ def preflight(verbose: bool = True) -> dict:
             print(f"  runtime_contract: {surface['runtime_contract']}")
             print(f"  catalog_aligned: {surface['catalog_aligned']}")
             if not surface["catalog_aligned"]:
-                print("  ! hosted/local caller contract identity is not internally aligned")
+                print("  ! published/runtime MCP contract identity is not internally aligned")
     return {"pin": pin, "listener_up": ok, "listener_detail": detail,
             "writes_enabled": gate, "surface": surface}
 
