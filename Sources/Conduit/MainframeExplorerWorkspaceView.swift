@@ -59,6 +59,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     @Published private(set) var symlinkInspection: MainframeSymlinkInspection?
     @Published private(set) var rootError: String?
     @Published private(set) var lifecycleMessage: String?
+    @Published private(set) var filesystemMessage: String?
     @Published private(set) var quickOpenEntries: [MainframeExplorerNode] = []
     @Published private(set) var quickOpenTruncated = false
     @Published private(set) var isIndexing = false
@@ -75,6 +76,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     private let lifecycleScanner = MainframeLifecycleScanner()
     private var indexGeneration = UUID()
     private var directoryWatchers: [String: MainframeExplorerDirectoryWatcher] = [:]
+    private var selectedFileWatcher: MainframeExplorerDirectoryWatcher?
     private var pendingDirectoryRefreshes: [String: Task<Void, Never>] = [:]
     private var pendingIndexRefresh: Task<Void, Never>?
 
@@ -141,6 +143,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         for task in pendingDirectoryRefreshes.values { task.cancel() }
         pendingDirectoryRefreshes = [:]
         directoryWatchers = [:]
+        selectedFileWatcher = nil
         root = normalized
         rootNodes = []
         childrenByDirectory = [:]
@@ -151,6 +154,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         symlinkInspection = nil
         rootError = nil
         lifecycleMessage = nil
+        filesystemMessage = nil
         quickOpenEntries = []
         quickOpenTruncated = false
         isIndexing = false
@@ -201,6 +205,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
 
     func select(_ node: MainframeExplorerNode, recordHistory: Bool = true) {
         guard navigationAllowed(to: node.relativePath) else { return }
+        selectedFileWatcher = nil
         selectedNode = node
         if recordHistory {
             history.visit(node.relativePath)
@@ -229,6 +234,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
                 documentMessage = error.localizedDescription
             }
         case .file:
+            watchSelectedFile(node)
             do {
                 let text = try scanner.readUTF8Text(root: root, file: node.url)
                 documentText = text
@@ -448,12 +454,15 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
                 ? try scanner.rootChildren(root: root)
                 : try scanner.children(root: root, directory: directoryURL)
             cache(nodes, forDirectoryPath: path)
+            filesystemMessage = nil
             if path.isEmpty {
                 rootNodes = nodes
                 rootError = nil
             }
             reconcileSelectedFileAfterFilesystemChange(inDirectoryPath: path)
         } catch {
+            let label = path.isEmpty ? "MainFrame root" : path
+            filesystemMessage = "Explorer could not refresh \(label): \(error.localizedDescription)"
             if path.isEmpty {
                 rootError = error.localizedDescription
             }
@@ -511,6 +520,18 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         }
     }
 
+    private func watchSelectedFile(_ node: MainframeExplorerNode) {
+        guard node.kind == .file else { return }
+        let parentPath = MainframeExplorerFilesystemFreshness
+            .containingDirectoryPath(for: node.relativePath)
+
+        selectedFileWatcher = MainframeExplorerDirectoryWatcher(url: node.url) { [weak self] in
+            Task { @MainActor in
+                self?.scheduleDirectoryRefresh(path: parentPath)
+            }
+        }
+    }
+
     private func removeCachedSubtree(rootPath: String) {
         let prefix = rootPath + "/"
 
@@ -543,6 +564,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         guard selectedParent == path else { return }
 
         guard let refreshedNode = nodesByPath[selectedNode.relativePath] else {
+            selectedFileWatcher = nil
             documentMessage = "The selected file changed on disk and is no longer present at this path."
             documentText = nil
             symlinkInspection = nil
@@ -826,6 +848,16 @@ struct MainframeExplorerSidebarView: View {
                     }
                     .padding(.vertical, 8)
                 }
+            }
+
+            if let message = explorer.filesystemMessage {
+                Divider().overlay(palette.line)
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(10)
+                    .accessibilityLabel("Explorer filesystem refresh note")
             }
 
             if let message = explorer.lifecycleMessage {
