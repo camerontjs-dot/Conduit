@@ -1,8 +1,35 @@
 #if os(macOS)
 import AppKit
 import ConduitCore
+import Darwin
+import Dispatch
 import Foundation
 import SwiftUI
+
+private final class MainframeExplorerDirectoryWatcher {
+    private let source: DispatchSourceFileSystemObject
+
+    init?(url: URL, onChange: @escaping @Sendable () -> Void) {
+        let descriptor = open(url.standardizedFileURL.path, O_EVTONLY)
+        guard descriptor >= 0 else { return nil }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor,
+            eventMask: [.write, .delete, .rename, .attrib, .extend, .link, .revoke],
+            queue: DispatchQueue.global(qos: .utility)
+        )
+        source.setEventHandler(handler: onChange)
+        source.setCancelHandler {
+            close(descriptor)
+        }
+        source.resume()
+        self.source = source
+    }
+
+    deinit {
+        source.cancel()
+    }
+}
 
 /// Workspace-local state for MainFrame Explorer.
 ///
@@ -47,6 +74,9 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     private let scanner = MainframeExplorerScanner()
     private let lifecycleScanner = MainframeLifecycleScanner()
     private var indexGeneration = UUID()
+    private var directoryWatchers: [String: MainframeExplorerDirectoryWatcher] = [:]
+    private var pendingDirectoryRefreshes: [String: Task<Void, Never>] = [:]
+    private var pendingIndexRefresh: Task<Void, Never>?
 
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
@@ -106,6 +136,11 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         if root?.standardizedFileURL == normalized { return }
 
         indexGeneration = UUID()
+        pendingIndexRefresh?.cancel()
+        pendingIndexRefresh = nil
+        for task in pendingDirectoryRefreshes.values { task.cancel() }
+        pendingDirectoryRefreshes = [:]
+        directoryWatchers = [:]
         root = normalized
         rootNodes = []
         childrenByDirectory = [:]
@@ -329,12 +364,19 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         }
 
         expandAncestors(of: relativePath, root: root)
+
+        // A cache miss is not authoritative. Re-read only the smallest
+        // containing directory before reporting the path as missing.
+        let containingPath = MainframeExplorerFilesystemFreshness
+            .containingDirectoryPath(for: relativePath)
+        refreshDirectory(path: containingPath)
+
         if let discovered = nodesByPath[relativePath] {
             select(discovered, recordHistory: recordHistory)
         } else {
             documentText = nil
             symlinkInspection = nil
-            documentMessage = "The requested path is no longer present in the current scan."
+            documentMessage = "The requested path is not present on disk after refreshing its containing directory."
         }
     }
 
@@ -346,11 +388,15 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         for component in parts.dropLast() {
             let currentPath = parentPath.isEmpty ? component : "\(parentPath)/\(component)"
             if nodesByPath[currentPath] == nil {
-                loadDirectory(path: parentPath, root: root)
+                // Recover newly created intermediate directories one level at
+                // a time without rebuilding unrelated parts of the tree.
+                refreshDirectory(path: parentPath)
             }
             if let node = nodesByPath[currentPath], node.kind == .directory {
                 loadChildrenIfNeeded(for: node)
                 expandedPaths.insert(currentPath)
+            } else {
+                return
             }
             parentPath = currentPath
         }
@@ -385,11 +431,176 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         }
     }
 
+    private func refreshDirectory(path: String) {
+        guard let root else { return }
+
+        let directoryURL: URL
+        if path.isEmpty {
+            directoryURL = root
+        } else if let known = nodesByPath[path], known.kind == .directory {
+            directoryURL = known.url
+        } else {
+            directoryURL = root.appendingPathComponent(path, isDirectory: true)
+        }
+
+        do {
+            let nodes = path.isEmpty
+                ? try scanner.rootChildren(root: root)
+                : try scanner.children(root: root, directory: directoryURL)
+            cache(nodes, forDirectoryPath: path)
+            if path.isEmpty {
+                rootNodes = nodes
+                rootError = nil
+            }
+            reconcileSelectedFileAfterFilesystemChange(inDirectoryPath: path)
+        } catch {
+            if path.isEmpty {
+                rootError = error.localizedDescription
+            }
+        }
+    }
+
+    private func scheduleDirectoryRefresh(path: String) {
+        pendingDirectoryRefreshes[path]?.cancel()
+        pendingDirectoryRefreshes[path] = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 160_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.pendingDirectoryRefreshes[path] = nil
+            self.refreshDirectory(path: path)
+            self.scheduleQuickOpenRefresh()
+        }
+    }
+
+    private func scheduleQuickOpenRefresh() {
+        guard let root else { return }
+        pendingIndexRefresh?.cancel()
+        pendingIndexRefresh = Task { [weak self] in
+            do {
+                // Coalesce ordinary create/modify/rename bursts into one
+                // bounded full-index refresh. Slice 6 may replace this with a
+                // more incremental strategy after workload evidence.
+                try await Task.sleep(nanoseconds: 750_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.pendingIndexRefresh = nil
+            self.buildQuickOpenIndex(root: root)
+        }
+    }
+
+    private func watchDirectoryIfNeeded(path: String) {
+        guard directoryWatchers[path] == nil, let root else { return }
+        let url: URL
+        if path.isEmpty {
+            url = root
+        } else if let node = nodesByPath[path], node.kind == .directory {
+            url = node.url
+        } else {
+            return
+        }
+
+        directoryWatchers[path] = MainframeExplorerDirectoryWatcher(url: url) { [weak self] in
+            Task { @MainActor in
+                self?.scheduleDirectoryRefresh(path: path)
+            }
+        }
+    }
+
+    private func removeCachedSubtree(rootPath: String) {
+        let prefix = rootPath + "/"
+
+        let nodeKeys = nodesByPath.keys.filter {
+            $0 == rootPath || $0.hasPrefix(prefix)
+        }
+        for key in nodeKeys {
+            nodesByPath.removeValue(forKey: key)
+        }
+
+        let directoryKeys = childrenByDirectory.keys.filter {
+            $0 == rootPath || $0.hasPrefix(prefix)
+        }
+        for key in directoryKeys {
+            childrenByDirectory.removeValue(forKey: key)
+            directoryWatchers.removeValue(forKey: key)
+            pendingDirectoryRefreshes[key]?.cancel()
+            pendingDirectoryRefreshes.removeValue(forKey: key)
+        }
+
+        expandedPaths = Set(expandedPaths.filter {
+            $0 != rootPath && !$0.hasPrefix(prefix)
+        })
+    }
+
+    private func reconcileSelectedFileAfterFilesystemChange(inDirectoryPath path: String) {
+        guard let selectedNode else { return }
+        let selectedParent = MainframeExplorerFilesystemFreshness
+            .containingDirectoryPath(for: selectedNode.relativePath)
+        guard selectedParent == path else { return }
+
+        guard let refreshedNode = nodesByPath[selectedNode.relativePath] else {
+            documentMessage = "The selected file changed on disk and is no longer present at this path."
+            documentText = nil
+            symlinkInspection = nil
+            if Self.isMarkdown(selectedNode) {
+                editor.noteExternalChange(
+                    "The selected Markdown file was removed or renamed on disk. Your buffer is preserved."
+                )
+            }
+            return
+        }
+
+        self.selectedNode = refreshedNode
+        guard refreshedNode.kind == .file else { return }
+
+        do {
+            let source = try scanner.readUTF8Text(root: root!, file: refreshedNode.url)
+            if Self.isMarkdown(refreshedNode),
+               editor.relativePath == refreshedNode.relativePath,
+               let baseline = editor.baseline,
+               source != baseline {
+                if editor.hasUnsavedChanges {
+                    editor.noteExternalChange()
+                } else {
+                    editor.refreshCleanBufferFromDisk(source)
+                    documentText = source
+                    documentMessage = nil
+                }
+            } else if !Self.isMarkdown(refreshedNode), source != documentText {
+                documentText = source
+                documentMessage = "Reloaded after an external file change."
+            }
+        } catch {
+            if Self.isMarkdown(refreshedNode), editor.hasUnsavedChanges {
+                editor.noteExternalChange(
+                    "The selected file changed on disk and can no longer be read as the original UTF-8 document. Your buffer is preserved."
+                )
+            } else {
+                documentText = nil
+                documentMessage = "The selected file changed on disk: \(error.localizedDescription)"
+            }
+        }
+    }
+
     private func cache(_ nodes: [MainframeExplorerNode], forDirectoryPath path: String) {
+        let previous = childrenByDirectory[path] ?? []
+        let staleRoots = MainframeExplorerFilesystemFreshness.staleSubtreeRoots(
+            previous: previous,
+            current: nodes
+        )
+        for staleRoot in staleRoots {
+            removeCachedSubtree(rootPath: staleRoot)
+        }
+
         childrenByDirectory[path] = nodes
         for node in nodes {
             nodesByPath[node.relativePath] = node
         }
+        watchDirectoryIfNeeded(path: path)
     }
 
     private func buildQuickOpenIndex(root: URL) {
