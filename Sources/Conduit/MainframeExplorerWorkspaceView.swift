@@ -10,7 +10,9 @@ private final class MainframeExplorerDirectoryWatcher {
     private let source: DispatchSourceFileSystemObject
 
     init?(url: URL, onChange: @escaping @Sendable () -> Void) {
-        let descriptor = open(url.standardizedFileURL.path, O_EVTONLY)
+        let descriptor = url.standardizedFileURL.path.withCString { path in
+            Darwin.open(path, O_EVTONLY)
+        }
         guard descriptor >= 0 else { return nil }
 
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -578,6 +580,10 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
 
         self.selectedNode = refreshedNode
         guard refreshedNode.kind == .file else { return }
+        // Atomic replacements can invalidate the watched inode while keeping
+        // the same path. Re-arm the selected-file watcher against the current
+        // filesystem object after each parent reconciliation.
+        watchSelectedFile(refreshedNode)
 
         do {
             let source = try scanner.readUTF8Text(root: root, file: refreshedNode.url)
