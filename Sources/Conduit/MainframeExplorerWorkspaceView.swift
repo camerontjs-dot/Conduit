@@ -537,7 +537,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     }
 
     private func reconcileSelectedFileAfterFilesystemChange(inDirectoryPath path: String) {
-        guard let selectedNode else { return }
+        guard let root, let selectedNode else { return }
         let selectedParent = MainframeExplorerFilesystemFreshness
             .containingDirectoryPath(for: selectedNode.relativePath)
         guard selectedParent == path else { return }
@@ -558,7 +558,7 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         guard refreshedNode.kind == .file else { return }
 
         do {
-            let source = try scanner.readUTF8Text(root: root!, file: refreshedNode.url)
+            let source = try scanner.readUTF8Text(root: root, file: refreshedNode.url)
             if Self.isMarkdown(refreshedNode),
                editor.relativePath == refreshedNode.relativePath,
                let baseline = editor.baseline,
