@@ -146,6 +146,81 @@ final class MainframeExplorerTests: XCTestCase {
         }
     }
 
+    func testDirectoryRescanReflectsCreateRenameAndDeleteAfterInitialListing() throws {
+        try withRoot { root in
+            let directory = try mkdir(root, "30_projects/demo")
+            let scanner = MainframeExplorerScanner()
+
+            XCTAssertTrue(try scanner.children(root: root, directory: directory).isEmpty)
+
+            _ = try write(root, "30_projects/demo/new.md", "new")
+            XCTAssertEqual(
+                try scanner.children(root: root, directory: directory).map(\.name),
+                ["new.md"]
+            )
+
+            try fm.moveItem(
+                at: root.appendingPathComponent("30_projects/demo/new.md"),
+                to: root.appendingPathComponent("30_projects/demo/renamed.md")
+            )
+            XCTAssertEqual(
+                try scanner.children(root: root, directory: directory).map(\.name),
+                ["renamed.md"]
+            )
+
+            try fm.removeItem(at: root.appendingPathComponent("30_projects/demo/renamed.md"))
+            XCTAssertTrue(try scanner.children(root: root, directory: directory).isEmpty)
+        }
+    }
+
+    func testFreshnessContainingDirectoryUsesSmallestParent() {
+        XCTAssertEqual(
+            MainframeExplorerFilesystemFreshness.containingDirectoryPath(
+                for: "30_projects/demo/artifacts/report.pdf"
+            ),
+            "30_projects/demo/artifacts"
+        )
+        XCTAssertEqual(
+            MainframeExplorerFilesystemFreshness.containingDirectoryPath(for: "README.md"),
+            ""
+        )
+    }
+
+    func testFreshnessInvalidatesRemovedAndDirectoryToFileSubtreesOnly() {
+        func node(_ path: String, _ kind: MainframeExplorerNodeKind) -> MainframeExplorerNode {
+            MainframeExplorerNode(
+                name: URL(fileURLWithPath: path).lastPathComponent,
+                relativePath: path,
+                url: URL(fileURLWithPath: "/mf").appendingPathComponent(path),
+                kind: kind,
+                zone: .projects,
+                recordScope: nil
+            )
+        }
+
+        let previous = [
+            node("30_projects/demo/kept", .directory),
+            node("30_projects/demo/replaced", .directory),
+            node("30_projects/demo/deleted.md", .file),
+        ]
+        let current = [
+            node("30_projects/demo/kept", .directory),
+            node("30_projects/demo/replaced", .file),
+            node("30_projects/demo/created.md", .file),
+        ]
+
+        XCTAssertEqual(
+            MainframeExplorerFilesystemFreshness.staleSubtreeRoots(
+                previous: previous,
+                current: current
+            ),
+            [
+                "30_projects/demo/deleted.md",
+                "30_projects/demo/replaced",
+            ]
+        )
+    }
+
     func testQuickOpenRanksExactNameBeforePathOnlyHit() {
         let exact = MainframeExplorerNode(name: "README.md", relativePath: "30_projects/cal/README.md", url: URL(fileURLWithPath: "/tmp/a"), kind: .file, zone: .projects, recordScope: nil)
         let prefix = MainframeExplorerNode(name: "README-notes.md", relativePath: "10_knowledge/README-notes.md", url: URL(fileURLWithPath: "/tmp/b"), kind: .file, zone: .knowledge, recordScope: nil)
