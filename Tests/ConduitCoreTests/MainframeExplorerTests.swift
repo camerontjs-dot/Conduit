@@ -246,6 +246,18 @@ final class MainframeExplorerTests: XCTestCase {
         }
     }
 
+    func testReaderObservesExternalReplacementOnSubsequentRead() throws {
+        try withRoot { root in
+            let file = try write(root, "10_knowledge/note.md", "before")
+            let scanner = MainframeExplorerScanner()
+            XCTAssertEqual(try scanner.readUTF8Text(root: root, file: file), "before")
+
+            try "after".write(to: file, atomically: true, encoding: .utf8)
+
+            XCTAssertEqual(try scanner.readUTF8Text(root: root, file: file), "after")
+        }
+    }
+
     func testReaderRejectsSymlinkAndOutsidePath() throws {
         try withRoot { root in
             let outside = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
