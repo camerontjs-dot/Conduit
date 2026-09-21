@@ -185,6 +185,27 @@ final class ProviderOrchestrationStateTests: XCTestCase {
         XCTAssertNotEqual(shell.transport, agent.transport)
     }
 
+    func testProviderTurnStateCoversEveryDeclaredLifecycleCase() throws {
+        let states: [ProviderTurnState] = [
+            .queued,
+            .accepted,
+            .active,
+            .awaitingInput,
+            .completed,
+            .cancelled,
+            .failed,
+            .ambiguous,
+        ]
+
+        XCTAssertEqual(states.count, 8)
+        XCTAssertEqual(Set(states.map(\\.rawValue)).count, 8)
+
+        for state in states {
+            let data = try JSONEncoder().encode(state)
+            XCTAssertEqual(try JSONDecoder().decode(ProviderTurnState.self, from: data), state)
+        }
+    }
+
     func testProviderCompletionAndObjectiveAcceptanceRemainIndependent() {
         let turn = ProviderTurnLineage(
             turnID: .known("turn-1"),
