@@ -1551,3 +1551,52 @@ decision makes no claim about its publisher or resolution.
    rewriting the append-only log, hiding persistence failures, moving provider
    completion authority into the catalog, or optimizing the sidebar while
    retaining a per-fragment AppModel publication.
+
+
+## D-050: Provider supervision uses explicit lineage, authority, and preflight state
+
+**Status:** Proposed (2026-09-20)
+
+**Context:** The durable-session pressure test in #52 showed that the current
+task/session vocabulary cannot represent several states without overloading
+them: an externally created provider session may have no Conduit task binding;
+one provider session may use different models on different turns; a provider
+turn may complete while objective acceptance remains pending; PTY input is not
+the same thing as an agent prompt; provider persistence and live process state
+may disagree; and a lifecycle verb such as close can mean detach on one backend
+and stop on another.
+
+**Decision:**
+
+1. WorkerLineage is the provider-neutral supervision read model. Conduit task
+   identity, runtime attempt, provider host, provider session/thread, provider
+   turns, process lineage, workspace identity, writer/controller identity, and
+   terminal/verification/acceptance state are distinct fields.
+2. Missing facts use OrchestrationValue.unknown. A caller may not obtain a
+   convenient default by borrowing authority from another layer.
+3. Model/provider identity is turn-scoped. A durable provider session is not
+   assigned one timeless model merely because a previous turn used it.
+4. Delivery records distinguish shell_stdin, agent_prompt, and
+   structured_message, with queued/accepted/active/completed/cancelled/failed
+   and ambiguous turn state kept separate from objective acceptance.
+5. LifecyclePreflight describes the operation target, support level,
+   provider-stop and slot-release consequences, recoverability, resume handle,
+   process scope, known descendants, side effects, and unsupported or unknown
+   consequences before mutation.
+6. Provider-specific state remains namespaced and JSON-typed rather than being
+   flattened into shared string fields.
+7. Observation authority and freshness are first-class data. These types are
+   descriptive only in this slice; provider discovery, writer leasing, lifecycle
+   mutation, and process reconciliation are later #53 slices.
+
+**Consequences:** Conduit gains a common state vocabulary capable of expressing
+the #52 pressure-test cases without inventing ownership or success. Later
+provider adapters can project into the shared model while preserving their own
+semantics. This slice changes no CAL/Apparatus contract semantics and does not
+itself discover, adopt, interrupt, stop, or resume provider sessions.
+
+**Rejected alternatives:** Reusing Conduit task identity as provider-session
+identity; storing one session-level model; representing unknown as nil plus
+caller convention; flattening provider-specific state to strings; calling PTY
+writes agent prompts; or mapping an unsupported lifecycle operation to the
+nearest available destructive action.

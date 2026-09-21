@@ -3346,6 +3346,153 @@ do {
     )
 }
 
+// MARK: - Provider orchestration state boundary (#53)
+
+let orchestrationObservation = SupervisionObservationStamp(
+    authority: .providerObserved,
+    freshness: .current,
+    observedAt: .known(Date(timeIntervalSince1970: 1_799_956_800))
+)
+let orchestrationUnknownWorkspace = WorkerWorkspaceLineage(
+    projectSlug: .unknown,
+    cwd: .unknown,
+    repositoryRoot: .unknown,
+    worktree: .unknown
+)
+let orchestrationUnknownProcess = WorkerProcessLineage(
+    launcherPID: .unknown,
+    processGroupID: .unknown,
+    parentPID: .unknown
+)
+let orchestrationUnfinished = WorkerTerminalState(
+    receipt: .unknown,
+    verification: .notPerformed,
+    objectiveAcceptance: .pending
+)
+let discoveredExternalWorker = WorkerLineage(
+    conduitTaskID: .unknown,
+    runtimeAttemptID: .unknown,
+    runtime: .known("OpenCode"),
+    adapter: .known("http-server"),
+    providerHostID: .unknown,
+    providerSessionID: .known("ses_external_fixture"),
+    turns: [],
+    workspace: orchestrationUnknownWorkspace,
+    process: orchestrationUnknownProcess,
+    origin: .externalProviderClient,
+    relationship: .discovered,
+    writerControllerID: .unknown,
+    terminal: orchestrationUnfinished,
+    observation: orchestrationObservation,
+    providerSpecific: .known(
+        ProviderSpecificPayload(
+            namespace: "opencode",
+            value: .object([
+                "status": .string("historical"),
+                "active": .bool(false),
+            ])
+        )
+    )
+)
+check(
+    "discovered provider session does not invent a Conduit binding",
+    discoveredExternalWorker.providerSessionID.value == "ses_external_fixture"
+        && discoveredExternalWorker.conduitTaskID.state == .unknown
+        && discoveredExternalWorker.runtimeAttemptID.state == .unknown
+        && discoveredExternalWorker.relationship == .discovered
+)
+let firstProviderTurn = ProviderTurnLineage(
+    turnID: .known("turn-1"),
+    state: .completed,
+    model: .known(
+        ProviderModelIdentity(providerID: "xai", modelID: "grok-fixture")
+    ),
+    observation: orchestrationObservation
+)
+let secondProviderTurn = ProviderTurnLineage(
+    turnID: .known("turn-2"),
+    state: .active,
+    model: .known(
+        ProviderModelIdentity(providerID: "opencode", modelID: "muse-fixture")
+    ),
+    observation: orchestrationObservation
+)
+check(
+    "provider model identity remains turn-scoped",
+    firstProviderTurn.model.value?.providerID == "xai"
+        && secondProviderTurn.model.value?.providerID == "opencode"
+        && firstProviderTurn.model != secondProviderTurn.model
+)
+let unknownOrchestrationValue: OrchestrationValue<String> = .unknown
+let unknownOrchestrationData = try! JSONEncoder().encode(unknownOrchestrationValue)
+check(
+    "orchestration UNKNOWN survives serialization",
+    (try? JSONDecoder().decode(
+        OrchestrationValue<String>.self,
+        from: unknownOrchestrationData
+    )) == unknownOrchestrationValue
+)
+let shellInputDelivery = PromptDeliveryRecord(
+    eventID: .known("shell-event"),
+    transport: .shellStdin,
+    state: .accepted,
+    contentDigest: .known("a"),
+    queuedBehindActiveTurn: .known(false),
+    providerTurnID: .unknown
+)
+let queuedAgentDelivery = PromptDeliveryRecord(
+    eventID: .known("agent-event"),
+    transport: .agentPrompt,
+    state: .queued,
+    contentDigest: .known("b"),
+    queuedBehindActiveTurn: .known(true),
+    providerTurnID: .unknown
+)
+check(
+    "shell stdin stays distinct from queued agent prompt delivery",
+    shellInputDelivery.transport == .shellStdin
+        && queuedAgentDelivery.transport == .agentPrompt
+        && queuedAgentDelivery.state == .queued
+        && queuedAgentDelivery.queuedBehindActiveTurn.value == true
+)
+let completedProviderTurn = ProviderTurnLineage(
+    turnID: .known("turn-complete"),
+    state: .completed,
+    model: .unknown,
+    observation: orchestrationObservation
+)
+check(
+    "provider completion does not imply objective acceptance",
+    completedProviderTurn.state == .completed
+        && orchestrationUnfinished.objectiveAcceptance == .pending
+        && orchestrationUnfinished.verification == .notPerformed
+)
+let unsupportedRelease = LifecyclePreflight(
+    operation: .releaseSupervision,
+    target: LifecycleTarget(
+        kind: .session,
+        identifier: .known("ses-provider")
+    ),
+    support: .unsupported,
+    willStopProvider: .unknown,
+    willReleaseSlot: .unknown,
+    recoverableAfterward: .unknown,
+    exactResumeHandle: .known("ses-provider"),
+    expectedProcessScope: .unknown,
+    knownDescendantPIDs: .unknown,
+    sideEffects: .unknown,
+    unsupportedConsequences: .known([
+        "provider does not expose release-with-host-continuing"
+    ]),
+    observation: orchestrationObservation
+)
+check(
+    "unsupported lifecycle consequence remains explicit",
+    unsupportedRelease.support == .unsupported
+        && unsupportedRelease.willStopProvider.state == .unknown
+        && unsupportedRelease.unsupportedConsequences.value?.count == 1
+)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

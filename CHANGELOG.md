@@ -27,6 +27,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- A versioned provider-supervision state model now keeps Conduit task/runtime
+  binding, provider host, provider session/thread, provider turn, process
+  lineage, writer identity, delivery, verification, and objective acceptance as
+  separate facts. Unknown observations remain explicit, model identity is
+  turn-scoped, provider-specific payloads retain typed namespaced JSON, and
+  lifecycle preflight can describe unsupported consequences without mapping
+  them to a different operation (#53).
+
+
 - MainFrame Explorer now has a lexical file/path filter and semantic pixel glyphs
   for lifecycle roots, project/operation scopes, source, tests, docs, assets,
   configuration, generated/dependency material, scripts, common file classes,
