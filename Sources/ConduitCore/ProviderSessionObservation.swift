@@ -61,7 +61,7 @@ public enum ProviderSessionObservationError: Error, Equatable, LocalizedError {
 
 /// Read-only OpenCode persistence observer.
 ///
-/// OpenCode session-list/export are provider persistence surfaces. They are
+/// OpenCode persistence snapshots are provider-observation surfaces. They are
 /// useful for exact session identity, workspace metadata, and persisted message
 /// lineage, but they are not OS/process authority. In particular, an
 /// incomplete persisted message is represented as AMBIGUOUS, never promoted to
@@ -152,7 +152,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         return try Self.lineage(
             session: info,
             messages: messages,
-            source: "session_export",
+            source: "persistence_snapshot",
             observedAt: now(),
             binding: binding
         )
@@ -180,9 +180,12 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         )
 
         let turns = messages.compactMap { message -> ProviderTurnLineage? in
-            guard let info = message["info"],
-                  info["role"]?.stringValue == "assistant"
-            else {
+            // SQLite persistence rows are already projected to message-info
+            // fields. Retain compatibility with the older export-shaped
+            // fixture wrapper while treating the flat persistence shape as
+            // canonical for this observation path.
+            let info = message["info"] ?? message
+            guard info["role"]?.stringValue == "assistant" else {
                 return nil
             }
 
@@ -253,7 +256,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
                 .known($0)
             } ?? .unknown,
             runtime: .known("opencode"),
-            adapter: .known("opencode_cli_persistence"),
+            adapter: .known("opencode_sqlite_snapshot"),
             providerHostID: .unknown,
             providerSessionID: .known(sessionID),
             turns: turns,
