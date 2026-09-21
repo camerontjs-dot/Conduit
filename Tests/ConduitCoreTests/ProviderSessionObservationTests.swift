@@ -58,6 +58,9 @@ final class ProviderSessionObservationTests: XCTestCase {
     }
 
     private func exportedSession() -> CodexJSON {
+        // Mirrors the SQLite observation transport: session metadata is under
+        // "info", while message rows are flat projections of persisted message
+        // info rather than provider-export wrappers.
         json(
             #"""
             {
@@ -73,47 +76,29 @@ final class ProviderSessionObservationTests: XCTestCase {
               },
               "messages": [
                 {
-                  "info": {
-                    "id": "msg_user_1",
-                    "sessionID": "ses_external",
-                    "role": "user",
-                    "time": {"created": 1796991000000}
-                  },
-                  "parts": []
+                  "id": "msg_user_1",
+                  "sessionID": "ses_external",
+                  "role": "user",
+                  "time": {"created": 1796991000000}
                 },
                 {
-                  "info": {
-                    "id": "msg_assistant_1",
-                    "sessionID": "ses_external",
-                    "role": "assistant",
-                    "time": {
-                      "created": 1796991001000,
-                      "completed": 1796991009000
-                    },
-                    "providerID": "xai",
-                    "modelID": "grok-4.20-0309-non-reasoning"
+                  "id": "msg_assistant_1",
+                  "sessionID": "ses_external",
+                  "role": "assistant",
+                  "time": {
+                    "created": 1796991001000,
+                    "completed": 1796991009000
                   },
-                  "parts": []
+                  "providerID": "xai",
+                  "modelID": "grok-4.20-0309-non-reasoning"
                 },
                 {
-                  "info": {
-                    "id": "msg_assistant_2",
-                    "sessionID": "ses_external",
-                    "role": "assistant",
-                    "time": {"created": 1796992001000},
-                    "providerID": "ollama",
-                    "modelID": "qwen3.5:9b"
-                  },
-                  "parts": [
-                    {
-                      "id": "prt_tool",
-                      "type": "tool",
-                      "state": {
-                        "status": "running",
-                        "input": {}
-                      }
-                    }
-                  ]
+                  "id": "msg_assistant_2",
+                  "sessionID": "ses_external",
+                  "role": "assistant",
+                  "time": {"created": 1796992001000},
+                  "providerID": "ollama",
+                  "modelID": "qwen3.5:9b"
                 }
               ]
             }
@@ -151,7 +136,7 @@ final class ProviderSessionObservationTests: XCTestCase {
         let worker = try XCTUnwrap(try observer.listSessions().first)
         XCTAssertEqual(worker.providerSessionID.value, "ses_external")
         XCTAssertEqual(worker.runtime.value, "opencode")
-        XCTAssertEqual(worker.adapter.value, "opencode_cli_persistence")
+        XCTAssertEqual(worker.adapter.value, "opencode_sqlite_snapshot")
         XCTAssertEqual(worker.providerHostID.state, .unknown)
         XCTAssertEqual(worker.process.launcherPID.state, .unknown)
         XCTAssertEqual(worker.process.processGroupID.state, .unknown)
