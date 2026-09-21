@@ -4038,12 +4038,6 @@ final class AppModel: ObservableObject {
     }
 
     private func sessionAPIOpenCodeObserver() -> OpenCodeProviderSessionObserver? {
-        let configured = settings.agents.first { profile in
-            profile.commandBasename == "opencode"
-                || profile.name.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-                ).lowercased() == "opencode"
-        }
         // Observation reads OpenCode persistence directly from a disposable
         // SQLite snapshot. It must not resolve or launch the OpenCode CLI,
         // because provider startup may apply persistence migrations.
