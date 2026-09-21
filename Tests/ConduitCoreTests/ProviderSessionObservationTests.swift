@@ -96,7 +96,10 @@ final class ProviderSessionObservationTests: XCTestCase {
                   "id": "msg_assistant_2",
                   "sessionID": "ses_external",
                   "role": "assistant",
-                  "time": {"created": 1796992001000},
+                  "time": {
+                    "created": 1796992001000,
+                    "completed": null
+                  },
                   "providerID": "ollama",
                   "modelID": "qwen3.5:9b"
                 }
