@@ -113,6 +113,40 @@ public struct MainframeExplorerIndex: Sendable {
     }
 }
 
+public enum MainframeExplorerFilesystemFreshness {
+    /// The smallest containing directory that must be re-read before an exact
+    /// relative-path miss can be treated as authoritative.
+    public static func containingDirectoryPath(for relativePath: String) -> String {
+        let parts = relativePath
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard parts.count > 1 else { return "" }
+        return parts.dropLast().joined(separator: "/")
+    }
+
+    /// Direct children that disappeared, or stopped being directories, are
+    /// subtree invalidation roots. Callers can remove only those cached
+    /// descendants instead of rebuilding the entire Explorer tree.
+    public static func staleSubtreeRoots(
+        previous: [MainframeExplorerNode],
+        current: [MainframeExplorerNode]
+    ) -> [String] {
+        let currentByPath = Dictionary(
+            uniqueKeysWithValues: current.map { ($0.relativePath, $0) }
+        )
+        return previous.compactMap { oldNode in
+            guard let newNode = currentByPath[oldNode.relativePath] else {
+                return oldNode.relativePath
+            }
+            if oldNode.kind == .directory, newNode.kind != .directory {
+                return oldNode.relativePath
+            }
+            return nil
+        }
+        .sorted()
+    }
+}
+
 /// Factual classification for a selected symbolic-link target. This does not
 /// authorize traversal; ordinary Explorer scans continue to treat links as
 /// leaves.

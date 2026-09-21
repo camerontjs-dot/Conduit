@@ -52,6 +52,23 @@ final class MainframeMarkdownEditingSession: ObservableObject {
         statusMessage = "Save or discard the current edit before navigating away."
     }
 
+    func noteExternalChange(_ message: String? = nil) {
+        hasConflict = true
+        statusMessage = message
+            ?? "The file changed on disk while it was open. Your buffer is preserved; reload before saving."
+    }
+
+    func refreshCleanBufferFromDisk(_ source: String) {
+        guard !hasUnsavedChanges else {
+            noteExternalChange()
+            return
+        }
+        buffer = source
+        baseline = source
+        hasConflict = false
+        statusMessage = "Reloaded after an external file change."
+    }
+
     @discardableResult
     func save(root: URL, file: URL) -> Bool {
         guard let baseline, let absolutePath else {
