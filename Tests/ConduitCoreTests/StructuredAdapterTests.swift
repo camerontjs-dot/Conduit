@@ -52,6 +52,19 @@ final class StructuredAdapterTests: XCTestCase {
 
     func testSessionAPIListAdaptersIsReadOnly() {
         XCTAssertFalse(ConduitSessionAPI.isWrite(.listAdapters))
+        XCTAssertFalse(
+            ConduitSessionAPI.isWrite(
+                .listProviderSessions(provider: "opencode")
+            )
+        )
+        XCTAssertFalse(
+            ConduitSessionAPI.isWrite(
+                .observeWorker(
+                    provider: "opencode",
+                    providerSessionID: "ses_external"
+                )
+            )
+        )
         XCTAssertFalse(ConduitSessionAPI.isWrite(.listSessions(cursor: nil, limit: nil)))
     }
 
