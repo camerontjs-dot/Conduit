@@ -198,7 +198,7 @@ final class ProviderOrchestrationStateTests: XCTestCase {
         ]
 
         XCTAssertEqual(states.count, 8)
-        XCTAssertEqual(Set(states.map(\\.rawValue)).count, 8)
+        XCTAssertEqual(Set(states.map(\.rawValue)).count, 8)
 
         for state in states {
             let data = try JSONEncoder().encode(state)
