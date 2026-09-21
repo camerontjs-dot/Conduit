@@ -7,7 +7,7 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 11)
+        XCTAssertEqual(names.count, 13)
         XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 5)
     }
 
@@ -18,6 +18,40 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
         XCTAssertTrue((create["description"] as? String)?.contains("no model override") == true)
         XCTAssertTrue((create["description"] as? String)?.contains("always advertised") == true)
         XCTAssertTrue((create["description"] as? String)?.contains("enables Session API writes locally") == true)
+
+        let listProviders = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_list_provider_sessions")
+        )
+        let listSchema = try XCTUnwrap(
+            listProviders["inputSchema"] as? [String: Any]
+        )
+        XCTAssertEqual(listSchema["required"] as? [String], ["provider"])
+        XCTAssertTrue(
+            (listProviders["description"] as? String)?.contains(
+                "does not send input"
+            ) == true
+        )
+        XCTAssertTrue(
+            (listProviders["description"] as? String)?.contains(
+                "consume a live execution slot"
+            ) == true
+        )
+
+        let observe = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_observe_worker")
+        )
+        let observeSchema = try XCTUnwrap(
+            observe["inputSchema"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            observeSchema["required"] as? [String],
+            ["provider", "provider_session_id"]
+        )
+        XCTAssertTrue(
+            (observe["description"] as? String)?.contains(
+                "never adopts or controls"
+            ) == true
+        )
 
         let interrupt = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_interrupt"))
         let description = try XCTUnwrap(interrupt["description"] as? String)
