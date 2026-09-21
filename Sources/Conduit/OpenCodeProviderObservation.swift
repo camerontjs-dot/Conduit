@@ -184,7 +184,7 @@ struct OpenCodeCLIObservationTransport: OpenCodeProviderObservationTransport {
         let earlier = prior?.stderr
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let detail = [earlier, current]
-            .compactMap { value in
+            .compactMap { value -> String? in
                 guard let value, !value.isEmpty else { return nil }
                 return String(value.prefix(480))
             }
