@@ -2520,12 +2520,38 @@ final class AppModel: ObservableObject {
                 self.statusMessage = "Starting \(descriptor.agent.name) on \(backend.displayName)…"
                 if let failure = await runtime.startStructuredAdapterIfNeeded() {
                     runtime.stopStructuredAdapter()
-                    self.statusMessage =
-                        "\(descriptor.agent.name) \(backend.displayName) failed (\(failure)). Falling back to PTY."
-                    runtime.controller.preparePTYFallback()
-                    runtime.controller.startIfNeeded()
-                    if let issue = runtime.controller.launchIssue {
-                        self.errorMessage = issue.localizedDescription
+                    switch StructuredAdapterStartFailurePolicy.disposition(
+                        for: failure
+                    ) {
+                    case .failClosedWriterCollision:
+                        _ = self.appendTaskEvent(
+                            TaskSessionEvent(
+                                taskSessionID: taskSessionID,
+                                authority: .conduitRecorded,
+                                kind: .operationalStateChanged(
+                                    .runtimeProvisioningFailed(
+                                        runtimeAttemptID,
+                                        tmuxSessionName: nil,
+                                        reason: failure,
+                                        recoverable: true
+                                    )
+                                )
+                            )
+                        )
+                        self.statusMessage =
+                            "\(descriptor.agent.name) provider session is already controlled elsewhere; Conduit left the original session unchanged."
+                        self.errorMessage = failure
+                        self.mcpAdmission?.markTaskEnded(taskSessionID)
+                        self.removeSessionTab(runtime)
+                        return
+                    case .fallbackAllowed:
+                        self.statusMessage =
+                            "\(descriptor.agent.name) \(backend.displayName) failed (\(failure)). Falling back to PTY."
+                        runtime.controller.preparePTYFallback()
+                        runtime.controller.startIfNeeded()
+                        if let issue = runtime.controller.launchIssue {
+                            self.errorMessage = issue.localizedDescription
+                        }
                     }
                 } else {
                     self.statusMessage =
