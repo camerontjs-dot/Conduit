@@ -86,7 +86,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         let root = try transport.listSessionsJSON()
         guard case .array(let rows) = root else {
             throw ProviderSessionObservationError.malformedProviderResponse(
-                "OpenCode session list was not a JSON array"
+                "OpenCode persistence inventory was not a JSON array"
             )
         }
 
@@ -94,13 +94,13 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         return try rows.map { row in
             guard let sessionID = row["id"]?.stringValue, !sessionID.isEmpty else {
                 throw ProviderSessionObservationError.malformedProviderResponse(
-                    "OpenCode session list contained a row without an id"
+                    "OpenCode persistence inventory contained a row without an id"
                 )
             }
             return try Self.lineage(
                 session: row,
                 messages: [],
-                source: "session_list",
+                source: "persistence_inventory",
                 observedAt: observedAt,
                 binding: bindingResolver?(sessionID)
             )
@@ -122,12 +122,12 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         )
         guard let info = root["info"] else {
             throw ProviderSessionObservationError.malformedProviderResponse(
-                "OpenCode export did not contain info"
+                "OpenCode persistence snapshot did not contain session metadata"
             )
         }
         guard let observedID = info["id"]?.stringValue, !observedID.isEmpty else {
             throw ProviderSessionObservationError.malformedProviderResponse(
-                "OpenCode export info did not contain an id"
+                "OpenCode persistence snapshot session metadata did not contain an id"
             )
         }
         guard observedID == providerSessionID else {
@@ -141,7 +141,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         if let raw = root["messages"] {
             guard case .array(let rows) = raw else {
                 throw ProviderSessionObservationError.malformedProviderResponse(
-                    "OpenCode export messages was not a JSON array"
+                    "OpenCode persistence snapshot messages were not a JSON array"
                 )
             }
             messages = rows
