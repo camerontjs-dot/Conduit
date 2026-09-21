@@ -53,6 +53,54 @@ public enum ProviderSessionAuthorityDisposition: String, Codable, Equatable, Sen
     case writerCollision = "writer_collision"
 }
 
+/// Canonical provider-neutral control-plane failure vocabulary.
+///
+/// Provider adapters translate their native error language into these failures.
+/// Callers branch on the canonical code, never on provider-specific strings.
+public enum ProviderSessionAuthorityFailure {
+    public static let writerCollisionCode = "writer_collision"
+
+    public static func writerCollision(
+        providerID: String,
+        providerSessionID: String,
+        detail: String? = nil
+    ) -> String {
+        var message =
+            "\(writerCollisionCode): provider \(providerID) session "
+            + "\(providerSessionID) already has another active writer/controller"
+        if let detail = detail?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ),
+        !detail.isEmpty {
+            message += " [provider_detail: \(detail)]"
+        }
+        return message
+    }
+
+    public static func isWriterCollision(_ message: String) -> Bool {
+        let normalized = message.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).lowercased()
+        return normalized == writerCollisionCode
+            || normalized.hasPrefix(writerCollisionCode + ":")
+    }
+}
+
+public enum StructuredAdapterStartFailureDisposition: String, Codable, Equatable, Sendable {
+    case failClosedWriterCollision = "fail_closed_writer_collision"
+    case fallbackAllowed = "fallback_allowed"
+}
+
+public enum StructuredAdapterStartFailurePolicy {
+    public static func disposition(
+        for failure: String
+    ) -> StructuredAdapterStartFailureDisposition {
+        ProviderSessionAuthorityFailure.isWriterCollision(failure)
+            ? .failClosedWriterCollision
+            : .fallbackAllowed
+    }
+}
+
 /// Receipt for one explicit writer/adoption attempt.
 ///
 /// A collision receipt is evidence that the requested provider session still
