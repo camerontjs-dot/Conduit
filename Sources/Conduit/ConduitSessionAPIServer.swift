@@ -550,12 +550,18 @@ final class ConduitSessionAPIServer {
             "isError": payload["error"] != nil,
             "content": [["type": "text", "text": text]],
         ]
-        if [
+        let returnsStructuredContent = [
             "conduit_session_events",
             "conduit_list_provider_sessions",
             "conduit_observe_worker",
             "conduit_adopt_provider_session",
-        ].contains(name), payload["error"] == nil {
+        ].contains(name)
+        let isTypedAuthorityCollision =
+            name == "conduit_adopt_provider_session"
+                && payload["disposition"] as? String == "writer_collision"
+        if returnsStructuredContent
+            && (payload["error"] == nil || isTypedAuthorityCollision)
+        {
             result["structuredContent"] = payload
         }
         return result
