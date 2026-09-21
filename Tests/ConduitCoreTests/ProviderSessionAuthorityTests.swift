@@ -106,6 +106,60 @@ final class ProviderSessionAuthorityTests: XCTestCase {
         )
     }
 
+    private func assertStableLineageSemantics(
+        _ lhs: WorkerLineage,
+        _ rhs: WorkerLineage,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(lhs.schemaVersion, rhs.schemaVersion, file: file, line: line)
+        XCTAssertEqual(lhs.conduitTaskID, rhs.conduitTaskID, file: file, line: line)
+        XCTAssertEqual(lhs.runtimeAttemptID, rhs.runtimeAttemptID, file: file, line: line)
+        XCTAssertEqual(lhs.runtime, rhs.runtime, file: file, line: line)
+        XCTAssertEqual(lhs.adapter, rhs.adapter, file: file, line: line)
+        XCTAssertEqual(lhs.providerHostID, rhs.providerHostID, file: file, line: line)
+        XCTAssertEqual(lhs.providerSessionID, rhs.providerSessionID, file: file, line: line)
+        XCTAssertEqual(lhs.workspace, rhs.workspace, file: file, line: line)
+        XCTAssertEqual(lhs.process, rhs.process, file: file, line: line)
+        XCTAssertEqual(lhs.origin, rhs.origin, file: file, line: line)
+        XCTAssertEqual(lhs.relationship, rhs.relationship, file: file, line: line)
+        XCTAssertEqual(lhs.writerControllerID, rhs.writerControllerID, file: file, line: line)
+        XCTAssertEqual(lhs.terminal, rhs.terminal, file: file, line: line)
+        XCTAssertEqual(lhs.providerSpecific, rhs.providerSpecific, file: file, line: line)
+        XCTAssertEqual(
+            lhs.observation.authority,
+            rhs.observation.authority,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            lhs.observation.freshness,
+            rhs.observation.freshness,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(lhs.turns.count, rhs.turns.count, file: file, line: line)
+
+        for (left, right) in zip(lhs.turns, rhs.turns) {
+            XCTAssertEqual(left.turnID, right.turnID, file: file, line: line)
+            XCTAssertEqual(left.state, right.state, file: file, line: line)
+            XCTAssertEqual(left.model, right.model, file: file, line: line)
+            XCTAssertEqual(left.delivery, right.delivery, file: file, line: line)
+            XCTAssertEqual(
+                left.observation.authority,
+                right.observation.authority,
+                file: file,
+                line: line
+            )
+            XCTAssertEqual(
+                left.observation.freshness,
+                right.observation.freshness,
+                file: file,
+                line: line
+            )
+        }
+    }
+
     func testMultipleObserversDoNotAcquireWriterAuthority() throws {
         let observer = FakeObserver()
         let coordinator = coordinator(observer: observer)
@@ -464,7 +518,10 @@ final class ProviderSessionAuthorityTests: XCTestCase {
         let secondObservation = try coordinator.observeSession(
             providerSessionID: sessionID
         )
-        XCTAssertEqual(firstObservation.worker, secondObservation.worker)
+        assertStableLineageSemantics(
+            firstObservation.worker,
+            secondObservation.worker
+        )
         XCTAssertEqual(
             firstObservation.authority.conduitWriterState,
             .unclaimed
@@ -497,9 +554,9 @@ final class ProviderSessionAuthorityTests: XCTestCase {
             collision.receipt.recognizedControllerID.value,
             "qualification-controller-a"
         )
-        XCTAssertEqual(
-            accepted.observation.worker.turns,
-            collision.observation.worker.turns
+        assertStableLineageSemantics(
+            accepted.observation.worker,
+            collision.observation.worker
         )
         XCTAssertEqual(
             collision.observation.worker.terminal.objectiveAcceptance,
