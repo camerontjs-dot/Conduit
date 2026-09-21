@@ -27,6 +27,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Provider-session control is now an explicit authority transition above read-only
+  discovery. Conduit may recognize one writer/controller for an existing
+  provider session without creating, resuming, prompting, replacing, or
+  otherwise mutating that provider session. Competing controller claims fail
+  closed as `writer_collision`, preserve the exact provider session/history,
+  and leave external/unrecognized writer ownership UNKNOWN. Provider-session
+  writer authority remains separate from future workspace/worktree writer
+  leasing (#53, #57).
+
 - The Session API can now discover and inspect existing OpenCode sessions through
   read-only provider persistence without creating a Conduit task or acquiring
   execution capacity. Results use the provider-neutral `WorkerLineage` model:
