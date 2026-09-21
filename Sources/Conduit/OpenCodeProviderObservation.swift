@@ -3,135 +3,301 @@ import ConduitCore
 import Darwin
 import Foundation
 
-/// OpenCode persistence transport for provider-session observation.
+/// Read-only OpenCode persistence transport.
 ///
-/// This transport launches only bounded read commands. It never starts
-/// `opencode serve`, never resumes a provider session, and has no prompt,
-/// interrupt, adoption, or lifecycle-mutation verb.
-struct OpenCodeCLIObservationTransport: OpenCodeProviderObservationTransport {
+/// The provider CLI itself is intentionally not used here. Current OpenCode
+/// database initialization applies migrations, so even `session list` or
+/// `export` can mutate provider persistence before returning a read result.
+/// This transport instead copies the provider database/WAL bytes into a
+/// disposable snapshot and queries only that copy.
+struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTransport {
     enum TransportError: Error, LocalizedError {
-        case commandFailed(String)
-        case timedOut(String)
+        case persistenceUnavailable(String)
+        case ambiguousPersistence([String])
+        case snapshotChangedDuringRead(String)
+        case sqliteUnavailable(String)
+        case queryFailed(String)
         case invalidJSON(String)
+        case sessionNotFound(String)
 
         var errorDescription: String? {
             switch self {
-            case .commandFailed(let message): return message
-            case .timedOut(let message): return message
-            case .invalidJSON(let message): return message
+            case .persistenceUnavailable(let message),
+                 .snapshotChangedDuringRead(let message),
+                 .sqliteUnavailable(let message),
+                 .queryFailed(let message),
+                 .invalidJSON(let message):
+                return message
+            case .ambiguousPersistence(let paths):
+                return "Multiple OpenCode persistence databases are present and no exact database authority is configured: \(paths.joined(separator: ", "))."
+            case .sessionNotFound(let id):
+                return "OpenCode provider session not found in persistence: \(id)"
             }
         }
     }
 
-    let executableURL: URL
-    var timeout: TimeInterval = 15
+    private struct FileFingerprint: Equatable {
+        let size: UInt64
+        let modifiedAt: Date?
+    }
+
+    private let fileManager: FileManager
+    private let environment: [String: String]
+    private let homeDirectory: URL
+    private let sqliteURL: URL
+    private let timeout: TimeInterval
+
+    init(
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        sqliteURL: URL = URL(fileURLWithPath: "/usr/bin/sqlite3"),
+        timeout: TimeInterval = 10
+    ) {
+        self.fileManager = fileManager
+        self.environment = environment
+        self.homeDirectory = homeDirectory
+        self.sqliteURL = sqliteURL
+        self.timeout = timeout
+    }
 
     func listSessionsJSON() throws -> CodexJSON {
-        let result = try run(["session", "list", "--format", "json"])
-        let trimmed = result.stdout.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        if trimmed.isEmpty {
-            return .array([])
-        }
-        guard let json = CodexJSON.parse(Data(trimmed.utf8)) else {
-            throw TransportError.invalidJSON(
-                "OpenCode session list did not return JSON."
+        try withStablePersistenceSnapshot { databaseURL in
+            let rows = try queryJSONLines(
+                databaseURL: databaseURL,
+                sql: """
+                PRAGMA query_only=ON;
+                SELECT json_object(
+                  'id', id,
+                  'title', title,
+                  'updated', time_updated,
+                  'created', time_created,
+                  'projectId', project_id,
+                  'directory', directory,
+                  'parentId', parent_id
+                )
+                FROM session
+                ORDER BY time_updated DESC, id DESC;
+                """
             )
+            return .array(rows)
         }
-        return json
     }
 
-    func exportSessionJSON(providerSessionID: String) throws -> CodexJSON {
-        // OpenCode 1.x exposes `opencode export <id>`. Newer CLI builds also
-        // expose `opencode session export <id>`. Both are read-only; the
-        // fallback keeps observation compatible without starting a server.
-        let first = try runAllowingFailure([
-            "export", providerSessionID, "--sanitize",
-        ])
-        let result: CommandResult
-        if first.status == 0 {
-            result = first
-        } else {
-            let fallback = try runAllowingFailure([
-                "session", "export", providerSessionID, "--sanitize",
+    func readSessionJSON(providerSessionID: String) throws -> CodexJSON {
+        try withStablePersistenceSnapshot { databaseURL in
+            let quotedID = Self.sqlLiteral(providerSessionID)
+            let sessions = try queryJSONLines(
+                databaseURL: databaseURL,
+                sql: """
+                PRAGMA query_only=ON;
+                SELECT json_object(
+                  'id', id,
+                  'title', title,
+                  'projectID', project_id,
+                  'directory', directory,
+                  'parentID', parent_id,
+                  'time', json_object(
+                    'created', time_created,
+                    'updated', time_updated
+                  )
+                )
+                FROM session
+                WHERE id = (quotedID)
+                LIMIT 1;
+                """
+            )
+            guard let info = sessions.first else {
+                throw TransportError.sessionNotFound(providerSessionID)
+            }
+
+            let messages = try queryJSONLines(
+                databaseURL: databaseURL,
+                sql: """
+                PRAGMA query_only=ON;
+                SELECT json_object(
+                  'id', id,
+                  'sessionID', session_id,
+                  'role', json_extract(data, '$.role'),
+                  'providerID', json_extract(data, '$.providerID'),
+                  'modelID', json_extract(data, '$.modelID'),
+                  'time', json_object(
+                    'created', time_created,
+                    'completed', json_extract(data, '$.time.completed')
+                  ),
+                  'error', CASE
+                    WHEN json_type(data, '$.error') IS NULL
+                      OR json_type(data, '$.error') = 'null'
+                    THEN NULL
+                    ELSE 1
+                  END
+                )
+                FROM message
+                WHERE session_id = (quotedID)
+                ORDER BY time_created ASC, id ASC;
+                """
+            )
+
+            return .object([
+                "info": info,
+                "messages": .array(messages),
             ])
-            guard fallback.status == 0 else {
-                throw TransportError.commandFailed(
-                    Self.failureMessage(
-                        label: "OpenCode export",
-                        result: fallback,
-                        prior: first
-                    )
+        }
+    }
+
+    private func withStablePersistenceSnapshot<T>(
+        _ body: (URL) throws -> T
+    ) throws -> T {
+        let source = try resolveDatabaseURL()
+
+        for _ in 0..<3 {
+            let beforeDatabase = try fingerprint(source)
+            let sourceWAL = URL(fileURLWithPath: source.path + "-wal")
+            let beforeWAL = try optionalFingerprint(sourceWAL)
+
+            let directory = fileManager.temporaryDirectory.appendingPathComponent(
+                "conduit-opencode-observation-\(UUID().uuidString)",
+                isDirectory: true
+            )
+            try fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            defer { try? fileManager.removeItem(at: directory) }
+
+            let snapshot = directory.appendingPathComponent("opencode.db")
+            try fileManager.copyItem(at: source, to: snapshot)
+            if beforeWAL != nil {
+                try fileManager.copyItem(
+                    at: sourceWAL,
+                    to: URL(fileURLWithPath: snapshot.path + "-wal")
                 )
             }
-            result = fallback
+
+            let afterDatabase = try fingerprint(source)
+            let afterWAL = try optionalFingerprint(sourceWAL)
+            guard beforeDatabase == afterDatabase,
+                  beforeWAL == afterWAL
+            else {
+                continue
+            }
+
+            return try body(snapshot)
         }
 
-        let trimmed = result.stdout.trimmingCharacters(
-            in: .whitespacesAndNewlines
+        throw TransportError.snapshotChangedDuringRead(
+            "OpenCode persistence changed during all three snapshot attempts; observation was refused rather than returning a potentially inconsistent provider view."
         )
-        guard !trimmed.isEmpty,
-              let json = CodexJSON.parse(Data(trimmed.utf8))
-        else {
-            throw TransportError.invalidJSON(
-                "OpenCode export did not return JSON."
-            )
-        }
-        return json
     }
 
-    private struct CommandResult {
-        let status: Int32
-        let stdout: String
-        let stderr: String
-    }
+    private func resolveDatabaseURL() throws -> URL {
+        let dataDirectory = opencodeDataDirectory()
 
-    private func run(_ arguments: [String]) throws -> CommandResult {
-        let result = try runAllowingFailure(arguments)
-        guard result.status == 0 else {
-            throw TransportError.commandFailed(
-                Self.failureMessage(
-                    label: "OpenCode observation",
-                    result: result,
-                    prior: nil
+        if let configured = environment["OPENCODE_DB"],
+           !configured.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if configured == ":memory:" {
+                throw TransportError.persistenceUnavailable(
+                    "OPENCODE_DB is in-memory, so no durable provider-session persistence exists for read-only discovery."
                 )
+            }
+            let configuredURL = URL(fileURLWithPath: configured)
+            let resolved = configuredURL.path.hasPrefix("/")
+                ? configuredURL
+                : dataDirectory.appendingPathComponent(configured)
+            guard fileManager.fileExists(atPath: resolved.path) else {
+                throw TransportError.persistenceUnavailable(
+                    "Configured OpenCode persistence does not exist at \(resolved.path)."
+                )
+            }
+            return resolved
+        }
+
+        let stable = dataDirectory.appendingPathComponent("opencode.db")
+        if fileManager.fileExists(atPath: stable.path) {
+            return stable
+        }
+
+        let candidates = (try? fileManager.contentsOfDirectory(
+            at: dataDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ))?
+            .filter {
+                $0.pathExtension == "db"
+                    && $0.lastPathComponent.hasPrefix("opencode-")
+            }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            ?? []
+
+        if candidates.count == 1 {
+            return candidates[0]
+        }
+        if candidates.count > 1 {
+            throw TransportError.ambiguousPersistence(
+                candidates.map(\.path)
             )
         }
-        return result
+
+        throw TransportError.persistenceUnavailable(
+            "No OpenCode SQLite persistence was found under \(dataDirectory.path)."
+        )
     }
 
-    private func runAllowingFailure(
-        _ arguments: [String]
-    ) throws -> CommandResult {
-        let fileManager = FileManager.default
-        let directory = fileManager.temporaryDirectory.appendingPathComponent(
-            "conduit-opencode-observation-\(UUID().uuidString)",
-            isDirectory: true
-        )
-        try fileManager.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
-        defer { try? fileManager.removeItem(at: directory) }
+    private func opencodeDataDirectory() -> URL {
+        let root: URL
+        if let configured = environment["XDG_DATA_HOME"],
+           configured.hasPrefix("/") {
+            root = URL(fileURLWithPath: configured, isDirectory: true)
+        } else {
+            root = homeDirectory
+                .appendingPathComponent(".local", isDirectory: true)
+                .appendingPathComponent("share", isDirectory: true)
+        }
+        return root.appendingPathComponent("opencode", isDirectory: true)
+    }
 
-        let stdoutURL = directory.appendingPathComponent("stdout")
-        let stderrURL = directory.appendingPathComponent("stderr")
-        fileManager.createFile(atPath: stdoutURL.path, contents: nil)
-        fileManager.createFile(atPath: stderrURL.path, contents: nil)
+    private func fingerprint(_ url: URL) throws -> FileFingerprint {
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        guard let size = attributes[.size] as? NSNumber else {
+            throw TransportError.persistenceUnavailable(
+                "Could not measure OpenCode persistence at \(url.path)."
+            )
+        }
+        return FileFingerprint(
+            size: size.uint64Value,
+            modifiedAt: attributes[.modificationDate] as? Date
+        )
+    }
 
-        let stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
-        let stderrHandle = try FileHandle(forWritingTo: stderrURL)
-        defer {
-            try? stdoutHandle.close()
-            try? stderrHandle.close()
+    private func optionalFingerprint(
+        _ url: URL
+    ) throws -> FileFingerprint? {
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return try fingerprint(url)
+    }
+
+    private func queryJSONLines(
+        databaseURL: URL,
+        sql: String
+    ) throws -> [CodexJSON] {
+        guard fileManager.isExecutableFile(atPath: sqliteURL.path) else {
+            throw TransportError.sqliteUnavailable(
+                "sqlite3 is unavailable at \(sqliteURL.path); provider observation cannot read the copied persistence snapshot."
+            )
         }
 
         let process = Process()
-        process.executableURL = executableURL
-        process.arguments = arguments
-        process.standardOutput = stdoutHandle
-        process.standardError = stderrHandle
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.executableURL = sqliteURL
+        process.arguments = [
+            "-batch",
+            "-noheader",
+            databaseURL.path,
+            sql,
+        ]
+        process.standardOutput = stdout
+        process.standardError = stderr
 
         try process.run()
 
@@ -139,7 +305,6 @@ struct OpenCodeCLIObservationTransport: OpenCodeProviderObservationTransport {
         while process.isRunning && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.025)
         }
-
         if process.isRunning {
             process.terminate()
             let terminationDeadline = Date().addingTimeInterval(1)
@@ -150,48 +315,43 @@ struct OpenCodeCLIObservationTransport: OpenCodeProviderObservationTransport {
                 kill(process.processIdentifier, SIGKILL)
             }
             process.waitUntilExit()
-            throw TransportError.timedOut(
-                "OpenCode observation command exceeded \(Int(timeout)) seconds."
+            throw TransportError.queryFailed(
+                "Read-only OpenCode persistence query exceeded \(Int(timeout)) seconds."
             )
         }
 
         process.waitUntilExit()
-        try? stdoutHandle.synchronize()
-        try? stderrHandle.synchronize()
+        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
+        guard process.terminationStatus == 0 else {
+            let detail = String(decoding: stderrData, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw TransportError.queryFailed(
+                detail.isEmpty
+                    ? "Read-only OpenCode persistence query failed with exit \(process.terminationStatus)."
+                    : "Read-only OpenCode persistence query failed with exit \(process.terminationStatus): \(String(detail.prefix(600)))"
+            )
+        }
 
-        let stdout = (try? String(
-            contentsOf: stdoutURL,
-            encoding: .utf8
-        )) ?? ""
-        let stderr = (try? String(
-            contentsOf: stderrURL,
-            encoding: .utf8
-        )) ?? ""
-        return CommandResult(
-            status: process.terminationStatus,
-            stdout: stdout,
-            stderr: stderr
-        )
+        let output = String(decoding: stdoutData, as: UTF8.self)
+        if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return []
+        }
+
+        return try output
+            .split(whereSeparator: \.isNewline)
+            .map { line in
+                guard let value = CodexJSON.parse(Data(line.utf8)) else {
+                    throw TransportError.invalidJSON(
+                        "OpenCode persistence query returned malformed JSON."
+                    )
+                }
+                return value
+            }
     }
 
-    private static func failureMessage(
-        label: String,
-        result: CommandResult,
-        prior: CommandResult?
-    ) -> String {
-        let current = result.stderr
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let earlier = prior?.stderr
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let detail = [earlier, current]
-            .compactMap { value -> String? in
-                guard let value, !value.isEmpty else { return nil }
-                return String(value.prefix(480))
-            }
-            .joined(separator: " | ")
-        return detail.isEmpty
-            ? "\(label) failed with exit \(result.status)."
-            : "\(label) failed with exit \(result.status): \(detail)"
+    private static func sqlLiteral(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "''"))'"
     }
 }
 #endif
