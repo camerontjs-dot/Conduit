@@ -150,9 +150,9 @@ public final class ProviderSessionAuthorityRegistry: @unchecked Sendable {
 
     private let lock = NSLock()
     private var controllerBySession: [Key: String] = [:]
-    private let now: @Sendable () -> Date
+    private let now: () -> Date
 
-    public init(now: @escaping @Sendable () -> Date = Date.init) {
+    public init(now: @escaping () -> Date = Date.init) {
         self.now = now
     }
 
