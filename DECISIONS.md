@@ -1691,16 +1691,21 @@ two authorities must not collapse into one lock.
    authority object. Collision handling must not manufacture session absence,
    create a replacement provider session, start a provider turn, send a prompt,
    resume another session, or fall back to PTY.
-5. OpenCode persistence remains read-only provider observation. It does not
+5. Provider-native collision language is translated at the adapter
+   boundary into the canonical `writer_collision` failure. The structured
+   startup path treats that failure as fail-closed: no replacement provider
+   session and no PTY fallback. Codex's current "active writer"/"open in another
+   app" responses are the first mapped production case retained from #48.
+6. OpenCode persistence remains read-only provider observation. It does not
    reveal another application's live writer ownership. External/unrecognized
    writer state therefore remains UNKNOWN in this slice.
-6. Provider-session writer authority is distinct from #57 workspace/worktree
+7. Provider-session writer authority is distinct from #57 workspace/worktree
    writer authority. A later writable worker may require both, but neither
    lease grants or implies the other.
-7. Explicit transfer/release is deferred to the lifecycle slice that can define
+8. Explicit transfer/release is deferred to the lifecycle slice that can define
    its preconditions and consequences. This slice intentionally exposes no
    authority-transfer escape hatch.
-8. The first registry is process-local governance state. It establishes the
+9. The first registry is process-local governance state. It establishes the
    single-writer invariant for the running Conduit control plane; it does not
    claim durable cross-restart ownership or provider-native exclusion.
 
