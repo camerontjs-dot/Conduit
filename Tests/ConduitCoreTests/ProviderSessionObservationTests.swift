@@ -270,7 +270,7 @@ final class ProviderSessionObservationTests: XCTestCase {
         guard case .object(let root) = payload.value,
               case .string("session_list")? = root["source"],
               case .object(let session)? = root["session"],
-              case .number(1)? = root["message_count"],
+              case .number(0)? = root["message_count"],
               case .number(0)? = root["assistant_turn_count"],
               case .number(1797000000000)? = session["updated"]
         else {
