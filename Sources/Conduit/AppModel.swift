@@ -3820,6 +3820,16 @@ final class AppModel: ObservableObject {
                 provider: provider,
                 providerSessionID: providerSessionID
             )
+        case .adoptProviderSession(
+            let provider,
+            let providerSessionID,
+            let controllerID
+        ):
+            return sessionAPIAdoptProviderSession(
+                provider: provider,
+                providerSessionID: providerSessionID,
+                controllerID: controllerID
+            )
         case .sessionStatus(let rawID):
             guard let uuid = UUID(uuidString: rawID),
                   let task = taskSessions.first(where: { $0.id.rawValue == uuid })
@@ -3947,16 +3957,27 @@ final class AppModel: ObservableObject {
                 "supported_providers": ["opencode"],
             ]
         }
-        let observer = sessionAPIOpenCodeObserver()
+        let coordinator = sessionAPIOpenCodeAuthorityCoordinator()
 
         do {
-            let workers = try observer.listSessions { [weak self] sessionID in
+            let observations = try coordinator.listSessions { [weak self] sessionID in
                 self?.sessionAPIProviderBinding(
                     providerSessionID: sessionID
                 )
             }
-            let encoded = workers.compactMap(sessionAPIWorkerLineageObject)
-            guard encoded.count == workers.count else {
+            let encoded = observations.compactMap {
+                observation -> [String: Any]? in
+                guard var worker = sessionAPIWorkerLineageObject(
+                    observation.worker
+                ),
+                let authority = sessionAPIJSONObject(observation.authority)
+                else {
+                    return nil
+                }
+                worker["provider_session_authority"] = authority
+                return worker
+            }
+            guard encoded.count == observations.count else {
                 return [
                     "error": "provider inventory could not be encoded completely",
                     "provider": "opencode",
@@ -3968,7 +3989,7 @@ final class AppModel: ObservableObject {
                 "workers": encoded,
                 "count": encoded.count,
                 "capacity_effect": "none; no Conduit create admission or live-task reservation",
-                "authority": "read from a disposable snapshot of OpenCode persistence; live worker freshness remains UNKNOWN without independent process observation",
+                "authority": "provider persistence observation plus Conduit's provider-session writer registry; external writer ownership remains UNKNOWN without independent provider authority",
             ]
         } catch {
             return [
@@ -3990,26 +4011,31 @@ final class AppModel: ObservableObject {
                 "supported_providers": ["opencode"],
             ]
         }
-        let observer = sessionAPIOpenCodeObserver()
+        let coordinator = sessionAPIOpenCodeAuthorityCoordinator()
 
         do {
-            let worker = try observer.observeSession(
+            let observation = try coordinator.observeSession(
                 providerSessionID: providerSessionID,
                 binding: sessionAPIProviderBinding(
                     providerSessionID: providerSessionID
                 )
             )
-            guard let object = sessionAPIWorkerLineageObject(worker) else {
+            guard var worker = sessionAPIWorkerLineageObject(
+                observation.worker
+            ),
+            let authority = sessionAPIJSONObject(observation.authority)
+            else {
                 return [
                     "error": "provider observation could not be encoded",
                     "provider": "opencode",
                 ]
             }
+            worker["provider_session_authority"] = authority
             return [
                 "provider": "opencode",
-                "worker": object,
+                "worker": worker,
                 "capacity_effect": "none; no Conduit create admission or live-task reservation",
-                "authority": "read from a disposable snapshot of OpenCode persistence; incomplete persisted turns remain ambiguous and process/writer/acceptance facts are not inferred",
+                "authority": "read-only provider observation plus Conduit's independent writer registry; observation itself never adopts or controls the session",
             ]
         } catch {
             return [
@@ -4017,6 +4043,90 @@ final class AppModel: ObservableObject {
                 "provider": "opencode",
                 "provider_session_id": providerSessionID,
                 "authority": "provider observation failed; no task/session mutation attempted",
+            ]
+        }
+    }
+
+    private func sessionAPIAdoptProviderSession(
+        provider: String,
+        providerSessionID: String,
+        controllerID: String
+    ) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
+            return ["error": "write tools are disabled"]
+        }
+        guard sessionAPINormalizedProvider(provider) == "opencode" else {
+            return [
+                "error": "unsupported provider",
+                "provider": provider,
+                "supported_providers": ["opencode"],
+            ]
+        }
+        let requestedController = controllerID.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !requestedController.isEmpty else {
+            return ["error": "controller_id is empty"]
+        }
+
+        let coordinator = sessionAPIOpenCodeAuthorityCoordinator()
+        do {
+            let result = try coordinator.adoptSession(
+                providerSessionID: providerSessionID,
+                controllerID: requestedController,
+                binding: sessionAPIProviderBinding(
+                    providerSessionID: providerSessionID
+                )
+            )
+            guard var worker = sessionAPIWorkerLineageObject(
+                result.observation.worker
+            ),
+            let authority = sessionAPIJSONObject(
+                result.observation.authority
+            ),
+            let receipt = sessionAPIJSONObject(result.receipt)
+            else {
+                return [
+                    "error": "provider authority result could not be encoded",
+                    "provider": "opencode",
+                    "provider_session_id": providerSessionID,
+                ]
+            }
+            worker["provider_session_authority"] = authority
+
+            var payload: [String: Any] = [
+                "provider": "opencode",
+                "provider_session_id": providerSessionID,
+                "controller_id": requestedController,
+                "disposition": result.receipt.disposition.rawValue,
+                "worker": worker,
+                "authority_receipt": receipt,
+                "provider_mutation": "none",
+                "capacity_effect": "none; no provider turn or execution slot is created by the authority claim",
+                "workspace_authority": "separate; this claim grants no #57 worktree/workspace writer lease",
+                "transfer_supported": false,
+                "authority": "Conduit provider-session writer governance only; no provider prompt, resume, replacement, PTY fallback, lifecycle mutation, or workspace mutation is performed",
+            ]
+
+            if result.receipt.disposition == .writerCollision {
+                let recognized = result.receipt.recognizedControllerID.value
+                    ?? "another controller"
+                payload["error"] =
+                    "writer_collision: provider session \(providerSessionID) "
+                    + "is already controlled by \(recognized); the exact "
+                    + "provider session remains present and unchanged"
+                payload["provider_session_exists"] = true
+            }
+
+            return payload
+        } catch {
+            return [
+                "error": error.localizedDescription,
+                "provider": "opencode",
+                "provider_session_id": providerSessionID,
+                "controller_id": requestedController,
+                "provider_mutation": "none",
+                "authority": "adoption failed before any provider mutation; no replacement session, prompt, turn, resume, or PTY fallback was attempted",
             ]
         }
     }
@@ -4031,6 +4141,15 @@ final class AppModel: ObservableObject {
         // because provider startup may apply persistence migrations.
         let transport = OpenCodeSQLiteObservationTransport()
         return OpenCodeProviderSessionObserver(transport: transport)
+    }
+
+    private func sessionAPIOpenCodeAuthorityCoordinator()
+        -> ProviderSessionAuthorityCoordinator
+    {
+        ProviderSessionAuthorityCoordinator(
+            observer: sessionAPIOpenCodeObserver(),
+            registry: .shared
+        )
     }
 
     /// Exact provider-session correlation only.
@@ -4076,18 +4195,24 @@ final class AppModel: ObservableObject {
         return matches[0]
     }
 
-    private func sessionAPIWorkerLineageObject(
-        _ worker: WorkerLineage
+    private func sessionAPIJSONObject<Value: Encodable>(
+        _ value: Value
     ) -> [String: Any]? {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(worker),
+        guard let data = try? encoder.encode(value),
               let object = try? JSONSerialization.jsonObject(with: data),
               let dictionary = object as? [String: Any]
         else {
             return nil
         }
         return dictionary
+    }
+
+    private func sessionAPIWorkerLineageObject(
+        _ worker: WorkerLineage
+    ) -> [String: Any]? {
+        sessionAPIJSONObject(worker)
     }
 
     private func sessionAPITaskID(_ rawID: String) -> TaskSessionID? {
