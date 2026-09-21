@@ -4050,7 +4050,7 @@ final class AppModel: ObservableObject {
         ) ?? EnvironmentResolver.shared.resolve("opencode") else {
             return nil
         }
-        let transport = OpenCodeCLIObservationTransport(
+        let transport = OpenCodeSQLiteObservationTransport(
             executableURL: URL(fileURLWithPath: executable)
         )
         return OpenCodeProviderSessionObserver(transport: transport)
