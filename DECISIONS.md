@@ -1555,7 +1555,7 @@ decision makes no claim about its publisher or resolution.
 
 ## D-050: Provider supervision uses explicit lineage, authority, and preflight state
 
-**Status:** Proposed (2026-09-20)
+**Status:** Accepted (2026-09-21; state-model foundation landed in #59)
 
 **Context:** The durable-session pressure test in #52 showed that the current
 task/session vocabulary cannot represent several states without overloading
@@ -1600,3 +1600,49 @@ identity; storing one session-level model; representing unknown as nil plus
 caller convention; flattening provider-specific state to strings; calling PTY
 writes agent prompts; or mapping an unsupported lifecycle operation to the
 nearest available destructive action.
+
+
+---
+
+## D-051: OpenCode discovery reads persistence without entering the execution path
+
+**Status:** Proposed (2026-09-21)
+
+**Context:** #52 demonstrated provider sessions created outside Conduit that remained
+visible to OpenCode but absent from Conduit inventory. The existing structured
+OpenCode client is not an observation seam: starting it acquires
+`OpenCodeServeLease`, may start `opencode serve`, binds task/runtime lifecycle,
+and can later send or abort turns. Using that path merely to inspect a provider
+session would manufacture supervision and consume execution resources.
+
+**Decision:**
+
+1. Provider discovery is a separate read-only interface that returns the shared
+   `WorkerLineage` model and exposes no prompt, resume, abort, adoption, lease,
+   or lifecycle-mutation verb.
+2. The OpenCode implementation reads provider-native persistence using structured
+   JSON session inventory and sanitized session export. It does not start or
+   acquire an OpenCode server host.
+3. Exact provider-session identity may correlate an existing Conduit task/runtime
+   binding when the match is unique. That correlation does not grant writer or
+   controller authority.
+4. Persistence is marked `provider_observed` with freshness `UNKNOWN`.
+   A fresh read does not establish that persisted provider state matches live OS
+   or process state.
+5. Persisted assistant messages without a provider completion or error are
+   `AMBIGUOUS`, not inferred `ACTIVE`. Provider turn completion remains
+   separate from terminal receipt, verification, and objective acceptance.
+6. Provider-specific metadata remains typed and namespaced under
+   `opencode.persistence`; unsupported shared fields remain explicit UNKNOWN.
+
+**Consequences:** A supervisor can inventory and inspect external OpenCode session
+identity without creating a Conduit task or consuming a live-task slot merely to
+observe it. This slice deliberately does not establish live process state,
+writer ownership, adoption, lifecycle control, or CAL integration. If OpenCode
+persistence cannot be read or its structured response is malformed, discovery
+fails closed rather than manufacturing replacement state.
+
+**Reconsideration trigger:** Revisit the transport if OpenCode provides a stable
+read endpoint that can observe the same durable session inventory without
+starting or acquiring a provider host and with stronger authority for freshness
+or live activity.
