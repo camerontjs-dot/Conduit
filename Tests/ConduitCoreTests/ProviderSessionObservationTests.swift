@@ -272,7 +272,8 @@ final class ProviderSessionObservationTests: XCTestCase {
               case .object(let session)? = root["session"],
               case .number(0)? = root["message_count"],
               case .number(0)? = root["assistant_turn_count"],
-              case .number(1797000000000)? = session["updated"]
+              case .string("project-external")? = session["projectId"],
+              session["updated"] == nil
         else {
             return XCTFail("provider-specific metadata lost JSON type or namespace")
         }
