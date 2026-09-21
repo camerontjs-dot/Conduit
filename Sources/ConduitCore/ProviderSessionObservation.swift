@@ -173,7 +173,9 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
 
         let observation = SupervisionObservationStamp(
             authority: .providerObserved,
-            freshness: .current,
+            // Persistence was read now, but its relationship to live worker
+            // state is unknown without an independent process observation.
+            freshness: .unknown,
             observedAt: .known(observedAt)
         )
 
