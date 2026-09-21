@@ -60,6 +60,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Codex `thread/resume` active-writer collisions no longer fall through to a
+  fresh replacement thread and then to PTY. The Codex adapter translates its
+  native single-writer error into the provider-neutral `writer_collision`
+  failure, and structured startup fails closed while preserving the exact
+  provider thread/history (#48, #53).
+
 - Explorer's default rail no longer hides non-lifecycle roots behind a collapsed
   `SYSTEM FILES` section or truncates project/operation descendants. `All Files`
   is the canonical tree, validated scope identity annotates the real directory,
