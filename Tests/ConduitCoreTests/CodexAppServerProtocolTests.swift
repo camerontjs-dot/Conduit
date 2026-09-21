@@ -89,6 +89,64 @@ final class CodexAppServerProtocolTests: XCTestCase {
         XCTAssertEqual(request.acceptResult["decision"] as? String, "accept")
     }
 
+    func testCodexNativeActiveWriterErrorsMapToCollision() {
+        XCTAssertTrue(
+            CodexThreadWriterCollisionMapper.isActiveWriterConflict(
+                "thread thr_1 already has an active writer"
+            )
+        )
+        XCTAssertTrue(
+            CodexThreadWriterCollisionMapper.isActiveWriterConflict(
+                "This is open in another app"
+            )
+        )
+        XCTAssertFalse(
+            CodexThreadWriterCollisionMapper.isActiveWriterConflict(
+                "thread thr_1 was not found"
+            )
+        )
+    }
+
+    func testCanonicalWriterCollisionFailsClosedBeforeFallback() {
+        let collision = ProviderSessionAuthorityFailure.writerCollision(
+            providerID: "codex",
+            providerSessionID: "thr_1",
+            detail: "already has an active writer"
+        )
+
+        XCTAssertTrue(
+            ProviderSessionAuthorityFailure.isWriterCollision(collision)
+        )
+        XCTAssertEqual(
+            StructuredAdapterStartFailurePolicy.disposition(
+                for: collision
+            ),
+            .failClosedWriterCollision
+        )
+        XCTAssertEqual(
+            StructuredAdapterStartFailurePolicy.disposition(
+                for: "codex is not on PATH."
+            ),
+            .fallbackAllowed
+        )
+    }
+
+    func testCollisionFailureKeepsExactProviderSessionIdentity() {
+        let collision = ProviderSessionAuthorityFailure.writerCollision(
+            providerID: "codex",
+            providerSessionID: "thr_exact",
+            detail: nil
+        )
+
+        XCTAssertTrue(collision.contains("thr_exact"))
+        XCTAssertTrue(collision.hasPrefix("writer_collision:"))
+        XCTAssertFalse(
+            ProviderSessionAuthorityFailure.isWriterCollision(
+                "thread thr_exact was not found"
+            )
+        )
+    }
+
     func testCodexProfilePrefersAppServer() {
         XCTAssertEqual(
             AgentProfile(name: "Codex", command: "codex").preferredSessionBackend,
