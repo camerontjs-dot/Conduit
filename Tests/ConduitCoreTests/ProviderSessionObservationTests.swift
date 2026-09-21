@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import ConduitCore
 
@@ -30,6 +31,45 @@ final class ProviderSessionObservationTests: XCTestCase {
             }
             return value
         }
+    }
+
+    private func makeSQLiteFixture(
+        sql: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> (directory: URL, database: URL) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "conduit-opencode-test-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let database = directory.appendingPathComponent("opencode.db")
+        let process = Process()
+        let stderr = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        process.arguments = [database.path, sql]
+        process.standardError = stderr
+        try process.run()
+        process.waitUntilExit()
+        let errorText = String(
+            decoding: stderr.fileHandleForReading.readDataToEndOfFile(),
+            as: UTF8.self
+        )
+        XCTAssertEqual(
+            process.terminationStatus,
+            0,
+            "sqlite fixture creation failed: \(errorText)",
+            file: file,
+            line: line
+        )
+        return (directory, database)
+    }
+
+    private func removeSQLiteFixture(_ fixture: (directory: URL, database: URL)) {
+        try? FileManager.default.removeItem(at: fixture.directory)
     }
 
     private let fixedDate = Date(timeIntervalSince1970: 1_797_000_000)
@@ -108,6 +148,241 @@ final class ProviderSessionObservationTests: XCTestCase {
             """#
         )
     }
+
+
+    func testSQLiteTransportProjectsRealFlatPersistenceRows() throws {
+        let fixture = try makeSQLiteFixture(
+            sql: #"""
+            PRAGMA journal_mode=DELETE;
+            CREATE TABLE session (
+              id TEXT PRIMARY KEY,
+              project_id TEXT NOT NULL,
+              parent_id TEXT,
+              directory TEXT NOT NULL,
+              title TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              time_updated INTEGER NOT NULL
+            );
+            CREATE TABLE message (
+              id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              time_updated INTEGER NOT NULL,
+              data TEXT NOT NULL
+            );
+            INSERT INTO session VALUES (
+              'ses_fixture',
+              'project-fixture',
+              NULL,
+              '/tmp/fixture',
+              'fixture session',
+              100,
+              200
+            );
+            INSERT INTO message VALUES (
+              'msg_user',
+              'ses_fixture',
+              110,
+              110,
+              json_object(
+                'role','user',
+                'time',json_object('created',110)
+              )
+            );
+            INSERT INTO message VALUES (
+              'msg_completed',
+              'ses_fixture',
+              120,
+              130,
+              json_object(
+                'role','assistant',
+                'providerID','xai',
+                'modelID','grok-fixture',
+                'time',json_object('created',120,'completed',130)
+              )
+            );
+            INSERT INTO message VALUES (
+              'msg_incomplete',
+              'ses_fixture',
+              140,
+              140,
+              json_object(
+                'role','assistant',
+                'providerID','ollama',
+                'modelID','qwen-fixture',
+                'time',json_object('created',140,'completed',NULL)
+              )
+            );
+            """#
+        )
+        defer { removeSQLiteFixture(fixture) }
+
+        let transport = OpenCodeSQLiteObservationTransport(
+            environment: ["OPENCODE_DB": fixture.database.path],
+            homeDirectory: fixture.directory,
+            timeout: 3
+        )
+        let observer = OpenCodeProviderSessionObserver(
+            transport: transport,
+            now: { self.fixedDate }
+        )
+
+        let worker = try observer.observeSession(
+            providerSessionID: "ses_fixture"
+        )
+
+        XCTAssertEqual(worker.turns.count, 2)
+        XCTAssertEqual(worker.turns[0].turnID.value, "msg_completed")
+        XCTAssertEqual(worker.turns[0].state, .completed)
+        XCTAssertEqual(
+            worker.turns[0].model.value,
+            ProviderModelIdentity(
+                providerID: "xai",
+                modelID: "grok-fixture"
+            )
+        )
+        XCTAssertEqual(worker.turns[1].turnID.value, "msg_incomplete")
+        XCTAssertEqual(worker.turns[1].state, .ambiguous)
+        XCTAssertEqual(
+            worker.turns[1].model.value,
+            ProviderModelIdentity(
+                providerID: "ollama",
+                modelID: "qwen-fixture"
+            )
+        )
+        XCTAssertEqual(worker.adapter.value, "opencode_sqlite_snapshot")
+    }
+
+    func testSQLiteTransportLargeInventoryDoesNotDependOnPipeCapacity() throws {
+        let fixture = try makeSQLiteFixture(
+            sql: #"""
+            PRAGMA journal_mode=DELETE;
+            CREATE TABLE session (
+              id TEXT PRIMARY KEY,
+              project_id TEXT NOT NULL,
+              parent_id TEXT,
+              directory TEXT NOT NULL,
+              title TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              time_updated INTEGER NOT NULL
+            );
+            WITH RECURSIVE rows(value) AS (
+              SELECT 1
+              UNION ALL
+              SELECT value + 1 FROM rows WHERE value < 1500
+            )
+            INSERT INTO session (
+              id,
+              project_id,
+              parent_id,
+              directory,
+              title,
+              time_created,
+              time_updated
+            )
+            SELECT
+              printf('ses_%04d', value),
+              'project-large',
+              NULL,
+              '/tmp/large',
+              replace(hex(zeroblob(120)), '00', 'x'),
+              value,
+              value
+            FROM rows;
+            """#
+        )
+        defer { removeSQLiteFixture(fixture) }
+
+        let transport = OpenCodeSQLiteObservationTransport(
+            environment: ["OPENCODE_DB": fixture.database.path],
+            homeDirectory: fixture.directory,
+            timeout: 3
+        )
+
+        guard case .array(let rows) = try transport.listSessionsJSON() else {
+            return XCTFail("large inventory was not returned as an array")
+        }
+        XCTAssertEqual(rows.count, 1500)
+    }
+
+    func testInstalledOpenCodePersistenceWhenExplicitlyRequested() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CONDUIT_OPENCODE_QUALIFICATION"] == "1" else {
+            throw XCTSkip(
+                "Set CONDUIT_OPENCODE_QUALIFICATION=1 with DB/session variables for installed qualification."
+            )
+        }
+        guard let databasePath = environment["CONDUIT_OPENCODE_QUALIFICATION_DB"],
+              !databasePath.isEmpty,
+              let sessionID = environment["CONDUIT_OPENCODE_QUALIFICATION_SESSION_ID"],
+              !sessionID.isEmpty
+        else {
+            return XCTFail(
+                "Installed qualification requires CONDUIT_OPENCODE_QUALIFICATION_DB and CONDUIT_OPENCODE_QUALIFICATION_SESSION_ID."
+            )
+        }
+
+        let database = URL(fileURLWithPath: databasePath)
+        let transport = OpenCodeSQLiteObservationTransport(
+            environment: ["OPENCODE_DB": database.path],
+            homeDirectory: database.deletingLastPathComponent(),
+            timeout: 30
+        )
+        let observer = OpenCodeProviderSessionObserver(transport: transport)
+
+        let worker = try observer.observeSession(providerSessionID: sessionID)
+        XCTAssertEqual(worker.providerSessionID.value, sessionID)
+        XCTAssertEqual(worker.adapter.value, "opencode_sqlite_snapshot")
+        XCTAssertEqual(worker.relationship, .discovered)
+        XCTAssertEqual(worker.observation.authority, .providerObserved)
+        XCTAssertEqual(worker.observation.freshness, .unknown)
+        XCTAssertEqual(worker.writerControllerID.state, .unknown)
+        XCTAssertEqual(worker.terminal.objectiveAcceptance, .unknown)
+
+        if let expectedRaw = environment[
+            "CONDUIT_OPENCODE_EXPECTED_ASSISTANT_TURNS"
+        ],
+           let expected = Int(expectedRaw) {
+            XCTAssertEqual(worker.turns.count, expected)
+        } else {
+            XCTAssertFalse(
+                worker.turns.isEmpty,
+                "selected installed session must expose at least one persisted assistant turn"
+            )
+        }
+
+        if let expectedProvider = environment[
+            "CONDUIT_OPENCODE_EXPECTED_PROVIDER_ID"
+        ],
+           let expectedModel = environment[
+            "CONDUIT_OPENCODE_EXPECTED_MODEL_ID"
+        ] {
+            let knownModels = worker.turns.compactMap(\.model.value)
+            XCTAssertFalse(knownModels.isEmpty)
+            XCTAssertTrue(
+                knownModels.allSatisfy {
+                    $0.providerID == expectedProvider
+                        && $0.modelID == expectedModel
+                }
+            )
+        }
+
+        let inventory = try observer.listSessions()
+        XCTAssertTrue(
+            inventory.contains {
+                $0.providerSessionID.value == sessionID
+            },
+            "installed provider inventory did not contain the selected exact session"
+        )
+
+        print(
+            "INSTALLED_OPENCODE_OBSERVATION "
+                + "session=\(sessionID) "
+                + "turns=\(worker.turns.count) "
+                + "inventory=\(inventory.count)"
+        )
+    }
+
 
     func testDiscoversExternalSessionWithoutConduitBinding() throws {
         let transport = FakeTransport(listDocument: externalInventory())
