@@ -207,7 +207,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
             let state: ProviderTurnState
             if hasNonNullValue(info["error"]) {
                 state = .failed
-            } else if info["time"]?["completed"] != nil {
+            } else if hasNonNullValue(info["time"]?["completed"]) {
                 state = .completed
             } else {
                 // Persisted absence of completion is not proof of a live turn.
