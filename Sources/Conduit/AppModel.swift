@@ -4044,15 +4044,10 @@ final class AppModel: ObservableObject {
                     in: .whitespacesAndNewlines
                 ).lowercased() == "opencode"
         }
-        let configuredCommand = configured?.command ?? "opencode"
-        guard let executable = EnvironmentResolver.shared.resolve(
-            configuredCommand
-        ) ?? EnvironmentResolver.shared.resolve("opencode") else {
-            return nil
-        }
-        let transport = OpenCodeSQLiteObservationTransport(
-            executableURL: URL(fileURLWithPath: executable)
-        )
+        // Observation reads OpenCode persistence directly from a disposable
+        // SQLite snapshot. It must not resolve or launch the OpenCode CLI,
+        // because provider startup may apply persistence migrations.
+        let transport = OpenCodeSQLiteObservationTransport()
         return OpenCodeProviderSessionObserver(transport: transport)
     }
 
