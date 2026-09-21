@@ -256,7 +256,7 @@ final class ProviderSessionObservationTests: XCTestCase {
         XCTAssertEqual(payload.schemaVersion, 1)
 
         guard case .object(let root) = payload.value,
-              case .string("session_list")? = root["source"],
+              case .string("persistence_inventory")? = root["source"],
               case .object(let session)? = root["session"],
               case .number(0)? = root["message_count"],
               case .number(0)? = root["assistant_turn_count"],
