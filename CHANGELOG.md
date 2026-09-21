@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The Session API can now discover and inspect existing OpenCode sessions through
+  read-only provider persistence without creating a Conduit task or acquiring
+  execution capacity. Results use the provider-neutral `WorkerLineage` model:
+  missing task/runtime/process/writer facts remain UNKNOWN, model identity stays
+  turn-scoped, persisted incomplete turns remain ambiguous, and provider
+  completion is not promoted into objective acceptance (#53).
+
 - A versioned provider-supervision state model now keeps Conduit task/runtime
   binding, provider host, provider session/thread, provider turn, process
   lineage, writer identity, delivery, verification, and objective acceptance as

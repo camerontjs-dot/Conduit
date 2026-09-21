@@ -3813,6 +3813,13 @@ final class AppModel: ObservableObject {
             ]
         case .listAdapters:
             return sessionAPIListAdapters()
+        case .listProviderSessions(let provider):
+            return sessionAPIListProviderSessions(provider: provider)
+        case .observeWorker(let provider, let providerSessionID):
+            return sessionAPIObserveWorker(
+                provider: provider,
+                providerSessionID: providerSessionID
+            )
         case .sessionStatus(let rawID):
             guard let uuid = UUID(uuidString: rawID),
                   let task = taskSessions.first(where: { $0.id.rawValue == uuid })
@@ -3928,6 +3935,159 @@ final class AppModel: ObservableObject {
             "adapters": profiles,
             "authority": "declared launch surfaces; not a live health check",
         ]
+    }
+
+    private func sessionAPIListProviderSessions(
+        provider: String
+    ) -> [String: Any] {
+        guard sessionAPINormalizedProvider(provider) == "opencode" else {
+            return [
+                "error": "unsupported provider",
+                "provider": provider,
+                "supported_providers": ["opencode"],
+            ]
+        }
+        let observer = sessionAPIOpenCodeObserver()
+
+        do {
+            let workers = try observer.listSessions { [weak self] sessionID in
+                self?.sessionAPIProviderBinding(
+                    providerSessionID: sessionID
+                )
+            }
+            let encoded = workers.compactMap(sessionAPIWorkerLineageObject)
+            guard encoded.count == workers.count else {
+                return [
+                    "error": "provider inventory could not be encoded completely",
+                    "provider": "opencode",
+                    "authority": "provider observation succeeded but no partial inventory is returned",
+                ]
+            }
+            return [
+                "provider": "opencode",
+                "workers": encoded,
+                "count": encoded.count,
+                "capacity_effect": "none; no Conduit create admission or live-task reservation",
+                "authority": "read from a disposable snapshot of OpenCode persistence; live worker freshness remains UNKNOWN without independent process observation",
+            ]
+        } catch {
+            return [
+                "error": error.localizedDescription,
+                "provider": "opencode",
+                "authority": "provider observation failed; no task/session mutation attempted",
+            ]
+        }
+    }
+
+    private func sessionAPIObserveWorker(
+        provider: String,
+        providerSessionID: String
+    ) -> [String: Any] {
+        guard sessionAPINormalizedProvider(provider) == "opencode" else {
+            return [
+                "error": "unsupported provider",
+                "provider": provider,
+                "supported_providers": ["opencode"],
+            ]
+        }
+        let observer = sessionAPIOpenCodeObserver()
+
+        do {
+            let worker = try observer.observeSession(
+                providerSessionID: providerSessionID,
+                binding: sessionAPIProviderBinding(
+                    providerSessionID: providerSessionID
+                )
+            )
+            guard let object = sessionAPIWorkerLineageObject(worker) else {
+                return [
+                    "error": "provider observation could not be encoded",
+                    "provider": "opencode",
+                ]
+            }
+            return [
+                "provider": "opencode",
+                "worker": object,
+                "capacity_effect": "none; no Conduit create admission or live-task reservation",
+                "authority": "read from a disposable snapshot of OpenCode persistence; incomplete persisted turns remain ambiguous and process/writer/acceptance facts are not inferred",
+            ]
+        } catch {
+            return [
+                "error": error.localizedDescription,
+                "provider": "opencode",
+                "provider_session_id": providerSessionID,
+                "authority": "provider observation failed; no task/session mutation attempted",
+            ]
+        }
+    }
+
+    private func sessionAPINormalizedProvider(_ provider: String) -> String {
+        provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func sessionAPIOpenCodeObserver() -> OpenCodeProviderSessionObserver {
+        // Observation reads OpenCode persistence directly from a disposable
+        // SQLite snapshot. It must not resolve or launch the OpenCode CLI,
+        // because provider startup may apply persistence migrations.
+        let transport = OpenCodeSQLiteObservationTransport()
+        return OpenCodeProviderSessionObserver(transport: transport)
+    }
+
+    /// Exact provider-session correlation only.
+    ///
+    /// A task binding is useful lineage, but it is not evidence that Conduit is
+    /// the current writer/controller. Ambiguous duplicate bindings therefore
+    /// stay UNKNOWN instead of picking whichever task happens to sort first.
+    private func sessionAPIProviderBinding(
+        providerSessionID: String
+    ) -> ProviderObservationBinding? {
+        var matches: [ProviderObservationBinding] = []
+        let store = AdapterThreadStore(
+            directory: AdapterThreadStore.defaultDirectory()
+        )
+
+        for task in taskSessions {
+            guard let profile = agentProfile(named: task.metadata.agentName),
+                  profile.preferredSessionBackend == .httpServer
+            else {
+                continue
+            }
+            let live = sessionAPILiveRuntime(for: task.id)
+            let threadID: String?
+            if let live, live.usesStructuredHost {
+                threadID = live.structuredSessionID
+            } else {
+                threadID = store.threadID(for: task.id)
+            }
+            guard threadID == providerSessionID else { continue }
+
+            matches.append(
+                ProviderObservationBinding(
+                    conduitTaskID: task.id.rawValue.uuidString,
+                    runtimeAttemptID: sessionAPIRuntimeAttemptID(
+                        for: task,
+                        live: live
+                    )?.rawValue.uuidString
+                )
+            )
+        }
+
+        guard matches.count == 1 else { return nil }
+        return matches[0]
+    }
+
+    private func sessionAPIWorkerLineageObject(
+        _ worker: WorkerLineage
+    ) -> [String: Any]? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(worker),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any]
+        else {
+            return nil
+        }
+        return dictionary
     }
 
     private func sessionAPITaskID(_ rawID: String) -> TaskSessionID? {

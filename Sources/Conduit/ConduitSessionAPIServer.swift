@@ -415,6 +415,22 @@ final class ConduitSessionAPIServer {
             )
         case "conduit_list_adapters":
             command = .listAdapters
+        case "conduit_list_provider_sessions":
+            let provider = arguments["provider"]?.stringValue ?? ""
+            command = provider.isEmpty
+                ? nil
+                : .listProviderSessions(provider: provider)
+        case "conduit_observe_worker":
+            let provider = arguments["provider"]?.stringValue ?? ""
+            let providerSessionID = arguments["provider_session_id"]?.stringValue
+                ?? arguments["providerSessionID"]?.stringValue
+                ?? ""
+            command = provider.isEmpty || providerSessionID.isEmpty
+                ? nil
+                : .observeWorker(
+                    provider: provider,
+                    providerSessionID: providerSessionID
+                )
         case "conduit_session_status":
             if let id = arguments["taskSessionID"]?.stringValue {
                 command = .sessionStatus(taskSessionID: id)
@@ -517,7 +533,11 @@ final class ConduitSessionAPIServer {
             "isError": payload["error"] != nil,
             "content": [["type": "text", "text": text]],
         ]
-        if name == "conduit_session_events", payload["error"] == nil {
+        if [
+            "conduit_session_events",
+            "conduit_list_provider_sessions",
+            "conduit_observe_worker",
+        ].contains(name), payload["error"] == nil {
             result["structuredContent"] = payload
         }
         return result

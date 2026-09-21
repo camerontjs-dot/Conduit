@@ -1555,7 +1555,7 @@ decision makes no claim about its publisher or resolution.
 
 ## D-050: Provider supervision uses explicit lineage, authority, and preflight state
 
-**Status:** Proposed (2026-09-20)
+**Status:** Accepted (2026-09-21; state-model foundation landed in #59)
 
 **Context:** The durable-session pressure test in #52 showed that the current
 task/session vocabulary cannot represent several states without overloading
@@ -1600,3 +1600,63 @@ identity; storing one session-level model; representing unknown as nil plus
 caller convention; flattening provider-specific state to strings; calling PTY
 writes agent prompts; or mapping an unsupported lifecycle operation to the
 nearest available destructive action.
+
+
+---
+
+## D-051: OpenCode discovery reads persistence without entering the execution path
+
+**Status:** Proposed (2026-09-21)
+
+**Context:** #52 demonstrated provider sessions created outside Conduit that remained
+visible to OpenCode but absent from Conduit inventory. The existing structured
+OpenCode client is not an observation seam: starting it acquires
+`OpenCodeServeLease`, may start `opencode serve`, binds task/runtime lifecycle,
+and can later send or abort turns. Using that path merely to inspect a provider
+session would manufacture supervision and consume execution resources. Source
+review also found that current OpenCode database initialization applies
+migrations, so invoking nominally read-only OpenCode CLI commands is not a
+strictly non-mutating observation boundary.
+
+**Decision:**
+
+1. Provider discovery is a separate read-only interface that returns the shared
+   `WorkerLineage` model and exposes no prompt, resume, abort, adoption, lease,
+   or lifecycle-mutation verb.
+2. OpenCode observation does not invoke the provider CLI or start/acquire an
+   OpenCode server host. It copies the provider SQLite database and WAL into a
+   disposable snapshot, verifies the source fingerprints remained stable across
+   the copy, and queries only the disposable copy with `PRAGMA query_only=ON`.
+3. The persistence projection is intentionally narrow: session identity and
+   metadata plus message identity, role, provider/model identity, completion,
+   and error state needed for turn lineage. Transcript content is not required
+   for this discovery slice.
+4. Exact provider-session identity may correlate an existing Conduit task/runtime
+   binding when the match is unique. That correlation does not grant writer or
+   controller authority.
+5. Persistence is marked `provider_observed` with freshness `UNKNOWN`.
+   A fresh snapshot read does not establish that persisted provider state matches
+   live OS or process state.
+6. Persisted assistant messages without a non-null provider completion or error
+   are `AMBIGUOUS`, not inferred `ACTIVE`. Provider turn completion remains
+   separate from terminal receipt, verification, and objective acceptance.
+7. Provider-specific metadata remains typed and namespaced under
+   `opencode.persistence`; unsupported shared fields remain explicit UNKNOWN.
+8. If persistence is unavailable, ambiguous, changes during snapshot capture, or
+   does not match the expected schema, discovery fails closed rather than
+   migrating provider state or manufacturing replacement state.
+
+**Consequences:** A supervisor can inventory and inspect external OpenCode session
+identity without creating a Conduit task or consuming a live-task slot merely to
+observe it. This slice deliberately does not establish live process state,
+writer ownership, adoption, lifecycle control, or CAL integration.
+
+**Rejected alternative:** The first implementation used `opencode session list`
+plus sanitized export. That interface appeared read-only at the command level,
+but current OpenCode startup initializes the database and applies migrations.
+It is therefore not accepted as the non-mutating observation seam.
+
+**Reconsideration trigger:** Revisit the transport if OpenCode provides a stable
+read endpoint that can observe the same durable session inventory without
+starting or acquiring a provider host and with stronger authority for freshness
+or live activity.
