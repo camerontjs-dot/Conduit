@@ -234,7 +234,7 @@ final class ProviderSessionObservationTests: XCTestCase {
         XCTAssertEqual(worker.turns[1].state, .ambiguous)
         XCTAssertNotEqual(worker.turns[1].state, .active)
         XCTAssertEqual(worker.observation.authority, .providerObserved)
-        XCTAssertEqual(worker.observation.freshness, .current)
+        XCTAssertEqual(worker.observation.freshness, .unknown)
         XCTAssertEqual(worker.observation.observedAt.value, fixedDate)
     }
 
