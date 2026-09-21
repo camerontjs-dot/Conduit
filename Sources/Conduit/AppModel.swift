@@ -3961,12 +3961,20 @@ final class AppModel: ObservableObject {
                     providerSessionID: sessionID
                 )
             }
+            let encoded = workers.compactMap(sessionAPIWorkerLineageObject)
+            guard encoded.count == workers.count else {
+                return [
+                    "error": "provider inventory could not be encoded completely",
+                    "provider": "opencode",
+                    "authority": "provider observation succeeded but no partial inventory is returned",
+                ]
+            }
             return [
                 "provider": "opencode",
-                "workers": workers.compactMap(sessionAPIWorkerLineageObject),
-                "count": workers.count,
+                "workers": encoded,
+                "count": encoded.count,
                 "capacity_effect": "none; no Conduit create admission or live-task reservation",
-                "authority": "current read of OpenCode persisted session metadata; not live OS/process state, writer authority, verification, or objective acceptance",
+                "authority": "current read of OpenCode persisted session metadata; live worker freshness remains UNKNOWN without independent process observation",
             ]
         } catch {
             return [
