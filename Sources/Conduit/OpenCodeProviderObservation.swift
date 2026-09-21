@@ -103,7 +103,7 @@ struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTransport 
                   )
                 )
                 FROM session
-                WHERE id = (quotedID)
+                WHERE id = \(quotedID)
                 LIMIT 1;
                 """
             )
@@ -133,7 +133,7 @@ struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTransport 
                   END
                 )
                 FROM message
-                WHERE session_id = (quotedID)
+                WHERE session_id = \(quotedID)
                 ORDER BY time_created ASC, id ASC;
                 """
             )
