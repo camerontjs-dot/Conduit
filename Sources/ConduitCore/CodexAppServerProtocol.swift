@@ -343,6 +343,17 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     }
 }
 
+public enum CodexThreadWriterCollisionMapper {
+    /// Translate current Codex-native single-writer errors into the canonical
+    /// provider-session authority failure. Matching stays adapter-specific;
+    /// orchestration policy consumes only the canonical writer_collision code.
+    public static func isActiveWriterConflict(_ message: String) -> Bool {
+        let normalized = message.lowercased()
+        return normalized.contains("already has an active writer")
+            || normalized.contains("open in another app")
+    }
+}
+
 public enum CodexAppServerRequests {
     public static func initialize(id: Int) -> [String: Any] {
         [
