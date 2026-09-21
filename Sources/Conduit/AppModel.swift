@@ -3947,13 +3947,7 @@ final class AppModel: ObservableObject {
                 "supported_providers": ["opencode"],
             ]
         }
-        guard let observer = sessionAPIOpenCodeObserver() else {
-            return [
-                "error": "opencode is not on PATH",
-                "provider": "opencode",
-                "authority": "no provider observation performed",
-            ]
-        }
+        let observer = sessionAPIOpenCodeObserver()
 
         do {
             let workers = try observer.listSessions { [weak self] sessionID in
@@ -3974,7 +3968,7 @@ final class AppModel: ObservableObject {
                 "workers": encoded,
                 "count": encoded.count,
                 "capacity_effect": "none; no Conduit create admission or live-task reservation",
-                "authority": "current read of OpenCode persisted session metadata; live worker freshness remains UNKNOWN without independent process observation",
+                "authority": "read from a disposable snapshot of OpenCode persistence; live worker freshness remains UNKNOWN without independent process observation",
             ]
         } catch {
             return [
@@ -3996,13 +3990,7 @@ final class AppModel: ObservableObject {
                 "supported_providers": ["opencode"],
             ]
         }
-        guard let observer = sessionAPIOpenCodeObserver() else {
-            return [
-                "error": "opencode is not on PATH",
-                "provider": "opencode",
-                "authority": "no provider observation performed",
-            ]
-        }
+        let observer = sessionAPIOpenCodeObserver()
 
         do {
             let worker = try observer.observeSession(
@@ -4021,7 +4009,7 @@ final class AppModel: ObservableObject {
                 "provider": "opencode",
                 "worker": object,
                 "capacity_effect": "none; no Conduit create admission or live-task reservation",
-                "authority": "current read of sanitized OpenCode persisted session data; incomplete persisted turns remain ambiguous and process/writer/acceptance facts are not inferred",
+                "authority": "read from a disposable snapshot of OpenCode persistence; incomplete persisted turns remain ambiguous and process/writer/acceptance facts are not inferred",
             ]
         } catch {
             return [
@@ -4037,7 +4025,7 @@ final class AppModel: ObservableObject {
         provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private func sessionAPIOpenCodeObserver() -> OpenCodeProviderSessionObserver? {
+    private func sessionAPIOpenCodeObserver() -> OpenCodeProviderSessionObserver {
         // Observation reads OpenCode persistence directly from a disposable
         // SQLite snapshot. It must not resolve or launch the OpenCode CLI,
         // because provider startup may apply persistence migrations.
