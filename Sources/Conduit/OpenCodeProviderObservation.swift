@@ -286,9 +286,38 @@ struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTransport 
             )
         }
 
+        // Do not use Pipe here. Inventory output can exceed the kernel pipe
+        // buffer; waiting for sqlite3 to exit before draining a Pipe can then
+        // deadlock the child until this method's timeout. File-backed capture
+        // keeps the observation bounded without mutating provider persistence.
+        let captureDirectory = fileManager.temporaryDirectory.appendingPathComponent(
+            "conduit-opencode-query-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try fileManager.createDirectory(
+            at: captureDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? fileManager.removeItem(at: captureDirectory) }
+
+        let stdoutURL = captureDirectory.appendingPathComponent("stdout.jsonl")
+        let stderrURL = captureDirectory.appendingPathComponent("stderr.txt")
+        guard fileManager.createFile(atPath: stdoutURL.path, contents: nil),
+              fileManager.createFile(atPath: stderrURL.path, contents: nil)
+        else {
+            throw TransportError.queryFailed(
+                "Could not create disposable sqlite3 capture files."
+            )
+        }
+
+        let stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
+        let stderrHandle = try FileHandle(forWritingTo: stderrURL)
+        defer {
+            try? stdoutHandle.close()
+            try? stderrHandle.close()
+        }
+
         let process = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
         process.executableURL = sqliteURL
         process.arguments = [
             "-batch",
@@ -296,8 +325,8 @@ struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTransport 
             databaseURL.path,
             sql,
         ]
-        process.standardOutput = stdout
-        process.standardError = stderr
+        process.standardOutput = stdoutHandle
+        process.standardError = stderrHandle
 
         try process.run()
 
@@ -321,8 +350,11 @@ struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTransport 
         }
 
         process.waitUntilExit()
-        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
+        try stdoutHandle.close()
+        try stderrHandle.close()
+
+        let stdoutData = try Data(contentsOf: stdoutURL)
+        let stderrData = try Data(contentsOf: stderrURL)
         guard process.terminationStatus == 0 else {
             let detail = String(decoding: stderrData, as: UTF8.self)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
