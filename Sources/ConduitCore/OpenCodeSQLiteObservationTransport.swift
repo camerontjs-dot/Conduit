@@ -1,5 +1,4 @@
 #if os(macOS)
-import ConduitCore
 import Darwin
 import Foundation
 
