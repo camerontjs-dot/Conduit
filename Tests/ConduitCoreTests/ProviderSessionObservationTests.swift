@@ -21,7 +21,7 @@ final class ProviderSessionObservationTests: XCTestCase {
             return listDocument
         }
 
-        func exportSessionJSON(providerSessionID: String) throws -> CodexJSON {
+        func readSessionJSON(providerSessionID: String) throws -> CodexJSON {
             exportCalls.append(providerSessionID)
             guard let value = exports[providerSessionID] else {
                 throw ProviderSessionObservationError.malformedProviderResponse(
