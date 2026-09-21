@@ -179,6 +179,36 @@ public enum ConduitSessionToolCatalog {
             annotations: localReadOnlyAnnotations
         ),
         tool(
+            "conduit_list_provider_sessions",
+            "Read provider-native session inventory without creating or adopting a Conduit task. This is observation only: it does not send input, resume or interrupt a turn, acquire writer authority, or consume a live execution slot. OpenCode persistence is provider-observed state, not proof of a live OS process; unsupported bindings remain UNKNOWN.",
+            annotations: localReadOnlyAnnotations,
+            properties: [
+                "provider": [
+                    "type": "string",
+                    "enum": ["opencode"],
+                    "description": "Provider observation implementation. Wave 1 supports opencode only.",
+                ],
+            ],
+            required: ["provider"]
+        ),
+        tool(
+            "conduit_observe_worker",
+            "Read one exact provider session into the provider-neutral WorkerLineage envelope. Observation never adopts or controls the session. Persisted provider completion remains separate from terminal receipt, verification, and objective acceptance; missing task/runtime/process/writer facts remain UNKNOWN.",
+            annotations: localReadOnlyAnnotations,
+            properties: [
+                "provider": [
+                    "type": "string",
+                    "enum": ["opencode"],
+                    "description": "Provider observation implementation. Wave 1 supports opencode only.",
+                ],
+                "provider_session_id": property(
+                    "string",
+                    "Exact provider-native session id returned by conduit_list_provider_sessions."
+                ),
+            ],
+            required: ["provider", "provider_session_id"]
+        ),
+        tool(
             "conduit_session_status",
             "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. close_outcome says whether conduit_close_session would be reversible for this task. prompts_held_pending_ready counts objectives Conduit accepted before the runtime was ready and still owes delivery on. thread_provenance says where the live structured session came from: resumed means the provider honoured the earlier thread, restarted means it refused and this is a NEW EMPTY session whose displaced id is superseded_thread_id, unverified means continuity was never confirmed, fresh means nobody asked to resume. Treat restarted and unverified as history you do not have. Status is observation, never verification of what an agent did.",
             annotations: localReadOnlyAnnotations,
