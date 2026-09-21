@@ -111,7 +111,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         providerSessionID: String,
         binding: ProviderObservationBinding? = nil
     ) throws -> WorkerLineage {
-        guard providerSessionID.hasPrefix("ses_"), providerSessionID.count > 4 else {
+        guard Self.validProviderSessionID(providerSessionID) else {
             throw ProviderSessionObservationError.invalidProviderSessionID(
                 providerSessionID
             )
@@ -283,7 +283,10 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
 
     private static func providerMetadata(from session: CodexJSON) -> ProviderPayloadValue {
         var object: [String: ProviderPayloadValue] = [:]
-        for key in ["id", "title", "projectID", "projectId", "directory", "time"] {
+        for key in [
+            "id", "title", "projectID", "projectId", "directory",
+            "parentID", "parentId", "time",
+        ] {
             guard let value = session[key] else { continue }
             object[key] = payloadValue(value)
         }
@@ -311,6 +314,15 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
         guard let json else { return false }
         if case .null = json { return false }
         return true
+    }
+
+    private static func validProviderSessionID(_ value: String) -> Bool {
+        guard value.hasPrefix("ses_"), value.count > 4 else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            CharacterSet.alphanumerics.contains(scalar)
+                || scalar == "_"
+                || scalar == "-"
+        }
     }
 
     private static func nonempty(_ value: String?) -> String? {
