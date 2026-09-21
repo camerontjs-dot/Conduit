@@ -224,10 +224,25 @@ final class CodexAppServerClient: ObservableObject {
                 )
                 attempt = .accepted
             } catch {
-                // The replacement is a NEW, EMPTY thread. Starting one is the
-                // right recovery; reporting it as the resume the caller asked
-                // for is not, so the substitution is recorded rather than
-                // swallowed with the error.
+                let message = error.localizedDescription
+                if CodexThreadWriterCollisionMapper.isActiveWriterConflict(
+                    message
+                ) {
+                    // A single-writer collision proves the requested thread
+                    // still exists under another writer. Replacing it would
+                    // fork history precisely when continuity remains present.
+                    throw ClientError.protocolError(
+                        ProviderSessionAuthorityFailure.writerCollision(
+                            providerID: "codex",
+                            providerSessionID: resumeThreadID,
+                            detail: message
+                        )
+                    )
+                }
+
+                // Ordinary refused/missing resume remains recoverable with a
+                // fresh thread. The replacement is explicitly recorded as
+                // restarted so callers do not mistake it for continuity.
                 attempt = .refused
                 started = try await request(
                     CodexAppServerRequests.threadStart(
