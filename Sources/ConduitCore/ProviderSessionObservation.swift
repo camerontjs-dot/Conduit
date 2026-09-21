@@ -39,7 +39,7 @@ public protocol ProviderSessionObserving {
 /// resume a turn, abort a session, or acquire a writer lease through it.
 public protocol OpenCodeProviderObservationTransport {
     func listSessionsJSON() throws -> CodexJSON
-    func exportSessionJSON(providerSessionID: String) throws -> CodexJSON
+    func readSessionJSON(providerSessionID: String) throws -> CodexJSON
 }
 
 public enum ProviderSessionObservationError: Error, Equatable, LocalizedError {
@@ -117,7 +117,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
             )
         }
 
-        let root = try transport.exportSessionJSON(
+        let root = try transport.readSessionJSON(
             providerSessionID: providerSessionID
         )
         guard let info = root["info"] else {
