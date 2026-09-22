@@ -5108,7 +5108,7 @@ final class AppModel: ObservableObject {
             taskID: taskID,
             operation: operation
         ),
-        let encoded = sessionAPIJSONObject(preflight)
+        let encoded = sessionAPILifecycleJSONObject(preflight)
         else {
             return [
                 "error": "lifecycle preflight could not be encoded",
@@ -5147,7 +5147,7 @@ final class AppModel: ObservableObject {
             taskID: taskID,
             operation: operation
         ),
-        let encoded = sessionAPIJSONObject(preflight)
+        let encoded = sessionAPILifecycleJSONObject(preflight)
         else {
             return [
                 "error": "lifecycle preflight unavailable",
@@ -5283,7 +5283,7 @@ final class AppModel: ObservableObject {
         let typedPreflight = sessionAPILifecyclePlan(
             taskID: taskID,
             operation: .abortTurn
-        ).flatMap { sessionAPIJSONObject($0) }
+        ).flatMap { sessionAPILifecycleJSONObject($0) }
         let interruptionEventID = runtime.recordInterruptRequest()
         if runtime.usesStructuredHost {
             runtime.interruptStructuredAdapter()
@@ -5341,7 +5341,7 @@ final class AppModel: ObservableObject {
         let typedPreflight = sessionAPILifecyclePlan(
             taskID: taskID,
             operation: lifecycleOperation
-        ).flatMap { sessionAPIJSONObject($0) }
+        ).flatMap { sessionAPILifecycleJSONObject($0) }
         leaveTask(taskID)
         var payload: [String: Any] = [
             "taskSessionID": rawID,
