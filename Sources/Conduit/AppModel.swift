@@ -5263,19 +5263,28 @@ final class AppModel: ObservableObject {
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to interrupt", "taskSessionID": rawID]
         }
+        let typedPreflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: .abortTurn
+        ).flatMap(sessionAPIJSONObject)
         let interruptionEventID = runtime.recordInterruptRequest()
         if runtime.usesStructuredHost {
             runtime.interruptStructuredAdapter()
         } else {
             runtime.controller.interrupt()
         }
-        return [
+        var payload: [String: Any] = [
             "taskSessionID": rawID,
             "interrupt": "requested",
             "interrupt_event_id": interruptionEventID.uuidString,
             "interrupted": true,
-            "authority": "Conduit issued and recorded an interrupt request; provider cancellation has not been observed. Read conduit_session_events for later observation.",
+            "compatibility_command": true,
+            "authority": "Conduit issued and recorded an interrupt request; provider cancellation has not been observed. PTY Ctrl-C is not upgraded into a provider turn-abort claim. Read conduit_session_events for later observation.",
         ]
+        if let typedPreflight {
+            payload["typed_abort_preflight"] = typedPreflight
+        }
+        return payload
     }
 
     private func sessionAPIClose(
@@ -5298,19 +5307,35 @@ final class AppModel: ObservableObject {
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to close", "taskSessionID": rawID]
         }
-        // Read the backend before the close: afterwards there is no live
-        // runtime left to ask.
+        // Read the backend and typed consequences before close: afterwards
+        // there is no live runtime left to inspect.
         let outcome = SessionCloseSemantics.outcome(
-            usesStructuredHost: runtime.usesStructuredHost
+            usesStructuredHost: runtime.usesStructuredHost,
+            usesTmux: runtime.controller.usesTmux
         )
+        let lifecycleOperation: LifecycleOperation = runtime.controller.usesTmux
+            ? .releaseSupervision
+            : .stopProviderHost
+        let typedPreflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: lifecycleOperation
+        ).flatMap(sessionAPIJSONObject)
         leaveTask(taskID)
-        return [
+        var payload: [String: Any] = [
             "taskSessionID": rawID,
             "closed": true,
             "close_outcome": outcome.rawValue,
+            // Compatibility field: this describes reconnecting the same live
+            // Conduit runtime, not provider-owned history.
             "recoverable": !outcome.isTerminal,
+            "compatibility_command": true,
             "authority": SessionCloseSemantics.authority(for: outcome),
         ]
+        if let typedPreflight {
+            payload["typed_lifecycle_preflight"] = typedPreflight
+            payload["typed_lifecycle_operation"] = lifecycleOperation.rawValue
+        }
+        return payload
     }
 
     func saveSettings() {
