@@ -64,8 +64,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   restoration, project scanning, or informational startup probes. The loopback
   listener starts after settings load; `/healthz` stays live while `/readyz`
   reports a typed non-ready startup state, and Session API writes fail closed
-  until project/bootstrap authority is ready. The listener is also marked
-  close-on-exec so PTY/provider child processes cannot inherit port 8750.
+  until project/bootstrap authority is ready. Failed security-scope activation
+  is checked against direct root readability before requiring reauthorization.
+  The listener is also marked close-on-exec so PTY/provider child processes
+  cannot inherit port 8750.
 
 
 - Codex `thread/resume` active-writer collisions no longer fall through to a

@@ -1754,11 +1754,14 @@ boundary.
 4. Read-only Session API operations may remain available while bootstrap is not
    ready. Every state-changing Session API command fails closed until readiness
    is `ready`.
-5. MainFrame bookmark activation failure is treated as failed authorization,
-   not silently ignored.
-6. Informational account/resource refreshes do not delay write readiness after
+5. MainFrame bookmark activation failure is not silently treated as success.
+   Conduit may continue when the resolved root is directly readable (including
+   non-sandboxed execution); otherwise readiness reports authorization required.
+6. A successful operator reauthorization/project refresh may complete the
+   interrupted bootstrap and transition readiness to `ready` without relaunch.
+7. Informational account/resource refreshes do not delay write readiness after
    project identity and durable-session reconciliation are established.
-7. The Session API listener is close-on-exec. Child PTYs and provider processes
+8. The Session API listener is close-on-exec. Child PTYs and provider processes
    must not inherit Conduit's control-plane socket.
 
 **Consequences:** A supervisor can distinguish "Conduit is alive" from "Conduit

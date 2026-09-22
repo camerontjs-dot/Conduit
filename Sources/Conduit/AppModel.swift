@@ -1400,16 +1400,7 @@ final class AppModel: ObservableObject {
             )
             return
         }
-        completedUsage = usageLog?.readRecords() ?? []
-        recoverInterruptedWorkSessions()
-        await refreshDiscoveredSessions()
-
-        // Project identity and durable-session reconciliation are established.
-        // Account/resource refreshes are informational and must not delay the
-        // control plane becoming ready for supervised work.
-        setSessionAPIReadiness(.ready)
-        Task { await refreshHealth() }
-        Task { await refreshResources() }
+        await completeBootstrapAfterProjectScan()
     }
 
     /// Startup scanning touches a protected user-selected folder. Keep that
@@ -1457,11 +1448,36 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func completeBootstrapAfterProjectScan() async {
+        completedUsage = usageLog?.readRecords() ?? []
+        recoverInterruptedWorkSessions()
+        await refreshDiscoveredSessions()
+
+        // Project identity and durable-session reconciliation are established.
+        // Account/resource refreshes are informational and must not delay the
+        // control plane becoming ready for supervised work.
+        setSessionAPIReadiness(.ready)
+        Task { await refreshHealth() }
+        Task { await refreshResources() }
+    }
+
     func refreshProjects() {
         guard !isScanningProjects else { return }
         Task {
             statusMessage = "Refreshing MainFrame projects…"
-            _ = await refreshProjectsForBootstrap()
+            let succeeded = await refreshProjectsForBootstrap()
+            guard !sessionAPIReadiness.isReady else { return }
+            if succeeded {
+                await completeBootstrapAfterProjectScan()
+            } else {
+                setSessionAPIReadiness(
+                    settings.mainframeRoot == nil
+                        ? .mainframeNotConfigured
+                        : (rootAccessNeedsAuthorization
+                            ? .mainframeAuthorizationRequired
+                            : .mainframeScanFailed)
+                )
+            }
         }
     }
 
@@ -1501,10 +1517,10 @@ final class AppModel: ObservableObject {
                 taskReconnectabilityObservation = .notChecked
                 scopedRootURL = url
                 isUsingScopedRoot = url.startAccessingSecurityScopedResource()
-                guard isUsingScopedRoot else {
+                guard isUsingScopedRoot || rootIsDirectlyReadable(url) else {
                     scopedRootURL = nil
                     rootAccessNeedsAuthorization = true
-                    errorMessage = "Conduit could not activate persistent access to that folder. Choose it again to renew macOS access."
+                    errorMessage = "Conduit could not activate or directly read that folder. Choose it again to renew macOS access."
                     return
                 }
                 rootAccessNeedsAuthorization = false
@@ -1539,10 +1555,10 @@ final class AppModel: ObservableObject {
             settings.mainframeRoot = url
             scopedRootURL = url
             isUsingScopedRoot = url.startAccessingSecurityScopedResource()
-            guard isUsingScopedRoot else {
+            guard isUsingScopedRoot || rootIsDirectlyReadable(url) else {
                 scopedRootURL = nil
                 rootAccessNeedsAuthorization = true
-                statusMessage = "MainFrame access could not be activated. Choose Root to renew it."
+                statusMessage = "MainFrame access could not be activated or read directly. Choose Root to renew it."
                 return false
             }
             if isStale {
@@ -1557,6 +1573,14 @@ final class AppModel: ObservableObject {
             statusMessage = "MainFrame access could not be restored. Choose Root to renew it."
             return false
         }
+    }
+
+    private func rootIsDirectlyReadable(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(
+            atPath: url.path,
+            isDirectory: &isDirectory
+        ) && isDirectory.boolValue
     }
 
     private func endScopedRootAccess() {
