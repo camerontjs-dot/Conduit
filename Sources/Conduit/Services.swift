@@ -337,13 +337,20 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         }
     }
 
-    /// Kill the underlying process (and durable tmux session when present) so
-    /// the next launch creates a brand-new session instead of reconnecting.
+    /// Request the underlying runtime to end.
+    ///
+    /// tmux gives Conduit a synchronous, out-of-band confirmation through
+    /// kill-session. A structured adapter can be declared ended only after its
+    /// owner has already stopped that adapter. A direct PTY is different:
+    /// SwiftTerm termination is a request, and the authoritative process exit
+    /// arrives later through processTerminated/waitpid. Never manufacture a
+    /// synchronous direct-PTY exit receipt.
     @discardableResult
-    func endSession() -> Bool {
+    func endSession(hostedAdapterAlreadyStopped: Bool = false) -> Bool {
         failPendingPrompts()
-        let runtimeEnded: Bool
+
         if usesTmux {
+            let runtimeEnded: Bool
             if let name = tmuxSessionName,
                let tmux = EnvironmentResolver.shared.resolve("tmux") {
                 // Kill first so has-session during processTerminated sees
@@ -352,23 +359,39 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             } else {
                 runtimeEnded = false
             }
-        } else {
-            runtimeEnded = true
+
+            let terminalState: SessionLifecycle = runtimeEnded
+                ? .exited(code: nil)
+                : .detached
+            // Detach→exited is blocked on the state machine (receipt honesty);
+            // an explicit operator action may force the terminal presentation
+            // state after the out-of-band result has been classified.
+            if lifecycle.isTerminal {
+                lifecycle = terminalState
+            } else if !lifecycle.transition(to: terminalState) {
+                lifecycle = terminalState
+            }
+            terminalView.terminate()
+            return runtimeEnded
         }
 
-        let terminalState: SessionLifecycle = runtimeEnded
-            ? .exited(code: nil)
-            : .detached
-        // Detach→exited is blocked on the state machine (receipt honesty);
-        // an explicit operator action may force the terminal presentation
-        // state after the out-of-band result has been classified.
-        if lifecycle.isTerminal {
-            lifecycle = terminalState
-        } else if !lifecycle.transition(to: terminalState) {
-            lifecycle = terminalState
+        if hostedAdapterAlreadyStopped {
+            let terminalState = SessionLifecycle.exited(code: nil)
+            if lifecycle.isTerminal {
+                lifecycle = terminalState
+            } else if !lifecycle.transition(to: terminalState) {
+                lifecycle = terminalState
+            }
+            terminalView.terminate()
+            return true
         }
+
+        // Direct PTY: request termination and wait for SwiftTerm's
+        // processTerminated callback to prove the process actually exited.
+        // Keeping lifecycle nonterminal also keeps the live-task evidence
+        // surface available if the process ignores or outlives the request.
         terminalView.terminate()
-        return runtimeEnded
+        return false
     }
 
     func terminate() {
