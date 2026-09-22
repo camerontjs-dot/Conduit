@@ -4018,6 +4018,17 @@ final class AppModel: ObservableObject {
                 origin: origin,
                 caller: caller
             )
+        case .lifecyclePreflight(let rawID, let operation):
+            return sessionAPILifecyclePreflight(
+                taskSessionID: rawID,
+                operation: operation
+            )
+        case .lifecycleOperation(let rawID, let operation):
+            return sessionAPILifecycleOperation(
+                taskSessionID: rawID,
+                operation: operation,
+                caller: caller
+            )
         case .interrupt(let rawID):
             return sessionAPIInterrupt(taskSessionID: rawID, caller: caller)
         case .closeSession(let rawID):
@@ -4474,7 +4485,8 @@ final class AppModel: ObservableObject {
         // in the response that tells it the decision was final.
         if let live {
             payload["close_outcome"] = SessionCloseSemantics.outcome(
-                usesStructuredHost: live.usesStructuredHost
+                usesStructuredHost: live.usesStructuredHost,
+                usesTmux: live.controller.usesTmux
             ).rawValue
         }
         // Every structured client replaces a refused resume with a new, empty
