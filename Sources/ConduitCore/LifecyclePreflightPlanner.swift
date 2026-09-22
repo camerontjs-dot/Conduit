@@ -545,6 +545,9 @@ public enum LifecyclePreflightPlanner {
         if let provider = snapshot.providerSessionID.value {
             return LifecycleTarget(kind: .session, identifier: .known(provider))
         }
+        if let attempt = snapshot.runtimeAttemptID.value {
+            return LifecycleTarget(kind: .session, identifier: .known(attempt))
+        }
         return LifecycleTarget(
             kind: .session,
             identifier: .known(snapshot.taskSessionID)
