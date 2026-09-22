@@ -2297,6 +2297,42 @@ check(
         .sessionEvents(taskSessionID: "t", cursor: "v1:0", limit: 2)
     )
 )
+check(
+    "session API bootstrap keeps reads available",
+    ConduitSessionAPI.allowsCommand(
+        .listProjects,
+        readiness: .bootstrapping
+    )
+)
+check(
+    "session API bootstrap blocks writes",
+    !ConduitSessionAPI.allowsCommand(
+        .createTask(
+            agent: "Shell",
+            projectSlug: "synthetic",
+            objective: "",
+            idempotencyKey: nil
+        ),
+        readiness: .mainframeAuthorizationRequired
+    )
+)
+check(
+    "session API ready state allows writes",
+    ConduitSessionAPI.allowsCommand(
+        .createTask(
+            agent: "Shell",
+            projectSlug: "synthetic",
+            objective: "",
+            idempotencyKey: nil
+        ),
+        readiness: .ready
+    )
+)
+check(
+    "session API readyz status is fail-closed before READY",
+    ConduitSessionAPIReadiness.mainframeScanFailed.httpStatusCode == 503
+        && ConduitSessionAPIReadiness.ready.httpStatusCode == 200
+)
 do {
     let stamp = Date(timeIntervalSince1970: 1_787_000_000)
     let supervisoryAttemptID = RuntimeAttemptID(
