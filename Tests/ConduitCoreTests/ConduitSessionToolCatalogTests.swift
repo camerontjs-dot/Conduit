@@ -7,7 +7,7 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 16)
+        XCTAssertEqual(names.count, 17)
         XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 7)
     }
 
@@ -81,6 +81,22 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
         XCTAssertTrue(
             (preflight["description"] as? String)?.contains(
                 "unsupported, or unknown"
+            ) == true
+        )
+
+        let processTree = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_process_tree")
+        )
+        let processTreeSchema = try XCTUnwrap(
+            processTree["inputSchema"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            processTreeSchema["required"] as? [String],
+            ["taskSessionID"]
+        )
+        XCTAssertTrue(
+            (processTree["description"] as? String)?.contains(
+                "Parent exit alone never becomes complete"
             ) == true
         )
 

@@ -11,7 +11,8 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
         providerHostID: OrchestrationValue<String> = .unknown,
         tmuxSessionName: OrchestrationValue<String> = .unknown,
         turnActive: OrchestrationValue<Bool> = .unknown,
-        hostStopsOnAdapterStop: OrchestrationValue<Bool> = .unknown
+        hostStopsOnAdapterStop: OrchestrationValue<Bool> = .unknown,
+        processTree: OrchestrationValue<ProcessTreeObservation> = .unknown
     ) -> LifecycleRuntimeSnapshot {
         LifecycleRuntimeSnapshot(
             kind: kind,
@@ -22,8 +23,62 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
             tmuxSessionName: tmuxSessionName,
             turnActive: turnActive,
             adapterStopWillStopProviderHost: hostStopsOnAdapterStop,
+            processTree: processTree,
             observedAt: now
         )
+    }
+
+    func testPreflightCarriesOnlyKnownLiveDescendantPIDsFromCompleteObservation() {
+        let stamp = SupervisionObservationStamp(
+            authority: .processObserved,
+            freshness: .current,
+            observedAt: .known(now)
+        )
+        let launcher = ProcessNodeObservation(
+            pid: 700,
+            parentPID: .known(1),
+            processGroupID: .known(700),
+            startIdentity: .known(
+                ProcessStartIdentity(startTime: .known(now.addingTimeInterval(-10)))
+            ),
+            commandName: .known("fixture-shell"),
+            ownership: .taskCreated,
+            ownershipBasis: .launcherIdentity,
+            liveness: .live,
+            observation: stamp
+        )
+        let child = ProcessNodeObservation(
+            pid: 701,
+            parentPID: .known(700),
+            processGroupID: .known(700),
+            startIdentity: .known(
+                ProcessStartIdentity(startTime: .known(now.addingTimeInterval(-5)))
+            ),
+            commandName: .known("fixture-child"),
+            ownership: .taskCreated,
+            ownershipBasis: .descendantObservedAfterLauncher,
+            liveness: .live,
+            observation: stamp
+        )
+        let tree = ProcessTreeObservation(
+            taskSessionID: "task-fixture",
+            runtimeAttemptID: .known("attempt-fixture"),
+            providerTurnID: .unknown,
+            launcher: .known(launcher),
+            descendants: [child],
+            coverage: .complete,
+            observation: stamp
+        )
+
+        let plan = LifecyclePreflightPlanner.preflight(
+            operation: .stopProviderHost,
+            snapshot: snapshot(
+                kind: .directPTY,
+                processTree: .known(tree)
+            )
+        )
+
+        XCTAssertEqual(plan.knownDescendantPIDs.value, [701])
     }
 
     func testOpenCodeLastOwnedLeaseStopReportsHostStopAndProviderResume() {

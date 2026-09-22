@@ -103,6 +103,19 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     private(set) var tmuxSessionName: String?
     private(set) var lastDirectPTYStopRequest: DirectPTYStopRequestResult = .notRequested
 
+    /// Exact SwiftTerm-owned launcher PID for read-only process-tree
+    /// observation. This is intentionally not a descendant cleanup handle.
+    var observedDirectPTYProcessID: pid_t? {
+        guard !usesTmux,
+              lifecycle == .launching || lifecycle == .running,
+              let process = terminalView.process,
+              process.shellPid > 0
+        else {
+            return nil
+        }
+        return process.shellPid
+    }
+
     // MARK: - Tier A observed usage
     //
     // Counters over what Conduit itself saw. Nothing here is read from the

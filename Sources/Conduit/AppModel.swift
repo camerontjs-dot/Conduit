@@ -397,6 +397,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var sessionAPIAddress: String?
     private var sessionAPIServer: ConduitSessionAPIServer?
     private var sessionAPIReadiness: ConduitSessionAPIReadiness = .bootstrapping
+    /// Identity-bound, in-memory process observations for lifecycle
+    /// reconciliation. These are not provider history and are never used to
+    /// infer writer authority, task completion, or objective acceptance.
+    private var sessionAPIProcessTreeBaselines: [TaskSessionID: ProcessTreeObservation] = [:]
+    private var sessionAPIProcessTreeReconciliations: [TaskSessionID: ProcessTreeReconciliation] = [:]
 
     var chatgptTunnelID: String? {
         let url = AdapterThreadStore.defaultDirectory()
@@ -3989,6 +3994,8 @@ final class AppModel: ObservableObject {
             // response while the task record remains UUID-authoritative.
             payload["taskSessionID"] = rawID
             return payload
+        case .processTree(let rawID):
+            return sessionAPIProcessTreeStatus(taskSessionID: rawID)
         case .sessionEvents(let rawID, let cursor, let limit):
             return sessionAPISessionEvents(
                 taskSessionID: rawID,
@@ -5112,6 +5119,17 @@ final class AppModel: ObservableObject {
             return .known(name)
         }()
 
+        let processTree: OrchestrationValue<ProcessTreeObservation> = {
+            guard let live else { return .unknown }
+            return .known(
+                sessionAPIObserveProcessTree(
+                    taskID: taskID,
+                    runtime: live,
+                    prior: nil
+                )
+            )
+        }()
+
         return LifecycleRuntimeSnapshot(
             kind: kind,
             taskSessionID: taskID.rawValue.uuidString,
@@ -5125,8 +5143,155 @@ final class AppModel: ObservableObject {
                 ? .known(live?.structuredTurnActive == true)
                 : .unknown,
             adapterStopWillStopProviderHost: adapterStopWillStopProviderHost,
+            processTree: processTree,
             observedAt: Date()
         )
+    }
+
+    /// Read the OS topology for the exact runtime launcher that Conduit can
+    /// identify. This method never signals, terminates, adopts, or releases a
+    /// process. A multi-process provider host is intentionally unavailable in
+    /// this first observer because choosing one PID would overstate coverage.
+    private func sessionAPIObserveProcessTree(
+        taskID: TaskSessionID,
+        runtime: TerminalRuntime?,
+        prior: ProcessTreeObservation?
+    ) -> ProcessTreeObservation {
+        let taskRawID = taskID.rawValue.uuidString
+        let runtimeAttemptID = runtime.map {
+            OrchestrationValue<String>.known($0.runtimeAttemptID.rawValue.uuidString)
+        } ?? prior?.runtimeAttemptID ?? .unknown
+
+        guard let rootPID = sessionAPIProcessTreeRootPID(
+            runtime: runtime,
+            prior: prior
+        ) else {
+            let reason: String
+            if runtime?.controller.usesTmux == true {
+                reason = "tmux supervision does not expose one task-owned launcher PID in this observation"
+            } else if let hostIdentifier = sessionAPIProviderHostIdentifier(
+                for: runtime
+            ), hostIdentifier.split(separator: ",").count > 1 {
+                reason = "provider host exposes multiple PIDs; single-root process-tree coverage is ambiguous"
+            } else {
+                reason = "task runtime launcher PID is unavailable to the process observer"
+            }
+            return ProcessTreeObservation.unavailable(
+                taskSessionID: taskRawID,
+                runtimeAttemptID: runtimeAttemptID,
+                providerTurnID: .unknown,
+                reason: reason
+            )
+        }
+
+        return MacOSProcessTreeObserver.observe(
+            rootPID: rootPID,
+            taskSessionID: taskRawID,
+            runtimeAttemptID: runtimeAttemptID.value,
+            providerTurnID: nil,
+            prior: prior
+        )
+    }
+
+    private func sessionAPIProcessTreeRootPID(
+        runtime: TerminalRuntime?,
+        prior: ProcessTreeObservation?
+    ) -> pid_t? {
+        if let direct = runtime?.controller.observedDirectPTYProcessID {
+            return direct
+        }
+        if let priorPID = prior?.launcher.value?.pid, priorPID > 0 {
+            return pid_t(priorPID)
+        }
+        guard let hostIdentifier = sessionAPIProviderHostIdentifier(for: runtime) else {
+            return nil
+        }
+        let components = hostIdentifier.split(separator: ",")
+        guard components.count == 1,
+              let rawPID = components.first?.split(separator: ":").last,
+              let pid = Int32(rawPID),
+              pid > 0
+        else {
+            return nil
+        }
+        return pid_t(pid)
+    }
+
+    private func sessionAPIProviderHostIdentifier(
+        for runtime: TerminalRuntime?
+    ) -> String? {
+        guard let runtime else { return nil }
+        return runtime.appServer?.lifecycleProviderHostIdentifier
+            ?? runtime.openCode?.lifecycleProviderHostIdentifier
+    }
+
+    private func sessionAPIProcessTreeStatus(
+        taskSessionID rawID: String
+    ) -> [String: Any] {
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        let live = sessionAPILiveRuntime(for: taskID)
+        let baseline = sessionAPIProcessTreeBaselines[taskID]
+        let observation = sessionAPIObserveProcessTree(
+            taskID: taskID,
+            runtime: live,
+            prior: baseline
+        )
+
+        if baseline == nil, observation.coverage != .unavailable {
+            // This is an in-memory read receipt used to bind the next
+            // lifecycle action. It does not alter task/provider history or
+            // execution capacity and is replaced by a fresh pre-action sample
+            // when a stop operation executes.
+            sessionAPIProcessTreeBaselines[taskID] = observation
+        }
+
+        var payload: [String: Any] = [
+            "taskSessionID": rawID,
+            "process_tree": sessionAPIJSONObject(observation) as Any,
+            "authority": "OS process observation through macOS libproc; parent relationship and command name are observations, ownership remains UNKNOWN unless the identity-bound basis is established",
+            "lifecycle_mutation": "none",
+        ]
+        if let baseline {
+            let reconciliation = ProcessTreeReconciler.reconcile(
+                before: baseline,
+                after: observation,
+                requestedOperation: sessionAPIProcessTreeReconciliations[taskID]?
+                    .requestedOperation ?? .unknown
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = reconciliation
+            payload["reconciliation"] = sessionAPIJSONObject(reconciliation) as Any
+            payload["postcondition"] = reconciliation.postcondition.rawValue
+        } else {
+            payload["baseline"] = "recorded_for_future_reconciliation"
+            payload["postcondition"] = "not_requested"
+        }
+        return payload
+    }
+
+    private func sessionAPIReconcileProcessTree(
+        taskID: TaskSessionID,
+        runtime: TerminalRuntime,
+        before: ProcessTreeObservation?,
+        operation: LifecycleOperation
+    ) -> ProcessTreeReconciliation {
+        let boundBefore = before ?? sessionAPIProcessTreeBaselines[taskID]
+        if let boundBefore {
+            sessionAPIProcessTreeBaselines[taskID] = boundBefore
+        }
+        let after = sessionAPIObserveProcessTree(
+            taskID: taskID,
+            runtime: runtime,
+            prior: boundBefore
+        )
+        let reconciliation = ProcessTreeReconciler.reconcile(
+            before: boundBefore,
+            after: after,
+            requestedOperation: .known(operation)
+        )
+        sessionAPIProcessTreeReconciliations[taskID] = reconciliation
+        return reconciliation
     }
 
     private func sessionAPILifecyclePlan(
@@ -5234,6 +5399,18 @@ final class AppModel: ObservableObject {
             ]
         }
 
+        let preActionProcessTree: ProcessTreeObservation? = {
+            guard operation == .stopProviderHost else { return nil }
+            let observed = sessionAPIObserveProcessTree(
+                taskID: taskID,
+                runtime: runtime,
+                prior: nil
+            )
+            guard observed.coverage != .unavailable else { return observed }
+            sessionAPIProcessTreeBaselines[taskID] = observed
+            return observed
+        }()
+
         switch operation {
         case .abortTurn:
             let interruptionEventID = runtime.recordInterruptRequest()
@@ -5269,6 +5446,12 @@ final class AppModel: ObservableObject {
                 mcpAdmission?.markTaskEnded(taskID)
             }
             let runtimeEnded = endSession(runtime)
+            let processTreeReconciliation = sessionAPIReconcileProcessTree(
+                taskID: taskID,
+                runtime: runtime,
+                before: preActionProcessTree,
+                operation: operation
+            )
             var payload: [String: Any] = [
                 "taskSessionID": rawID,
                 "operation": operation.rawValue,
@@ -5277,6 +5460,10 @@ final class AppModel: ObservableObject {
                 "execution_capacity_released": !waitsForObservedDirectPTYExit,
                 "preflight": encoded,
                 "authority": "Conduit executed the explicit runtime/provider-host stop path; provider history is not deleted and objective acceptance is not established",
+                "process_tree_reconciliation": sessionAPIJSONObject(
+                    processTreeReconciliation
+                ) as Any,
+                "process_tree_postcondition": processTreeReconciliation.postcondition.rawValue,
             ]
             if waitsForObservedDirectPTYExit && !runtimeEnded {
                 let request = runtime.controller.lastDirectPTYStopRequest

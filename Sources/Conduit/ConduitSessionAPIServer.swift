@@ -477,6 +477,12 @@ final class ConduitSessionAPIServer {
             } else {
                 command = nil
             }
+        case "conduit_process_tree":
+            if let id = arguments["taskSessionID"]?.stringValue {
+                command = .processTree(taskSessionID: id)
+            } else {
+                command = nil
+            }
         case "conduit_session_events":
             if let id = arguments["taskSessionID"]?.stringValue {
                 let cursor = arguments["cursor"]?.stringValue
@@ -602,6 +608,7 @@ final class ConduitSessionAPIServer {
             "conduit_adopt_provider_session",
             "conduit_lifecycle_preflight",
             "conduit_lifecycle_operation",
+            "conduit_process_tree",
         ].contains(name)
         let isTypedAuthorityCollision =
             name == "conduit_adopt_provider_session"

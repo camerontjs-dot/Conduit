@@ -13,6 +13,9 @@ final class SessionAPIReadinessTests: XCTestCase {
 
     func testBootstrapStatesAllowReadsButBlockWrites() {
         let read = ConduitSessionCommand.listProjects
+        let processTree = ConduitSessionCommand.processTree(
+            taskSessionID: "task-fixture"
+        )
         let write = ConduitSessionCommand.createTask(
             agent: "Shell",
             projectSlug: "synthetic",
@@ -23,6 +26,10 @@ final class SessionAPIReadinessTests: XCTestCase {
         for state in ConduitSessionAPIReadiness.allCases where state != .ready {
             XCTAssertTrue(
                 ConduitSessionAPI.allowsCommand(read, readiness: state)
+            )
+            XCTAssertFalse(ConduitSessionAPI.isWrite(processTree))
+            XCTAssertTrue(
+                ConduitSessionAPI.allowsCommand(processTree, readiness: state)
             )
             XCTAssertFalse(
                 ConduitSessionAPI.allowsCommand(write, readiness: state)

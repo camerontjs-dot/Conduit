@@ -26,6 +26,10 @@ public struct LifecycleRuntimeSnapshot: Codable, Equatable, Sendable {
     /// provider host. This matters for OpenCode because one serve process is
     /// shared by multiple retained clients.
     public var adapterStopWillStopProviderHost: OrchestrationValue<Bool>
+    /// Read-only OS process observation available at preflight time. This is
+    /// never a promise that a later lifecycle operation will stop every
+    /// descendant; the operation must reconcile its own postcondition.
+    public var processTree: OrchestrationValue<ProcessTreeObservation>
     public var observedAt: Date
 
     public init(
@@ -37,6 +41,7 @@ public struct LifecycleRuntimeSnapshot: Codable, Equatable, Sendable {
         tmuxSessionName: OrchestrationValue<String>,
         turnActive: OrchestrationValue<Bool>,
         adapterStopWillStopProviderHost: OrchestrationValue<Bool>,
+        processTree: OrchestrationValue<ProcessTreeObservation> = .unknown,
         observedAt: Date
     ) {
         self.kind = kind
@@ -47,6 +52,7 @@ public struct LifecycleRuntimeSnapshot: Codable, Equatable, Sendable {
         self.tmuxSessionName = tmuxSessionName
         self.turnActive = turnActive
         self.adapterStopWillStopProviderHost = adapterStopWillStopProviderHost
+        self.processTree = processTree
         self.observedAt = observedAt
     }
 }
@@ -397,7 +403,7 @@ public enum LifecyclePreflightPlanner {
                 unsupported: .known([]),
                 unknown: .known([
                     "tmux termination is confirmed only after mutation; failure leaves the runtime detached",
-                    "descendant-process reconciliation is outside this slice"
+                    "tmux process topology is not claimed as a direct Conduit-owned process tree"
                 ])
             )
 
@@ -419,7 +425,7 @@ public enum LifecyclePreflightPlanner {
                 unsupported: .known([]),
                 unknown: .known([
                     "whether the direct PTY process has exited after the termination request",
-                    "descendant-process reconciliation is outside this slice"
+                    "post-action process-tree reconciliation is required before declaring the stop complete"
                 ])
             )
 
@@ -449,7 +455,7 @@ public enum LifecyclePreflightPlanner {
             ]),
             unsupported: .known([]),
             unknown: .known([
-                "provider-host termination is requested but process-tree descendants are not reconciled in this slice"
+                "provider-host termination is requested; post-action process-tree reconciliation is required before declaring the stop complete"
             ])
         )
     }
@@ -517,7 +523,7 @@ public enum LifecyclePreflightPlanner {
             recoverableAfterward: recoverableAfterward,
             exactResumeHandle: resumeHandle(snapshot),
             expectedProcessScope: expectedProcessScope,
-            knownDescendantPIDs: .unknown,
+            knownDescendantPIDs: knownDescendantPIDs(snapshot),
             sideEffects: sideEffects,
             unsupportedConsequences: unsupported,
             unknownConsequences: unknown,
@@ -539,6 +545,23 @@ public enum LifecyclePreflightPlanner {
             return .known(tmux)
         }
         return .unknown
+    }
+
+    private static func knownDescendantPIDs(
+        _ snapshot: LifecycleRuntimeSnapshot
+    ) -> OrchestrationValue<[Int32]> {
+        guard let processTree = snapshot.processTree.value else {
+            return .unknown
+        }
+        guard processTree.coverage == .complete else {
+            return .unknown
+        }
+        return .known(
+            processTree.descendants
+                .filter { $0.liveness == .live }
+                .map(\.pid)
+                .sorted()
+        )
     }
 
     private static func sessionTarget(
