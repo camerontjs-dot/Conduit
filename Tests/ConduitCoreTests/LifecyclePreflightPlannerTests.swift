@@ -140,13 +140,22 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
         XCTAssertEqual(tmux.willReleaseSlot.value, true)
         XCTAssertEqual(tmux.recoverableAfterward.value, true)
         XCTAssertEqual(tmux.exactResumeHandle.value, "conduit-task")
-        XCTAssertEqual(tmux.expectedProcessScope.value, .none)
+        XCTAssertEqual(
+            tmux.expectedProcessScope.value,
+            LifecycleProcessScope.none
+        )
 
         XCTAssertEqual(directRelease.support, .unsupported)
         XCTAssertEqual(directStop.support, .supported)
-        XCTAssertEqual(directStop.willStopProvider.value, true)
+        XCTAssertEqual(directStop.willStopProvider.state, .unknown)
+        XCTAssertEqual(directStop.willReleaseSlot.state, .unknown)
         XCTAssertEqual(directStop.recoverableAfterward.value, false)
         XCTAssertEqual(directStop.expectedProcessScope.value, .session)
+        XCTAssertTrue(
+            directStop.unknownConsequences.value?.contains(
+                "whether the direct PTY process has exited after the termination request"
+            ) == true
+        )
     }
 
     func testAbortTurnDoesNotStopProviderOrReleaseCapacity() {
@@ -222,7 +231,10 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
         XCTAssertEqual(plan.support, .unsupported)
         XCTAssertEqual(plan.willStopProvider.value, false)
         XCTAssertEqual(plan.willReleaseSlot.value, false)
-        XCTAssertEqual(plan.expectedProcessScope.value, .none)
+        XCTAssertEqual(
+            plan.expectedProcessScope.value,
+            LifecycleProcessScope.none
+        )
         XCTAssertTrue(
             plan.unsupportedConsequences.value?.first?
                 .contains("no provider-history archive/delete") == true
