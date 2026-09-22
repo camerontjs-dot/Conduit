@@ -186,8 +186,10 @@ public enum ProviderSessionAuthorityError: Error, Equatable, LocalizedError {
 /// writable worker may need both this provider-session authority and a #57
 /// workspace writer lease, but neither lock implies the other.
 ///
-/// Transfer/release is intentionally absent in this slice. A competing claim
-/// fails closed until a later lifecycle slice owns explicit transfer semantics.
+/// Transfer/release remains intentionally separate from task/runtime lifecycle.
+/// Closing or stopping a Conduit task must not silently release an independently
+/// claimed provider-session writer. A future authority-transfer surface must
+/// identify the exact provider session and recognized controller explicitly.
 public final class ProviderSessionAuthorityRegistry: @unchecked Sendable {
     public static let shared = ProviderSessionAuthorityRegistry()
 
