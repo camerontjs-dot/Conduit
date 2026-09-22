@@ -2,6 +2,7 @@
 import AppKit
 import AVFoundation
 import ConduitCore
+import Darwin
 import Foundation
 import Speech
 import SwiftTerm
@@ -56,6 +57,33 @@ final class ActivityTerminalView: LocalProcessTerminalView {
     }
 }
 
+enum DirectPTYStopRequestResult: Equatable {
+    case notRequested
+    case requested(pid_t)
+    case awaitingExistingExit(pid_t)
+    case unavailable
+    case signalFailed(pid_t, errno: Int32)
+
+    var accepted: Bool {
+        switch self {
+        case .requested, .awaitingExistingExit:
+            return true
+        case .notRequested, .unavailable, .signalFailed:
+            return false
+        }
+    }
+
+    var pid: pid_t? {
+        switch self {
+        case .requested(let pid),
+             .awaitingExistingExit(let pid),
+             .signalFailed(let pid, _):
+            return pid
+        case .notRequested, .unavailable:
+            return nil
+        }
+    }
+}
 @MainActor
 final class TerminalSessionController: NSObject, ObservableObject, LocalProcessTerminalViewDelegate {
     let descriptor: SessionDescriptor
@@ -73,6 +101,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     @Published private(set) var lastOutputAt: Date?
     private(set) var usesTmux = false
     private(set) var tmuxSessionName: String?
+    private(set) var lastDirectPTYStopRequest: DirectPTYStopRequestResult = .notRequested
 
     // MARK: - Tier A observed usage
     //
@@ -386,21 +415,60 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             return true
         }
 
-        // Direct PTY: request termination and wait for SwiftTerm's
-        // processTerminated callback to prove the process actually exited.
-        // Keeping lifecycle nonterminal also keeps the live-task evidence
-        // surface available if the process ignores or outlives the request.
-        terminalView.terminate()
+        // Direct PTY: signal only the exact SwiftTerm-owned child. Do not call
+        // LocalProcess.terminate(): at the pinned SwiftTerm revision that API
+        // sends SIGTERM and immediately cancels its own process monitor, which
+        // prevents Conduit from receiving the later process-exit callback.
+        // Keep SwiftTerm's monitor alive so the existing waitpid-backed
+        // processTerminated callback remains the authority for completion.
+        lastDirectPTYStopRequest = requestDirectPTYTermination()
         return false
+    }
+
+    @discardableResult
+    private func requestDirectPTYTermination() -> DirectPTYStopRequestResult {
+        guard !usesTmux,
+              lifecycle == .launching || lifecycle == .running
+        else {
+            return .unavailable
+        }
+
+        let process = terminalView.process
+        let pid = process.shellPid
+        guard pid > 0 else { return .unavailable }
+
+        // PTY EOF can flip SwiftTerm's running flag before its process
+        // monitor delivers the final waitpid-backed callback. In that narrow
+        // state there is nothing safe to signal; keep waiting for observation.
+        guard process.running else {
+            return .awaitingExistingExit(pid)
+        }
+
+        if kill(pid, SIGTERM) != 0 {
+            let code = errno
+            if code == ESRCH {
+                return .awaitingExistingExit(pid)
+            }
+            return .signalFailed(pid, errno: code)
+        }
+
+        // Interactive shells may ignore SIGTERM. Escalate only the same exact
+        // child PID after a bounded grace period. Retain this controller until
+        // the check so SwiftTerm's process monitor also remains alive. This is
+        // deliberately not descendant/process-tree cleanup.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [self] in
+            guard !lifecycle.isTerminal,
+                  terminalView.process.shellPid == pid,
+                  terminalView.process.running
+            else { return }
+            _ = kill(pid, SIGKILL)
+        }
+        return .requested(pid)
     }
 
     func terminate() {
         guard lifecycle == .launching || lifecycle == .running else { return }
-        terminalView.terminate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self, !self.lifecycle.isTerminal else { return }
-            self.lifecycle.transition(to: .exited(code: nil))
-        }
+        lastDirectPTYStopRequest = requestDirectPTYTermination()
     }
 
     func visualState(at date: Date) -> TerminalVisualState {
