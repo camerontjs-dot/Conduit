@@ -4988,11 +4988,11 @@ final class AppModel: ObservableObject {
         if let live {
             if live.usesStructuredHost {
                 switch backend {
-                case .appServer?: kind = .codexAppServer
-                case .httpServer?: kind = .openCodeHTTP
-                case .acp?: kind = .acp
-                case .structuredCli?: kind = .structuredCLI
-                case .pty?, nil:
+                case .some(.appServer): kind = .codexAppServer
+                case .some(.httpServer): kind = .openCodeHTTP
+                case .some(.acp): kind = .acp
+                case .some(.structuredCli): kind = .structuredCLI
+                case .some(.pty), nil:
                     // A live structured host without a matching declared
                     // backend is not safe to reinterpret as PTY.
                     kind = .absent
@@ -5266,7 +5266,7 @@ final class AppModel: ObservableObject {
         let typedPreflight = sessionAPILifecyclePlan(
             taskID: taskID,
             operation: .abortTurn
-        ).flatMap(sessionAPIJSONObject)
+        ).flatMap { sessionAPIJSONObject($0) }
         let interruptionEventID = runtime.recordInterruptRequest()
         if runtime.usesStructuredHost {
             runtime.interruptStructuredAdapter()
