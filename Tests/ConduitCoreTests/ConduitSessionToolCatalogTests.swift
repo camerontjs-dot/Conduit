@@ -88,9 +88,7 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             ConduitSessionToolCatalog.tool(named: "conduit_lifecycle_operation")
         )
         XCTAssertTrue(
-            (lifecycle["description"] as? String)?.contains("fail closed")
-                ?? (lifecycle["description"] as? String)?.contains("fail")
-                == true
+            (lifecycle["description"] as? String)?.contains("fail closed") == true
         )
 
         let interrupt = try XCTUnwrap(
