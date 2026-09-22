@@ -320,29 +320,18 @@ struct TmuxDriver: Sendable {
     /// history from entering the capture pipeline.
     static let conversationCaptureLineLimit = 600
 
-    enum SessionPresence: Equatable, Sendable {
-        case present
-        case absent
-        case unknown
-    }
-
     /// Distinguishes a proved absence from an observation failure. tmux uses a
     /// non-zero status for both, so the diagnostic is part of the evidence.
-    func sessionPresence(_ name: String) -> SessionPresence {
+    func sessionPresence(_ name: String) -> TmuxSessionPresence {
         let result = SubprocessRunner.run(
             tmuxPath,
             ["has-session", "-t", "=\(name)"],
             timeout: 5
         )
-        if result.status == 0 {
-            return .present
-        }
-        let diagnostic = result.output.lowercased()
-        if diagnostic.contains("can't find session")
-            || diagnostic.contains("no server running") {
-            return .absent
-        }
-        return .unknown
+        return TmuxSessionPresenceClassifier.classify(
+            exitStatus: result.status,
+            output: result.output
+        )
     }
 
     /// Creates the session detached if missing, or proves an existing session
