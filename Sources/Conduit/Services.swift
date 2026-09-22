@@ -439,13 +439,10 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         let pid = process.shellPid
         guard pid > 0 else { return .unavailable }
 
-        // PTY EOF can flip SwiftTerm's running flag before its process
-        // monitor delivers the final waitpid-backed callback. In that narrow
-        // state there is nothing safe to signal; keep waiting for observation.
-        guard process.running else {
-            return .awaitingExistingExit(pid)
-        }
-
+        // Signal the exact child even if SwiftTerm has already seen PTY EOF.
+        // Until SwiftTerm's monitor reaps this child, that PID cannot be reused;
+        // if it already exited the signal is harmless and the callback remains
+        // the authority for completion.
         if kill(pid, SIGTERM) != 0 {
             let code = errno
             if code == ESRCH {
@@ -460,9 +457,10 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         // deliberately not descendant/process-tree cleanup.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [self] in
             guard !lifecycle.isTerminal,
-                  terminalView.process.shellPid == pid,
-                  terminalView.process.running
+                  terminalView.process.shellPid == pid
             else { return }
+            // If the child has exited but its monitor event is still queued,
+            // it remains unreaped and the PID cannot have been recycled.
             _ = kill(pid, SIGKILL)
         }
         return .requested(pid)
