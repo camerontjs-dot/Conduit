@@ -443,7 +443,7 @@ public enum LifecycleProcessScope: String, Codable, Equatable, Sendable {
 /// values in later slices; unknown and unsupported consequences stay explicit
 /// instead of being mapped to a more convenient lifecycle verb.
 public struct LifecyclePreflight: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var operation: LifecycleOperation
@@ -457,6 +457,11 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
     public var knownDescendantPIDs: OrchestrationValue<[Int32]>
     public var sideEffects: OrchestrationValue<[String]>
     public var unsupportedConsequences: OrchestrationValue<[String]>
+    /// Consequences Conduit can name but cannot currently resolve.
+    ///
+    /// Keeping these separate from unsupported consequences prevents a missing
+    /// observation from being upgraded into a negative capability claim.
+    public var unknownConsequences: OrchestrationValue<[String]>
     public var observation: SupervisionObservationStamp
 
     public init(
@@ -472,6 +477,7 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
         knownDescendantPIDs: OrchestrationValue<[Int32]>,
         sideEffects: OrchestrationValue<[String]>,
         unsupportedConsequences: OrchestrationValue<[String]>,
+        unknownConsequences: OrchestrationValue<[String]> = .unknown,
         observation: SupervisionObservationStamp
     ) {
         self.schemaVersion = schemaVersion
@@ -486,6 +492,7 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
         self.knownDescendantPIDs = knownDescendantPIDs
         self.sideEffects = sideEffects
         self.unsupportedConsequences = unsupportedConsequences
+        self.unknownConsequences = unknownConsequences
         self.observation = observation
     }
 }
