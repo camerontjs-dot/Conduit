@@ -606,8 +606,16 @@ final class ConduitSessionAPIServer {
         let isTypedAuthorityCollision =
             name == "conduit_adopt_provider_session"
                 && payload["disposition"] as? String == "writer_collision"
+        let isTypedLifecycleRefusal =
+            name == "conduit_lifecycle_operation"
+                && payload["preflight"] != nil
+                && payload["executed"] as? Bool == false
         if returnsStructuredContent
-            && (payload["error"] == nil || isTypedAuthorityCollision)
+            && (
+                payload["error"] == nil
+                    || isTypedAuthorityCollision
+                    || isTypedLifecycleRefusal
+            )
         {
             result["structuredContent"] = payload
         }
