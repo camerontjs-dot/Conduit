@@ -4973,6 +4973,276 @@ final class AppModel: ObservableObject {
         ]
     }
 
+    private func sessionAPILifecycleSnapshot(
+        for taskID: TaskSessionID
+    ) -> LifecycleRuntimeSnapshot? {
+        guard let task = taskSessions.first(where: { $0.id == taskID }) else {
+            return nil
+        }
+
+        let live = sessionAPILiveRuntime(for: taskID)
+        let profile = agentProfile(named: task.metadata.agentName)
+        let backend = profile?.preferredSessionBackend
+
+        let kind: LifecycleRuntimeKind
+        if let live {
+            if live.usesStructuredHost {
+                switch backend {
+                case .appServer?: kind = .codexAppServer
+                case .httpServer?: kind = .openCodeHTTP
+                case .acp?: kind = .acp
+                case .structuredCli?: kind = .structuredCLI
+                case .pty?, nil:
+                    // A live structured host without a matching declared
+                    // backend is not safe to reinterpret as PTY.
+                    kind = .absent
+                }
+            } else if live.controller.usesTmux {
+                kind = .tmux
+            } else {
+                kind = .directPTY
+            }
+        } else {
+            kind = .absent
+        }
+
+        let providerSessionID: OrchestrationValue<String> = {
+            if let liveID = live?.structuredSessionID, !liveID.isEmpty {
+                return .known(liveID)
+            }
+            guard live == nil, backend?.isStructured == true,
+                  let persisted = AdapterThreadStore(
+                    directory: AdapterThreadStore.defaultDirectory()
+                  ).threadID(for: taskID),
+                  !persisted.isEmpty
+            else {
+                return .unknown
+            }
+            return .known(persisted)
+        }()
+
+        let providerHostID: OrchestrationValue<String> = {
+            guard let live else { return .unknown }
+            if let id = live.appServer?.lifecycleProviderHostIdentifier {
+                return .known(id)
+            }
+            if let id = live.openCode?.lifecycleProviderHostIdentifier {
+                return .known(id)
+            }
+            return .unknown
+        }()
+
+        let adapterStopWillStopProviderHost: OrchestrationValue<Bool> = {
+            guard let live, live.usesStructuredHost else { return .unknown }
+            if let openCode = live.openCode {
+                return .known(openCode.lifecycleStopWillStopProviderHost)
+            }
+            // Codex app-server, ACP, and stream-json are task-local processes
+            // in the current implementation.
+            return .known(true)
+        }()
+
+        let tmuxSessionName: OrchestrationValue<String> = {
+            guard let name = live?.descriptor.tmuxSessionName,
+                  live?.controller.usesTmux == true,
+                  !name.isEmpty
+            else {
+                return .unknown
+            }
+            return .known(name)
+        }()
+
+        return LifecycleRuntimeSnapshot(
+            kind: kind,
+            taskSessionID: taskID.rawValue.uuidString,
+            runtimeAttemptID: live.map {
+                .known($0.runtimeAttemptID.rawValue.uuidString)
+            } ?? .unknown,
+            providerSessionID: providerSessionID,
+            providerHostID: providerHostID,
+            tmuxSessionName: tmuxSessionName,
+            turnActive: live?.usesStructuredHost == true
+                ? .known(live?.structuredTurnActive == true)
+                : .unknown,
+            adapterStopWillStopProviderHost: adapterStopWillStopProviderHost,
+            observedAt: Date()
+        )
+    }
+
+    private func sessionAPILifecyclePlan(
+        taskID: TaskSessionID,
+        operation: LifecycleOperation
+    ) -> LifecyclePreflight? {
+        guard let snapshot = sessionAPILifecycleSnapshot(for: taskID) else {
+            return nil
+        }
+        return LifecyclePreflightPlanner.preflight(
+            operation: operation,
+            snapshot: snapshot
+        )
+    }
+
+    private func sessionAPILifecyclePreflight(
+        taskSessionID rawID: String,
+        operation: LifecycleOperation
+    ) -> [String: Any] {
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        guard let preflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: operation
+        ),
+        let encoded = sessionAPIJSONObject(preflight)
+        else {
+            return [
+                "error": "lifecycle preflight could not be encoded",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+            ]
+        }
+        return [
+            "taskSessionID": rawID,
+            "operation": operation.rawValue,
+            "preflight": encoded,
+            "mutation": "none",
+            "authority": "read-only Conduit lifecycle planning from current runtime/provider facts; UNKNOWN remains UNKNOWN",
+        ]
+    }
+
+    private func sessionAPILifecycleOperation(
+        taskSessionID rawID: String,
+        operation: LifecycleOperation,
+        caller: ConduitSessionCaller
+    ) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
+            return ["error": "write tools are disabled"]
+        }
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        let decision = sessionAPIAdmission.admitWrite(
+            callerIdentity: caller.identity,
+            resources: sessionAPIResourceSnapshot()
+        )
+        guard decision.shouldExecute else {
+            return sessionAPIAdmissionRefusal(decision)
+        }
+        guard let preflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: operation
+        ),
+        let encoded = sessionAPIJSONObject(preflight)
+        else {
+            return [
+                "error": "lifecycle preflight unavailable",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+            ]
+        }
+
+        if operation == .observe {
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "observation_only": true,
+                "preflight": encoded,
+                "authority": "observe is read-only; no lifecycle mutation was performed",
+            ]
+        }
+
+        guard preflight.support == .supported else {
+            return [
+                "error": "lifecycle operation is \(preflight.support.rawValue)",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+                "authority": "fail-closed lifecycle dispatch; unsupported/UNKNOWN operations are not remapped to another verb",
+            ]
+        }
+
+        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
+            return [
+                "error": "no live runtime for lifecycle mutation",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+            ]
+        }
+
+        switch operation {
+        case .abortTurn:
+            let interruptionEventID = runtime.recordInterruptRequest()
+            runtime.interruptStructuredAdapter()
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": true,
+                "abort": "requested",
+                "interrupt_event_id": interruptionEventID.uuidString,
+                "preflight": encoded,
+                "authority": "provider-native turn abort/cancel was requested; provider cancellation completion and objective acceptance are not established",
+            ]
+
+        case .releaseSupervision:
+            // Planner support currently limits this path to durable tmux.
+            leaveTask(taskID)
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": true,
+                "supervision": "released",
+                "preflight": encoded,
+                "authority": "Conduit released supervision/capacity without intentionally stopping the durable tmux runtime; task/objective completion is not established",
+            ]
+
+        case .stopProviderHost:
+            // Mirror endTask while preserving whether tmux could actually be
+            // confirmed gone. Structured/direct-PTY controllers return true
+            // for the requested local stop, not provider-history deletion.
+            mcpAdmission?.markTaskEnded(taskID)
+            let runtimeEnded = endSession(runtime)
+            var payload: [String: Any] = [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": true,
+                "runtime_end_confirmed": runtimeEnded,
+                "preflight": encoded,
+                "authority": "Conduit executed the explicit runtime/provider-host stop path; provider history is not deleted and objective acceptance is not established",
+            ]
+            if !runtimeEnded {
+                payload["error"] =
+                    "runtime stop could not be confirmed; Conduit preserved the detached runtime for explicit reconciliation"
+            }
+            return payload
+
+        case .observe:
+            // Handled before the supported-mutation guard.
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+            ]
+
+        case .adopt, .startTurn, .archiveProviderHistory:
+            // The planner currently marks these unsupported on this executor.
+            // Keep the switch exhaustive so a future support change cannot
+            // silently fall through to an unrelated lifecycle mutation.
+            return [
+                "error": "operation has no lifecycle executor",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+            ]
+        }
+    }
+
     private func sessionAPIInterrupt(
         taskSessionID rawID: String,
         caller: ConduitSessionCaller
