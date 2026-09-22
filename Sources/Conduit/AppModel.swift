@@ -549,6 +549,9 @@ final class AppModel: ObservableObject {
     /// live `sessions` array and is never persisted as project truth.
     private var lastSelectedSessionIDByProject: [String: UUID] = [:]
     private var explicitlyFinalizedRuntimeAttempts = Set<RuntimeAttemptID>()
+    /// Direct PTY stops are asynchronous: keep admission occupied until the
+    /// existing process callback proves the PTY actually exited.
+    private var pendingDirectPTYStopAttempts = Set<RuntimeAttemptID>()
 
     init() {
         refreshTaskSidebarProjection()
@@ -1137,6 +1140,9 @@ final class AppModel: ObservableObject {
         runtimeAttemptID: RuntimeAttemptID
     ) {
         bankObservedUsage(record)
+        if pendingDirectPTYStopAttempts.remove(runtimeAttemptID) != nil {
+            mcpAdmission?.markTaskEnded(taskSessionID)
+        }
         if explicitlyFinalizedRuntimeAttempts.remove(runtimeAttemptID) != nil {
             return
         }
@@ -2141,7 +2147,11 @@ final class AppModel: ObservableObject {
             statusMessage = "Reconnect this task before ending its runtime."
             return
         }
-        mcpAdmission?.markTaskEnded(id)
+        let waitsForObservedDirectPTYExit =
+            !runtime.usesStructuredHost && !runtime.controller.usesTmux
+        if !waitsForObservedDirectPTYExit {
+            mcpAdmission?.markTaskEnded(id)
+        }
         endSession(runtime)
     }
 
@@ -2838,13 +2848,33 @@ final class AppModel: ObservableObject {
     /// agent on this project starts fresh (no reconnect to a stuck shell).
     @discardableResult
     func endSession(_ runtime: TerminalRuntime) -> Bool {
-        let tmuxName = runtime.controller.usesTmux
+        let wasTmux = runtime.controller.usesTmux
+        let wasStructured = runtime.usesStructuredHost
+        let waitsForObservedDirectPTYExit = !wasTmux && !wasStructured
+        let tmuxName = wasTmux
             ? runtime.descriptor.tmuxSessionName
             : nil
-        explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
+
+        if waitsForObservedDirectPTYExit {
+            pendingDirectPTYStopAttempts.insert(runtime.runtimeAttemptID)
+        } else {
+            explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
+        }
+
         runtime.closeAgentOutputCapture()
         runtime.stopAppServer()
-        let runtimeEnded = runtime.controller.endSession()
+        let runtimeEnded = runtime.controller.endSession(
+            hostedAdapterAlreadyStopped: wasStructured
+        )
+
+        if waitsForObservedDirectPTYExit {
+            // SwiftTerm termination is asynchronous. Keep the task/runtime live
+            // until processTerminated produces the process-observed receipt.
+            statusMessage =
+                "Stop requested for \(runtime.descriptor.agent.name); waiting for process exit observation."
+            return false
+        }
+
         if let taskID = runtime.descriptor.taskSessionID {
             let state: TaskSessionOperationalState = runtimeEnded
                 ? .closed(.operatorEndedRuntime)
@@ -2902,7 +2932,9 @@ final class AppModel: ObservableObject {
         }
         let wasDurable = runtime.controller.usesTmux
         guard endSession(runtime) else {
-            errorMessage = "The underlying tmux runtime could not be confirmed ended, so Conduit did not launch a replacement."
+            errorMessage = runtime.controller.usesTmux
+                ? "The underlying tmux runtime could not be confirmed ended, so Conduit did not launch a replacement."
+                : "Direct PTY termination was requested but has not yet been observed. Conduit will not launch a replacement while the prior process may still be alive."
             return nil
         }
         selectProject(project)
@@ -5218,22 +5250,29 @@ final class AppModel: ObservableObject {
             ]
 
         case .stopProviderHost:
-            // Mirror endTask while preserving whether tmux could actually be
-            // confirmed gone. Structured/direct-PTY controllers return true
-            // for the requested local stop, not provider-history deletion.
-            mcpAdmission?.markTaskEnded(taskID)
+            let waitsForObservedDirectPTYExit =
+                !runtime.usesStructuredHost && !runtime.controller.usesTmux
+            if !waitsForObservedDirectPTYExit {
+                mcpAdmission?.markTaskEnded(taskID)
+            }
             let runtimeEnded = endSession(runtime)
             var payload: [String: Any] = [
                 "taskSessionID": rawID,
                 "operation": operation.rawValue,
                 "executed": true,
                 "runtime_end_confirmed": runtimeEnded,
+                "execution_capacity_released": !waitsForObservedDirectPTYExit,
                 "preflight": encoded,
                 "authority": "Conduit executed the explicit runtime/provider-host stop path; provider history is not deleted and objective acceptance is not established",
             ]
-            if !runtimeEnded {
+            if waitsForObservedDirectPTYExit && !runtimeEnded {
+                payload["stop"] = "requested"
+                payload["completion"] = "pending_process_observation"
+                payload["authority"] =
+                    "Conduit requested direct PTY termination but has not observed process exit. The task remains live and execution capacity remains occupied until SwiftTerm reports termination; objective acceptance is not established."
+            } else if !runtimeEnded {
                 payload["error"] =
-                    "runtime stop could not be confirmed; Conduit preserved the detached runtime for explicit reconciliation"
+                    "runtime stop could not be confirmed; Conduit preserved the detached durable runtime for explicit reconciliation"
             }
             return payload
 
