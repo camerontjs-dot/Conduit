@@ -522,7 +522,8 @@ enum MacOSProcessTreeObserver {
                 Int32(byteCount)
             )
         }
-        guard written > 0 else { return nil }
+        guard written >= 0 else { return nil }
+        guard written > 0 else { return [] }
         let found = Int(written) / MemoryLayout<pid_t>.size
         return Array(buffer.prefix(found)).filter { $0 > 0 }
     }
