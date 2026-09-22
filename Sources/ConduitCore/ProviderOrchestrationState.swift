@@ -451,6 +451,9 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
     public var support: LifecycleSupport
     public var willStopProvider: OrchestrationValue<Bool>
     public var willReleaseSlot: OrchestrationValue<Bool>
+    /// Whether the targeted provider/session execution context is known to be
+    /// resumable afterward through exactResumeHandle. This does not promise
+    /// that the same live Conduit runtime/tab survives the operation.
     public var recoverableAfterward: OrchestrationValue<Bool>
     public var exactResumeHandle: OrchestrationValue<String>
     public var expectedProcessScope: OrchestrationValue<LifecycleProcessScope>
