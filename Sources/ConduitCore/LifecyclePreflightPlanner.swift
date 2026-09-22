@@ -217,11 +217,12 @@ public enum LifecyclePreflightPlanner {
                 expectedProcessScope: .known(.none),
                 sideEffects: .known([
                     "Conduit detaches its tmux client and releases task execution capacity",
-                    "the tmux session and its provider/runtime keep running",
+                    "this release does not intentionally stop the tmux session or its provider/runtime",
                     "task history is preserved"
                 ]),
                 unsupported: .known([]),
                 unknown: .known([
+                    "provider/runtime liveness after detach is not re-observed by preflight",
                     "provider work may continue after Conduit stops supervising it"
                 ])
             )
@@ -241,12 +242,14 @@ public enum LifecyclePreflightPlanner {
                     expectedProcessScope: .known(.none),
                     sideEffects: .known([
                         "Conduit stops this OpenCode client/SSE supervision and releases one server lease",
-                        "the shared or externally owned OpenCode provider host remains running",
+                        "this release does not intentionally stop the shared or externally owned OpenCode provider host",
                         "the Conduit task runtime closes and releases execution capacity",
                         "provider session/history is not deleted"
                     ]),
                     unsupported: .known([]),
-                    unknown: .known([])
+                    unknown: .known([
+                        "provider-host liveness after release is not re-observed by preflight"
+                    ])
                 )
             }
             if snapshot.adapterStopWillStopProviderHost.value == true {
