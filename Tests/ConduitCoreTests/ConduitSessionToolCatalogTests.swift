@@ -7,8 +7,8 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 14)
-        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 6)
+        XCTAssertEqual(names.count, 16)
+        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 7)
     }
 
     func testRequiredArgumentsAndDescriptionsRemainActionable() throws {
@@ -68,11 +68,38 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
         XCTAssertTrue(adoptDescription.contains("does not create"))
         XCTAssertTrue(adoptDescription.contains("workspace/worktree writer lease"))
 
-        let interrupt = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_interrupt"))
+        let preflight = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_lifecycle_preflight")
+        )
+        let preflightSchema = try XCTUnwrap(
+            preflight["inputSchema"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            preflightSchema["required"] as? [String],
+            ["taskSessionID", "operation"]
+        )
+        XCTAssertTrue(
+            (preflight["description"] as? String)?.contains(
+                "unsupported, or unknown"
+            ) == true
+        )
+
+        let lifecycle = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_lifecycle_operation")
+        )
+        XCTAssertTrue(
+            (lifecycle["description"] as? String)?.contains("fail closed")
+                ?? (lifecycle["description"] as? String)?.contains("fail")
+                == true
+        )
+
+        let interrupt = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_interrupt")
+        )
         let description = try XCTUnwrap(interrupt["description"] as? String)
         XCTAssertTrue(description.contains("interrupt_request"))
         XCTAssertTrue(description.contains("not observed cancellation"))
-        XCTAssertTrue(description.contains("truncated remains"))
+        XCTAssertTrue(description.contains("raw Ctrl-C"))
     }
 
     func testEventsSchemaSeparatesInterruptKindFromTextTruncation() throws {
