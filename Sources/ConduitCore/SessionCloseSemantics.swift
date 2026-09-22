@@ -1,45 +1,49 @@
 import Foundation
 
-/// What `conduit_close_session` actually costs, which is not the same on every
-/// backend.
+/// Compatibility semantics for the legacy `conduit_close_session` verb.
 ///
-/// A durable tmux runtime is *detached*: the work keeps running, and
-/// `conduit_reconcile_task` can adopt it again. A structured adapter is
-/// *stopped*: the host process ends and the task reports `recoverable: false`
-/// from then on. Both were reported to the caller as `closed: true` with the
-/// same authority line, so a remote orchestrator could not tell an
-/// interruption it could undo from one it could not.
+/// New callers should use LifecyclePreflight plus explicit lifecycle operations.
+/// This type remains only so the old command can report what it actually did.
 ///
-/// This matters most before the call, not after. An orchestrator deciding
-/// whether to free a slot needs to know that on a structured backend the
-/// decision is final, while it still has the option not to make it.
+/// `stopped` means the live Conduit runtime/adapter is ended. It does not mean
+/// provider-owned session history was deleted, nor does it imply that an exact
+/// provider resume handle is absent. `detached` is reserved for durable tmux.
 public enum SessionCloseSemantics {
     public enum Outcome: String, Equatable, Sendable {
-        /// The runtime is left running and can be adopted again.
+        /// The durable tmux runtime is left running and can be adopted again.
         case detached
-        /// The host is stopped and the task cannot be reconnected.
+        /// The live Conduit runtime/adapter is terminated.
         case stopped
 
-        /// Whether closing ends the task for good.
+        /// Whether this Conduit runtime remains reconnectable as the same live
+        /// runtime. Provider history may still be separately resumable.
         public var isTerminal: Bool { self == .stopped }
     }
 
-    public static func outcome(usesStructuredHost: Bool) -> Outcome {
-        usesStructuredHost ? .stopped : .detached
+    public static func outcome(
+        usesStructuredHost: Bool,
+        usesTmux: Bool
+    ) -> Outcome {
+        if usesTmux { return .detached }
+        // Structured adapters and direct PTYs both end their live Conduit
+        // runtime on close. Their provider-history consequences differ and are
+        // intentionally not encoded in this legacy two-state result.
+        return .stopped
     }
 
-    /// What the caller is told, in terms it can branch on.
+    /// What the compatibility caller is told, without upgrading runtime closure
+    /// into a provider-history claim.
     public static func authority(for outcome: Outcome) -> String {
         switch outcome {
         case .detached:
-            return "leave requested; the runtime was detached and keeps "
-                + "running. conduit_reconcile_task can adopt it again. "
-                + "Not verification."
+            return "legacy close requested; the tmux runtime was detached and "
+                + "keeps running. conduit_reconcile_task can adopt it again. "
+                + "Provider/objective completion is not established."
         case .stopped:
-            return "leave requested; the structured host was STOPPED and this "
-                + "task is not recoverable. conduit_reconcile_task cannot "
-                + "reconnect it and history is preserved read-only. "
-                + "Not verification."
+            return "legacy close requested; the live Conduit runtime/adapter "
+                + "was stopped. Provider-owned session history is not deleted "
+                + "by this command and may remain resumable through an exact "
+                + "provider handle. Provider/objective completion is not established."
         }
     }
 }
