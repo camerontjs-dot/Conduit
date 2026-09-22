@@ -226,7 +226,67 @@ public enum LifecyclePreflightPlanner {
                 ])
             )
 
-        case .codexAppServer, .openCodeHTTP, .acp, .structuredCLI:
+        case .openCodeHTTP:
+            if snapshot.adapterStopWillStopProviderHost.value == false {
+                return plan(
+                    operation: .releaseSupervision,
+                    snapshot: snapshot,
+                    target: providerSessionTarget(snapshot),
+                    support: .supported,
+                    willStopProvider: .known(false),
+                    willReleaseSlot: .known(true),
+                    recoverableAfterward: resumeHandle(snapshot).isKnown
+                        ? .known(true)
+                        : .unknown,
+                    expectedProcessScope: .known(.none),
+                    sideEffects: .known([
+                        "Conduit stops this OpenCode client/SSE supervision and releases one server lease",
+                        "the shared or externally owned OpenCode provider host remains running",
+                        "the Conduit task runtime closes and releases execution capacity",
+                        "provider session/history is not deleted"
+                    ]),
+                    unsupported: .known([]),
+                    unknown: .known([])
+                )
+            }
+            if snapshot.adapterStopWillStopProviderHost.value == true {
+                return plan(
+                    operation: .releaseSupervision,
+                    snapshot: snapshot,
+                    target: providerSessionTarget(snapshot),
+                    support: .unsupported,
+                    willStopProvider: .known(true),
+                    willReleaseSlot: .unknown,
+                    recoverableAfterward: resumeHandle(snapshot).isKnown
+                        ? .known(true)
+                        : .unknown,
+                    expectedProcessScope: .known(.providerHost),
+                    sideEffects: .known([]),
+                    unsupported: .known([
+                        "releasing this final Conduit OpenCode lease would also stop the provider host; use stop_provider_host if that consequence is intended"
+                    ]),
+                    unknown: .known([])
+                )
+            }
+            return plan(
+                operation: .releaseSupervision,
+                snapshot: snapshot,
+                target: providerSessionTarget(snapshot),
+                support: .unknown,
+                willStopProvider: .unknown,
+                willReleaseSlot: .unknown,
+                recoverableAfterward: resumeHandle(snapshot).isKnown
+                    ? .known(true)
+                    : .unknown,
+                expectedProcessScope: .unknown,
+                sideEffects: .unknown,
+                unsupported: .known([]),
+                unknown: .known([
+                    "whether releasing this OpenCode client would also stop the shared provider host"
+                ])
+            )
+
+        case .codexAppServer, .acp, .structuredCLI:
             return plan(
                 operation: .releaseSupervision,
                 snapshot: snapshot,
@@ -243,7 +303,7 @@ public enum LifecyclePreflightPlanner {
                     "the current structured adapter has no detach/release path that guarantees the provider host continues unchanged"
                 ]),
                 unknown: .known([
-                    "a generic release cannot be substituted with stopStructuredAdapter without changing provider-host consequences"
+                    "stopStructuredAdapter would change provider-host consequences and is not a release substitute"
                 ])
             )
 
