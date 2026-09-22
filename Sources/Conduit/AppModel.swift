@@ -5189,7 +5189,9 @@ final class AppModel: ObservableObject {
             ]
 
         case .releaseSupervision:
-            // Planner support currently limits this path to durable tmux.
+            // Planner support currently limits this to durable tmux or an
+            // OpenCode client whose lease can be released without stopping the
+            // shared/external provider host.
             leaveTask(taskID)
             return [
                 "taskSessionID": rawID,
@@ -5313,13 +5315,18 @@ final class AppModel: ObservableObject {
             usesStructuredHost: runtime.usesStructuredHost,
             usesTmux: runtime.controller.usesTmux
         )
-        let lifecycleOperation: LifecycleOperation = runtime.controller.usesTmux
-            ? .releaseSupervision
-            : .stopProviderHost
+        let releasePreflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: .releaseSupervision
+        )
+        let lifecycleOperation: LifecycleOperation =
+            releasePreflight?.support == .supported
+                ? .releaseSupervision
+                : .stopProviderHost
         let typedPreflight = sessionAPILifecyclePlan(
             taskID: taskID,
             operation: lifecycleOperation
-        ).flatMap(sessionAPIJSONObject)
+        ).flatMap { sessionAPIJSONObject($0) }
         leaveTask(taskID)
         var payload: [String: Any] = [
             "taskSessionID": rawID,
