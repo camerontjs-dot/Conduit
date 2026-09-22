@@ -495,4 +495,90 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
         self.unknownConsequences = unknownConsequences
         self.observation = observation
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case operation
+        case target
+        case support
+        case willStopProvider
+        case willReleaseSlot
+        case recoverableAfterward
+        case exactResumeHandle
+        case expectedProcessScope
+        case knownDescendantPIDs
+        case sideEffects
+        case unsupportedConsequences
+        case unknownConsequences
+        case observation
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        operation = try container.decode(LifecycleOperation.self, forKey: .operation)
+        target = try container.decode(LifecycleTarget.self, forKey: .target)
+        support = try container.decode(LifecycleSupport.self, forKey: .support)
+        willStopProvider = try container.decode(
+            OrchestrationValue<Bool>.self,
+            forKey: .willStopProvider
+        )
+        willReleaseSlot = try container.decode(
+            OrchestrationValue<Bool>.self,
+            forKey: .willReleaseSlot
+        )
+        recoverableAfterward = try container.decode(
+            OrchestrationValue<Bool>.self,
+            forKey: .recoverableAfterward
+        )
+        exactResumeHandle = try container.decode(
+            OrchestrationValue<String>.self,
+            forKey: .exactResumeHandle
+        )
+        expectedProcessScope = try container.decode(
+            OrchestrationValue<LifecycleProcessScope>.self,
+            forKey: .expectedProcessScope
+        )
+        knownDescendantPIDs = try container.decode(
+            OrchestrationValue<[Int32]>.self,
+            forKey: .knownDescendantPIDs
+        )
+        sideEffects = try container.decode(
+            OrchestrationValue<[String]>.self,
+            forKey: .sideEffects
+        )
+        unsupportedConsequences = try container.decode(
+            OrchestrationValue<[String]>.self,
+            forKey: .unsupportedConsequences
+        )
+        unknownConsequences = try container.decodeIfPresent(
+            OrchestrationValue<[String]>.self,
+            forKey: .unknownConsequences
+        ) ?? .unknown
+        observation = try container.decode(
+            SupervisionObservationStamp.self,
+            forKey: .observation
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(operation, forKey: .operation)
+        try container.encode(target, forKey: .target)
+        try container.encode(support, forKey: .support)
+        try container.encode(willStopProvider, forKey: .willStopProvider)
+        try container.encode(willReleaseSlot, forKey: .willReleaseSlot)
+        try container.encode(recoverableAfterward, forKey: .recoverableAfterward)
+        try container.encode(exactResumeHandle, forKey: .exactResumeHandle)
+        try container.encode(expectedProcessScope, forKey: .expectedProcessScope)
+        try container.encode(knownDescendantPIDs, forKey: .knownDescendantPIDs)
+        try container.encode(sideEffects, forKey: .sideEffects)
+        try container.encode(
+            unsupportedConsequences,
+            forKey: .unsupportedConsequences
+        )
+        try container.encode(unknownConsequences, forKey: .unknownConsequences)
+        try container.encode(observation, forKey: .observation)
+    }
 }
