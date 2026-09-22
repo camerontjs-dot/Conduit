@@ -170,6 +170,14 @@ final class ProviderSessionObservationTests: XCTestCase {
               time_updated INTEGER NOT NULL,
               data TEXT NOT NULL
             );
+            CREATE TABLE part (
+              id TEXT PRIMARY KEY,
+              message_id TEXT NOT NULL,
+              session_id TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              time_updated INTEGER NOT NULL,
+              data TEXT NOT NULL
+            );
             INSERT INTO session VALUES (
               'ses_fixture',
               'project-fixture',
@@ -213,6 +221,22 @@ final class ProviderSessionObservationTests: XCTestCase {
                 'time',json_object('created',140,'completed',NULL)
               )
             );
+            INSERT INTO part VALUES (
+              'prt_running_tool',
+              'msg_incomplete',
+              'ses_fixture',
+              145,
+              150,
+              json_object(
+                'type','tool',
+                'tool','bash',
+                'callID','call_fixture',
+                'state',json_object(
+                  'status','running',
+                  'input',json_object('command','qualification-only-secret-command')
+                )
+              )
+            );
             """#
         )
         defer { removeSQLiteFixture(fixture) }
@@ -251,6 +275,96 @@ final class ProviderSessionObservationTests: XCTestCase {
             )
         )
         XCTAssertEqual(worker.adapter.value, "opencode_sqlite_snapshot")
+        XCTAssertEqual(worker.runtimeReconciliation?.providerReportedState, .active)
+        XCTAssertEqual(
+            worker.runtimeReconciliation?.providerActivities.value?.count,
+            1
+        )
+        let persistedTool = try XCTUnwrap(
+            worker.runtimeReconciliation?.providerActivities.value?.first
+        )
+        XCTAssertEqual(persistedTool.partID.value, "prt_running_tool")
+        XCTAssertEqual(persistedTool.messageID.value, "msg_incomplete")
+        XCTAssertEqual(persistedTool.callID.value, "call_fixture")
+        XCTAssertEqual(persistedTool.toolName.value, "bash")
+        XCTAssertEqual(persistedTool.reportedStatus.value, "running")
+        XCTAssertEqual(
+            try XCTUnwrap(persistedTool.createdAt.value).timeIntervalSince1970,
+            0.145,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(persistedTool.updatedAt.value).timeIntervalSince1970,
+            0.150,
+            accuracy: 0.000_001
+        )
+        let serializedWorker = try String(
+            decoding: JSONEncoder().encode(worker),
+            as: UTF8.self
+        )
+        XCTAssertFalse(serializedWorker.contains("qualification-only-secret-command"))
+    }
+
+    func testSQLiteWithoutPartTableKeepsToolActivityUnknown() throws {
+        let fixture = try makeSQLiteFixture(
+            sql: #"""
+            PRAGMA journal_mode=DELETE;
+            CREATE TABLE session (
+              id TEXT PRIMARY KEY,
+              project_id TEXT NOT NULL,
+              parent_id TEXT,
+              directory TEXT NOT NULL,
+              title TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              time_updated INTEGER NOT NULL
+            );
+            CREATE TABLE message (
+              id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              time_updated INTEGER NOT NULL,
+              data TEXT NOT NULL
+            );
+            INSERT INTO session VALUES (
+              'ses_legacy_fixture', 'project-fixture', NULL, '/tmp/fixture',
+              'legacy fixture', 100, 200
+            );
+            INSERT INTO message VALUES (
+              'msg_incomplete', 'ses_legacy_fixture', 140, 140,
+              json_object(
+                'role','assistant',
+                'time',json_object('created',140,'completed',NULL)
+              )
+            );
+            """#
+        )
+        defer { removeSQLiteFixture(fixture) }
+
+        let observer = OpenCodeProviderSessionObserver(
+            transport: OpenCodeSQLiteObservationTransport(
+                environment: ["OPENCODE_DB": fixture.database.path],
+                homeDirectory: fixture.directory,
+                timeout: 3
+            ),
+            now: { self.fixedDate }
+        )
+
+        let worker = try observer.observeSession(
+            providerSessionID: "ses_legacy_fixture"
+        )
+
+        XCTAssertEqual(worker.turns.first?.state, .ambiguous)
+        XCTAssertEqual(worker.runtimeReconciliation?.providerActivities.state, .unknown)
+        XCTAssertEqual(worker.runtimeReconciliation?.providerReportedState, .unknown)
+        XCTAssertTrue(
+            worker.runtimeReconciliation?.diagnostics.contains {
+                $0.contains("tool-part status is unavailable")
+            } == true
+        )
+        XCTAssertEqual(
+            worker.runtimeReconciliation?.disposition,
+            .insufficientObservation
+        )
     }
 
     func testSQLiteTransportLargeInventoryDoesNotDependOnPipeCapacity() throws {
@@ -499,6 +613,12 @@ final class ProviderSessionObservationTests: XCTestCase {
         XCTAssertEqual(worker.observation.authority, .providerObserved)
         XCTAssertEqual(worker.observation.freshness, .unknown)
         XCTAssertEqual(worker.observation.observedAt.value, fixedDate)
+        XCTAssertEqual(worker.runtimeReconciliation?.providerActivities.state, .unknown)
+        XCTAssertEqual(worker.runtimeReconciliation?.providerReportedState, .unknown)
+        XCTAssertEqual(
+            worker.runtimeReconciliation?.disposition,
+            .insufficientObservation
+        )
     }
 
     func testProviderCompletionDoesNotBecomeObjectiveAcceptance() throws {
@@ -516,6 +636,69 @@ final class ProviderSessionObservationTests: XCTestCase {
         XCTAssertEqual(worker.turns[0].state, .completed)
         XCTAssertEqual(worker.terminal.receipt, .unknown)
         XCTAssertEqual(worker.terminal.verification, .unknown)
+        XCTAssertEqual(worker.terminal.objectiveAcceptance, .unknown)
+    }
+
+    func testLaterCompletedTurnPreservesOlderRunningToolEvidence() throws {
+        let document = json(
+            #"""
+            {
+              "info": {
+                "id": "ses_resume_fixture",
+                "time": {"updated": 1797000003000}
+              },
+              "messages": [
+                {
+                  "id": "msg_interrupted",
+                  "role": "assistant",
+                  "time": {"created": 1797000000000, "completed": null}
+                },
+                {
+                  "id": "msg_after_resume",
+                  "role": "assistant",
+                  "time": {"created": 1797000002000, "completed": 1797000003000}
+                }
+              ],
+              "parts": [
+                {
+                  "id": "prt_stale_tool",
+                  "messageID": "msg_interrupted",
+                  "kind": "tool",
+                  "tool": "bash",
+                  "callID": "call_interrupted",
+                  "status": "running",
+                  "createdAt": 1797000000500,
+                  "updatedAt": 1797000000600
+                }
+              ]
+            }
+            """#
+        )
+        let observer = OpenCodeProviderSessionObserver(
+            transport: FakeTransport(
+                exports: ["ses_resume_fixture": document]
+            ),
+            now: { self.fixedDate }
+        )
+
+        let worker = try observer.observeSession(
+            providerSessionID: "ses_resume_fixture"
+        )
+
+        XCTAssertEqual(worker.turns.map(\.state), [.ambiguous, .completed])
+        XCTAssertEqual(
+            worker.runtimeReconciliation?.providerReportedState,
+            .inactive
+        )
+        XCTAssertEqual(
+            worker.runtimeReconciliation?.providerActivities.value?.first?.reportedStatus.value,
+            "running"
+        )
+        XCTAssertTrue(
+            worker.runtimeReconciliation?.diagnostics.contains {
+                $0.contains("older persisted tool part still says running")
+            } == true
+        )
         XCTAssertEqual(worker.terminal.objectiveAcceptance, .unknown)
     }
 

@@ -4180,14 +4180,19 @@ final class AppModel: ObservableObject {
         let coordinator = sessionAPIOpenCodeAuthorityCoordinator()
 
         do {
+            let binding = sessionAPIProviderBinding(
+                providerSessionID: providerSessionID
+            )
             let observation = try coordinator.observeSession(
                 providerSessionID: providerSessionID,
-                binding: sessionAPIProviderBinding(
-                    providerSessionID: providerSessionID
-                )
+                binding: binding
+            )
+            let reconciledWorker = sessionAPIReconcileWorkerRuntime(
+                observation.worker,
+                binding: binding
             )
             guard var worker = sessionAPIWorkerLineageObject(
-                observation.worker
+                reconciledWorker
             ),
             let authority = sessionAPIJSONObject(observation.authority)
             else {
@@ -4201,16 +4206,105 @@ final class AppModel: ObservableObject {
                 "provider": "opencode",
                 "worker": worker,
                 "capacity_effect": "none; no Conduit create admission or live-task reservation",
-                "authority": "read-only provider observation plus Conduit's independent writer registry; observation itself never adopts or controls the session",
+                "authority": "read-only provider persistence, exact-binding OS process observation, and Conduit's independent writer registry; observation itself never adopts or controls the session",
             ]
         } catch {
-            return [
+            let binding = sessionAPIProviderBinding(
+                providerSessionID: providerSessionID
+            )
+            let processEvidence = sessionAPIObserveBoundProcess(binding: binding)
+            let unknownObservation = SupervisionObservationStamp(
+                authority: .unknown,
+                freshness: .unknown,
+                observedAt: .unknown
+            )
+            let reconciliation = ProviderRuntimeReconciler.reconcile(
+                providerID: "opencode",
+                providerSessionID: providerSessionID,
+                binding: binding,
+                latestProviderTurnID: .unknown,
+                providerReportedState: .unknown,
+                providerActivities: .unknown,
+                providerSourceUpdatedAt: .unknown,
+                providerObservation: unknownObservation,
+                processObservation: processEvidence.observation,
+                processReconciliation: processEvidence.reconciliation,
+                diagnostics: [
+                    "OpenCode persistence was unavailable: \(error.localizedDescription)"
+                ]
+            )
+            var payload: [String: Any] = [
                 "error": error.localizedDescription,
                 "provider": "opencode",
                 "provider_session_id": providerSessionID,
-                "authority": "provider observation failed; no task/session mutation attempted",
+                "authority": "provider persistence unavailable; any process observation is an independent exact-binding read; no task/session mutation attempted",
             ]
+            if let encoded = sessionAPIJSONObject(reconciliation) {
+                payload["reconciliation"] = encoded
+            }
+            return payload
         }
+    }
+
+    private func sessionAPIReconcileWorkerRuntime(
+        _ worker: WorkerLineage,
+        binding: ProviderObservationBinding?
+    ) -> WorkerLineage {
+        guard let existing = worker.runtimeReconciliation else { return worker }
+        let processEvidence = sessionAPIObserveBoundProcess(binding: binding)
+        var result = worker
+        result.runtimeReconciliation = ProviderRuntimeReconciler.reconcile(
+            providerID: existing.providerID,
+            providerSessionID: worker.providerSessionID.value ?? "",
+            binding: binding,
+            latestProviderTurnID: existing.latestProviderTurnID,
+            providerReportedState: existing.providerReportedState,
+            providerActivities: existing.providerActivities,
+            providerSourceUpdatedAt: existing.providerSourceUpdatedAt,
+            providerObservation: existing.providerObservation,
+            processObservation: processEvidence.observation,
+            processReconciliation: processEvidence.reconciliation,
+            diagnostics: existing.diagnostics
+        )
+        if let launcher = processEvidence.observation?.launcher.value {
+            result.process = WorkerProcessLineage(
+                launcherPID: .known(launcher.pid),
+                processGroupID: launcher.processGroupID,
+                parentPID: launcher.parentPID
+            )
+        }
+        return result
+    }
+
+    /// Read the exact task-bound Slice 6A process tree. The first complete
+    /// sample is retained only as an in-memory before-snapshot for a later
+    /// read; no provider/task state, execution slot, or process is changed.
+    private func sessionAPIObserveBoundProcess(
+        binding: ProviderObservationBinding?
+    ) -> (observation: ProcessTreeObservation?, reconciliation: ProcessTreeReconciliation?) {
+        guard let binding,
+              let taskID = sessionAPITaskID(binding.conduitTaskID),
+              taskSessions.contains(where: { $0.id == taskID })
+        else {
+            return (nil, nil)
+        }
+
+        let prior = sessionAPIProcessTreeBaselines[taskID]
+        let observation = sessionAPIObserveProcessTree(
+            taskID: taskID,
+            runtime: sessionAPILiveRuntime(for: taskID),
+            prior: prior
+        )
+        if prior == nil, observation.coverage != .unavailable {
+            sessionAPIProcessTreeBaselines[taskID] = observation
+        }
+        return (
+            observation,
+            ProcessTreeReconciler.reconcile(
+                before: prior,
+                after: observation
+            )
+        )
     }
 
     private func sessionAPIAdoptProviderSession(

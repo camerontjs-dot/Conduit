@@ -49,7 +49,7 @@ final class ProviderOrchestrationStateTests: XCTestCase {
             providerSpecific: .unknown
         )
 
-        XCTAssertEqual(lineage.schemaVersion, 1)
+        XCTAssertEqual(lineage.schemaVersion, 2)
         XCTAssertEqual(lineage.providerSessionID.value, "ses_external_fixture")
         XCTAssertEqual(lineage.relationship, .discovered)
         XCTAssertEqual(lineage.conduitTaskID.state, .unknown)

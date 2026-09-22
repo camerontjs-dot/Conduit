@@ -59,6 +59,234 @@ public enum ProviderSessionObservationError: Error, Equatable, LocalizedError {
     }
 }
 
+/// Deterministic provider-neutral reconciliation. The caller must supply an
+/// exact Conduit binding before process evidence can be paired with provider
+/// persistence. No operation here mutates provider history or process state.
+public enum ProviderRuntimeReconciler {
+    public static func reconcile(
+        providerID: String,
+        providerSessionID: String,
+        binding: ProviderObservationBinding?,
+        latestProviderTurnID: OrchestrationValue<String>,
+        providerReportedState: ProviderReportedRuntimeState,
+        providerActivities: OrchestrationValue<[ProviderPersistedActivity]>,
+        providerSourceUpdatedAt: OrchestrationValue<Date>,
+        providerObservation: SupervisionObservationStamp,
+        processObservation: ProcessTreeObservation? = nil,
+        processReconciliation: ProcessTreeReconciliation? = nil,
+        diagnostics initialDiagnostics: [String] = []
+    ) -> ProviderRuntimeReconciliation {
+        var diagnostics = initialDiagnostics
+        var unknownFacts: [String] = ["objective_acceptance"]
+        if providerObservation.freshness == .unknown {
+            unknownFacts.append("provider_persistence_freshness_vs_live_runtime")
+        }
+        if !latestProviderTurnID.isKnown {
+            unknownFacts.append("provider_turn_identity")
+        }
+        if !providerActivities.isKnown {
+            unknownFacts.append("persisted_tool_part_state")
+        }
+        if let processObservation,
+           !processObservation.providerTurnID.isKnown {
+            unknownFacts.append("provider_turn_to_process_identity_correlation")
+        } else if processObservation == nil {
+            unknownFacts.append("provider_turn_to_process_identity_correlation")
+        }
+
+        let processValue = processObservation.map(OrchestrationValue.known)
+            ?? .unknown
+        let processReconciliationValue = processReconciliation.map(
+            OrchestrationValue.known
+        ) ?? .unknown
+        let taskID = binding.map { OrchestrationValue<String>.known($0.conduitTaskID) }
+            ?? .unknown
+        let attemptID = binding?.runtimeAttemptID.map(OrchestrationValue.known)
+            ?? .unknown
+
+        var disposition: ProviderRuntimeReconciliationDisposition =
+            .insufficientObservation
+
+        guard providerObservation.authority == .providerObserved,
+              providerObservation.observedAt.isKnown,
+              let binding
+        else {
+            diagnostics.append(
+                "Provider state or exact Conduit session binding is unavailable; no cross-authority consistency is inferred."
+            )
+            if binding == nil { unknownFacts.append("exact_conduit_binding") }
+            return ProviderRuntimeReconciliation(
+                providerID: providerID,
+                providerSessionID: .known(providerSessionID),
+                conduitTaskID: taskID,
+                runtimeAttemptID: attemptID,
+                latestProviderTurnID: latestProviderTurnID,
+                providerReportedState: providerReportedState,
+                providerActivities: providerActivities,
+                providerSourceUpdatedAt: providerSourceUpdatedAt,
+                providerObservation: providerObservation,
+                processObservation: processValue,
+                processReconciliation: processReconciliationValue,
+                disposition: disposition,
+                diagnostics: diagnostics,
+                unknownFacts: Array(Set(unknownFacts)).sorted()
+            )
+        }
+
+        guard let processObservation else {
+            diagnostics.append(
+                "No exact task-bound process observation is available."
+            )
+            unknownFacts.append("process_liveness_and_residuals")
+            return ProviderRuntimeReconciliation(
+                providerID: providerID,
+                providerSessionID: .known(providerSessionID),
+                conduitTaskID: taskID,
+                runtimeAttemptID: attemptID,
+                latestProviderTurnID: latestProviderTurnID,
+                providerReportedState: providerReportedState,
+                providerActivities: providerActivities,
+                providerSourceUpdatedAt: providerSourceUpdatedAt,
+                providerObservation: providerObservation,
+                processObservation: processValue,
+                processReconciliation: processReconciliationValue,
+                disposition: disposition,
+                diagnostics: diagnostics,
+                unknownFacts: Array(Set(unknownFacts)).sorted()
+            )
+        }
+
+        guard processObservation.taskSessionID == binding.conduitTaskID,
+              attemptMatches(binding.runtimeAttemptID, processObservation.runtimeAttemptID)
+        else {
+            disposition = .inconsistentAuthorities
+            diagnostics.append(
+                "Process observation identity does not match the exact Conduit task/runtime-attempt binding."
+            )
+            unknownFacts.append("process_binding_identity")
+            return ProviderRuntimeReconciliation(
+                providerID: providerID,
+                providerSessionID: .known(providerSessionID),
+                conduitTaskID: taskID,
+                runtimeAttemptID: attemptID,
+                latestProviderTurnID: latestProviderTurnID,
+                providerReportedState: providerReportedState,
+                providerActivities: providerActivities,
+                providerSourceUpdatedAt: providerSourceUpdatedAt,
+                providerObservation: providerObservation,
+                processObservation: processValue,
+                processReconciliation: processReconciliationValue,
+                disposition: disposition,
+                diagnostics: diagnostics,
+                unknownFacts: Array(Set(unknownFacts)).sorted()
+            )
+        }
+
+        if processObservation.observation.freshness != .current {
+            unknownFacts.append("current_process_liveness")
+        } else if processObservation.coverage == .unavailable
+                    || processObservation.coverage == .ambiguous {
+            unknownFacts.append("process_liveness_and_residuals")
+        } else {
+            let processDisposition = processReconciliation?.disposition
+            let launcherIsLive = processObservation.launcher.value?.liveness == .live
+
+            switch providerReportedState {
+            case .active:
+                if launcherIsLive {
+                    disposition = .consistentActive
+                    diagnostics.append(
+                        "Provider reports active persisted work and the exact bound runtime launcher is live; tool-part to individual process correlation remains separate."
+                    )
+                } else if processDisposition == .parentExitedOwnedResidual {
+                    disposition = .providerActiveParentAbsentOwnedResidual
+                    diagnostics.append(
+                        "Provider persistence reports active work, the bound parent is absent, and Slice 6A retains a live task-created residual. No cleanup was attempted."
+                    )
+                } else if processDisposition == .parentExitedNoOwnedResidual {
+                    disposition = .providerStaleRunningProcessAbsent
+                    diagnostics.append(
+                        "Provider persistence reports active work, but the bound parent exited and complete Slice 6A observation found no live owned residual. Provider history is preserved."
+                    )
+                } else {
+                    diagnostics.append(
+                        "Provider reports active persisted work, but process evidence does not establish a live launcher or a complete absent/residual postcondition."
+                    )
+                    unknownFacts.append("process_liveness_and_residuals")
+                }
+            case .inactive:
+                if processDisposition == .parentExitedNoOwnedResidual {
+                    disposition = .consistentInactive
+                    diagnostics.append(
+                        "Provider reports the latest turn inactive and complete Slice 6A observation found no live owned process. Objective acceptance remains independent."
+                    )
+                } else if processDisposition == .parentExitedOwnedResidual {
+                    disposition = .providerInactiveProcessResidual
+                    diagnostics.append(
+                        "Provider reports the latest turn inactive while Slice 6A still observes a live task-created residual. No cleanup was attempted."
+                    )
+                } else {
+                    diagnostics.append(
+                        "Provider reports the latest turn inactive, but process evidence does not establish an absent runtime and residual set. A live provider host alone may be idle."
+                    )
+                    unknownFacts.append("process_liveness_and_residuals")
+                }
+            case .unknown:
+                diagnostics.append(
+                    "Provider persistence does not establish active or inactive state for the latest turn."
+                )
+                unknownFacts.append("latest_provider_runtime_state")
+            }
+        }
+
+        if let processReconciliation,
+           (processReconciliation.taskSessionID != binding.conduitTaskID
+                || processReconciliation.runtimeAttemptID.value
+                    != processObservation.runtimeAttemptID.value
+                || processReconciliation.after.taskSessionID
+                    != processObservation.taskSessionID
+                || processReconciliation.after.runtimeAttemptID.value
+                    != processObservation.runtimeAttemptID.value) {
+            disposition = .inconsistentAuthorities
+            diagnostics.append(
+                "Slice 6A reconciliation identity does not match the process observation and exact Conduit runtime binding."
+            )
+            unknownFacts.append("process_reconciliation_identity")
+        }
+
+        diagnostics.append(
+            "Provider persistence and OS process state are independent observations; reconciliation performs no provider-history rewrite or process cleanup."
+        )
+
+        return ProviderRuntimeReconciliation(
+            providerID: providerID,
+            providerSessionID: .known(providerSessionID),
+            conduitTaskID: taskID,
+            runtimeAttemptID: attemptID,
+            latestProviderTurnID: latestProviderTurnID,
+            providerReportedState: providerReportedState,
+            providerActivities: providerActivities,
+            providerSourceUpdatedAt: providerSourceUpdatedAt,
+            providerObservation: providerObservation,
+            processObservation: processValue,
+            processReconciliation: processReconciliationValue,
+            disposition: disposition,
+            diagnostics: diagnostics,
+            unknownFacts: Array(Set(unknownFacts)).sorted()
+        )
+    }
+
+    private static func attemptMatches(
+        _ boundAttemptID: String?,
+        _ observedAttemptID: OrchestrationValue<String>
+    ) -> Bool {
+        guard let boundAttemptID else {
+            return !observedAttemptID.isKnown
+        }
+        return observedAttemptID.value == boundAttemptID
+    }
+}
+
 /// Read-only OpenCode persistence observer.
 ///
 /// OpenCode persistence snapshots are provider-observation surfaces. They are
@@ -100,6 +328,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
             return try Self.lineage(
                 session: row,
                 messages: [],
+                activities: .unknown,
                 source: "persistence_inventory",
                 observedAt: observedAt,
                 binding: bindingResolver?(sessionID)
@@ -149,9 +378,19 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
             messages = []
         }
 
+        let activities: OrchestrationValue<[ProviderPersistedActivity]>
+        if case .array(let rows)? = root["parts"] {
+            activities = .known(rows.compactMap(Self.activity))
+        } else {
+            // Missing/null parts means this transport/schema did not establish
+            // that the complete tool-part table was observed.
+            activities = .unknown
+        }
+
         return try Self.lineage(
             session: info,
             messages: messages,
+            activities: activities,
             source: "persistence_snapshot",
             observedAt: now(),
             binding: binding
@@ -161,6 +400,7 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
     private static func lineage(
         session: CodexJSON,
         messages: [CodexJSON],
+        activities: OrchestrationValue<[ProviderPersistedActivity]>,
         source: String,
         observedAt: Date,
         binding: ProviderObservationBinding?
@@ -229,6 +469,22 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
             )
         }
 
+        let latestMessage = messages.reversed().first {
+            ($0["info"] ?? $0)["role"]?.stringValue == "assistant"
+        }
+        let latestInfo = latestMessage.map { $0["info"] ?? $0 }
+        let latestTurnID = latestInfo?["id"]?.stringValue
+            .map(OrchestrationValue.known) ?? .unknown
+        var activityDiagnostics: [String] = []
+        let providerReportedState = Self.providerReportedState(
+            latestMessage: latestMessage,
+            activities: activities,
+            diagnostics: &activityDiagnostics
+        )
+        let providerSourceUpdatedAt = Self.dateValue(
+            session["time"]?["updated"] ?? session["updated"]
+        ).map(OrchestrationValue.known) ?? .unknown
+
         let directory = session["directory"]?.stringValue
         let workspace = WorkerWorkspaceLineage(
             projectSlug: .unknown,
@@ -280,8 +536,101 @@ public final class OpenCodeProviderSessionObserver: ProviderSessionObserving {
                 objectiveAcceptance: .unknown
             ),
             observation: observation,
-            providerSpecific: .known(providerSpecific)
+            providerSpecific: .known(providerSpecific),
+            runtimeReconciliation: ProviderRuntimeReconciler.reconcile(
+                providerID: "opencode",
+                providerSessionID: sessionID,
+                binding: binding,
+                latestProviderTurnID: latestTurnID,
+                providerReportedState: providerReportedState,
+                providerActivities: activities,
+                providerSourceUpdatedAt: providerSourceUpdatedAt,
+                providerObservation: observation,
+                diagnostics: activityDiagnostics
+            )
         )
+    }
+
+    private static func providerReportedState(
+        latestMessage: CodexJSON?,
+        activities: OrchestrationValue<[ProviderPersistedActivity]>,
+        diagnostics: inout [String]
+    ) -> ProviderReportedRuntimeState {
+        guard let latestMessage else { return .unknown }
+        let info = latestMessage["info"] ?? latestMessage
+        let messageID = info["id"]?.stringValue
+        if hasNonNullValue(info["error"])
+            || hasNonNullValue(info["time"]?["completed"]) {
+            if let rows = activities.value {
+                if rows.contains(where: {
+                    $0.reportedStatus.value?.lowercased() == "running"
+                        && $0.messageID.value == messageID
+                }) {
+                    diagnostics.append(
+                        "Latest assistant message is complete while one of its persisted tool parts still says running."
+                    )
+                    return .unknown
+                }
+                if rows.contains(where: {
+                    $0.reportedStatus.value?.lowercased() == "running"
+                        && $0.messageID.value != messageID
+                }) {
+                    diagnostics.append(
+                        "An older persisted tool part still says running; it is retained as historical evidence and is not promoted to the latest session state."
+                    )
+                }
+            }
+            return .inactive
+        }
+
+        guard let messageID,
+              let rows = activities.value
+        else {
+            diagnostics.append(
+                "Latest assistant message is incomplete, but persisted tool-part status is unavailable or cannot be tied to that message."
+            )
+            return .unknown
+        }
+        if rows.contains(where: {
+            $0.messageID.value == messageID
+                && $0.reportedStatus.value?.lowercased() == "running"
+        }) {
+            if rows.contains(where: {
+                $0.messageID.value != messageID
+                    && $0.reportedStatus.value?.lowercased() == "running"
+            }) {
+                diagnostics.append(
+                    "An older persisted tool part still says running; it is retained as historical evidence and is not promoted to the latest session state."
+                )
+            }
+            return .active
+        }
+        diagnostics.append(
+            "Latest assistant message is incomplete without a persisted running tool part; persistence alone does not establish whether it is live."
+        )
+        return .unknown
+    }
+
+    private static func activity(_ row: CodexJSON) -> ProviderPersistedActivity? {
+        // The allowlist intentionally excludes state.input/output and any
+        // command or tool arguments from provider persistence.
+        guard row["kind"]?.stringValue == "tool" else { return nil }
+        return ProviderPersistedActivity(
+            partID: row["id"]?.stringValue.map(OrchestrationValue.known) ?? .unknown,
+            messageID: row["messageID"]?.stringValue.map(OrchestrationValue.known) ?? .unknown,
+            callID: row["callID"]?.stringValue.map(OrchestrationValue.known) ?? .unknown,
+            kind: row["kind"]?.stringValue.map(OrchestrationValue.known) ?? .unknown,
+            toolName: row["tool"]?.stringValue.map(OrchestrationValue.known) ?? .unknown,
+            reportedStatus: row["status"]?.stringValue.map(OrchestrationValue.known) ?? .unknown,
+            createdAt: dateValue(row["createdAt"]).map(OrchestrationValue.known) ?? .unknown,
+            updatedAt: dateValue(row["updatedAt"]).map(OrchestrationValue.known) ?? .unknown
+        )
+    }
+
+    private static func dateValue(_ value: CodexJSON?) -> Date? {
+        guard case .number(let number)? = value, number > 0 else { return nil }
+        // OpenCode SQLite timestamps are Unix milliseconds.
+        return Date(timeIntervalSince1970: number / 1_000)
     }
 
     private static func providerMetadata(from session: CodexJSON) -> ProviderPayloadValue {

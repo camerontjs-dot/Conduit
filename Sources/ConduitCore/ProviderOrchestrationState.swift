@@ -333,6 +333,116 @@ public struct WorkerTerminalState: Codable, Equatable, Sendable {
     }
 }
 
+/// Normalized interpretation of the newest provider-persisted turn/activity.
+/// It does not claim that the runtime is currently executing.
+public enum ProviderReportedRuntimeState: String, Codable, Equatable, Sendable {
+    case active
+    case inactive
+    case unknown
+}
+
+/// Allowlisted provider persistence for one OpenCode tool part. Input, output,
+/// command text, and other potentially sensitive payloads are deliberately
+/// excluded. `messageID` is the provider turn identity when available and
+/// `callID` identifies the tool invocation when OpenCode persists it.
+public struct ProviderPersistedActivity: Codable, Equatable, Sendable {
+    public var partID: OrchestrationValue<String>
+    public var messageID: OrchestrationValue<String>
+    public var callID: OrchestrationValue<String>
+    public var kind: OrchestrationValue<String>
+    public var toolName: OrchestrationValue<String>
+    public var reportedStatus: OrchestrationValue<String>
+    public var createdAt: OrchestrationValue<Date>
+    public var updatedAt: OrchestrationValue<Date>
+
+    public init(
+        partID: OrchestrationValue<String>,
+        messageID: OrchestrationValue<String>,
+        callID: OrchestrationValue<String>,
+        kind: OrchestrationValue<String>,
+        toolName: OrchestrationValue<String>,
+        reportedStatus: OrchestrationValue<String>,
+        createdAt: OrchestrationValue<Date>,
+        updatedAt: OrchestrationValue<Date>
+    ) {
+        self.partID = partID
+        self.messageID = messageID
+        self.callID = callID
+        self.kind = kind
+        self.toolName = toolName
+        self.reportedStatus = reportedStatus
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public enum ProviderRuntimeReconciliationDisposition: String, Codable, Equatable, Sendable {
+    case consistentActive = "consistent_active"
+    case consistentInactive = "consistent_inactive"
+    case providerStaleRunningProcessAbsent = "provider_stale_running_process_absent"
+    case providerActiveParentAbsentOwnedResidual = "provider_active_parent_absent_owned_residual"
+    case providerInactiveProcessResidual = "provider_inactive_process_residual"
+    case inconsistentAuthorities = "inconsistent_authorities"
+    case insufficientObservation = "insufficient_observation"
+}
+
+/// Keeps provider persistence and process-tree observation side by side.
+/// Neither authority overwrites the other, and the disposition is a derived
+/// read result rather than a provider-history or process mutation.
+public struct ProviderRuntimeReconciliation: Codable, Equatable, Sendable {
+    public static let currentSchemaVersion = 1
+
+    public var schemaVersion: Int
+    public var providerID: String
+    public var providerSessionID: OrchestrationValue<String>
+    public var conduitTaskID: OrchestrationValue<String>
+    public var runtimeAttemptID: OrchestrationValue<String>
+    public var latestProviderTurnID: OrchestrationValue<String>
+    public var providerReportedState: ProviderReportedRuntimeState
+    public var providerActivities: OrchestrationValue<[ProviderPersistedActivity]>
+    public var providerSourceUpdatedAt: OrchestrationValue<Date>
+    public var providerObservation: SupervisionObservationStamp
+    public var processObservation: OrchestrationValue<ProcessTreeObservation>
+    public var processReconciliation: OrchestrationValue<ProcessTreeReconciliation>
+    public var disposition: ProviderRuntimeReconciliationDisposition
+    public var diagnostics: [String]
+    public var unknownFacts: [String]
+
+    public init(
+        schemaVersion: Int = ProviderRuntimeReconciliation.currentSchemaVersion,
+        providerID: String,
+        providerSessionID: OrchestrationValue<String>,
+        conduitTaskID: OrchestrationValue<String>,
+        runtimeAttemptID: OrchestrationValue<String>,
+        latestProviderTurnID: OrchestrationValue<String>,
+        providerReportedState: ProviderReportedRuntimeState,
+        providerActivities: OrchestrationValue<[ProviderPersistedActivity]>,
+        providerSourceUpdatedAt: OrchestrationValue<Date>,
+        providerObservation: SupervisionObservationStamp,
+        processObservation: OrchestrationValue<ProcessTreeObservation>,
+        processReconciliation: OrchestrationValue<ProcessTreeReconciliation>,
+        disposition: ProviderRuntimeReconciliationDisposition,
+        diagnostics: [String],
+        unknownFacts: [String]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.providerID = providerID
+        self.providerSessionID = providerSessionID
+        self.conduitTaskID = conduitTaskID
+        self.runtimeAttemptID = runtimeAttemptID
+        self.latestProviderTurnID = latestProviderTurnID
+        self.providerReportedState = providerReportedState
+        self.providerActivities = providerActivities
+        self.providerSourceUpdatedAt = providerSourceUpdatedAt
+        self.providerObservation = providerObservation
+        self.processObservation = processObservation
+        self.processReconciliation = processReconciliation
+        self.disposition = disposition
+        self.diagnostics = diagnostics
+        self.unknownFacts = unknownFacts
+    }
+}
+
 /// Provider-neutral read model for one worker/session lineage.
 ///
 /// Provider host, provider session, provider turn, and Conduit supervisory
@@ -340,7 +450,7 @@ public struct WorkerTerminalState: Codable, Equatable, Sendable {
 /// not on the provider session, because a durable provider session may change
 /// model between turns.
 public struct WorkerLineage: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var conduitTaskID: OrchestrationValue<String>
@@ -358,6 +468,7 @@ public struct WorkerLineage: Codable, Equatable, Sendable {
     public var terminal: WorkerTerminalState
     public var observation: SupervisionObservationStamp
     public var providerSpecific: OrchestrationValue<ProviderSpecificPayload>
+    public var runtimeReconciliation: ProviderRuntimeReconciliation?
 
     public init(
         schemaVersion: Int = WorkerLineage.currentSchemaVersion,
@@ -375,7 +486,8 @@ public struct WorkerLineage: Codable, Equatable, Sendable {
         writerControllerID: OrchestrationValue<String>,
         terminal: WorkerTerminalState,
         observation: SupervisionObservationStamp,
-        providerSpecific: OrchestrationValue<ProviderSpecificPayload>
+        providerSpecific: OrchestrationValue<ProviderSpecificPayload>,
+        runtimeReconciliation: ProviderRuntimeReconciliation? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.conduitTaskID = conduitTaskID
@@ -393,6 +505,7 @@ public struct WorkerLineage: Codable, Equatable, Sendable {
         self.terminal = terminal
         self.observation = observation
         self.providerSpecific = providerSpecific
+        self.runtimeReconciliation = runtimeReconciliation
     }
 }
 

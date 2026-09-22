@@ -193,7 +193,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_observe_worker",
-            "Read one exact provider session into the provider-neutral WorkerLineage envelope. Observation never adopts or controls the session. Persisted provider completion remains separate from terminal receipt, verification, and objective acceptance; missing task/runtime/process/writer facts remain UNKNOWN.",
+            "Read one exact provider session into WorkerLineage, with separately stamped provider-persisted activity and exact-binding Slice 6A process reconciliation where available. Contradictory or stale authorities remain explicit; observation never adopts or controls the session, starts a turn, cleans processes, or promotes provider completion into objective acceptance. Missing facts remain UNKNOWN.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "provider": [

@@ -137,9 +137,60 @@ public struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTra
                 """
             )
 
+            // OpenCode versions before the normalized part table (or a
+            // partially migrated persistence store) cannot establish that a
+            // missing tool part means there was no persisted tool activity.
+            // Preserve that distinction as JSON null/UNKNOWN.
+            let partTables = try queryJSONLines(
+                databaseURL: databaseURL,
+                sql: """
+                PRAGMA query_only=ON;
+                SELECT json_object(
+                  'present', EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type = 'table' AND name = 'part'
+                  )
+                );
+                """
+            )
+            let parts: CodexJSON
+            let hasPartsTable: Bool
+            switch partTables.first?["present"] {
+            case .bool(true)?:
+                hasPartsTable = true
+            case .number(let value)?:
+                hasPartsTable = value == 1
+            default:
+                hasPartsTable = false
+            }
+            if hasPartsTable {
+                parts = .array(try queryJSONLines(
+                    databaseURL: databaseURL,
+                    sql: """
+                    PRAGMA query_only=ON;
+                    SELECT json_object(
+                      'id', id,
+                      'messageID', message_id,
+                      'kind', json_extract(data, '$.type'),
+                      'tool', json_extract(data, '$.tool'),
+                      'callID', json_extract(data, '$.callID'),
+                      'status', json_extract(data, '$.state.status'),
+                      'createdAt', time_created,
+                      'updatedAt', time_updated
+                    )
+                    FROM part
+                    WHERE session_id = \(quotedID)
+                    ORDER BY time_created ASC, id ASC;
+                    """
+                ))
+            } else {
+                parts = .null
+            }
+
             return .object([
                 "info": info,
                 "messages": .array(messages),
+                "parts": parts,
             ])
         }
     }

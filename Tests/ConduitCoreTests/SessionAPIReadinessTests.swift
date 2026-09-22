@@ -16,6 +16,10 @@ final class SessionAPIReadinessTests: XCTestCase {
         let processTree = ConduitSessionCommand.processTree(
             taskSessionID: "task-fixture"
         )
+        let observeWorker = ConduitSessionCommand.observeWorker(
+            provider: "opencode",
+            providerSessionID: "ses_fixture"
+        )
         let write = ConduitSessionCommand.createTask(
             agent: "Shell",
             projectSlug: "synthetic",
@@ -26,6 +30,10 @@ final class SessionAPIReadinessTests: XCTestCase {
         for state in ConduitSessionAPIReadiness.allCases where state != .ready {
             XCTAssertTrue(
                 ConduitSessionAPI.allowsCommand(read, readiness: state)
+            )
+            XCTAssertFalse(ConduitSessionAPI.isWrite(observeWorker))
+            XCTAssertTrue(
+                ConduitSessionAPI.allowsCommand(observeWorker, readiness: state)
             )
             XCTAssertFalse(ConduitSessionAPI.isWrite(processTree))
             XCTAssertTrue(
