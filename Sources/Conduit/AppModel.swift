@@ -5287,23 +5287,28 @@ final class AppModel: ObservableObject {
                 case .requested:
                     payload["stop"] = "requested"
                     payload["stop_signal"] = "SIGTERM"
-                    payload["escalation"] = "SIGKILL after 1s only if the same exact PTY child remains running"
+                    payload["escalation"] = "SIGKILL after 1s only if the same exact PTY child remains unobserved"
+                    payload["authority"] =
+                        "Conduit signaled only the exact SwiftTerm-owned direct PTY child and has not yet observed process exit. The task remains live and execution capacity remains occupied until the existing waitpid-backed callback reports termination; descendants are not inspected or signaled and objective acceptance is not established."
                 case .awaitingExistingExit:
                     payload["stop"] = "awaiting_existing_exit"
+                    payload["authority"] =
+                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into an exit fact; capacity remains occupied until the waitpid-backed callback reports termination."
                 case .signalFailed(_, let code):
                     payload["executed"] = false
                     payload["stop"] = "signal_failed"
                     payload["errno"] = Int(code)
                     payload["error"] = "direct PTY signal request failed; runtime remains live"
+                    payload["authority"] =
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
                 case .unavailable, .notRequested:
                     payload["executed"] = false
                     payload["stop"] = "unavailable"
                     payload["error"] = "no live direct PTY process identity was available to signal"
+                    payload["authority"] =
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
                 }
                 payload["completion"] = "pending_process_observation"
-                payload["authority"] = request.accepted
-                    ? "Conduit signaled only the exact SwiftTerm-owned direct PTY child and has not yet observed process exit. The task remains live and execution capacity remains occupied until the existing waitpid-backed callback reports termination; descendants are not inspected or signaled and objective acceptance is not established."
-                    : "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
             } else if !runtimeEnded {
                 payload["error"] =
                     "runtime stop could not be confirmed; Conduit preserved the detached durable runtime for explicit reconciliation"
