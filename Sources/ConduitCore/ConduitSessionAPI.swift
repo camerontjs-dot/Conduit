@@ -71,6 +71,11 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     case listAdapters
     case listProviderSessions(provider: String)
     case observeWorker(provider: String, providerSessionID: String)
+    case adoptProviderSession(
+        provider: String,
+        providerSessionID: String,
+        controllerID: String
+    )
     case sessionStatus(taskSessionID: String)
     case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
     case queryMindGraph(question: String, scope: String)
@@ -96,7 +101,8 @@ public enum ConduitSessionAPI {
         case .listProjects, .listSessions, .listAdapters, .listProviderSessions,
              .observeWorker, .sessionStatus, .sessionEvents, .queryMindGraph:
             return false
-        case .createTask, .reconcileTask, .sendPrompt, .interrupt, .closeSession:
+        case .adoptProviderSession, .createTask, .reconcileTask, .sendPrompt,
+             .interrupt, .closeSession:
             return true
         }
     }

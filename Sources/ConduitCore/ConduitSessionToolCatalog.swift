@@ -247,6 +247,27 @@ public enum ConduitSessionToolCatalog {
 
     private static let writeTools: [[String: Any]] = [
         tool(
+            "conduit_adopt_provider_session",
+            "Explicitly claim Conduit writer/controller authority for one existing provider session. This does not create, resume, replace, prompt, interrupt, or otherwise mutate the provider session. A competing controller is returned as writer_collision and the original session identity/history remain authoritative. controller_id is an opaque Conduit supervisory identity, not an authentication credential. This authority is separate from any #57 workspace/worktree writer lease. External writer ownership remains UNKNOWN unless independently observed.",
+            annotations: nonDestructiveStateChangingAnnotations,
+            properties: [
+                "provider": [
+                    "type": "string",
+                    "enum": ["opencode"],
+                    "description": "Provider authority adapter. Wave 1 supports opencode only.",
+                ],
+                "provider_session_id": property(
+                    "string",
+                    "Exact existing provider session id returned by conduit_list_provider_sessions."
+                ),
+                "controller_id": property(
+                    "string",
+                    "Stable opaque identity for the Conduit supervisor/controller claiming this provider session. This is governance identity, not authentication."
+                ),
+            ],
+            required: ["provider", "provider_session_id", "controller_id"]
+        ),
+        tool(
             "conduit_create_task",
             "Start a Conduit agent session and return its taskSessionID. Read objective_delivery_state, not objective_delivered, to decide what to do next: delivered means it reached the runtime; queued means Conduit owns delivery and will complete it without another call, so resending would run the objective twice; failed means the runtime refused it and objective_resend_required is true, so wait for ready then send it with conduit_send_prompt. The model remains the operator-configured profile choice; this tool has no model override. Approvals stay on the Mac. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: stateChangingAnnotations,

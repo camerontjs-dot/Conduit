@@ -431,6 +431,23 @@ final class ConduitSessionAPIServer {
                     provider: provider,
                     providerSessionID: providerSessionID
                 )
+        case "conduit_adopt_provider_session":
+            let provider = arguments["provider"]?.stringValue ?? ""
+            let providerSessionID = arguments["provider_session_id"]?.stringValue
+                ?? arguments["providerSessionID"]?.stringValue
+                ?? ""
+            let controllerID = arguments["controller_id"]?.stringValue
+                ?? arguments["controllerID"]?.stringValue
+                ?? ""
+            command = provider.isEmpty
+                    || providerSessionID.isEmpty
+                    || controllerID.isEmpty
+                ? nil
+                : .adoptProviderSession(
+                    provider: provider,
+                    providerSessionID: providerSessionID,
+                    controllerID: controllerID
+                )
         case "conduit_session_status":
             if let id = arguments["taskSessionID"]?.stringValue {
                 command = .sessionStatus(taskSessionID: id)
@@ -533,11 +550,18 @@ final class ConduitSessionAPIServer {
             "isError": payload["error"] != nil,
             "content": [["type": "text", "text": text]],
         ]
-        if [
+        let returnsStructuredContent = [
             "conduit_session_events",
             "conduit_list_provider_sessions",
             "conduit_observe_worker",
-        ].contains(name), payload["error"] == nil {
+            "conduit_adopt_provider_session",
+        ].contains(name)
+        let isTypedAuthorityCollision =
+            name == "conduit_adopt_provider_session"
+                && payload["disposition"] as? String == "writer_collision"
+        if returnsStructuredContent
+            && (payload["error"] == nil || isTypedAuthorityCollision)
+        {
             result["structuredContent"] = payload
         }
         return result

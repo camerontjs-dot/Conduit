@@ -7,8 +7,8 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 13)
-        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 5)
+        XCTAssertEqual(names.count, 14)
+        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 6)
     }
 
     func testRequiredArgumentsAndDescriptionsRemainActionable() throws {
@@ -52,6 +52,21 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
                 "never adopts or controls"
             ) == true
         )
+
+        let adopt = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_adopt_provider_session")
+        )
+        let adoptSchema = try XCTUnwrap(
+            adopt["inputSchema"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            adoptSchema["required"] as? [String],
+            ["provider", "provider_session_id", "controller_id"]
+        )
+        let adoptDescription = try XCTUnwrap(adopt["description"] as? String)
+        XCTAssertTrue(adoptDescription.contains("writer_collision"))
+        XCTAssertTrue(adoptDescription.contains("does not create"))
+        XCTAssertTrue(adoptDescription.contains("workspace/worktree writer lease"))
 
         let interrupt = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_interrupt"))
         let description = try XCTUnwrap(interrupt["description"] as? String)

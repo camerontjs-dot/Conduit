@@ -65,6 +65,15 @@ final class StructuredAdapterTests: XCTestCase {
                 )
             )
         )
+        XCTAssertTrue(
+            ConduitSessionAPI.isWrite(
+                .adoptProviderSession(
+                    provider: "opencode",
+                    providerSessionID: "ses_external",
+                    controllerID: "supervisor-a"
+                )
+            )
+        )
         XCTAssertFalse(ConduitSessionAPI.isWrite(.listSessions(cursor: nil, limit: nil)))
     }
 
