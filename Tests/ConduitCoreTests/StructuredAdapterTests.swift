@@ -75,6 +75,22 @@ final class StructuredAdapterTests: XCTestCase {
             )
         )
         XCTAssertFalse(ConduitSessionAPI.isWrite(.listSessions(cursor: nil, limit: nil)))
+        XCTAssertFalse(
+            ConduitSessionAPI.isWrite(
+                .lifecyclePreflight(
+                    taskSessionID: "task",
+                    operation: .stopProviderHost
+                )
+            )
+        )
+        XCTAssertTrue(
+            ConduitSessionAPI.isWrite(
+                .lifecycleOperation(
+                    taskSessionID: "task",
+                    operation: .stopProviderHost
+                )
+            )
+        )
     }
 
     func testACPPromptCompletion() {
