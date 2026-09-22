@@ -5214,7 +5214,7 @@ final class AppModel: ObservableObject {
                 "executed": true,
                 "supervision": "released",
                 "preflight": encoded,
-                "authority": "Conduit released supervision/capacity without intentionally stopping the durable tmux runtime; task/objective completion is not established",
+                "authority": "Conduit released supervision/capacity along a preflight-supported path without stopping the provider host/runtime; task/objective completion is not established",
             ]
 
         case .stopProviderHost:
