@@ -4323,6 +4323,21 @@ final class AppModel: ObservableObject {
         return dictionary
     }
 
+    private func sessionAPILifecycleJSONObject(
+        _ preflight: LifecyclePreflight
+    ) -> [String: Any]? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        guard let data = try? encoder.encode(preflight),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any]
+        else {
+            return nil
+        }
+        return dictionary
+    }
+
     private func sessionAPIWorkerLineageObject(
         _ worker: WorkerLineage
     ) -> [String: Any]? {
