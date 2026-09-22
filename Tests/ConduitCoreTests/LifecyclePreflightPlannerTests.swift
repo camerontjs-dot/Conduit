@@ -168,6 +168,29 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
         XCTAssertEqual(plan.expectedProcessScope.value, .turn)
     }
 
+    func testOpenCodeSharedHostCanReleaseSupervisionWithoutStoppingHost() {
+        let plan = LifecyclePreflightPlanner.preflight(
+            operation: .releaseSupervision,
+            snapshot: snapshot(
+                kind: .openCodeHTTP,
+                providerSessionID: .known("ses-shared"),
+                providerHostID: .known("pid:4200"),
+                hostStopsOnAdapterStop: .known(false)
+            )
+        )
+
+        XCTAssertEqual(plan.support, .supported)
+        XCTAssertEqual(plan.willStopProvider.value, false)
+        XCTAssertEqual(plan.willReleaseSlot.value, true)
+        XCTAssertEqual(plan.recoverableAfterward.value, true)
+        XCTAssertEqual(plan.exactResumeHandle.value, "ses-shared")
+        XCTAssertTrue(
+            plan.sideEffects.value?.contains(
+                "the shared or externally owned OpenCode provider host remains running"
+            ) == true
+        )
+    }
+
     func testReleaseWhileStructuredProviderContinuesFailsClosed() {
         let plan = LifecyclePreflightPlanner.preflight(
             operation: .releaseSupervision,
