@@ -549,6 +549,9 @@ final class AppModel: ObservableObject {
     /// live `sessions` array and is never persisted as project truth.
     private var lastSelectedSessionIDByProject: [String: UUID] = [:]
     private var explicitlyFinalizedRuntimeAttempts = Set<RuntimeAttemptID>()
+    /// Direct PTY stops are asynchronous: keep admission occupied until the
+    /// existing process callback proves the PTY actually exited.
+    private var pendingDirectPTYStopAttempts = Set<RuntimeAttemptID>()
 
     init() {
         refreshTaskSidebarProjection()
@@ -1137,6 +1140,9 @@ final class AppModel: ObservableObject {
         runtimeAttemptID: RuntimeAttemptID
     ) {
         bankObservedUsage(record)
+        if pendingDirectPTYStopAttempts.remove(runtimeAttemptID) != nil {
+            mcpAdmission?.markTaskEnded(taskSessionID)
+        }
         if explicitlyFinalizedRuntimeAttempts.remove(runtimeAttemptID) != nil {
             return
         }
@@ -2141,7 +2147,11 @@ final class AppModel: ObservableObject {
             statusMessage = "Reconnect this task before ending its runtime."
             return
         }
-        mcpAdmission?.markTaskEnded(id)
+        let waitsForObservedDirectPTYExit =
+            !runtime.usesStructuredHost && !runtime.controller.usesTmux
+        if !waitsForObservedDirectPTYExit {
+            mcpAdmission?.markTaskEnded(id)
+        }
         endSession(runtime)
     }
 
@@ -2838,13 +2848,46 @@ final class AppModel: ObservableObject {
     /// agent on this project starts fresh (no reconnect to a stuck shell).
     @discardableResult
     func endSession(_ runtime: TerminalRuntime) -> Bool {
-        let tmuxName = runtime.controller.usesTmux
+        let wasTmux = runtime.controller.usesTmux
+        let wasStructured = runtime.usesStructuredHost
+        let waitsForObservedDirectPTYExit = !wasTmux && !wasStructured
+        let tmuxName = wasTmux
             ? runtime.descriptor.tmuxSessionName
             : nil
-        explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
+
+        if waitsForObservedDirectPTYExit {
+            pendingDirectPTYStopAttempts.insert(runtime.runtimeAttemptID)
+        } else {
+            explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
+        }
+
         runtime.closeAgentOutputCapture()
         runtime.stopAppServer()
-        let runtimeEnded = runtime.controller.endSession()
+        let runtimeEnded = runtime.controller.endSession(
+            hostedAdapterAlreadyStopped: wasStructured
+        )
+
+        if waitsForObservedDirectPTYExit {
+            let request = runtime.controller.lastDirectPTYStopRequest
+            if request.accepted {
+                // Keep the task/runtime live until SwiftTerm's still-active
+                // waitpid-backed process monitor produces the observed exit.
+                statusMessage =
+                    "Stop requested for \(runtime.descriptor.agent.name); waiting for process exit observation."
+            } else {
+                pendingDirectPTYStopAttempts.remove(runtime.runtimeAttemptID)
+                switch request {
+                case .signalFailed(let pid, let code):
+                    errorMessage =
+                        "Could not signal direct PTY PID \(pid) (errno \(code)); runtime remains live."
+                default:
+                    errorMessage =
+                        "Could not identify a live direct PTY process to stop; runtime remains live."
+                }
+            }
+            return false
+        }
+
         if let taskID = runtime.descriptor.taskSessionID {
             let state: TaskSessionOperationalState = runtimeEnded
                 ? .closed(.operatorEndedRuntime)
@@ -2902,7 +2945,9 @@ final class AppModel: ObservableObject {
         }
         let wasDurable = runtime.controller.usesTmux
         guard endSession(runtime) else {
-            errorMessage = "The underlying tmux runtime could not be confirmed ended, so Conduit did not launch a replacement."
+            errorMessage = runtime.controller.usesTmux
+                ? "The underlying tmux runtime could not be confirmed ended, so Conduit did not launch a replacement."
+                : "Direct PTY termination was requested but has not yet been observed. Conduit will not launch a replacement while the prior process may still be alive."
             return nil
         }
         selectProject(project)
@@ -4018,6 +4063,17 @@ final class AppModel: ObservableObject {
                 origin: origin,
                 caller: caller
             )
+        case .lifecyclePreflight(let rawID, let operation):
+            return sessionAPILifecyclePreflight(
+                taskSessionID: rawID,
+                operation: operation
+            )
+        case .lifecycleOperation(let rawID, let operation):
+            return sessionAPILifecycleOperation(
+                taskSessionID: rawID,
+                operation: operation,
+                caller: caller
+            )
         case .interrupt(let rawID):
             return sessionAPIInterrupt(taskSessionID: rawID, caller: caller)
         case .closeSession(let rawID):
@@ -4312,6 +4368,21 @@ final class AppModel: ObservableObject {
         return dictionary
     }
 
+    private func sessionAPILifecycleJSONObject(
+        _ preflight: LifecyclePreflight
+    ) -> [String: Any]? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        guard let data = try? encoder.encode(preflight),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any]
+        else {
+            return nil
+        }
+        return dictionary
+    }
+
     private func sessionAPIWorkerLineageObject(
         _ worker: WorkerLineage
     ) -> [String: Any]? {
@@ -4474,7 +4545,8 @@ final class AppModel: ObservableObject {
         // in the response that tells it the decision was final.
         if let live {
             payload["close_outcome"] = SessionCloseSemantics.outcome(
-                usesStructuredHost: live.usesStructuredHost
+                usesStructuredHost: live.usesStructuredHost,
+                usesTmux: live.controller.usesTmux
             ).rawValue
         }
         // Every structured client replaces a refused resume with a new, empty
@@ -4961,6 +5033,311 @@ final class AppModel: ObservableObject {
         ]
     }
 
+    private func sessionAPILifecycleSnapshot(
+        for taskID: TaskSessionID
+    ) -> LifecycleRuntimeSnapshot? {
+        guard let task = taskSessions.first(where: { $0.id == taskID }) else {
+            return nil
+        }
+
+        let live = sessionAPILiveRuntime(for: taskID)
+        let profile = agentProfile(named: task.metadata.agentName)
+        let backend = profile?.preferredSessionBackend
+
+        let kind: LifecycleRuntimeKind
+        if let live {
+            if live.usesStructuredHost {
+                switch backend {
+                case .some(.appServer): kind = .codexAppServer
+                case .some(.httpServer): kind = .openCodeHTTP
+                case .some(.acp): kind = .acp
+                case .some(.structuredCli): kind = .structuredCLI
+                case .some(.pty), nil:
+                    // A live structured host without a matching declared
+                    // backend is not safe to reinterpret as PTY.
+                    kind = .absent
+                }
+            } else if live.controller.usesTmux {
+                kind = .tmux
+            } else {
+                kind = .directPTY
+            }
+        } else {
+            kind = .absent
+        }
+
+        let providerSessionID: OrchestrationValue<String> = {
+            if let liveID = live?.structuredSessionID, !liveID.isEmpty {
+                return .known(liveID)
+            }
+            guard live == nil, backend?.isStructured == true,
+                  let persisted = AdapterThreadStore(
+                    directory: AdapterThreadStore.defaultDirectory()
+                  ).threadID(for: taskID),
+                  !persisted.isEmpty
+            else {
+                return .unknown
+            }
+            return .known(persisted)
+        }()
+
+        let providerHostID: OrchestrationValue<String> = {
+            guard let live else { return .unknown }
+            if let id = live.appServer?.lifecycleProviderHostIdentifier {
+                return .known(id)
+            }
+            if let id = live.openCode?.lifecycleProviderHostIdentifier {
+                return .known(id)
+            }
+            return .unknown
+        }()
+
+        let adapterStopWillStopProviderHost: OrchestrationValue<Bool> = {
+            guard let live, live.usesStructuredHost else { return .unknown }
+            if let openCode = live.openCode {
+                return .known(openCode.lifecycleStopWillStopProviderHost)
+            }
+            // Codex app-server, ACP, and stream-json are task-local processes
+            // in the current implementation.
+            return .known(true)
+        }()
+
+        let tmuxSessionName: OrchestrationValue<String> = {
+            guard let name = live?.descriptor.tmuxSessionName,
+                  live?.controller.usesTmux == true,
+                  !name.isEmpty
+            else {
+                return .unknown
+            }
+            return .known(name)
+        }()
+
+        return LifecycleRuntimeSnapshot(
+            kind: kind,
+            taskSessionID: taskID.rawValue.uuidString,
+            runtimeAttemptID: live.map {
+                .known($0.runtimeAttemptID.rawValue.uuidString)
+            } ?? .unknown,
+            providerSessionID: providerSessionID,
+            providerHostID: providerHostID,
+            tmuxSessionName: tmuxSessionName,
+            turnActive: live?.usesStructuredHost == true
+                ? .known(live?.structuredTurnActive == true)
+                : .unknown,
+            adapterStopWillStopProviderHost: adapterStopWillStopProviderHost,
+            observedAt: Date()
+        )
+    }
+
+    private func sessionAPILifecyclePlan(
+        taskID: TaskSessionID,
+        operation: LifecycleOperation
+    ) -> LifecyclePreflight? {
+        guard let snapshot = sessionAPILifecycleSnapshot(for: taskID) else {
+            return nil
+        }
+        return LifecyclePreflightPlanner.preflight(
+            operation: operation,
+            snapshot: snapshot
+        )
+    }
+
+    private func sessionAPILifecyclePreflight(
+        taskSessionID rawID: String,
+        operation: LifecycleOperation
+    ) -> [String: Any] {
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        guard let preflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: operation
+        ),
+        let encoded = sessionAPILifecycleJSONObject(preflight)
+        else {
+            return [
+                "error": "lifecycle preflight could not be encoded",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+            ]
+        }
+        return [
+            "taskSessionID": rawID,
+            "operation": operation.rawValue,
+            "preflight": encoded,
+            "mutation": "none",
+            "authority": "read-only Conduit lifecycle planning from current runtime/provider facts; UNKNOWN remains UNKNOWN",
+        ]
+    }
+
+    private func sessionAPILifecycleOperation(
+        taskSessionID rawID: String,
+        operation: LifecycleOperation,
+        caller: ConduitSessionCaller
+    ) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else {
+            return ["error": "write tools are disabled"]
+        }
+        guard let taskID = sessionAPITaskID(rawID) else {
+            return ["error": "invalid taskSessionID"]
+        }
+        let decision = sessionAPIAdmission.admitWrite(
+            callerIdentity: caller.identity,
+            resources: sessionAPIResourceSnapshot()
+        )
+        guard decision.shouldExecute else {
+            return sessionAPIAdmissionRefusal(decision)
+        }
+        guard let preflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: operation
+        ),
+        let encoded = sessionAPILifecycleJSONObject(preflight)
+        else {
+            return [
+                "error": "lifecycle preflight unavailable",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+            ]
+        }
+
+        if operation == .observe {
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "observation_only": true,
+                "preflight": encoded,
+                "authority": "observe is read-only; no lifecycle mutation was performed",
+            ]
+        }
+
+        guard preflight.support == .supported else {
+            return [
+                "error": "lifecycle operation is \(preflight.support.rawValue)",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+                "authority": "fail-closed lifecycle dispatch; unsupported/UNKNOWN operations are not remapped to another verb",
+            ]
+        }
+
+        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
+            return [
+                "error": "no live runtime for lifecycle mutation",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+            ]
+        }
+
+        switch operation {
+        case .abortTurn:
+            let interruptionEventID = runtime.recordInterruptRequest()
+            runtime.interruptStructuredAdapter()
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": true,
+                "abort": "requested",
+                "interrupt_event_id": interruptionEventID.uuidString,
+                "preflight": encoded,
+                "authority": "provider-native turn abort/cancel was requested; provider cancellation completion and objective acceptance are not established",
+            ]
+
+        case .releaseSupervision:
+            // Planner support currently limits this to durable tmux or an
+            // OpenCode client whose lease can be released without stopping the
+            // shared/external provider host.
+            leaveTask(taskID)
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": true,
+                "supervision": "released",
+                "preflight": encoded,
+                "authority": "Conduit released supervision/capacity along a preflight-supported path without stopping the provider host/runtime; task/objective completion is not established",
+            ]
+
+        case .stopProviderHost:
+            let waitsForObservedDirectPTYExit =
+                !runtime.usesStructuredHost && !runtime.controller.usesTmux
+            if !waitsForObservedDirectPTYExit {
+                mcpAdmission?.markTaskEnded(taskID)
+            }
+            let runtimeEnded = endSession(runtime)
+            var payload: [String: Any] = [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": true,
+                "runtime_end_confirmed": runtimeEnded,
+                "execution_capacity_released": !waitsForObservedDirectPTYExit,
+                "preflight": encoded,
+                "authority": "Conduit executed the explicit runtime/provider-host stop path; provider history is not deleted and objective acceptance is not established",
+            ]
+            if waitsForObservedDirectPTYExit && !runtimeEnded {
+                let request = runtime.controller.lastDirectPTYStopRequest
+                if let pid = request.pid {
+                    payload["target_pid"] = Int(pid)
+                }
+                switch request {
+                case .requested:
+                    payload["stop"] = "requested"
+                    payload["stop_signal"] = "SIGTERM"
+                    payload["escalation"] = "SIGKILL after 1s only if the same exact PTY child remains unobserved"
+                    payload["authority"] =
+                        "Conduit signaled only the exact SwiftTerm-owned direct PTY child and has not yet observed process exit. The task remains live and execution capacity remains occupied until the existing waitpid-backed callback reports termination; descendants are not inspected or signaled and objective acceptance is not established."
+                case .awaitingExistingExit:
+                    payload["stop"] = "awaiting_existing_exit"
+                    payload["authority"] =
+                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into an exit fact; capacity remains occupied until the waitpid-backed callback reports termination."
+                case .signalFailed(_, let code):
+                    payload["executed"] = false
+                    payload["stop"] = "signal_failed"
+                    payload["errno"] = Int(code)
+                    payload["error"] = "direct PTY signal request failed; runtime remains live"
+                    payload["authority"] =
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                case .unavailable, .notRequested:
+                    payload["executed"] = false
+                    payload["stop"] = "unavailable"
+                    payload["error"] = "no live direct PTY process identity was available to signal"
+                    payload["authority"] =
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                }
+                payload["completion"] = "pending_process_observation"
+            } else if !runtimeEnded {
+                payload["error"] =
+                    "runtime stop could not be confirmed; Conduit preserved the detached durable runtime for explicit reconciliation"
+            }
+            return payload
+
+        case .observe:
+            // Handled before the supported-mutation guard.
+            return [
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+            ]
+
+        case .adopt, .startTurn, .archiveProviderHistory:
+            // The planner currently marks these unsupported on this executor.
+            // Keep the switch exhaustive so a future support change cannot
+            // silently fall through to an unrelated lifecycle mutation.
+            return [
+                "error": "operation has no lifecycle executor",
+                "taskSessionID": rawID,
+                "operation": operation.rawValue,
+                "executed": false,
+                "preflight": encoded,
+            ]
+        }
+    }
+
     private func sessionAPIInterrupt(
         taskSessionID rawID: String,
         caller: ConduitSessionCaller
@@ -4981,19 +5358,28 @@ final class AppModel: ObservableObject {
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to interrupt", "taskSessionID": rawID]
         }
+        let typedPreflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: .abortTurn
+        ).flatMap { sessionAPILifecycleJSONObject($0) }
         let interruptionEventID = runtime.recordInterruptRequest()
         if runtime.usesStructuredHost {
             runtime.interruptStructuredAdapter()
         } else {
             runtime.controller.interrupt()
         }
-        return [
+        var payload: [String: Any] = [
             "taskSessionID": rawID,
             "interrupt": "requested",
             "interrupt_event_id": interruptionEventID.uuidString,
             "interrupted": true,
-            "authority": "Conduit issued and recorded an interrupt request; provider cancellation has not been observed. Read conduit_session_events for later observation.",
+            "compatibility_command": true,
+            "authority": "Conduit issued and recorded an interrupt request; provider cancellation has not been observed. PTY Ctrl-C is not upgraded into a provider turn-abort claim. Read conduit_session_events for later observation.",
         ]
+        if let typedPreflight {
+            payload["typed_abort_preflight"] = typedPreflight
+        }
+        return payload
     }
 
     private func sessionAPIClose(
@@ -5016,19 +5402,40 @@ final class AppModel: ObservableObject {
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return ["error": "no live runtime to close", "taskSessionID": rawID]
         }
-        // Read the backend before the close: afterwards there is no live
-        // runtime left to ask.
+        // Read the backend and typed consequences before close: afterwards
+        // there is no live runtime left to inspect.
         let outcome = SessionCloseSemantics.outcome(
-            usesStructuredHost: runtime.usesStructuredHost
+            usesStructuredHost: runtime.usesStructuredHost,
+            usesTmux: runtime.controller.usesTmux
         )
+        let releasePreflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: .releaseSupervision
+        )
+        let lifecycleOperation: LifecycleOperation =
+            releasePreflight?.support == .supported
+                ? .releaseSupervision
+                : .stopProviderHost
+        let typedPreflight = sessionAPILifecyclePlan(
+            taskID: taskID,
+            operation: lifecycleOperation
+        ).flatMap { sessionAPILifecycleJSONObject($0) }
         leaveTask(taskID)
-        return [
+        var payload: [String: Any] = [
             "taskSessionID": rawID,
             "closed": true,
             "close_outcome": outcome.rawValue,
+            // Compatibility field: this describes reconnecting the same live
+            // Conduit runtime, not provider-owned history.
             "recoverable": !outcome.isTerminal,
+            "compatibility_command": true,
             "authority": SessionCloseSemantics.authority(for: outcome),
         ]
+        if let typedPreflight {
+            payload["typed_lifecycle_preflight"] = typedPreflight
+            payload["typed_lifecycle_operation"] = lifecycleOperation.rawValue
+        }
+        return payload
     }
 
     func saveSettings() {

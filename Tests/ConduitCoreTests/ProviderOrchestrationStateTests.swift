@@ -267,6 +267,43 @@ final class ProviderOrchestrationStateTests: XCTestCase {
         XCTAssertEqual(ptyDetach.exactResumeHandle.value, "tmux-session-1")
     }
 
+    func testLifecyclePreflightV1PayloadDecodesWithUnknownNewConsequences() throws {
+        let legacy = LifecyclePreflight(
+            schemaVersion: 1,
+            operation: .releaseSupervision,
+            target: LifecycleTarget(
+                kind: .session,
+                identifier: .known("tmux-legacy")
+            ),
+            support: .supported,
+            willStopProvider: .known(false),
+            willReleaseSlot: .known(true),
+            recoverableAfterward: .known(true),
+            exactResumeHandle: .known("tmux-legacy"),
+            expectedProcessScope: .known(.none),
+            knownDescendantPIDs: .unknown,
+            sideEffects: .known(["detach"]),
+            unsupportedConsequences: .known([]),
+            unknownConsequences: .known(["new-field-placeholder"]),
+            observation: observed
+        )
+        let encoded = try JSONEncoder().encode(legacy)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "unknownConsequences")
+        let v1Data = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(
+            LifecyclePreflight.self,
+            from: v1Data
+        )
+
+        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertEqual(decoded.unknownConsequences.state, .unknown)
+        XCTAssertEqual(decoded.operation, .releaseSupervision)
+    }
+
     func testUnsupportedLifecycleOperationStaysUnsupportedInsteadOfMappingToStop() {
         let preflight = LifecyclePreflight(
             operation: .releaseSupervision,

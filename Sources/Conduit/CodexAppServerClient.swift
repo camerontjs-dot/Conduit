@@ -51,6 +51,22 @@ final class CodexAppServerClient: ObservableObject {
     private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
 
     var onEffect: ((CodexAppServerEffect) -> Void)?
+
+    /// Exact in-process host identity available to lifecycle preflight.
+    ///
+    /// Socket-proxy mode can own two processes, so preserve both PIDs rather
+    /// than pretending one is the whole host.
+    var lifecycleProviderHostIdentifier: String? {
+        var identifiers: [String] = []
+        if let process, process.isRunning {
+            identifiers.append("pid:\(process.processIdentifier)")
+        }
+        if let serverProcess, serverProcess.isRunning {
+            identifiers.append("pid:\(serverProcess.processIdentifier)")
+        }
+        return identifiers.isEmpty ? nil : identifiers.joined(separator: ",")
+    }
+
     /// Fired once the host can accept a turn.
     ///
     /// Conduit holds a prompt that arrives before this point rather than

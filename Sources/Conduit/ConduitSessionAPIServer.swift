@@ -528,6 +528,28 @@ final class ConduitSessionAPIServer {
             } else {
                 command = nil
             }
+        case "conduit_lifecycle_preflight":
+            if let id = arguments["taskSessionID"]?.stringValue,
+               let rawOperation = arguments["operation"]?.stringValue,
+               let operation = LifecycleOperation(rawValue: rawOperation) {
+                command = .lifecyclePreflight(
+                    taskSessionID: id,
+                    operation: operation
+                )
+            } else {
+                command = nil
+            }
+        case "conduit_lifecycle_operation":
+            if let id = arguments["taskSessionID"]?.stringValue,
+               let rawOperation = arguments["operation"]?.stringValue,
+               let operation = LifecycleOperation(rawValue: rawOperation) {
+                command = .lifecycleOperation(
+                    taskSessionID: id,
+                    operation: operation
+                )
+            } else {
+                command = nil
+            }
         case "conduit_interrupt":
             if let id = arguments["taskSessionID"]?.stringValue {
                 command = .interrupt(taskSessionID: id)
@@ -578,12 +600,21 @@ final class ConduitSessionAPIServer {
             "conduit_list_provider_sessions",
             "conduit_observe_worker",
             "conduit_adopt_provider_session",
+            "conduit_lifecycle_preflight",
+            "conduit_lifecycle_operation",
         ].contains(name)
         let isTypedAuthorityCollision =
             name == "conduit_adopt_provider_session"
                 && payload["disposition"] as? String == "writer_collision"
+        let isTypedLifecycleResult =
+            name == "conduit_lifecycle_operation"
+                && payload["preflight"] != nil
         if returnsStructuredContent
-            && (payload["error"] == nil || isTypedAuthorityCollision)
+            && (
+                payload["error"] == nil
+                    || isTypedAuthorityCollision
+                    || isTypedLifecycleResult
+            )
         {
             result["structuredContent"] = payload
         }

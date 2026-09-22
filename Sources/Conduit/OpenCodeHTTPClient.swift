@@ -78,6 +78,15 @@ final class OpenCodeServeLease {
         }
     }
 
+    /// Read-only lifecycle fact for one client release.
+    ///
+    /// A task-local OpenCode stop releases exactly one lease. It stops the
+    /// shared provider host only when this is the last retained client and the
+    /// host process is owned by this Conduit process.
+    func willStopOwnedHostAfterReleasingOneLease() -> Bool {
+        retainCount == 1 && process?.isRunning == true
+    }
+
     func shutdownIfIdle() {
         guard retainCount == 0 else { return }
         if let process, process.isRunning {
@@ -260,6 +269,17 @@ final class OpenCodeHTTPClient: ObservableObject {
     private var activityIndexByID: [String: Int] = [:]
     private var sseTask: Task<Void, Never>?
     private var stopped = false
+
+    /// Exact observed host identity when the lease record carries one.
+    var lifecycleProviderHostIdentifier: String? {
+        lease.map { "pid:\($0.pid)" }
+    }
+
+    /// Whether calling stop() on this client is presently known to stop the
+    /// shared OpenCode provider host rather than only releasing this client.
+    var lifecycleStopWillStopProviderHost: Bool {
+        OpenCodeServeLease.shared.willStopOwnedHostAfterReleasingOneLease()
+    }
 
     init(cwd: URL, model: String?, resumeSessionID: String? = nil) {
         self.cwd = cwd
