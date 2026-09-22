@@ -240,6 +240,18 @@ public enum ConduitSessionToolCatalog {
             required: ["taskSessionID"]
         ),
         tool(
+            "conduit_process_tree",
+            "Read the current OS process topology for one task's identity-bound launcher and reconcile it with the last recorded snapshot when available. Reports launcher PID/PGID, observed descendants, parent relationships at observation time, start identities, task-created versus pre-existing versus UNKNOWN ownership, observed exits, residual descendants, and an explicit postcondition. Parent exit alone never becomes complete; this call is read-only and does not signal or clean up any process.",
+            annotations: localReadOnlyAnnotations,
+            properties: [
+                "taskSessionID": property(
+                    "string",
+                    "Durable Conduit task UUID from conduit_create_task or conduit_list_sessions."
+                ),
+            ],
+            required: ["taskSessionID"]
+        ),
+        tool(
             "conduit_session_events",
             "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification.",
             annotations: localReadOnlyAnnotations,

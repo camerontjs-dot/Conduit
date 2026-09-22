@@ -1778,3 +1778,55 @@ the bootstrap boundary that prevented writes.
 **Reconsideration trigger:** Revisit the split if a future control-plane
 architecture can expose equivalent liveness and bounded readiness without
 coupling listener availability to workspace initialization.
+
+
+---
+
+## D-054: Process-tree observation is identity-bound and reconciliation-first
+
+**Status:** Proposed (2026-09-22)
+
+**Context:** #52 demonstrated that a provider parent can exit after SIGINT
+while a task-created child survives and is reparented to PID 1. The prior
+direct-PTY stop path intentionally signals only the exact SwiftTerm-owned
+launcher and waits for its waitpid-backed exit callback; it did not expose the
+descendant state needed to distinguish parent exit from lifecycle completion.
+
+**Decision:**
+
+1. Conduit exposes process lineage through a provider-neutral read model and a
+   read-only `conduit_process_tree` Session API operation.
+2. The model carries task/runtime/turn identity, launcher and descendant
+   process facts, PGID, parent relationship at observation time, macOS start
+   identity where available, liveness/exit, observation authority/freshness,
+   and explicit task-created, pre-existing, or UNKNOWN ownership.
+3. Task ownership is established from the identity-bound launcher and observed
+   descendant topology plus process start identity. PPID, command name, timing,
+   or proximity alone never proves ownership, and a reparented child retains a
+   task-created classification only through its prior process identity.
+4. A parent exit produces a complete postcondition only when a before/after
+   observation is complete and no owned or UNKNOWN residual remains. Partial,
+   ambiguous, or unavailable observations remain incomplete/UNKNOWN.
+5. Slice 6A performs no destructive residual cleanup. The receipt records that
+   cleanup was not attempted and names no targets; a future cleanup slice must
+   establish ownership, record every targeted PID and basis, re-observe exit,
+   and fail closed for UNKNOWN ownership.
+6. This model does not change provider-session writer authority, lifecycle
+   preflight operation meanings, task/provider/session/turn identity, tmux
+   release, provider history, workspace leases, or objective acceptance.
+
+**Consequences:** A supervisor can distinguish parent exit, owned residual,
+pre-existing residual, UNKNOWN ownership, live parent, and unavailable
+observation. Direct PTY stop still signals only the exact launcher and keeps
+capacity occupied until the existing process-exit callback; the new process
+receipt adds evidence without turning observation into cleanup or completion.
+
+**Non-claims:** A process snapshot is not a complete OS process tree when its
+coverage is partial or ambiguous. Provider-reported activity remains separate
+from OS liveness, and process reconciliation does not establish provider
+completion, delivery, verification, or objective acceptance.
+
+**Reconsideration trigger:** Add residual cleanup only after a machine-bound
+qualification proves that an identity-bound task-owned target can be signaled,
+re-observed as exited, and kept separate from an unrelated-process negative
+control.

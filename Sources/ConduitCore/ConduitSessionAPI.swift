@@ -77,6 +77,7 @@ public enum ConduitSessionCommand: Equatable, Sendable {
         controllerID: String
     )
     case sessionStatus(taskSessionID: String)
+    case processTree(taskSessionID: String)
     case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
     case queryMindGraph(question: String, scope: String)
     case createTask(
@@ -121,7 +122,7 @@ public enum ConduitSessionAPI {
     public static func isWrite(_ command: ConduitSessionCommand) -> Bool {
         switch command {
         case .listProjects, .listSessions, .listAdapters, .listProviderSessions,
-             .observeWorker, .sessionStatus, .sessionEvents, .queryMindGraph,
+             .observeWorker, .sessionStatus, .processTree, .sessionEvents, .queryMindGraph,
              .lifecyclePreflight:
             return false
         case .adoptProviderSession, .createTask, .reconcileTask, .sendPrompt,

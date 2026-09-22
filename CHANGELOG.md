@@ -51,6 +51,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   lifecycle preflight can describe unsupported consequences without mapping
   them to a different operation (#53).
 
+- `conduit_process_tree` now exposes a read-only, identity-bound macOS process
+  observation for a live task runtime. It records launcher and descendant PIDs,
+  PGIDs, parent relationships at observation time, process start identity,
+  task-created versus pre-existing versus UNKNOWN ownership, observed exits,
+  and residual descendants after a lifecycle stop. Parent exit alone never
+  becomes a complete stop postcondition. Slice 6A does not signal residual
+  descendants; cleanup remains deferred until a separate ownership-qualified
+  mutation is proven (#53, #52).
+
 
 - MainFrame Explorer now has a lexical file/path filter and semantic pixel glyphs
   for lifecycle roots, project/operation scopes, source, tests, docs, assets,
