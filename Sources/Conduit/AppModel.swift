@@ -2868,10 +2868,23 @@ final class AppModel: ObservableObject {
         )
 
         if waitsForObservedDirectPTYExit {
-            // SwiftTerm termination is asynchronous. Keep the task/runtime live
-            // until processTerminated produces the process-observed receipt.
-            statusMessage =
-                "Stop requested for \(runtime.descriptor.agent.name); waiting for process exit observation."
+            let request = runtime.controller.lastDirectPTYStopRequest
+            if request.accepted {
+                // Keep the task/runtime live until SwiftTerm's still-active
+                // waitpid-backed process monitor produces the observed exit.
+                statusMessage =
+                    "Stop requested for \(runtime.descriptor.agent.name); waiting for process exit observation."
+            } else {
+                pendingDirectPTYStopAttempts.remove(runtime.runtimeAttemptID)
+                switch request {
+                case .signalFailed(let pid, let code):
+                    errorMessage =
+                        "Could not signal direct PTY PID \(pid) (errno \(code)); runtime remains live."
+                default:
+                    errorMessage =
+                        "Could not identify a live direct PTY process to stop; runtime remains live."
+                }
+            }
             return false
         }
 
@@ -5266,10 +5279,31 @@ final class AppModel: ObservableObject {
                 "authority": "Conduit executed the explicit runtime/provider-host stop path; provider history is not deleted and objective acceptance is not established",
             ]
             if waitsForObservedDirectPTYExit && !runtimeEnded {
-                payload["stop"] = "requested"
+                let request = runtime.controller.lastDirectPTYStopRequest
+                if let pid = request.pid {
+                    payload["target_pid"] = Int(pid)
+                }
+                switch request {
+                case .requested:
+                    payload["stop"] = "requested"
+                    payload["stop_signal"] = "SIGTERM"
+                    payload["escalation"] = "SIGKILL after 1s only if the same exact PTY child remains running"
+                case .awaitingExistingExit:
+                    payload["stop"] = "awaiting_existing_exit"
+                case .signalFailed(_, let code):
+                    payload["executed"] = false
+                    payload["stop"] = "signal_failed"
+                    payload["errno"] = Int(code)
+                    payload["error"] = "direct PTY signal request failed; runtime remains live"
+                case .unavailable, .notRequested:
+                    payload["executed"] = false
+                    payload["stop"] = "unavailable"
+                    payload["error"] = "no live direct PTY process identity was available to signal"
+                }
                 payload["completion"] = "pending_process_observation"
-                payload["authority"] =
-                    "Conduit requested direct PTY termination but has not observed process exit. The task remains live and execution capacity remains occupied until SwiftTerm reports termination; objective acceptance is not established."
+                payload["authority"] = request.accepted
+                    ? "Conduit signaled only the exact SwiftTerm-owned direct PTY child and has not yet observed process exit. The task remains live and execution capacity remains occupied until the existing waitpid-backed callback reports termination; descendants are not inspected or signaled and objective acceptance is not established."
+                    : "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
             } else if !runtimeEnded {
                 payload["error"] =
                     "runtime stop could not be confirmed; Conduit preserved the detached durable runtime for explicit reconciliation"
