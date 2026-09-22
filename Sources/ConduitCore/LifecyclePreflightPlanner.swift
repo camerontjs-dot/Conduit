@@ -407,16 +407,18 @@ public enum LifecyclePreflightPlanner {
                 snapshot: snapshot,
                 target: sessionTarget(snapshot),
                 support: .supported,
-                willStopProvider: .known(true),
-                willReleaseSlot: .known(true),
+                willStopProvider: .unknown,
+                willReleaseSlot: .unknown,
                 recoverableAfterward: .known(false),
                 expectedProcessScope: .known(.session),
                 sideEffects: .known([
-                    "Conduit terminates the direct PTY runtime and releases task execution capacity",
-                    "task history is preserved"
+                    "Conduit requests termination of the direct PTY runtime",
+                    "task history is preserved",
+                    "execution capacity is released only after process exit is observed"
                 ]),
                 unsupported: .known([]),
                 unknown: .known([
+                    "whether the direct PTY process has exited after the termination request",
                     "descendant-process reconciliation is outside this slice"
                 ])
             )
