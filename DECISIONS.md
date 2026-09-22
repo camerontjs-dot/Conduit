@@ -1830,3 +1830,49 @@ completion, delivery, verification, or objective acceptance.
 qualification proves that an identity-bound task-owned target can be signaled,
 re-observed as exited, and kept separate from an unrelated-process negative
 control.
+
+
+---
+
+## D-055: Provider persistence and process state remain separate reconciliation authorities
+
+**Status:** Proposed (2026-09-22)
+
+**Context:** Issue #52 preserved an OpenCode tool part reported as `running`
+after its provider host and process were gone; the exact provider session later
+resumed. Slice 6A added identity-bound process-tree evidence, including the
+possibility of an owned residual after its parent exits. Neither observation
+rewrites the other's history or proves objective acceptance.
+
+**Decision:**
+
+1. Provider-persisted state and OS process observations remain separately
+   typed authorities, with their own observation time, freshness, and
+   availability. Preserve exact provider session/thread and turn/tool identity
+   where each source supplies it.
+2. Provider-reported `running` alone does not establish live execution. Parent
+   absence alone does not establish that no owned process remains.
+3. Join the authorities only through an exact current Conduit task/runtime
+   binding. Mismatched identity, stale evidence, unavailable observation, and
+   unsupported correlation remain explicit diagnostics or `UNKNOWN`.
+4. Process exit does not rewrite provider history. A resumable provider session
+   does not mean its interrupted turn completed successfully.
+5. Provider completion remains separate from objective acceptance. This slice
+   authorizes observation and reconciliation only; it adds no process cleanup,
+   task creation, provider turn, input delivery, session adoption, or writer
+   authority.
+
+**Consequences:** A supervisor can report consistent active/inactive evidence
+and contradictions such as stale provider-running with no process or provider
+inactive with an owned residual, without collapsing one source into the other.
+Insufficient evidence remains visible rather than being promoted into a
+consistency claim.
+
+**Non-claims:** The model does not prove freshness of persisted OpenCode state
+relative to a live process, tool-part-to-PID correlation, interrupted-turn
+success, objective acceptance, or equivalent persistence support for other
+providers. Those remain `UNKNOWN` until their authorities supply evidence.
+
+**Reconsideration trigger:** Revisit the model when a provider supplies a
+machine-bound session/turn/process correlation with freshness semantics, or
+when a qualified cleanup slice proposes a separate authority and safety gate.
