@@ -433,7 +433,9 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             return .unavailable
         }
 
-        let process = terminalView.process
+        guard let process = terminalView.process else {
+            return .unavailable
+        }
         let pid = process.shellPid
         guard pid > 0 else { return .unavailable }
 
