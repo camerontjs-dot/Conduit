@@ -353,7 +353,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_close_session",
-            "Compatibility close surface. tmux detaches; direct PTY terminates; structured adapters stop their Conduit host/client, while provider-owned session history may remain resumable and is never deleted by close. Use conduit_lifecycle_preflight and an explicit lifecycle operation when the caller must know provider-host, capacity, and recoverability consequences before mutation.",
+            "Compatibility close surface. tmux detach is recoverable through its exact runtime handle. Direct PTY close is not recoverable as the same live runtime and termination is asynchronous. Structured adapters stop their Conduit host/client; that live runtime is not recoverable, while provider-owned session history may remain recoverable through an exact provider handle and is never deleted by close. Use conduit_lifecycle_preflight and an explicit lifecycle operation when the caller must know provider-host, capacity, and recoverability consequences before mutation.",
             annotations: stateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id to leave. Explicit close frees one live-task slot."),
