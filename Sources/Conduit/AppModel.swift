@@ -396,6 +396,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var accountUsageError: String?
     @Published private(set) var sessionAPIAddress: String?
     private var sessionAPIServer: ConduitSessionAPIServer?
+    private var sessionAPIReadiness: ConduitSessionAPIReadiness = .bootstrapping
 
     var chatgptTunnelID: String? {
         let url = AdapterThreadStore.defaultDirectory()
@@ -1370,24 +1371,36 @@ final class AppModel: ObservableObject {
         applyTaskSessionLoad(taskLoad)
         settings = SettingsStore.loadSnapshot()
         showContext = settings.showContextByDefault
+
+        // Bring the loopback control plane up before workspace restoration.
+        // Health must remain observable when MainFrame authorization or scanning
+        // is exactly what needs diagnosis; writes remain fail-closed until the
+        // bootstrap state reaches READY.
+        setSessionAPIReadiness(.bootstrapping)
+        syncSessionAPI()
+
         guard activateSavedRootAccess() else {
             projects = []
             selectedProjectID = nil
             if settings.mainframeRoot != nil {
                 rootAccessNeedsAuthorization = true
                 statusMessage = "Choose Root once to renew macOS access to MainFrame."
+                setSessionAPIReadiness(.mainframeAuthorizationRequired)
+            } else {
+                setSessionAPIReadiness(.mainframeNotConfigured)
             }
             return
         }
         statusMessage = "Scanning the configured MainFrame root…"
-        guard await refreshProjectsForBootstrap() else { return }
-        completedUsage = usageLog?.readRecords() ?? []
-        recoverInterruptedWorkSessions()
-        await refreshDiscoveredSessions()
-        async let health: Void = refreshHealth()
-        async let resources: Void = refreshResources()
-        _ = await (health, resources)
-        syncSessionAPI()
+        guard await refreshProjectsForBootstrap() else {
+            setSessionAPIReadiness(
+                settings.mainframeRoot == nil
+                    ? .mainframeNotConfigured
+                    : .mainframeScanFailed
+            )
+            return
+        }
+        await completeBootstrapAfterProjectScan()
     }
 
     /// Startup scanning touches a protected user-selected folder. Keep that
@@ -1435,11 +1448,36 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func completeBootstrapAfterProjectScan() async {
+        completedUsage = usageLog?.readRecords() ?? []
+        recoverInterruptedWorkSessions()
+        await refreshDiscoveredSessions()
+
+        // Project identity and durable-session reconciliation are established.
+        // Account/resource refreshes are informational and must not delay the
+        // control plane becoming ready for supervised work.
+        setSessionAPIReadiness(.ready)
+        Task { await refreshHealth() }
+        Task { await refreshResources() }
+    }
+
     func refreshProjects() {
         guard !isScanningProjects else { return }
         Task {
             statusMessage = "Refreshing MainFrame projects…"
-            _ = await refreshProjectsForBootstrap()
+            let succeeded = await refreshProjectsForBootstrap()
+            guard !sessionAPIReadiness.isReady else { return }
+            if succeeded {
+                await completeBootstrapAfterProjectScan()
+            } else {
+                setSessionAPIReadiness(
+                    settings.mainframeRoot == nil
+                        ? .mainframeNotConfigured
+                        : (rootAccessNeedsAuthorization
+                            ? .mainframeAuthorizationRequired
+                            : .mainframeScanFailed)
+                )
+            }
         }
     }
 
@@ -1479,6 +1517,12 @@ final class AppModel: ObservableObject {
                 taskReconnectabilityObservation = .notChecked
                 scopedRootURL = url
                 isUsingScopedRoot = url.startAccessingSecurityScopedResource()
+                guard isUsingScopedRoot || rootIsDirectlyReadable(url) else {
+                    scopedRootURL = nil
+                    rootAccessNeedsAuthorization = true
+                    errorMessage = "Conduit could not activate or directly read that folder. Choose it again to renew macOS access."
+                    return
+                }
                 rootAccessNeedsAuthorization = false
             } catch {
                 rootAccessNeedsAuthorization = true
@@ -1511,6 +1555,12 @@ final class AppModel: ObservableObject {
             settings.mainframeRoot = url
             scopedRootURL = url
             isUsingScopedRoot = url.startAccessingSecurityScopedResource()
+            guard isUsingScopedRoot || rootIsDirectlyReadable(url) else {
+                scopedRootURL = nil
+                rootAccessNeedsAuthorization = true
+                statusMessage = "MainFrame access could not be activated or read directly. Choose Root to renew it."
+                return false
+            }
             if isStale {
                 rootAccessNeedsAuthorization = true
                 statusMessage = "MainFrame access has expired. Choose Root to renew it."
@@ -1523,6 +1573,14 @@ final class AppModel: ObservableObject {
             statusMessage = "MainFrame access could not be restored. Choose Root to renew it."
             return false
         }
+    }
+
+    private func rootIsDirectlyReadable(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(
+            atPath: url.path,
+            isDirectory: &isDirectory
+        ) && isDirectory.boolValue
     }
 
     private func endScopedRootAccess() {
@@ -3747,6 +3805,13 @@ final class AppModel: ObservableObject {
         statusMessage = "Session API token copied. ChatGPT still needs tunnel-client running."
     }
 
+    private func setSessionAPIReadiness(
+        _ readiness: ConduitSessionAPIReadiness
+    ) {
+        sessionAPIReadiness = readiness
+        sessionAPIServer?.setReadiness(readiness)
+    }
+
     func syncSessionAPI() {
         sessionAPIServer?.stop()
         sessionAPIServer = nil
@@ -3763,6 +3828,7 @@ final class AppModel: ObservableObject {
         }
         do {
             try server.start()
+            server.setReadiness(sessionAPIReadiness)
             sessionAPIServer = server
             sessionAPIAddress =
                 "http://127.0.0.1:\(ConduitSessionAPI.loopbackPort)\(ConduitSessionAPI.loopbackPath)"
@@ -3782,6 +3848,17 @@ final class AppModel: ObservableObject {
         _ command: ConduitSessionCommand,
         caller: ConduitSessionCaller = .unidentified
     ) -> [String: Any] {
+        guard ConduitSessionAPI.allowsCommand(
+            command,
+            readiness: sessionAPIReadiness
+        ) else {
+            return [
+                "error": "Conduit startup is not ready for Session API writes.",
+                "readiness": sessionAPIReadiness.rawValue,
+                "authority": "startup readiness gate; no write was executed",
+            ]
+        }
+
         sessionAPIServingDepth += 1
         let captured = sessionAPICapturedError
         sessionAPICapturedError = nil

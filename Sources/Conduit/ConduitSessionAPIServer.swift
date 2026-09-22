@@ -56,6 +56,7 @@ final class ConduitSessionAPIServer {
     private nonisolated let connectionSlots = DispatchSemaphore(value: 8)
     private let token: String
     private let allowWrites: Bool
+    private var readiness: ConduitSessionAPIReadiness = .bootstrapping
     private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     private nonisolated static let maximumHeaderBytes = 16_384
     private nonisolated static let maximumBodyBytes = 1_048_576
@@ -80,6 +81,10 @@ final class ConduitSessionAPIServer {
         self.handle = handle
     }
 
+    func setReadiness(_ readiness: ConduitSessionAPIReadiness) {
+        self.readiness = readiness
+    }
+
     func start() throws {
         stop()
         let fd = socket(AF_INET, SOCK_STREAM, 0)
@@ -90,6 +95,18 @@ final class ConduitSessionAPIServer {
                 userInfo: [NSLocalizedDescriptionKey: "Could not create loopback socket."]
             )
         }
+        let descriptorFlags = fcntl(fd, F_GETFD)
+        guard descriptorFlags >= 0,
+              fcntl(fd, F_SETFD, descriptorFlags | FD_CLOEXEC) == 0
+        else {
+            close(fd)
+            throw NSError(
+                domain: "Conduit.SessionAPI",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Could not mark the loopback listener close-on-exec."]
+            )
+        }
+
         var yes: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
         var addr = sockaddr_in()
@@ -307,9 +324,15 @@ final class ConduitSessionAPIServer {
             .split(whereSeparator: \.isNewline)
             .map(String.init)
         let firstLine = headerLines.first ?? ""
-        let isHealth = firstLine.contains("GET /healthz") || firstLine.contains("GET /readyz")
-        if isHealth {
+        if firstLine.contains("GET /healthz") {
             return Self.http(200, body: "ok\n", contentType: "text/plain")
+        }
+        if firstLine.contains("GET /readyz") {
+            return Self.http(
+                readiness.httpStatusCode,
+                body: readiness.rawValue + "\n",
+                contentType: "text/plain"
+            )
         }
         // This endpoint uses a local bearer token supplied by tunnel-client,
         // not OAuth. A 404 tells no-auth MCP clients that protected-resource

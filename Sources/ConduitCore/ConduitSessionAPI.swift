@@ -91,6 +91,20 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     case closeSession(taskSessionID: String)
 }
 
+public enum ConduitSessionAPIReadiness: String, Codable, CaseIterable, Equatable, Sendable {
+    case bootstrapping
+    case mainframeNotConfigured = "mainframe_not_configured"
+    case mainframeAuthorizationRequired = "mainframe_authorization_required"
+    case mainframeScanFailed = "mainframe_scan_failed"
+    case ready
+
+    public var isReady: Bool { self == .ready }
+
+    public var httpStatusCode: Int {
+        isReady ? 200 : 503
+    }
+}
+
 public enum ConduitSessionAPI {
     /// Loopback-only MCP listen address. Do not share with MindGraph :8000.
     public static let loopbackPort = 8750
@@ -105,6 +119,13 @@ public enum ConduitSessionAPI {
              .interrupt, .closeSession:
             return true
         }
+    }
+
+    public static func allowsCommand(
+        _ command: ConduitSessionCommand,
+        readiness: ConduitSessionAPIReadiness
+    ) -> Bool {
+        !isWrite(command) || readiness.isReady
     }
 
     public static func allowsMindGraphScope(_ scope: String) -> Bool {

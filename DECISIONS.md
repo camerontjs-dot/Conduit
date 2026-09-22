@@ -1726,3 +1726,55 @@ provider/workspace mega-lock.
 **Reconsideration trigger:** Revisit registry persistence and explicit transfer
 when the lifecycle/reconciliation slice can prove provider-native ownership,
 release semantics, or cross-restart authority without inventing state.
+
+
+---
+
+## D-053: Session API liveness is independent from workspace readiness
+
+**Status:** Proposed (2026-09-22)
+
+**Context:** PR #63 lifecycle qualification exposed a control-plane bootstrap
+failure before the lifecycle behavior under test could run. Conduit started the
+Session API only after restoring MainFrame security-scoped access, scanning the
+workspace, reconciling tmux state, and completing startup probes. A failure or
+authorization requirement in any earlier step left the app process alive but
+made port 8750 disappear precisely when the control plane was needed for
+diagnosis. An earlier PR #63 run also observed a direct-PTY child retaining the
+listener, showing that the listener file descriptor could cross an exec
+boundary.
+
+**Decision:**
+
+1. Session API liveness and Conduit workspace readiness are separate states.
+2. When the operator has enabled the Session API, its loopback listener starts
+   immediately after settings are loaded rather than after MainFrame bootstrap.
+3. `/healthz` reports listener/process liveness. `/readyz` reports whether
+   startup has established the authority required for Session API writes.
+4. Read-only Session API operations may remain available while bootstrap is not
+   ready. Every state-changing Session API command fails closed until readiness
+   is `ready`.
+5. MainFrame bookmark activation failure is not silently treated as success.
+   Conduit may continue when the resolved root is directly readable (including
+   non-sandboxed execution); otherwise readiness reports authorization required.
+6. A successful operator reauthorization/project refresh may complete the
+   interrupted bootstrap and transition readiness to `ready` without relaunch.
+7. Informational account/resource refreshes do not delay write readiness after
+   project identity and durable-session reconciliation are established.
+8. The Session API listener is close-on-exec. Child PTYs and provider processes
+   must not inherit Conduit's control-plane socket.
+
+**Consequences:** A supervisor can distinguish "Conduit is alive" from "Conduit
+is ready to mutate supervised work." Workspace authorization failures remain
+visible instead of taking down the diagnostic/control surface. The change does
+not weaken the local write toggle, admission policy, provider authority, or
+lifecycle semantics.
+
+**Non-claims:** A healthy listener does not establish usable MainFrame access,
+successful project scanning, provider availability, or lifecycle correctness.
+A non-ready state does not diagnose macOS authorization by itself; it identifies
+the bootstrap boundary that prevented writes.
+
+**Reconsideration trigger:** Revisit the split if a future control-plane
+architecture can expose equivalent liveness and bounded readiness without
+coupling listener availability to workspace initialization.
