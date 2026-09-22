@@ -439,9 +439,9 @@ public enum LifecycleProcessScope: String, Codable, Equatable, Sendable {
 
 /// Pre-mutation declaration of the consequences Conduit currently knows.
 ///
-/// This type is intentionally descriptive only. Provider adapters will supply
-/// values in later slices; unknown and unsupported consequences stay explicit
-/// instead of being mapped to a more convenient lifecycle verb.
+/// This type is intentionally descriptive only. Live adapters and runtime
+/// snapshots supply the facts; unknown and unsupported consequences stay
+/// explicit instead of being mapped to a more convenient lifecycle verb.
 public struct LifecyclePreflight: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 2
 
