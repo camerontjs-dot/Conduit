@@ -1,75 +1,75 @@
 import XCTest
 @testable import ConduitCore
 
-/// Coverage for the asymmetry `conduit_close_session` hides.
+/// Compatibility coverage for the overloaded legacy close verb.
 ///
-/// Observed on 2026-09-04 and again on 2026-09-05: closing a Codex task
-/// returned `closed: true` with the same authority line a tmux close returns,
-/// and the task then reported `recoverable: false` with no way back. The
-/// canary's L4.3 lane could not even attempt reconnection.
+/// Explicit lifecycle callers should use LifecyclePreflight instead. These tests
+/// keep the old surface honest about the narrower fact it still exposes.
 final class SessionCloseSemanticsTests: XCTestCase {
-
-    func testAStructuredHostIsStoppedNotDetached() {
+    func testStructuredHostCloseStopsLiveConduitRuntime() {
         XCTAssertEqual(
-            SessionCloseSemantics.outcome(usesStructuredHost: true),
+            SessionCloseSemantics.outcome(
+                usesStructuredHost: true,
+                usesTmux: false
+            ),
             .stopped
         )
     }
 
-    func testAPTYIsDetached() {
+    func testDirectPTYCloseStopsInsteadOfPretendingToDetach() {
         XCTAssertEqual(
-            SessionCloseSemantics.outcome(usesStructuredHost: false),
-            .detached
+            SessionCloseSemantics.outcome(
+                usesStructuredHost: false,
+                usesTmux: false
+            ),
+            .stopped
         )
     }
 
-    func testOnlyTheStructuredCloseIsTerminal() {
-        XCTAssertTrue(SessionCloseSemantics.Outcome.stopped.isTerminal)
+    func testTmuxCloseIsTheOnlyDetachedCase() {
+        XCTAssertEqual(
+            SessionCloseSemantics.outcome(
+                usesStructuredHost: false,
+                usesTmux: true
+            ),
+            .detached
+        )
         XCTAssertFalse(SessionCloseSemantics.Outcome.detached.isTerminal)
+        XCTAssertTrue(SessionCloseSemantics.Outcome.stopped.isTerminal)
     }
 
     func testTheTwoOutcomesDoNotShareAnAuthorityLine() {
-        // Reporting both as "leave requested; not verification" is what made
-        // an irreversible close indistinguishable from a reversible one.
         XCTAssertNotEqual(
             SessionCloseSemantics.authority(for: .stopped),
             SessionCloseSemantics.authority(for: .detached)
         )
     }
 
-    func testTheTerminalCloseSaysItIsNotRecoverable() throws {
+    func testStoppedCloseDoesNotClaimProviderHistoryDeletion() {
         let authority = SessionCloseSemantics.authority(for: .stopped)
-        XCTAssertTrue(
-            authority.lowercased().contains("not recoverable"),
-            "got: \(authority)"
-        )
-        XCTAssertTrue(
-            authority.contains("STOPPED"),
-            "the irreversible case should not read like the reversible one: \(authority)"
-        )
+        XCTAssertTrue(authority.contains("Provider-owned session history"))
+        XCTAssertTrue(authority.contains("not deleted"))
+        XCTAssertTrue(authority.contains("may remain resumable"))
+        XCTAssertFalse(authority.lowercased().contains("history is deleted"))
     }
 
-    func testTheDetachedCloseNamesTheWayBack() throws {
+    func testDetachedCloseNamesTheWayBack() {
         let authority = SessionCloseSemantics.authority(for: .detached)
-        XCTAssertTrue(
-            authority.contains("conduit_reconcile_task"),
-            "got: \(authority)"
-        )
+        XCTAssertTrue(authority.contains("conduit_reconcile_task"))
+        XCTAssertTrue(authority.contains("keeps running"))
     }
 
-    func testNeitherOutcomeClaimsVerification() {
-        // Closing observes nothing about what the agent did.
+    func testNeitherOutcomeClaimsObjectiveCompletion() {
         for outcome in [SessionCloseSemantics.Outcome.stopped, .detached] {
             XCTAssertTrue(
                 SessionCloseSemantics.authority(for: outcome)
-                    .contains("Not verification"),
+                    .contains("objective completion is not established"),
                 "outcome: \(outcome.rawValue)"
             )
         }
     }
 
-    func testRawValuesAreStableForCallersBranchingOnThem() {
-        // These strings are the caller-facing contract for close_outcome.
+    func testRawValuesRemainStableForCompatibilityCallers() {
         XCTAssertEqual(SessionCloseSemantics.Outcome.stopped.rawValue, "stopped")
         XCTAssertEqual(SessionCloseSemantics.Outcome.detached.rawValue, "detached")
     }
