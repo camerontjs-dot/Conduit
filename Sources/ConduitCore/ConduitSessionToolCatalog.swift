@@ -209,6 +209,28 @@ public enum ConduitSessionToolCatalog {
             required: ["provider", "provider_session_id"]
         ),
         tool(
+            "conduit_lifecycle_preflight",
+            "Read the consequences Conduit currently knows for one exact lifecycle operation before mutation. support is supported, unsupported, or unknown; provider stop, execution-capacity release, recoverability, resume handle, process scope, side effects, unsupported consequences, and unknown consequences remain separate. This call is read-only and does not reserve or release authority.",
+            annotations: localReadOnlyAnnotations,
+            properties: [
+                "taskSessionID": property("string", "Durable Conduit task UUID."),
+                "operation": [
+                    "type": "string",
+                    "enum": [
+                        "observe",
+                        "adopt",
+                        "start_turn",
+                        "abort_turn",
+                        "release_supervision",
+                        "stop_provider_host",
+                        "archive_provider_history",
+                    ],
+                    "description": "Exact lifecycle operation to inspect or execute.",
+                ],
+            ],
+            required: ["taskSessionID", "operation"]
+        ),
+        tool(
             "conduit_session_status",
             "Observed status for one existing Conduit task plus a short redacted conversation tail. It reads the durable log when no runtime is live. close_outcome says whether conduit_close_session would be reversible for this task. prompts_held_pending_ready counts objectives Conduit accepted before the runtime was ready and still owes delivery on. thread_provenance says where the live structured session came from: resumed means the provider honoured the earlier thread, restarted means it refused and this is a NEW EMPTY session whose displaced id is superseded_thread_id, unverified means continuity was never confirmed, fresh means nobody asked to resume. Treat restarted and unverified as history you do not have. Status is observation, never verification of what an agent did.",
             annotations: localReadOnlyAnnotations,
@@ -299,8 +321,30 @@ public enum ConduitSessionToolCatalog {
             required: ["taskSessionID"]
         ),
         tool(
+            "conduit_lifecycle_operation",
+            "Execute one explicit lifecycle operation only when the preflight for the same live target reports supported. Unsupported or unknown operations fail closed and are not remapped to another verb. observe, adopt, and start_turn remain separate existing surfaces; provider-history archive/delete is currently unsupported.",
+            annotations: stateChangingAnnotations,
+            properties: [
+                "taskSessionID": property("string", "Durable Conduit task UUID."),
+                "operation": [
+                    "type": "string",
+                    "enum": [
+                        "observe",
+                        "adopt",
+                        "start_turn",
+                        "abort_turn",
+                        "release_supervision",
+                        "stop_provider_host",
+                        "archive_provider_history",
+                    ],
+                    "description": "Exact lifecycle operation to inspect or execute.",
+                ],
+            ],
+            required: ["taskSessionID", "operation"]
+        ),
+        tool(
             "conduit_interrupt",
-            "Request interruption of the live runtime. The response confirms only that Conduit issued the request and records interrupt_request; it is not observed cancellation. Read conduit_session_events for later provider observation; truncated remains a separate Conduit text-cap field. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Compatibility interrupt surface. Structured backends request their provider-native abort/cancel; PTY backends send raw Ctrl-C, which is not a provider-defined turn-abort contract. The response confirms only that Conduit issued the request and records interrupt_request; it is not observed cancellation. Use conduit_lifecycle_preflight + abort_turn when the typed lifecycle distinction matters.",
             annotations: stateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or conduit_list_sessions. A live runtime is required."),
@@ -309,7 +353,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_close_session",
-            "Leave the live runtime. This does not delete task history, but it is not symmetric across backends. Read close_outcome: detached means a durable tmux runtime was left running and conduit_reconcile_task can adopt it again; stopped means a structured adapter was ended and the task is NOT recoverable — reconcile cannot reconnect it. conduit_session_status reports the same close_outcome for a live task BEFORE you close it, so check there first if the decision needs to be reversible. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Compatibility close surface. tmux detaches; direct PTY terminates; structured adapters stop their Conduit host/client, while provider-owned session history may remain resumable and is never deleted by close. Use conduit_lifecycle_preflight and an explicit lifecycle operation when the caller must know provider-host, capacity, and recoverability consequences before mutation.",
             annotations: stateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id to leave. Explicit close frees one live-task slot."),
