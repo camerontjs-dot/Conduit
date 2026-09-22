@@ -186,7 +186,7 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
         XCTAssertEqual(plan.exactResumeHandle.value, "ses-shared")
         XCTAssertTrue(
             plan.sideEffects.value?.contains(
-                "the shared or externally owned OpenCode provider host remains running"
+                "this release does not intentionally stop the shared or externally owned OpenCode provider host"
             ) == true
         )
     }
