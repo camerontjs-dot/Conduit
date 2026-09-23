@@ -1,0 +1,49 @@
+{
+  "authority": "Qualification-owned direct PTY and OS process group; no provider session or operator shell reused",
+  "cleanup": {
+    "owned_process_group_stop": {
+      "before": [
+        {
+          "pid": 51603,
+          "ppid": 51590,
+          "process_name": "zsh"
+        },
+        {
+          "pid": 51604,
+          "ppid": 51603,
+          "process_name": "sleep"
+        }
+      ],
+      "exit_code": -15,
+      "remaining": [],
+      "stopped": true
+    },
+    "qualification_workspace_removed": true
+  },
+  "identity": {
+    "process_group_id": 51603,
+    "qualification_id": "a980a905-83bc-49f3-bdce-30eb62fc43d5",
+    "shell_pid": 51603,
+    "workspace_label": "conduit-slice10-shell-ev3og9n0"
+  },
+  "observations": {
+    "owned_process_group_visible": {
+      "contains_child": true,
+      "contains_shell_pid": true,
+      "member_pids": [
+        51603,
+        51604
+      ],
+      "process_group_id": 51603,
+      "process_names": [
+        "/bin/zsh",
+        "sleep"
+      ]
+    }
+  },
+  "observed_at_utc": "2026-09-23T22:42:40.900Z",
+  "procedure_id": "shell-process-tree-v1",
+  "receipt_type": "shell-process-probe-v1",
+  "schema_version": "1.0.0",
+  "state": "pass"
+}

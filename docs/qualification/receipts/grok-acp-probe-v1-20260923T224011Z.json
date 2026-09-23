@@ -1,0 +1,108 @@
+{
+  "authority": "Grok ACP stdio launched with --no-leader in a unique empty cwd; exact session/load and exact-session delete only",
+  "cleanup": {
+    "delete_verification_host_stop": {
+      "before": [
+        {
+          "pid": 51455,
+          "ppid": 51430,
+          "process_name": "grok"
+        }
+      ],
+      "exit_code": 143,
+      "remaining": [],
+      "stopped": true
+    },
+    "final_host_stop": {
+      "before": [
+        {
+          "pid": 51445,
+          "ppid": 51430,
+          "process_name": "grok"
+        }
+      ],
+      "exit_code": 143,
+      "remaining": [],
+      "stopped": true
+    },
+    "first_host_stop": {
+      "before": [
+        {
+          "pid": 51436,
+          "ppid": 51430,
+          "process_name": "grok"
+        }
+      ],
+      "exit_code": 143,
+      "remaining": [],
+      "stopped": true
+    },
+    "provider_session_delete": {
+      "delete_exit_code": 0,
+      "exact_load_refused_after_delete": true,
+      "provider_session_id": "01a0d06d-28e7-7732-994f-908919af5bdc",
+      "verification_limit": "The exact ACP load must report not found; auth, protocol, or host failures are not counted as absence.",
+      "verified_absent": true
+    },
+    "provider_session_id": "01a0d06d-28e7-7732-994f-908919af5bdc",
+    "qualification_workspace_removed": true
+  },
+  "events": [
+    {
+      "method": "session/update",
+      "provider_session_id": "01a0d06d-28e7-7732-994f-908919af5bdc",
+      "sessionUpdate": "user_message_chunk"
+    },
+    {
+      "method": "session/update",
+      "provider_session_id": "01a0d06d-28e7-7732-994f-908919af5bdc",
+      "sessionUpdate": "available_commands_update"
+    }
+  ],
+  "failure": {
+    "message": "Grok ACP did not load the same exact provider session",
+    "type": "RuntimeError"
+  },
+  "identity": {
+    "provider_host_pid": 51436,
+    "provider_session_id": "01a0d06d-28e7-7732-994f-908919af5bdc",
+    "qualification_id": "543ab5ab-793b-4cbf-8e28-345d0cbf2dd6",
+    "resumed_host_pid": 51445,
+    "workspace_label": "conduit-slice10-grok-tj7ajyru"
+  },
+  "observations": {
+    "exact_resume_after_host_restart": {
+      "identity_matches": false,
+      "provider_session_id": null
+    },
+    "initialize": {
+      "authentication_methods_advertised": true,
+      "capability_keys": [
+        "_meta",
+        "auth",
+        "loadSession",
+        "mcpCapabilities",
+        "promptCapabilities",
+        "sessionCapabilities"
+      ],
+      "ok": true,
+      "protocol_version": 1
+    },
+    "prompt_sha256": "fd85682b67554b767858354a155aeb1b672684572ab31851c07dc5128a8d9903",
+    "session_new": {
+      "provider_session_id_returned": true
+    },
+    "turn_probe": {
+      "cancel_notification_sent": true,
+      "prompt_completed": true,
+      "provider_cancel_observed": true,
+      "provider_turn_id": null,
+      "stop_reason": "cancelled"
+    }
+  },
+  "observed_at_utc": "2026-09-23T22:40:11.978Z",
+  "procedure_id": "grok-acp-session-v1",
+  "receipt_type": "grok-acp-probe-v1",
+  "schema_version": "1.0.0",
+  "state": "inconclusive"
+}

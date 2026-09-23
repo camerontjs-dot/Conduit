@@ -1,0 +1,57 @@
+{
+  "authority": "Gemini CLI ACP stdio in a unique empty cwd; initialize only; no authenticate, session, prompt, account, or operator-session operations",
+  "cleanup": {
+    "host_stop": {
+      "before": [
+        {
+          "pid": 52381,
+          "ppid": 52374,
+          "process_name": "node"
+        },
+        {
+          "pid": 52382,
+          "ppid": 52381,
+          "process_name": "node"
+        },
+        {
+          "pid": 52404,
+          "ppid": 52382,
+          "process_name": "system_profiler"
+        }
+      ],
+      "exit_code": 0,
+      "remaining": [],
+      "stopped": true
+    },
+    "qualification_workspace_removed": true
+  },
+  "identity": {
+    "provider_host_pid": 52381,
+    "qualification_id": "b1f563e7-03be-4da8-99b6-a9c91a980852",
+    "workspace_label": "conduit-slice10-gemini-2wtpk71h"
+  },
+  "observations": {
+    "initialize": {
+      "authentication_method_count": 4,
+      "authentication_method_ids": [
+        "gateway",
+        "gemini-api-key",
+        "oauth-personal",
+        "vertex-ai"
+      ],
+      "capability_keys": [
+        "loadSession",
+        "mcpCapabilities",
+        "promptCapabilities"
+      ],
+      "ok": true,
+      "protocol_version": 1,
+      "session_or_prompt_started": false
+    }
+  },
+  "observed_at_utc": "2026-09-23T22:48:05.053Z",
+  "procedure_id": "gemini-acp-initialize-only-v1",
+  "receipt_type": "gemini-acp-probe-v1",
+  "schema_version": "1.0.0",
+  "state": "pass"
+}

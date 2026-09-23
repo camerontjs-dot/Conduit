@@ -1,0 +1,125 @@
+{
+  "authority": "authenticated Codex App Server stdio; unique empty cwd; thread/list uses exact cwd filter; only newly created thread is resumed/archived",
+  "cleanup": {
+    "final_host_stop": {
+      "before": [
+        {
+          "pid": 50207,
+          "ppid": 50167,
+          "process_name": "codex"
+        }
+      ],
+      "exit_code": -15,
+      "remaining": [],
+      "stopped": true
+    },
+    "first_host_stop": {
+      "before": [
+        {
+          "pid": 50173,
+          "ppid": 50167,
+          "process_name": "codex"
+        }
+      ],
+      "exit_code": -15,
+      "remaining": [],
+      "stopped": true
+    },
+    "provider_thread_archive": {
+      "acknowledged": true,
+      "deletion_claimed": false,
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f",
+      "result_type": "dict",
+      "resume_refused_as_archived": true,
+      "verified_archived": true,
+      "verified_in_archived_cwd_scoped_list": true
+    },
+    "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f",
+    "qualification_workspace_removed": true
+  },
+  "events": [
+    {
+      "method": "thread/status/changed",
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f"
+    },
+    {
+      "method": "thread/goal/cleared",
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f"
+    },
+    {
+      "method": "thread/status/changed",
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f"
+    },
+    {
+      "method": "thread/archived",
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f"
+    }
+  ],
+  "identity": {
+    "provider_host_pid": 50173,
+    "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f",
+    "provider_turn_id": "01a0d062-2d3f-70c0-a378-715bb6a5fc7b",
+    "qualification_id": "8ba99a3b-167a-4836-a742-c5902c8338c5",
+    "resumed_host_pid": 50207,
+    "workspace_label": "conduit-slice10-codex-_g082qsm"
+  },
+  "observations": {
+    "exact_resume_after_host_restart": {
+      "identity_matches": true,
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f"
+    },
+    "initialize": {
+      "capability_keys": [],
+      "ok": true,
+      "server_info": null
+    },
+    "pre_turn_discovery": {
+      "count": 0,
+      "filter": "cwd",
+      "note": "the exact-cwd listing did not return this thread before its first turn; persistence timing remains provider-specific",
+      "thread_present_before_first_turn": false
+    },
+    "prompt_sha256": "54b6d43b0a310a2330a331321537daccbe6f54f65370429d67916a0f690a941d",
+    "scoped_discovery": {
+      "count": 1,
+      "filter": "cwd",
+      "note": "an empty exact-cwd result is preserved as unknown; no account-wide listing was attempted",
+      "qualification_thread_present": true,
+      "returned_ids": [
+        "01a0d062-289f-78d0-a46b-c0e89e3ed33f"
+      ],
+      "status": "observed"
+    },
+    "thread_start": {
+      "provider_thread_id_returned": true
+    },
+    "turn_completion_after_interrupt": {
+      "method": "turn/completed",
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f",
+      "provider_turn_id": "01a0d062-2d3f-70c0-a378-715bb6a5fc7b",
+      "turn_status": "interrupted"
+    },
+    "turn_interrupt": {
+      "acknowledged": true,
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f",
+      "provider_turn_id": "01a0d062-2d3f-70c0-a378-715bb6a5fc7b",
+      "result_type": "dict"
+    },
+    "turn_start": {
+      "acknowledged": true,
+      "initial_status": "inProgress",
+      "provider_turn_id_returned": true
+    },
+    "turn_started_event": {
+      "method": "turn/started",
+      "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f",
+      "provider_turn_id": "01a0d062-2d3f-70c0-a378-715bb6a5fc7b",
+      "turn_status": "inProgress"
+    }
+  },
+  "observed_at_utc": "2026-09-23T22:28:11.329Z",
+  "procedure_id": "codex-app-server-isolated-thread-v1",
+  "receipt_type": "codex-app-server-probe-v1",
+  "schema_version": "1.0.0",
+  "state": "pass"
+}

@@ -1,0 +1,30 @@
+{
+  "command": [
+    "swift",
+    "test",
+    "--filter",
+    "CodexAppServerProtocolTests"
+  ],
+  "completed_at_utc": "2026-09-23T23:19:11.455Z",
+  "credential_values_recorded": false,
+  "environment": {
+    "DEVELOPER_DIR": "/Applications/Xcode.app/Contents/Developer"
+  },
+  "exit_code": 0,
+  "limitation": "Focused protocol suite only; full repository suite and app build are separate gates.",
+  "observed_at_utc": "2026-09-23T23:19:11.455Z",
+  "receipt_type": "repository_test_run",
+  "schema_version": "1.0.0",
+  "session_content_read": false,
+  "source_sha256": {
+    "Sources/Conduit/AppModel.swift": "83731dcceaf102e7a0536bd9f71a4e3c1584c9f03943dbee78cec86802d538d5",
+    "Sources/Conduit/CodexAppServerClient.swift": "bb70c445990b9050c23ed8ad9b3bb3e42a69c7f499b39ea4d2775a0db011063f",
+    "Sources/ConduitCore/CodexAppServerProtocol.swift": "18b661335b7a911e4eda2d33fa5147e2fcb7cbb38d15f78d00e96a52ac63f9b7",
+    "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift": "c16be21db8e6059662cd8cf337a5d80d63d03f6db7b6d272c85bc5eb8d154e15"
+  },
+  "started_at_utc": "2026-09-23T23:19:08.392Z",
+  "state": "pass",
+  "suite": "CodexAppServerProtocolTests",
+  "summary_line": "Executed 17 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds",
+  "tests_executed": 17
+}

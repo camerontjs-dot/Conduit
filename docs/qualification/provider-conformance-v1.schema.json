@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/camerontjs-dot/Conduit/blob/main/docs/qualification/provider-conformance-v1.schema.json",
+  "title": "Conduit provider conformance matrix v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "matrix_id",
+    "observed_at_utc",
+    "claim_scope",
+    "starting_main",
+    "candidate",
+    "inventory_ref",
+    "runtimes",
+    "evidence_catalog",
+    "controls",
+    "ci_observation",
+    "preserved_runs",
+    "non_claims",
+    "credential_values_recorded",
+    "session_content_read"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "matrix_id": {"type": "string", "minLength": 1},
+    "observed_at_utc": {"type": "string", "format": "date-time"},
+    "claim_scope": {"type": "string", "minLength": 1},
+    "starting_main": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha", "tree_sha", "authority"],
+      "properties": {
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "tree_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "authority": {"type": "string", "minLength": 1}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "freeze_state", "freeze_record_location"],
+      "properties": {
+        "branch": {"type": "string", "minLength": 1},
+        "freeze_state": {"enum": ["not_frozen_at_matrix_observation", "frozen"]},
+        "commit_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "tree_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "freeze_record_location": {"type": "string", "minLength": 1}
+      }
+    },
+    "inventory_ref": {"$ref": "#/$defs/evidenceReference"},
+    "runtimes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["opencode", "codex_app_server", "claude", "grok_acp", "gemini_acp", "antigravity", "shell_fallback"],
+      "properties": {
+        "opencode": {"$ref": "#/$defs/runtime"},
+        "codex_app_server": {"$ref": "#/$defs/runtime"},
+        "claude": {"$ref": "#/$defs/runtime"},
+        "grok_acp": {"$ref": "#/$defs/runtime"},
+        "gemini_acp": {"$ref": "#/$defs/runtime"},
+        "antigravity": {"$ref": "#/$defs/runtime"},
+        "shell_fallback": {"$ref": "#/$defs/runtime"}
+      }
+    },
+    "evidence_catalog": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/evidence"}
+    },
+    "controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positive_observation", "explicitly_unsupported", "unavailable_runtime", "unknown_authority", "provider_semantic_difference"],
+      "properties": {
+        "positive_observation": {"$ref": "#/$defs/control"},
+        "explicitly_unsupported": {"$ref": "#/$defs/control"},
+        "unavailable_runtime": {"$ref": "#/$defs/control"},
+        "unknown_authority": {"$ref": "#/$defs/control"},
+        "provider_semantic_difference": {"$ref": "#/$defs/control"}
+      }
+    },
+    "ci_observation": {"$ref": "#/$defs/ciObservation"},
+    "preserved_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_ref", "classification", "note"],
+        "properties": {
+          "evidence_ref": {"type": "string", "minLength": 1},
+          "classification": {"type": "string", "minLength": 1},
+          "note": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "non_claims": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "credential_values_recorded": {"const": false},
+    "session_content_read": {"const": false}
+  },
+  "$defs": {
+    "status": {"enum": ["supported", "unsupported", "unknown", "unavailable"]},
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence_refs", "note"],
+      "properties": {
+        "status": {"$ref": "#/$defs/status"},
+        "evidence_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "conduit"],
+      "properties": {
+        "provider": {"$ref": "#/$defs/outcome"},
+        "conduit": {"$ref": "#/$defs/outcome"}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installed", "version", "desktop_app_versions", "readiness", "interface_exercised", "adapter_source", "adapter_tests", "capabilities"],
+      "properties": {
+        "installed": {"type": "boolean"},
+        "version": {"type": ["string", "null"]},
+        "desktop_app_versions": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
+        "readiness": {"type": "string", "minLength": 1},
+        "interface_exercised": {"type": "string", "minLength": 1},
+        "adapter_source": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "adapter_tests": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "mode_notes": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "external_discovery", "resumable", "adoptable_connectable", "cancel_active_turn",
+            "release_supervision_with_provider_continuing", "provider_host_stop", "permission_approval_awareness",
+            "event_streaming", "process_tree_visibility", "diff_artifact_telemetry",
+            "exact_session_thread_identity", "current_turn_state_visibility", "writer_controller_collision_visibility"
+          ],
+          "properties": {
+            "external_discovery": {"$ref": "#/$defs/capability"},
+            "resumable": {"$ref": "#/$defs/capability"},
+            "adoptable_connectable": {"$ref": "#/$defs/capability"},
+            "cancel_active_turn": {"$ref": "#/$defs/capability"},
+            "release_supervision_with_provider_continuing": {"$ref": "#/$defs/capability"},
+            "provider_host_stop": {"$ref": "#/$defs/capability"},
+            "permission_approval_awareness": {"$ref": "#/$defs/capability"},
+            "event_streaming": {"$ref": "#/$defs/capability"},
+            "process_tree_visibility": {"$ref": "#/$defs/capability"},
+            "diff_artifact_telemetry": {"$ref": "#/$defs/capability"},
+            "exact_session_thread_identity": {"$ref": "#/$defs/capability"},
+            "current_turn_state_visibility": {"$ref": "#/$defs/capability"},
+            "writer_controller_collision_visibility": {"$ref": "#/$defs/capability"}
+          }
+        }
+      }
+    },
+    "evidenceReference": {"type": "string", "minLength": 1},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "url": {"type": "string", "format": "uri"}
+      },
+      "anyOf": [{"required": ["path", "sha256"]}, {"required": ["url"]}]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "observed_at_utc", "freshness", "procedure_id", "authority", "identity", "artifact", "limitation"],
+      "properties": {
+        "kind": {"enum": ["inventory", "runtime_probe", "historical_qualification", "source_test", "negative_probe", "schema", "procedure_source"]},
+        "observed_at_utc": {"type": "string", "minLength": 1},
+        "freshness": {"type": "string", "minLength": 1},
+        "procedure_id": {"type": "string", "minLength": 1},
+        "authority": {"type": "string", "minLength": 1},
+        "identity": {"type": "object"},
+        "artifact": {"$ref": "#/$defs/artifact"},
+        "limitation": {"type": "string", "minLength": 1}
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_refs", "result", "note"],
+      "properties": {
+        "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "result": {"type": "string", "minLength": 1},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
+    "ciObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_hosted_ci", "related_main_or_prior_run", "green_claim"],
+      "properties": {
+        "candidate_hosted_ci": {"type": "string", "minLength": 1},
+        "related_main_or_prior_run": {"type": "string", "minLength": 1},
+        "green_claim": {"const": false}
+      }
+    }
+  }
+}

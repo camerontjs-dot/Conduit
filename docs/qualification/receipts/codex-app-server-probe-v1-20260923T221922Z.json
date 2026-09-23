@@ -1,0 +1,90 @@
+{
+  "authority": "authenticated Codex App Server stdio; unique empty cwd; thread/list uses exact cwd filter; only newly created thread is resumed/archived",
+  "cleanup": {
+    "final_host_stop": {
+      "before": [
+        {
+          "pid": 47775,
+          "ppid": 47769,
+          "process_name": "codex"
+        }
+      ],
+      "exit_code": -15,
+      "remaining": [],
+      "stopped": true
+    },
+    "provider_thread_id": "01a0d05a-19b5-7301-bab6-700d57f5279c",
+    "qualification_workspace_removed": true
+  },
+  "events": [
+    {
+      "method": "thread/started",
+      "provider_thread_id": "01a0d05a-19b5-7301-bab6-700d57f5279c"
+    },
+    {
+      "method": "thread/status/changed",
+      "provider_thread_id": "01a0d05a-19b5-7301-bab6-700d57f5279c"
+    },
+    {
+      "method": "turn/started",
+      "provider_thread_id": "01a0d05a-19b5-7301-bab6-700d57f5279c",
+      "provider_turn_id": "01a0d05a-1ce3-70a3-8539-b1dec8846217",
+      "turn_status": "inProgress"
+    }
+  ],
+  "failure": {
+    "message": "Codex App Server cwd-filtered discovery did not find the qualification thread after its first turn",
+    "type": "RuntimeError"
+  },
+  "identity": {
+    "provider_host_pid": 47775,
+    "provider_thread_id": "01a0d05a-19b5-7301-bab6-700d57f5279c",
+    "provider_turn_id": "01a0d05a-1ce3-70a3-8539-b1dec8846217",
+    "qualification_id": "40dc467f-0277-48fa-ac3c-a2ef3c9116cc",
+    "workspace_label": "conduit-slice10-codex-n17nq6oz"
+  },
+  "observations": {
+    "initialize": {
+      "capability_keys": [],
+      "ok": true,
+      "server_info": null
+    },
+    "pre_turn_discovery": {
+      "count": 0,
+      "filter": "cwd",
+      "note": "thread/start returned an ID, but this runtime did not persist a listable rollout before its first turn",
+      "thread_present_before_first_turn": false
+    },
+    "prompt_sha256": "54b6d43b0a310a2330a331321537daccbe6f54f65370429d67916a0f690a941d",
+    "scoped_discovery": {
+      "count": 0,
+      "filter": "cwd",
+      "qualification_thread_present": false,
+      "returned_ids": []
+    },
+    "thread_start": {
+      "provider_thread_id_returned": true
+    },
+    "turn_probe": {
+      "error_type": "RuntimeError",
+      "message": "Codex App Server turn/interrupt failed: Invalid request: missing field `turnId`",
+      "state": "inconclusive"
+    },
+    "turn_start": {
+      "acknowledged": true,
+      "initial_status": "inProgress",
+      "provider_turn_id_returned": true
+    },
+    "turn_started_event": {
+      "method": "turn/started",
+      "provider_thread_id": "01a0d05a-19b5-7301-bab6-700d57f5279c",
+      "provider_turn_id": "01a0d05a-1ce3-70a3-8539-b1dec8846217",
+      "turn_status": "inProgress"
+    }
+  },
+  "observed_at_utc": "2026-09-23T22:19:22.438Z",
+  "procedure_id": "codex-app-server-isolated-thread-v1",
+  "receipt_type": "codex-app-server-probe-v1",
+  "schema_version": "1.0.0",
+  "state": "inconclusive"
+}

@@ -1,0 +1,128 @@
+{
+  "authority": "qualification-owned OpenCode server process, random loopback port, exact unique workspace filter; no global session list or transcript reads",
+  "cleanup": {
+    "final_host_stop": {
+      "before": [
+        {
+          "pid": 50471,
+          "ppid": 50457,
+          "process_name": "opencode"
+        }
+      ],
+      "exit_code": -15,
+      "remaining": [],
+      "stopped": true
+    },
+    "first_host_stop": {
+      "before": [
+        {
+          "pid": 50463,
+          "ppid": 50457,
+          "process_name": "opencode"
+        }
+      ],
+      "exit_code": -15,
+      "remaining": [],
+      "stopped": true
+    },
+    "provider_session_id": "ses_f2f9a209cffeBQ6QytpmAFB0E3",
+    "qualification_workspace_removed": true,
+    "session_delete": {
+      "delete_status": 200,
+      "post_delete_read_status": 404,
+      "provider_session_id": "ses_f2f9a209cffeBQ6QytpmAFB0E3",
+      "verified_absent": true
+    }
+  },
+  "identity": {
+    "provider_host_pid": 50463,
+    "provider_session_id": "ses_f2f9a209cffeBQ6QytpmAFB0E3",
+    "qualification_id": "8c9ad118-68ab-4b42-ab3b-51fb4a182967",
+    "resumed_host_pid": 50471,
+    "workspace_label": "conduit-slice10-opencode-btactwhh"
+  },
+  "observations": {
+    "diff_surface": {
+      "entry_count": 0,
+      "nonempty_artifact_observed": false,
+      "response_type": "list",
+      "status": 200
+    },
+    "event_stream": {
+      "content_type": "text/event-stream",
+      "events": [
+        {
+          "provider_session_id": "ses_f2f9a209cffeBQ6QytpmAFB0E3",
+          "type": "session.idle"
+        }
+      ],
+      "http_status": 200
+    },
+    "exact_resume_after_host_restart": {
+      "identity_matches": true,
+      "status": 200
+    },
+    "exact_session_read": {
+      "identity_matches": true,
+      "status": 200
+    },
+    "health": {
+      "healthy": true,
+      "status": 200
+    },
+    "installed_openapi": {
+      "event_stream": "/event",
+      "exact_session_read": "/session/{sessionID}",
+      "scoped_list_filter": "directory",
+      "session_diff": "/session/{sessionID}/diff",
+      "status": 200
+    },
+    "message_state_readback": {
+      "assistant_message_states": [
+        {
+          "provider_message_id": "msg_0d065e04e00189TtlEjQVo9eX8",
+          "status": null
+        }
+      ],
+      "content_read_or_recorded": false,
+      "status": 200
+    },
+    "scoped_discovery": {
+      "count": 1,
+      "filter": "directory",
+      "qualification_session_present": true,
+      "returned_ids": [
+        "ses_f2f9a209cffeBQ6QytpmAFB0E3"
+      ],
+      "status": 200
+    },
+    "session_created": {
+      "exact_id_returned": true,
+      "status": 200
+    },
+    "turn_probe": {
+      "abort_http_status": 200,
+      "accepted": true,
+      "active_session_status_observed": {
+        "provider_session_id": "ses_f2f9a209cffeBQ6QytpmAFB0E3",
+        "status": "busy",
+        "type": "session.status"
+      },
+      "event_stream_opened": true,
+      "initial_server_connected_event_observed": true,
+      "model": "xai/grok-4.20-0309-non-reasoning",
+      "prompt_http_status": 204,
+      "prompt_sha256": "113259484a932ae3ae7aa36289ce8ccca6e0ab22279fdec5b3c0f8ad90e38165",
+      "terminal_session_or_message_event": {
+        "provider_session_id": "ses_f2f9a209cffeBQ6QytpmAFB0E3",
+        "status": "idle",
+        "type": "session.status"
+      }
+    }
+  },
+  "observed_at_utc": "2026-09-23T22:32:13.613Z",
+  "procedure_id": "opencode-http-session-v1",
+  "receipt_type": "opencode-runtime-probe-v1",
+  "schema_version": "1.0.0",
+  "state": "pass"
+}
