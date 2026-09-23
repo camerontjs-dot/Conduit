@@ -192,6 +192,16 @@ public enum ConduitSessionToolCatalog {
             required: ["provider"]
         ),
         tool(
+            "conduit_fleet_snapshot",
+            "Read one versioned Fleet and handoff projection over Conduit's durable task records, persisted adapter thread handles, read-only OpenCode session observations, writer authority, current lifecycle/process observations, and Slice 7 reconciliation. Tasks and provider sessions have independent cursors. Persisted runtime facts are marked stale after restart; unsupported facts stay UNKNOWN. Discovered sessions are not adopted, and this read creates no task or turn, sends no input, claims no lease, runs no cleanup, and reserves no execution slot.",
+            annotations: localReadOnlyAnnotations,
+            properties: [
+                "task_cursor": property("string", "Cursor from a prior task page next_cursor. Omit to start at the newest task."),
+                "provider_cursor": property("string", "Independent cursor from a prior provider page next_cursor. Omit to start at the first provider session."),
+                "limit": integerProperty("Maximum rows in each page. Default 40, hard cap 200.", maximum: 200),
+            ]
+        ),
+        tool(
             "conduit_observe_worker",
             "Read one exact provider session into WorkerLineage, with separately stamped provider-persisted activity and exact-binding Slice 6A process reconciliation where available. Contradictory or stale authorities remain explicit; observation never adopts or controls the session, starts a turn, cleans processes, or promotes provider completion into objective acceptance. Missing facts remain UNKNOWN.",
             annotations: localReadOnlyAnnotations,
