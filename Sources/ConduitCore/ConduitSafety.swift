@@ -34,12 +34,12 @@ public enum ConduitResourceMetric: String, Codable, CaseIterable, Sendable {
     case promptQueueDepth = "prompt_queue_depth"
 }
 
-public enum ConduitResourceMeasurement: Equatable, Sendable {
+public enum ConduitResourceMeasurement: Codable, Equatable, Sendable {
     case known(value: UInt64, observedAt: Date)
     case unknown
 }
 
-public struct ConduitResourceSnapshot: Equatable, Sendable {
+public struct ConduitResourceSnapshot: Codable, Equatable, Sendable {
     public let availablePhysicalMemoryBytes: ConduitResourceMeasurement
     public let ownedProcessTreeRSSBytes: ConduitResourceMeasurement
     public let persistenceQueueCount: ConduitResourceMeasurement
@@ -1626,4 +1626,3 @@ public final class RuntimeDirectoryOwnerLock: @unchecked Sendable {
         }
     }
 }
-

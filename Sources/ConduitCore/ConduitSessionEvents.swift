@@ -37,7 +37,7 @@ public struct ConduitSessionAdapterSnapshot: Equatable, Sendable {
     }
 }
 
-public enum ConduitSessionProviderThreadSource: String, Equatable, Sendable {
+public enum ConduitSessionProviderThreadSource: String, Codable, Equatable, Sendable {
     case live
     case persisted
     case unavailable
@@ -162,7 +162,7 @@ public struct ConduitSessionEventSource: Equatable, Sendable {
     }
 }
 
-public enum ConduitSessionEventCursorState: String, Equatable, Sendable {
+public enum ConduitSessionEventCursorState: String, Codable, Equatable, Sendable {
     case ok
     case ahead
     case invalid
@@ -170,7 +170,7 @@ public enum ConduitSessionEventCursorState: String, Equatable, Sendable {
 
 /// Turn observation for one existing task. Session lifecycle stays separate:
 /// a running Codex session may still have a completed turn.
-public struct ConduitSessionTurnSnapshot: Equatable, Sendable {
+public struct ConduitSessionTurnSnapshot: Codable, Equatable, Sendable {
     public var state: String
     public var status: String?
     public var honesty: String

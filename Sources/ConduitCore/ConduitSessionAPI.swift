@@ -70,6 +70,11 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     case listSessions(cursor: String?, limit: Int?)
     case listAdapters
     case listProviderSessions(provider: String)
+    case fleetSnapshot(
+        taskCursor: String?,
+        providerCursor: String?,
+        limit: Int?
+    )
     case observeWorker(provider: String, providerSessionID: String)
     case adoptProviderSession(
         provider: String,
@@ -122,7 +127,7 @@ public enum ConduitSessionAPI {
     public static func isWrite(_ command: ConduitSessionCommand) -> Bool {
         switch command {
         case .listProjects, .listSessions, .listAdapters, .listProviderSessions,
-             .observeWorker, .sessionStatus, .processTree, .sessionEvents, .queryMindGraph,
+             .fleetSnapshot, .observeWorker, .sessionStatus, .processTree, .sessionEvents, .queryMindGraph,
              .lifecyclePreflight:
             return false
         case .adoptProviderSession, .createTask, .reconcileTask, .sendPrompt,

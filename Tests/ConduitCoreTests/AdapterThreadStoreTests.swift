@@ -23,6 +23,45 @@ final class AdapterThreadStoreTests: XCTestCase {
         XCTAssertEqual(store().supersededThreadIDs(for: id), [])
     }
 
+    func testLoadResultDistinguishesMissingFromMalformedHandleState() throws {
+        let absent = store().loadResult()
+        XCTAssertEqual(absent.availability, .missing)
+        XCTAssertTrue(absent.records.isEmpty)
+
+        try "not-json".write(
+            to: store().url,
+            atomically: true,
+            encoding: .utf8
+        )
+        let malformed = store().loadResult()
+        XCTAssertEqual(malformed.availability, .unavailable)
+        XCTAssertTrue(malformed.records.isEmpty)
+        XCTAssertNotNil(malformed.diagnostic)
+    }
+
+    func testFreshStoreInstanceRecoversExactHandoffHandle() {
+        let id = TaskSessionID(rawValue: UUID())
+        store().save(taskSessionID: id, backend: "app-server", threadID: "thread-exact")
+
+        let fresh = AdapterThreadStore(directory: dir).loadResult()
+        XCTAssertEqual(fresh.availability, .available)
+        XCTAssertEqual(
+            fresh.records[id.rawValue.uuidString.lowercased()]?.threadID,
+            "thread-exact"
+        )
+    }
+
+    func testSupersededHandleKeepsTheAdapterNamespaceObservedAtReplacement() {
+        let id = TaskSessionID(rawValue: UUID())
+        store().save(taskSessionID: id, backend: "app-server", threadID: "thread-old")
+        store().save(taskSessionID: id, backend: "http-server", threadID: "session-new")
+
+        let record = store().record(for: id)
+        XCTAssertEqual(record?.supersededThreadIDs, ["thread-old"])
+        XCTAssertEqual(record?.supersededThreadBackends["thread-old"], "app-server")
+        XCTAssertEqual(record?.backend, "http-server")
+    }
+
     /// The self-erasing half of the silent-restart defect: a replacement id
     /// used to land on top of the only pointer to the real history.
     func testAReplacementThreadDoesNotDestroyThePriorPointer() {
@@ -111,6 +150,7 @@ final class AdapterThreadStoreTests: XCTestCase {
         XCTAssertEqual(loaded.count, 1, "a legacy file must not decode as empty")
         XCTAssertEqual(loaded.values.first?.threadID, "t-legacy")
         XCTAssertEqual(loaded.values.first?.supersededThreadIDs, [])
+        XCTAssertEqual(loaded.values.first?.supersededThreadBackends, [:])
     }
 
     func testALegacyFileSurvivesASaveForADifferentTask() throws {

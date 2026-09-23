@@ -7,7 +7,7 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 17)
+        XCTAssertEqual(names.count, 18)
         XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 7)
     }
 
@@ -52,6 +52,21 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
                 "never adopts or controls"
             ) == true
         )
+
+        let fleet = try XCTUnwrap(
+            ConduitSessionToolCatalog.tool(named: "conduit_fleet_snapshot")
+        )
+        let fleetAnnotations = try XCTUnwrap(
+            fleet["annotations"] as? [String: Any]
+        )
+        XCTAssertEqual(fleetAnnotations["readOnlyHint"] as? Bool, true)
+        let fleetProperties = try XCTUnwrap(
+            (fleet["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+        )
+        XCTAssertNotNil(fleetProperties["task_cursor"])
+        XCTAssertNotNil(fleetProperties["provider_cursor"])
+        XCTAssertTrue((fleet["description"] as? String)?.contains("UNKNOWN") == true)
+        XCTAssertTrue((fleet["description"] as? String)?.contains("reserves no execution slot") == true)
 
         let adopt = try XCTUnwrap(
             ConduitSessionToolCatalog.tool(named: "conduit_adopt_provider_session")

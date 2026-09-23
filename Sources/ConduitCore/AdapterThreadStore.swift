@@ -1,7 +1,8 @@
 import Foundation
 
-/// Persists Codex app-server thread ids so Reconnect can call `thread/resume`
-/// instead of opening a PTY. Content-free: backend + thread ids only.
+/// Persists structured-adapter session/thread ids so Conduit can attempt the
+/// adapter-specific recovery path instead of opening a PTY. Content-free:
+/// backend and opaque ids only.
 public struct AdapterThreadRecord: Codable, Equatable, Sendable {
     public var backend: String
     public var threadID: String
@@ -14,6 +15,9 @@ public struct AdapterThreadRecord: Codable, Equatable, Sendable {
     /// recovery destroys the route back and a second attempt cannot even try
     /// the right thread. Ids only — same content-free boundary as `threadID`.
     public var supersededThreadIDs: [String]
+    /// Adapter labels for superseded ids that Conduit observed when it moved
+    /// away from them. Legacy records have no namespace proof and stay unknown.
+    public var supersededThreadBackends: [String: String]
 
     /// Kept small on purpose: this is a recovery hint, not an audit trail.
     public static let supersededLimit = 8
@@ -22,22 +26,27 @@ public struct AdapterThreadRecord: Codable, Equatable, Sendable {
         backend: String,
         threadID: String,
         updatedAt: Date = Date(),
-        supersededThreadIDs: [String] = []
+        supersededThreadIDs: [String] = [],
+        supersededThreadBackends: [String: String] = [:]
     ) {
         self.backend = backend
         self.threadID = threadID
         self.updatedAt = updatedAt
-        self.supersededThreadIDs = Array(supersededThreadIDs.prefix(Self.supersededLimit))
+        let boundedSuperseded = Array(supersededThreadIDs.prefix(Self.supersededLimit))
+        self.supersededThreadIDs = boundedSuperseded
+        self.supersededThreadBackends = supersededThreadBackends.filter {
+            boundedSuperseded.contains($0.key)
+        }
     }
 
     // Hand-written rather than synthesised because `load()` decodes the whole
     // map with `try?`: one record that fails to decode returns an EMPTY store,
     // and the next save then writes a file containing only that save. A
-    // synthesised `init(from:)` treats a missing key as an error, so shipping
-    // `supersededThreadIDs` as a required field would wipe every existing
-    // pointer on first run. `decodeIfPresent` is what keeps old files readable.
+    // synthesised `init(from:)` treats a missing key as an error, so adding
+    // optional lineage fields must keep older pointers readable.
     private enum CodingKeys: String, CodingKey {
         case backend, threadID, updatedAt, supersededThreadIDs
+        case supersededThreadBackends
     }
 
     public init(from decoder: Decoder) throws {
@@ -47,6 +56,11 @@ public struct AdapterThreadRecord: Codable, Equatable, Sendable {
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         supersededThreadIDs =
             try c.decodeIfPresent([String].self, forKey: .supersededThreadIDs) ?? []
+        supersededThreadBackends =
+            try c.decodeIfPresent([String: String].self, forKey: .supersededThreadBackends) ?? [:]
+        supersededThreadBackends = supersededThreadBackends.filter {
+            supersededThreadIDs.contains($0.key)
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -58,6 +72,31 @@ public struct AdapterThreadRecord: Codable, Equatable, Sendable {
         if !supersededThreadIDs.isEmpty {
             try c.encode(supersededThreadIDs, forKey: .supersededThreadIDs)
         }
+        if !supersededThreadBackends.isEmpty {
+            try c.encode(supersededThreadBackends, forKey: .supersededThreadBackends)
+        }
+    }
+}
+
+public enum AdapterThreadStoreAvailability: String, Codable, Equatable, Sendable {
+    case available
+    case missing
+    case unavailable
+}
+
+public struct AdapterThreadStoreLoadResult: Equatable, Sendable {
+    public var records: [String: AdapterThreadRecord]
+    public var availability: AdapterThreadStoreAvailability
+    public var diagnostic: String?
+
+    public init(
+        records: [String: AdapterThreadRecord],
+        availability: AdapterThreadStoreAvailability,
+        diagnostic: String? = nil
+    ) {
+        self.records = records
+        self.availability = availability
+        self.diagnostic = diagnostic
     }
 }
 
@@ -74,7 +113,11 @@ public struct AdapterThreadStore: Sendable {
     }
 
     public func threadID(for taskSessionID: TaskSessionID) -> String? {
-        load()[taskSessionID.rawValue.uuidString.lowercased()]?.threadID
+        record(for: taskSessionID)?.threadID
+    }
+
+    public func record(for taskSessionID: TaskSessionID) -> AdapterThreadRecord? {
+        loadResult().records[taskSessionID.rawValue.uuidString.lowercased()]
     }
 
     /// Records the thread a task is now driving, without dropping the one it
@@ -93,16 +136,22 @@ public struct AdapterThreadStore: Sendable {
         let key = taskSessionID.rawValue.uuidString.lowercased()
         let previous = records[key]
         var superseded = previous?.supersededThreadIDs ?? []
+        var supersededBackends = previous?.supersededThreadBackends ?? [:]
         if let prior = previous?.threadID, prior != threadID {
             superseded.removeAll { $0 == prior }
             superseded.insert(prior, at: 0)
+            supersededBackends[prior] = previous?.backend
         }
         // The live id never doubles as its own history.
         superseded.removeAll { $0 == threadID }
+        supersededBackends.removeValue(forKey: threadID)
+        superseded = Array(superseded.prefix(AdapterThreadRecord.supersededLimit))
+        supersededBackends = supersededBackends.filter { superseded.contains($0.key) }
         records[key] = AdapterThreadRecord(
             backend: backend,
             threadID: threadID,
-            supersededThreadIDs: superseded
+            supersededThreadIDs: superseded,
+            supersededThreadBackends: supersededBackends
         )
         persist(records)
     }
@@ -114,11 +163,43 @@ public struct AdapterThreadStore: Sendable {
     }
 
     public func load() -> [String: AdapterThreadRecord] {
-        guard let data = try? Data(contentsOf: url) else { return [:] }
+        loadResult().records
+    }
+
+    public func loadResult() -> AdapterThreadStoreLoadResult {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return AdapterThreadStoreLoadResult(
+                records: [:],
+                availability: .missing
+            )
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            return AdapterThreadStoreLoadResult(
+                records: [:],
+                availability: .unavailable,
+                diagnostic: "Adapter thread handles could not be read."
+            )
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([String: AdapterThreadRecord].self, from: data))
-            ?? [:]
+        do {
+            return AdapterThreadStoreLoadResult(
+                records: try decoder.decode(
+                    [String: AdapterThreadRecord].self,
+                    from: data
+                ),
+                availability: .available
+            )
+        } catch {
+            return AdapterThreadStoreLoadResult(
+                records: [:],
+                availability: .unavailable,
+                diagnostic: "Adapter thread handle data was malformed or unsupported."
+            )
+        }
     }
 
     private func persist(_ records: [String: AdapterThreadRecord]) {

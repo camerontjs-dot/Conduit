@@ -1876,3 +1876,68 @@ providers. Those remain `UNKNOWN` until their authorities supply evidence.
 **Reconsideration trigger:** Revisit the model when a provider supplies a
 machine-bound session/turn/process correlation with freshness semantics, or
 when a qualified cleanup slice proposes a separate authority and safety gate.
+
+
+---
+
+## D-056: Fleet handoff is a read-only projection over existing authorities
+
+**Status:** Proposed (2026-09-22)
+
+**Context:** A successor Conduit/ChatGPT supervisor needs one structured path
+to recover task, provider-session, runtime, and handoff lineage without
+searching terminal scrollback. The existing authorities have different
+lifetimes: task and adapter-thread records are durable, provider persistence
+is a read-only provider observation, the process-local writer registry is
+ephemeral, and live process/adapter facts exist only while their runtime is
+observable. A second fleet database would compete with those authorities and
+could turn old observations into current state after restart.
+
+**Decision:**
+
+1. Expose one additive, read-only `conduit_fleet_snapshot` API as a versioned
+   projection over the existing task-session log, adapter-thread handle store,
+   Conversation event log, provider observer, writer registry, admission
+   controller, resource sensors, and exact live process/runtime observers. The
+   snapshot is rebuilt on read; it is not persisted as a parallel database.
+2. Keep task, runtime attempt, provider host, provider session/thread, provider
+   turn, writer/controller authority, delivery, lifecycle, process tree,
+   verification, and objective acceptance as separate typed fields. A task or
+   runtime binding never grants provider writer authority, and discovery never
+   adopts a session.
+3. Stamp each material observation with source authority, observed time, and
+   current/stale/unknown freshness. Persisted runtime/turn facts remain stale
+   after restart; absent or unsupported observations remain `UNKNOWN`.
+   Superseded thread handles retain their adapter namespace only where the
+   existing store recorded it; legacy handles without that evidence remain
+   namespace-unknown.
+4. Keep provider discovery, supervised sessions, provider-reported active
+   turns, Conduit task-control slots, provider hosts, process counts, resource
+   readings, and actual execution-slot occupancy separate. Discovered or idle
+   historical sessions do not consume capacity by appearing in the inventory.
+   No new capacity algorithm is introduced.
+5. Reading the projection creates no task or turn, sends no input, acquires no
+   writer lease, adopts no provider session, performs no process cleanup, and
+   reserves no execution slot. Existing list/observe APIs and write gates stay
+   compatible.
+
+**Consequences:** A fresh consumer can reconstruct durable task/runtime
+attempt identity, the exact last-known provider handle, its recorded adapter
+namespace where supported, workspace association, and provider inventory from
+one structured surface. Contradictory authorities remain inspectable through
+their existing typed reconciliation models. The initial provider inventory is
+OpenCode-only; other provider sessions and global execution-slot occupancy
+remain `UNKNOWN`. The writer registry remains process-local and does not
+reconstruct a previous process's lease.
+
+**Non-claims:** A persisted handle does not prove the provider session is live
+or resumable. OpenCode persistence does not prove process liveness or current
+provider execution. Provider completion does not prove task completion,
+verification, or objective acceptance. Capacity counts do not establish a
+provider-neutral execution-slot total. Shell telemetry and other provider
+conformance remain separate slices.
+
+**Reconsideration trigger:** Add durable provider authority, additional
+provider inventories, Shell telemetry, or execution-slot accounting only when
+their owning slices establish the underlying authority and qualification
+boundary.

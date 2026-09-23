@@ -27,6 +27,16 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
+  with independent task/provider cursors. It rebuilds Conduit tasks and adapter
+  thread handles from existing durable stores, adds read-only OpenCode worker
+  observations, and keeps writer authority, turn state, process evidence,
+  lifecycle, verification, and capacity as separate stamped facts. Persisted
+  runtime observations are stale after restart; unsupported providers,
+  execution-slot occupancy, and acceptance remain UNKNOWN. Reading the
+  snapshot creates no task, turn, input delivery, writer lease, cleanup, or
+  execution-slot reservation (#53, #49).
+
 - `conduit_observe_worker` now reconciles OpenCode's persisted latest-turn/tool
   state with a separately stamped, exact-binding Slice 6A process observation.
   It preserves persisted tool-part identity/status/timestamps, represents stale

@@ -20,6 +20,11 @@ final class SessionAPIReadinessTests: XCTestCase {
             provider: "opencode",
             providerSessionID: "ses_fixture"
         )
+        let fleetSnapshot = ConduitSessionCommand.fleetSnapshot(
+            taskCursor: nil,
+            providerCursor: nil,
+            limit: 40
+        )
         let write = ConduitSessionCommand.createTask(
             agent: "Shell",
             projectSlug: "synthetic",
@@ -38,6 +43,10 @@ final class SessionAPIReadinessTests: XCTestCase {
             XCTAssertFalse(ConduitSessionAPI.isWrite(processTree))
             XCTAssertTrue(
                 ConduitSessionAPI.allowsCommand(processTree, readiness: state)
+            )
+            XCTAssertFalse(ConduitSessionAPI.isWrite(fleetSnapshot))
+            XCTAssertTrue(
+                ConduitSessionAPI.allowsCommand(fleetSnapshot, readiness: state)
             )
             XCTAssertFalse(
                 ConduitSessionAPI.allowsCommand(write, readiness: state)

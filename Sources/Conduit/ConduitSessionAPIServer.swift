@@ -443,6 +443,14 @@ final class ConduitSessionAPIServer {
             command = provider.isEmpty
                 ? nil
                 : .listProviderSessions(provider: provider)
+        case "conduit_fleet_snapshot":
+            command = .fleetSnapshot(
+                taskCursor: arguments["task_cursor"]?.stringValue
+                    ?? arguments["taskCursor"]?.stringValue,
+                providerCursor: arguments["provider_cursor"]?.stringValue
+                    ?? arguments["providerCursor"]?.stringValue,
+                limit: Self.intArgument(arguments["limit"])
+            )
         case "conduit_observe_worker":
             let provider = arguments["provider"]?.stringValue ?? ""
             let providerSessionID = arguments["provider_session_id"]?.stringValue
@@ -604,6 +612,7 @@ final class ConduitSessionAPIServer {
         let returnsStructuredContent = [
             "conduit_session_events",
             "conduit_list_provider_sessions",
+            "conduit_fleet_snapshot",
             "conduit_observe_worker",
             "conduit_adopt_provider_session",
             "conduit_lifecycle_preflight",

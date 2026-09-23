@@ -3968,6 +3968,12 @@ final class AppModel: ObservableObject {
             return sessionAPIListAdapters()
         case .listProviderSessions(let provider):
             return sessionAPIListProviderSessions(provider: provider)
+        case .fleetSnapshot(let taskCursor, let providerCursor, let limit):
+            return sessionAPIFleetSnapshot(
+                taskCursor: taskCursor,
+                providerCursor: providerCursor,
+                limit: limit
+            )
         case .observeWorker(let provider, let providerSessionID):
             return sessionAPIObserveWorker(
                 provider: provider,
@@ -4164,6 +4170,720 @@ final class AppModel: ObservableObject {
                 "authority": "provider observation failed; no task/session mutation attempted",
             ]
         }
+    }
+
+    /// One read-only reconstruction path over the authorities already owned by
+    /// Conduit. Durable task and adapter records are reloaded for every call;
+    /// process and live adapter facts are sampled only for exact current task
+    /// runtimes. No process baseline, provider lease, task, or turn is created.
+    private func sessionAPIFleetSnapshot(
+        taskCursor: String?,
+        providerCursor: String?,
+        limit: Int?
+    ) -> [String: Any] {
+        let now = Date()
+        let taskLoad = taskSessionStore.load()
+        let durableTasks = taskLoad.snapshots.sorted {
+            if $0.lastActivityAt != $1.lastActivityAt {
+                return $0.lastActivityAt > $1.lastActivityAt
+            }
+            return $0.id.rawValue.uuidString.lowercased()
+                < $1.id.rawValue.uuidString.lowercased()
+        }
+        let taskWindow = ConduitSessionListPage.window(
+            total: durableTasks.count,
+            cursor: taskCursor,
+            limit: limit
+        )
+        let selectedTasks = Array(
+            durableTasks[taskWindow.startIndex..<taskWindow.endIndex]
+        )
+        let threadStore = AdapterThreadStore(
+            directory: AdapterThreadStore.defaultDirectory()
+        ).loadResult()
+        let threadRecords = threadStore.records
+        let taskStoreStamp = SupervisionObservationStamp(
+            authority: .conduitRecorded,
+            freshness: taskLoad.diagnostics.isEmpty ? .current : .unknown,
+            observedAt: .known(now)
+        )
+
+        func backend(_ raw: String?) -> AgentSessionBackend? {
+            guard let raw else { return nil }
+            switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "pty": return .pty
+            case "app-server", "appserver": return .appServer
+            case "acp": return .acp
+            case "http-server", "httpserver": return .httpServer
+            case "structured-cli", "structuredcli", "stream-json": return .structuredCli
+            default: return nil
+            }
+        }
+
+        func backend(for task: TaskSessionSnapshot, live: TerminalRuntime?, record: AdapterThreadRecord?) -> AgentSessionBackend? {
+            if let live { return live.descriptor.agent.preferredSessionBackend }
+            if let recorded = backend(record?.backend) { return recorded }
+            if case .runtimeProvisioning(_, let recorded, _) = task.operationalState {
+                return backend(recorded)
+            }
+            return nil
+        }
+
+        func persistedLifecycle(_ state: TaskSessionOperationalState?) -> String? {
+            switch state {
+            case .runtimeProvisioning?: return "provisioning"
+            case .runtimeOpened?: return "runtime_opened"
+            case .runtimeProvisioningFailed?: return "provisioning_failed"
+            case .runtimeDetached?: return "detached"
+            case .closed?: return "closed"
+            case .interrupted?: return "interrupted"
+            case nil: return nil
+            }
+        }
+
+        func taskSnapshot(
+            _ task: TaskSessionSnapshot,
+            includeConversation: Bool
+        ) -> (ConduitFleetTaskSnapshot, Int, Bool) {
+            let live = sessionAPILiveRuntime(for: task.id)
+            let key = task.id.rawValue.uuidString.lowercased()
+            let handle = threadRecords[key]
+            var fleetTask = ConduitFleetSnapshotBuilder.persistedTask(
+                task,
+                providerHandle: handle,
+                handleStoreAvailability: threadStore.availability,
+                observedAt: now
+            )
+            let actualBackend = backend(for: task, live: live, record: handle)
+            let operationalAttempt = sessionAPIRuntimeAttemptID(for: task, live: live)
+            let runtimeAttempt: OrchestrationValue<String> = operationalAttempt.map {
+                .known($0.rawValue.uuidString)
+            } ?? .unknown
+            let runtimeStamp: SupervisionObservationStamp
+            let lifecycle: OrchestrationValue<String>
+            let runtimeID: OrchestrationValue<String>
+            if let live {
+                runtimeStamp = SupervisionObservationStamp(
+                    authority: .conduitRecorded,
+                    freshness: .current,
+                    observedAt: .known(now)
+                )
+                lifecycle = .known(sessionAPIRuntimeLifecycle(live.controller.lifecycle))
+                runtimeID = .known(live.descriptor.id.uuidString)
+            } else if let recordedLifecycle = persistedLifecycle(task.operationalState) {
+                runtimeStamp = SupervisionObservationStamp(
+                    authority: .conduitRecorded,
+                    freshness: .stale,
+                    observedAt: task.operationalStateAt.map(OrchestrationValue.known)
+                        ?? .unknown
+                )
+                lifecycle = .known(recordedLifecycle)
+                runtimeID = .unknown
+            } else {
+                runtimeStamp = SupervisionObservationStamp(
+                    authority: .unknown,
+                    freshness: .unknown,
+                    observedAt: .unknown
+                )
+                lifecycle = .unknown
+                runtimeID = .unknown
+            }
+            let providerSessionID: OrchestrationValue<String>
+            let providerBackend: OrchestrationValue<String>
+            let handleStamp: SupervisionObservationStamp
+            if let liveID = live?.structuredSessionID, !liveID.isEmpty,
+               let liveBackend = actualBackend {
+                providerSessionID = .known(liveID)
+                providerBackend = .known(liveBackend.workSessionLabel)
+                handleStamp = SupervisionObservationStamp(
+                    authority: .conduitRecorded,
+                    freshness: .current,
+                    observedAt: .known(now)
+                )
+            } else if let handle {
+                providerSessionID = .known(handle.threadID)
+                providerBackend = .known(handle.backend)
+                handleStamp = SupervisionObservationStamp(
+                    authority: .conduitRecorded,
+                    freshness: .stale,
+                    observedAt: .known(handle.updatedAt)
+                )
+            } else {
+                providerSessionID = .unknown
+                providerBackend = .unknown
+                handleStamp = SupervisionObservationStamp(
+                    authority: .unknown,
+                    freshness: .unknown,
+                    observedAt: .unknown
+                )
+            }
+            let supersededHandles: OrchestrationValue<[FleetThreadHandoffHandle]> = handle.map { record in
+                .known(record.supersededThreadIDs.map { id in
+                    FleetThreadHandoffHandle(
+                        threadID: .known(id),
+                        backend: record.supersededThreadBackends[id]
+                            .map(OrchestrationValue.known) ?? .unknown,
+                        observation: SupervisionObservationStamp(
+                            authority: .conduitRecorded,
+                            freshness: .stale,
+                            observedAt: .known(record.updatedAt)
+                        )
+                    )
+                })
+            } ?? (threadStore.availability == .available ? .known([]) : .unknown)
+
+            let events: [SessionPresentationEvent]
+            let conversationPresent: Bool
+            if let live {
+                events = live.presentationEvents
+                conversationPresent = true
+            } else if includeConversation {
+                let log = ConversationEventLog(
+                    directory: conversationDirectory,
+                    taskSessionID: task.id
+                )
+                conversationPresent = FileManager.default.fileExists(atPath: log.url.path)
+                events = log.read().events
+            } else {
+                events = []
+                conversationPresent = false
+            }
+
+            let turnValue: OrchestrationValue<ConduitSessionTurnSnapshot>
+            let deliveryValue: OrchestrationValue<PromptDeliveryState>
+            let pendingInput: OrchestrationValue<FleetPendingInputState>
+            let turnStamp: SupervisionObservationStamp
+            if let actualBackend {
+                let adapter: ConduitSessionAdapterSnapshot? = {
+                    guard let live, live.usesStructuredHost else { return nil }
+                    return ConduitSessionAdapterSnapshot(
+                        threadID: live.structuredSessionID,
+                        turnActive: live.structuredTurnActive,
+                        lastTurnStatus: live.structuredLastTurnStatus,
+                        pendingApproval: live.structuredPendingApproval,
+                        pendingApprovalSummary: live.structuredPendingApprovalSummary,
+                        turnFailure: live.structuredTurnFailure
+                    )
+                }()
+                let source = ConduitSessionEventSource(
+                    taskSessionID: task.id.rawValue.uuidString,
+                    backend: actualBackend,
+                    sessionLifecycle: lifecycle.value ?? "unknown",
+                    runtimeState: lifecycle.value ?? "unknown",
+                    live: live != nil,
+                    ready: live?.structuredIsReady ?? false,
+                    events: events,
+                    adapter: adapter,
+                    runtimeAttemptID: operationalAttempt,
+                    persistedThreadID: live == nil ? handle?.threadID : nil,
+                    observedAt: now
+                )
+                if live != nil || conversationPresent {
+                    turnValue = .known(ConduitSessionEventExport.turnSnapshot(source: source))
+                    turnStamp = live != nil
+                        ? SupervisionObservationStamp(
+                            authority: live?.usesStructuredHost == true
+                                ? .providerObserved : .derivedFromRaw,
+                            freshness: .current,
+                            observedAt: .known(now)
+                        )
+                        : SupervisionObservationStamp(
+                            authority: actualBackend == .pty
+                                ? .derivedFromRaw : .conduitRecorded,
+                            freshness: .stale,
+                            observedAt: .known(task.lastConversationActivityAt ?? task.lastActivityAt)
+                        )
+                } else {
+                    turnValue = .unknown
+                    turnStamp = SupervisionObservationStamp(
+                        authority: .unknown,
+                        freshness: .unknown,
+                        observedAt: .unknown
+                    )
+                }
+                if let prompt = events.last(where: {
+                    if case .userPrompt = $0.kind { return true }
+                    return false
+                }), case .userPrompt(let record) = prompt.kind {
+                    deliveryValue = .known(record.delivery)
+                } else {
+                    deliveryValue = .unknown
+                }
+                if let live, live.usesStructuredHost {
+                    pendingInput = .known(
+                        live.structuredPendingApproval ? .approval : .none
+                    )
+                } else {
+                    pendingInput = .unknown
+                }
+            } else {
+                turnValue = .unknown
+                deliveryValue = .unknown
+                pendingInput = .unknown
+                turnStamp = SupervisionObservationStamp(
+                    authority: .unknown,
+                    freshness: .unknown,
+                    observedAt: .unknown
+                )
+            }
+
+            let processObservation: OrchestrationValue<ProcessTreeObservation>
+            let processReconciliation: OrchestrationValue<ProcessTreeReconciliation>
+            if let live {
+                let prior = sessionAPIProcessTreeBaselines[task.id]
+                let observed = sessionAPIObserveProcessTree(
+                    taskID: task.id,
+                    runtime: live,
+                    prior: prior
+                )
+                processObservation = .known(observed)
+                processReconciliation = .known(
+                    ProcessTreeReconciler.reconcile(
+                        before: prior,
+                        after: observed
+                    )
+                )
+            } else {
+                processObservation = .unknown
+                processReconciliation = .unknown
+            }
+
+            fleetTask.runtimeAttemptID = runtimeAttempt
+            fleetTask.runtime = runtimeID
+            fleetTask.lifecycle = lifecycle
+            fleetTask.runtimeObservation = runtimeStamp
+            fleetTask.providerSessionID = providerSessionID
+            fleetTask.providerBackend = providerBackend
+            fleetTask.supersededThreadHandles = supersededHandles
+            fleetTask.providerHandleObservation = handleStamp
+            fleetTask.turn = FleetTurnObservation(
+                turn: turnValue,
+                lastPromptDelivery: deliveryValue,
+                pendingInput: pendingInput,
+                observation: turnStamp
+            )
+            fleetTask.processObservation = processObservation
+            fleetTask.processReconciliation = processReconciliation
+            fleetTask.heldPromptCount = live.map {
+                .known(max(0, $0.heldPromptCount))
+            } ?? .unknown
+            return (fleetTask, conversationPresent ? 1 : 0, conversationPresent)
+        }
+
+        let selectedTaskIDs = Set(selectedTasks.map(\.id))
+        // The task page bounds returned metadata and conversation reads, while
+        // capacity still accounts for every known Conduit task. Live process
+        // observations are sampled for all durable tasks so a task cursor
+        // cannot make unseen workers disappear from the capacity projection.
+        let allTaskResults = durableTasks.map { task in
+            taskSnapshot(
+                task,
+                includeConversation: selectedTaskIDs.contains(task.id)
+            )
+        }
+        let allTaskItems = allTaskResults.map(\.0)
+        let taskItemsByID = Dictionary(
+            uniqueKeysWithValues: allTaskItems.map { ($0.task.id, $0) }
+        )
+        var taskItems = selectedTasks.compactMap {
+            taskItemsByID[$0.id]
+        }
+        var taskPage = ConduitFleetPage(
+            items: taskItems,
+            total: .known(taskWindow.total),
+            returned: taskWindow.count,
+            hasMore: .known(taskWindow.hasMore),
+            nextCursor: .known(taskWindow.nextCursor),
+            cursorState: taskWindow.cursorState,
+            observation: taskStoreStamp
+        )
+        let conversationLogCount = allTaskResults.reduce(0) { $0 + $1.1 }
+
+        let taskIdentities = allTaskItems.map {
+            FleetTaskIdentity(
+                taskSessionID: $0.task.id.rawValue.uuidString,
+                runtimeAttemptID: $0.runtimeAttemptID,
+                observation: $0.runtimeObservation
+            )
+        }
+
+        func providerBinding(_ providerSessionID: String) -> ProviderObservationBinding? {
+            var matches: [ProviderObservationBinding] = []
+            for task in durableTasks {
+                let key = task.id.rawValue.uuidString.lowercased()
+                let live = sessionAPILiveRuntime(for: task.id)
+                let record = threadRecords[key]
+                let liveMatch = live?.descriptor.agent.preferredSessionBackend == .httpServer
+                    && live?.openCode?.sessionID == providerSessionID
+                let persistedMatch = record?.backend == AgentSessionBackend.httpServer.workSessionLabel
+                    && record?.threadID == providerSessionID
+                guard liveMatch || persistedMatch else { continue }
+                matches.append(
+                    ProviderObservationBinding(
+                        conduitTaskID: task.id.rawValue.uuidString,
+                        runtimeAttemptID: taskItemsByID[task.id]?.runtimeAttemptID.value
+                    )
+                )
+            }
+            if matches.count == 1 { return matches[0] }
+            guard matches.isEmpty else { return nil }
+
+            let historicalMatches = durableTasks.filter { task in
+                let record = threadRecords[
+                    task.id.rawValue.uuidString.lowercased()
+                ]
+                return record?.supersededThreadBackends[providerSessionID]
+                    == AgentSessionBackend.httpServer.workSessionLabel
+            }
+            guard historicalMatches.count == 1,
+                  let task = historicalMatches.first
+            else { return nil }
+            return ProviderObservationBinding(
+                conduitTaskID: task.id.rawValue.uuidString,
+                runtimeAttemptID: nil
+            )
+        }
+
+        func historicalProviderTask(
+            _ providerSessionID: String
+        ) -> TaskSessionSnapshot? {
+            let matches = durableTasks.filter { task in
+                threadRecords[task.id.rawValue.uuidString.lowercased()]?
+                    .supersededThreadBackends[providerSessionID]
+                    == AgentSessionBackend.httpServer.workSessionLabel
+            }
+            return matches.count == 1 ? matches[0] : nil
+        }
+
+        func fleetWorker(
+            worker: WorkerLineage,
+            authority: ProviderSessionAuthoritySnapshot,
+            diagnostics: [String] = []
+        ) -> ConduitFleetProviderWorkerSnapshot {
+            var association = ConduitFleetSnapshotBuilder.taskAssociation(
+                for: worker,
+                tasks: taskIdentities,
+                taskInventoryObservation: taskStoreStamp
+            )
+            if association.kind == .unbound || association.kind == .ambiguous,
+               let providerSessionID = worker.providerSessionID.value,
+               let historicalTask = historicalProviderTask(providerSessionID) {
+                association = FleetTaskAssociation(
+                    kind: .historical,
+                    taskSessionID: .known(
+                        historicalTask.id.rawValue.uuidString
+                    ),
+                    runtimeAttemptID: .unknown,
+                    observation: worker.observation
+                )
+            }
+            return ConduitFleetProviderWorkerSnapshot(
+                worker: worker,
+                writerAuthority: authority,
+                writerAuthorityObservation: SupervisionObservationStamp(
+                    authority: .conduitRecorded,
+                    freshness: .current,
+                    observedAt: .known(now)
+                ),
+                taskAssociation: association,
+                diagnostics: diagnostics
+            )
+        }
+
+        var providerInventory: [ConduitFleetProviderWorkerSnapshot] = []
+        var detailedPage: [ConduitFleetProviderWorkerSnapshot] = []
+        var providerPage: ConduitFleetPage<ConduitFleetProviderWorkerSnapshot>
+        var providerAvailable = false
+        var providerDiagnostics = [
+            "OpenCode is the only provider persistence observer in Slice 8; other provider inventories remain UNKNOWN."
+        ]
+        let coordinator = sessionAPIOpenCodeAuthorityCoordinator()
+        do {
+            let inventory = try coordinator.listSessions { sessionID in
+                providerBinding(sessionID)
+            }
+            providerAvailable = true
+            providerInventory = inventory.map {
+                fleetWorker(worker: $0.worker, authority: $0.authority)
+            }.sorted {
+                let lhs = $0.worker.runtimeReconciliation?.providerSourceUpdatedAt.value
+                    ?? .distantPast
+                let rhs = $1.worker.runtimeReconciliation?.providerSourceUpdatedAt.value
+                    ?? .distantPast
+                if lhs != rhs { return lhs > rhs }
+                return ($0.worker.providerSessionID.value ?? "")
+                    < ($1.worker.providerSessionID.value ?? "")
+            }
+            providerPage = ConduitFleetSnapshotBuilder.providerPage(
+                items: providerInventory,
+                cursor: providerCursor,
+                limit: limit,
+                observedAt: now
+            )
+            for inventoryWorker in providerPage.items {
+                guard let exactID = inventoryWorker.worker.providerSessionID.value else {
+                    detailedPage.append(
+                        fleetWorker(
+                            worker: inventoryWorker.worker,
+                            authority: inventoryWorker.writerAuthority,
+                            diagnostics: ["Provider inventory row had no exact session identity."]
+                        )
+                    )
+                    continue
+                }
+                do {
+                    let observed = try coordinator.observeSession(
+                        providerSessionID: exactID,
+                        binding: providerBinding(exactID)
+                    )
+                    var worker = observed.worker
+                    if let binding = providerBinding(exactID),
+                       let boundAttemptID = binding.runtimeAttemptID,
+                       let taskID = sessionAPITaskID(binding.conduitTaskID),
+                       let live = sessionAPILiveRuntime(for: taskID),
+                       live.runtimeAttemptID.rawValue.uuidString == boundAttemptID,
+                       live.structuredSessionID == exactID,
+                       let existing = worker.runtimeReconciliation {
+                        let prior = sessionAPIProcessTreeBaselines[taskID]
+                        let process = sessionAPIObserveProcessTree(
+                            taskID: taskID,
+                            runtime: live,
+                            prior: prior
+                        )
+                        let reconciliation = ProcessTreeReconciler.reconcile(
+                            before: prior,
+                            after: process
+                        )
+                        worker.runtimeReconciliation = ProviderRuntimeReconciler.reconcile(
+                            providerID: existing.providerID,
+                            providerSessionID: exactID,
+                            binding: providerBinding(exactID),
+                            latestProviderTurnID: existing.latestProviderTurnID,
+                            providerReportedState: existing.providerReportedState,
+                            providerActivities: existing.providerActivities,
+                            providerSourceUpdatedAt: existing.providerSourceUpdatedAt,
+                            providerObservation: existing.providerObservation,
+                            processObservation: process,
+                            processReconciliation: reconciliation,
+                            diagnostics: existing.diagnostics
+                        )
+                        if let launcher = process.launcher.value {
+                            worker.process = WorkerProcessLineage(
+                                launcherPID: .known(launcher.pid),
+                                processGroupID: launcher.processGroupID,
+                                parentPID: launcher.parentPID
+                            )
+                        }
+                    }
+                    detailedPage.append(
+                        fleetWorker(worker: worker, authority: observed.authority)
+                    )
+                } catch {
+                    detailedPage.append(
+                        fleetWorker(
+                            worker: inventoryWorker.worker,
+                            authority: inventoryWorker.writerAuthority,
+                            diagnostics: [
+                                "Exact provider detail read failed; the inventory row is preserved without upgrading its turn or process state."
+                            ]
+                        )
+                    )
+                }
+            }
+            providerPage.items = detailedPage
+        } catch {
+            providerDiagnostics.append(
+                "OpenCode provider inventory was unavailable; no provider rows or negative inventory claim are returned."
+            )
+            providerPage = ConduitFleetSnapshotBuilder.unavailableProviderPage(
+                cursor: providerCursor,
+                observedAt: now
+            )
+        }
+
+        for providerWorker in detailedPage {
+            guard providerWorker.taskAssociation.kind == .exact,
+                  let taskID = providerWorker.taskAssociation.taskSessionID.value,
+                  let taskUUID = UUID(uuidString: taskID),
+                  let taskIndex = taskItems.firstIndex(where: {
+                      $0.task.id.rawValue == taskUUID
+                  }),
+                  let model = providerWorker.worker.turns.last?.model,
+                  model.isKnown
+            else { continue }
+            taskItems[taskIndex].model = model
+            taskItems[taskIndex].modelObservation = providerWorker.worker.turns.last?.observation
+                ?? providerWorker.worker.observation
+        }
+        taskPage.items = taskItems
+
+        let taskSlotSnapshot: ConduitTaskControlSlotSnapshot
+        if let admission = mcpAdmission {
+            let state = admission.stateSnapshot()
+            taskSlotSnapshot = ConduitTaskControlSlotSnapshot(
+                used: .known(state.liveTaskSessionIDs.count),
+                limit: .known(admission.policy.globalLiveTaskLimit),
+                pendingCreateReservations: .known(state.pendingCreateReservationCount),
+                queuedPromptReservations: .known(state.queuedPromptCount),
+                observation: SupervisionObservationStamp(
+                    authority: .conduitRecorded,
+                    freshness: .current,
+                    observedAt: .known(now)
+                )
+            )
+        } else {
+            taskSlotSnapshot = ConduitTaskControlSlotSnapshot(
+                used: .unknown,
+                limit: .unknown,
+                pendingCreateReservations: .unknown,
+                queuedPromptReservations: .unknown,
+                observation: SupervisionObservationStamp(
+                    authority: .unknown,
+                    freshness: .unknown,
+                    observedAt: .unknown
+                )
+            )
+        }
+        let resources = sessionAPIResourceSnapshot()
+        let capacity = ConduitFleetSnapshotBuilder.capacity(
+            inventory: providerInventory,
+            observedPage: detailedPage,
+            taskRows: allTaskItems,
+            inventoryAvailable: providerAvailable,
+            inventoryHasMore: providerPage.hasMore.value ?? true,
+            taskSlots: taskSlotSnapshot,
+            resources: resources,
+            observedAt: now
+        )
+
+        let threadSourceAvailability: FleetSourceAvailability
+        let threadSourceCount: OrchestrationValue<Int>
+        let threadSourceStamp: SupervisionObservationStamp
+        var threadDiagnostics: [String] = []
+        switch threadStore.availability {
+        case .available:
+            threadSourceAvailability = .available
+            threadSourceCount = .known(threadRecords.count)
+            threadSourceStamp = SupervisionObservationStamp(
+                authority: .conduitRecorded,
+                freshness: .current,
+                observedAt: .known(now)
+            )
+        case .missing:
+            threadSourceAvailability = .partial
+            threadSourceCount = .unknown
+            threadSourceStamp = SupervisionObservationStamp(
+                authority: .unknown,
+                freshness: .unknown,
+                observedAt: .known(now)
+            )
+            threadDiagnostics.append("No adapter thread handle file exists; provider handles remain UNKNOWN where not live.")
+        case .unavailable:
+            threadSourceAvailability = .unavailable
+            threadSourceCount = .unknown
+            threadSourceStamp = SupervisionObservationStamp(
+                authority: .unknown,
+                freshness: .unknown,
+                observedAt: .known(now)
+            )
+            threadDiagnostics.append(threadStore.diagnostic ?? "Adapter thread handles are unavailable.")
+        }
+        let taskDiagnostics = Array(Set(taskLoad.diagnostics.map { $0.kind.rawValue })).sorted()
+        let processSampleCount = allTaskItems.filter {
+            $0.processObservation.isKnown
+        }.count
+        let completeProcessCount = allTaskItems.filter {
+            $0.processObservation.value?.coverage == .complete
+        }.count
+        let controlledCount = providerInventory.filter {
+            $0.writerAuthority.conduitWriterState == .controlled
+        }.count
+        let sources = [
+            FleetSourceSnapshot(
+                source: "conduit_task_session_store",
+                availability: taskLoad.diagnostics.isEmpty ? .available : .partial,
+                recordCount: .known(durableTasks.count),
+                observation: taskStoreStamp,
+                diagnostics: taskDiagnostics
+            ),
+            FleetSourceSnapshot(
+                source: "adapter_thread_store",
+                availability: threadSourceAvailability,
+                recordCount: threadSourceCount,
+                observation: threadSourceStamp,
+                diagnostics: threadDiagnostics
+            ),
+            FleetSourceSnapshot(
+                source: "conversation_event_logs",
+                availability: conversationLogCount == selectedTasks.count ? .available : .partial,
+                recordCount: .known(conversationLogCount),
+                observation: SupervisionObservationStamp(
+                    authority: .conduitRecorded,
+                    freshness: .current,
+                    observedAt: .known(now)
+                ),
+                diagnostics: ["Conversation events are read for returned task rows only; raw event content is not included in the Fleet response."]
+            ),
+            FleetSourceSnapshot(
+                source: "opencode_provider_persistence",
+                availability: providerAvailable ? .partial : .unavailable,
+                recordCount: providerAvailable ? .known(providerInventory.count) : .unknown,
+                observation: SupervisionObservationStamp(
+                    authority: providerAvailable ? .providerObserved : .unknown,
+                    freshness: providerAvailable ? .current : .unknown,
+                    observedAt: .known(now)
+                ),
+                diagnostics: providerDiagnostics
+            ),
+            FleetSourceSnapshot(
+                source: "provider_session_writer_registry",
+                availability: providerAvailable ? .available : .unavailable,
+                recordCount: providerAvailable ? .known(controlledCount) : .unknown,
+                observation: SupervisionObservationStamp(
+                    authority: providerAvailable ? .conduitRecorded : .unknown,
+                    freshness: providerAvailable ? .current : .unknown,
+                    observedAt: .known(now)
+                ),
+                diagnostics: ["Writer registry is process-local; only the current Conduit registry is observed. It does not prove external writer ownership."]
+            ),
+            FleetSourceSnapshot(
+                source: "identity_bound_process_tree",
+                availability: !allTaskItems.isEmpty
+                        && completeProcessCount == allTaskItems.count
+                    ? .available : .partial,
+                recordCount: .known(processSampleCount),
+                observation: SupervisionObservationStamp(
+                    authority: .processObserved,
+                    freshness: processSampleCount == 0 ? .unknown : .current,
+                    observedAt: .known(now)
+                ),
+                diagnostics: ["Only exact live Conduit runtimes are sampled across the durable task inventory; discovered or historical provider processes remain UNKNOWN. Process observation does not mutate lifecycle state."]
+            ),
+        ]
+        let snapshot = ConduitFleetSnapshot(
+            observedAt: now,
+            tasks: taskPage,
+            providerSessions: providerPage,
+            sources: sources,
+            capacity: capacity
+        )
+        guard let object = sessionAPIFleetJSONObject(snapshot) else {
+            return ["error": "Fleet snapshot could not be encoded."]
+        }
+        return object
+    }
+
+    private func sessionAPIFleetJSONObject(
+        _ value: ConduitFleetSnapshot
+    ) -> [String: Any]? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        guard let data = try? encoder.encode(value),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any]
+        else { return nil }
+        return dictionary
     }
 
     private func sessionAPIObserveWorker(
