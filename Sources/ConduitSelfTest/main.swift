@@ -3599,6 +3599,42 @@ check(
         && shellExactCorrelation.providerSessionID.value == "ses_shell_exact"
         && shellExactCorrelation.commandID.state == .unknown
 )
+let shellCoverageExpectations: [
+    (ProcessTreeObservationCoverage, ShellProviderCorrelationKind)
+] = [
+    (.complete, .exact),
+    (.partial, .candidate),
+    (.ambiguous, .ambiguous),
+    (.unavailable, .unknown),
+]
+let shellCoverageIsFailClosed = shellCoverageExpectations.allSatisfy { entry in
+    let (coverage, expectedKind) = entry
+    var tree = shellProcessTree
+    tree.coverage = coverage
+    return ShellProviderCorrelationResolver.resolve(
+        taskSessionID: shellTaskSessionID.rawValue.uuidString,
+        runtimeAttemptID: shellRuntimeAttemptID,
+        shellExecutionID: shellExecutionID,
+        processCandidates: [
+            ShellOpenCodeProcessCandidate(
+                node: shellProviderProcess,
+                arguments: [
+                    "/opt/homebrew/bin/opencode",
+                    "run",
+                    "--session",
+                    "ses_shell_exact",
+                ]
+            )
+        ],
+        processTree: tree,
+        providerSessionIDs: .known(["ses_shell_exact"]),
+        providerObservation: shellProviderStamp
+    ).kind == expectedKind
+}
+check(
+    "Shell exact correlation requires complete process-tree coverage",
+    shellCoverageIsFailClosed
+)
 let shellUnrelatedProcess = ProcessNodeObservation(
     pid: 402,
     parentPID: .known(300),

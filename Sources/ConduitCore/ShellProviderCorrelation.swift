@@ -163,12 +163,58 @@ public enum ShellProviderCorrelationResolver {
             )
         }
 
-        guard providerSessionIDs.state == .known,
-              let discoveredIDs = providerSessionIDs.value,
-              providerObservation.authority == .providerObserved,
-              providerObservation.freshness == .current,
-              discoveredIDs.filter({ $0 == sessionID }).count == 1
-        else {
+        let persistenceConfirmsCandidate = providerSessionIDs.state == .known
+            && providerSessionIDs.value?.filter({ $0 == sessionID }).count == 1
+            && providerObservation.authority == .providerObserved
+            && providerObservation.freshness == .current
+
+        switch processTree.coverage {
+        case .complete:
+            break
+        case .partial:
+            let diagnostic = persistenceConfirmsCandidate
+                ? "Current provider persistence confirms the candidate, but partial process-tree coverage cannot establish that it is unique."
+                : "Partial process-tree coverage leaves the observed OpenCode session as a candidate; a second owned process may be unobserved."
+            return ShellProviderCorrelation(
+                kind: .candidate,
+                taskSessionID: .known(taskSessionID),
+                runtimeAttemptID: .known(runtimeAttemptID),
+                shellExecutionID: .known(shellExecutionID),
+                commandID: .unknown,
+                processPID: .known(node.pid),
+                providerSessionID: .known(sessionID),
+                candidateSessionIDs: [sessionID],
+                processObservation: processTree.observation,
+                providerObservation: providerObservation,
+                diagnostics: [diagnostic]
+            )
+        case .ambiguous:
+            let diagnostic = persistenceConfirmsCandidate
+                ? "Current provider persistence confirms the observed session, but ambiguous process-tree coverage cannot establish its unique Shell relationship."
+                : "Ambiguous process-tree coverage cannot establish a unique Shell-to-session relationship."
+            return ShellProviderCorrelation(
+                kind: .ambiguous,
+                taskSessionID: .known(taskSessionID),
+                runtimeAttemptID: .known(runtimeAttemptID),
+                shellExecutionID: .known(shellExecutionID),
+                candidateSessionIDs: [sessionID],
+                processObservation: processTree.observation,
+                providerObservation: providerObservation,
+                diagnostics: [diagnostic]
+            )
+        case .unavailable:
+            return ShellProviderCorrelation(
+                kind: .unknown,
+                taskSessionID: .known(taskSessionID),
+                runtimeAttemptID: .known(runtimeAttemptID),
+                shellExecutionID: .known(shellExecutionID),
+                processObservation: processTree.observation,
+                providerObservation: providerObservation,
+                diagnostics: ["Process-tree coverage is unavailable; an exact Shell-to-session relationship cannot be established."]
+            )
+        }
+
+        guard persistenceConfirmsCandidate else {
             return ShellProviderCorrelation(
                 kind: .candidate,
                 taskSessionID: .known(taskSessionID),

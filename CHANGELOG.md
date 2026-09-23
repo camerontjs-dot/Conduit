@@ -99,6 +99,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Shell-to-OpenCode correlation now requires complete process-tree coverage
+  before returning `exact`. A sole observed session under partial coverage
+  remains a candidate, ambiguous coverage remains ambiguous, and unavailable
+  coverage returns UNKNOWN (#51, #53).
+
 - Session API liveness no longer depends on successful MainFrame bookmark
   restoration, project scanning, or informational startup probes. The loopback
   listener starts after settings load; `/healthz` stays live while `/readyz`

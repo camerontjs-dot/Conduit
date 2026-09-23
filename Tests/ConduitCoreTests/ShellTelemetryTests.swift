@@ -267,6 +267,50 @@ final class ShellTelemetryTests: XCTestCase {
         XCTAssertEqual(unconfirmed.providerSessionID.value, "ses_exact")
     }
 
+    func testExactCorrelationRequiresCompleteProcessTreeCoverage() throws {
+        let completeTree = processTree(childPID: 525, childLiveness: .live)
+        let owned = try XCTUnwrap(completeTree.descendants.first)
+        let candidate = ShellOpenCodeProcessCandidate(
+            node: owned,
+            arguments: ["/opt/homebrew/bin/opencode", "--session", "ses_coverage"]
+        )
+        let cases: [
+            (ProcessTreeObservationCoverage, ShellProviderCorrelationKind)
+        ] = [
+            (.complete, .exact),
+            (.partial, .candidate),
+            (.ambiguous, .ambiguous),
+            (.unavailable, .unknown),
+        ]
+
+        for (coverage, expectedKind) in cases {
+            var tree = completeTree
+            tree.coverage = coverage
+            let result = ShellProviderCorrelationResolver.resolve(
+                taskSessionID: taskID.rawValue.uuidString,
+                runtimeAttemptID: runtimeID,
+                shellExecutionID: executionID,
+                processCandidates: [candidate],
+                processTree: tree,
+                providerSessionIDs: .known(["ses_coverage"]),
+                providerObservation: providerStamp
+            )
+
+            XCTAssertEqual(
+                result.kind,
+                expectedKind,
+                "Only process-tree coverage changed for \(coverage.rawValue)."
+            )
+            if coverage != .complete {
+                XCTAssertNotEqual(
+                    result.kind,
+                    .exact,
+                    "Incomplete coverage cannot establish unique correlation."
+                )
+            }
+        }
+    }
+
     func testMissingOrAmbiguousSessionArgumentStaysUnknownOrAmbiguous() throws {
         let tree = processTree(childPID: 530, childLiveness: .live)
         let owned = try XCTUnwrap(tree.descendants.first)

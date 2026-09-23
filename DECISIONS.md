@@ -1966,12 +1966,14 @@ and objective acceptance have different authorities and lifetimes.
    signals or treat PPID, process name, PTY quietness, or capture closure as
    ownership or completion proof.
 3. Mark a Shell-to-OpenCode correlation exact only when current task/runtime
-   process evidence contains one live task-created OpenCode process, its live
-   argv supplies one exact `--session`/`-s` value, and the current OpenCode
-   persistence inventory contains that session identity exactly once. The
-   process allowlist accepts the observed executable names `opencode` and
-   `opencode.exe`. Missing or conflicting evidence remains UNKNOWN, candidate,
-   or ambiguous; cwd, timing, and terminal text are not join keys.
+   process evidence has complete coverage and contains one live task-created
+   OpenCode process, its live argv supplies one exact `--session`/`-s` value,
+   and the current OpenCode persistence inventory contains that session
+   identity exactly once. Partial process-tree coverage leaves an observed
+   session as a candidate; ambiguous coverage remains ambiguous, and
+   unavailable coverage remains UNKNOWN. The process allowlist accepts the
+   observed executable names `opencode` and `opencode.exe`. Cwd, timing, and
+   terminal text are not join keys.
 4. Stamp the current persistence inventory read separately from each provider
    worker's freshness relative to a live host. An exact identity join therefore
    does not promote provider-host liveness, provider-turn state, task
