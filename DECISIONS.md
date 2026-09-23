@@ -1941,3 +1941,61 @@ conformance remain separate slices.
 provider inventories, Shell telemetry, or execution-slot accounting only when
 their owning slices establish the underlying authority and qualification
 boundary.
+
+
+## D-057: Shell telemetry can correlate an exact OpenCode persistence identity
+
+**Status:** Proposed (2026-09-23)
+
+**Context:** Issue #53 Slice 9 and issue #51 call for Shell-launched local
+execution to become observable by the existing Fleet snapshot without reading
+or retaining PTY history. A Shell command, its process descendants, OpenCode
+persistence, provider-host liveness, provider-turn state, Conduit task state,
+and objective acceptance have different authorities and lifetimes.
+
+**Decision:**
+
+1. For a Conduit-managed zsh runtime, create one private telemetry socket and
+   token. Lifecycle hooks record execution and command boundaries, monotonic
+   command sequence, cwd, shell PID/PGID, exit status, and typed delivery
+   `shell_stdin`. Persist these content-free events and separate process-tree
+   snapshots in the existing append-only task event log; do not create another
+   Fleet database or retain command text or PTY bytes.
+2. Reuse the identity-bound, read-only macOS process observer. It records the
+   launcher identity and observed descendant relationships; it does not send
+   signals or treat PPID, process name, PTY quietness, or capture closure as
+   ownership or completion proof.
+3. Mark a Shell-to-OpenCode correlation exact only when current task/runtime
+   process evidence contains one live task-created OpenCode process, its live
+   argv supplies one exact `--session`/`-s` value, and the current OpenCode
+   persistence inventory contains that session identity exactly once. The
+   process allowlist accepts the observed executable names `opencode` and
+   `opencode.exe`. Missing or conflicting evidence remains UNKNOWN, candidate,
+   or ambiguous; cwd, timing, and terminal text are not join keys.
+4. Stamp the current persistence inventory read separately from each provider
+   worker's freshness relative to a live host. An exact identity join therefore
+   does not promote provider-host liveness, provider-turn state, task
+   association, or writer authority. Provider rows remain discovered and
+   unbound unless an independent existing authority proves otherwise.
+5. Keep PTY/capture quietness, Shell command exit, child liveness, provider-host
+   liveness, persistence presence, provider-turn state, Conduit task
+   completion, verification, and objective acceptance separate. Unsupported
+   repository checkpoints and other absent facts remain UNKNOWN.
+
+**Consequences:** A later Fleet reader can identify one exact persisted
+OpenCode session from a live Shell-owned process without reconstructing terminal
+history. The task-side command identity is recorded, but no process-to-command
+identity is claimed. Read-only observation does not send provider input,
+adopt a session, acquire a writer lease, clean up processes, or reserve
+execution capacity.
+
+**Non-claims:** Persistence does not prove that an OpenCode host is live, that a
+provider turn is active or complete, or that a Shell command owns the exact
+provider turn. Shell command exit does not imply child or provider completion.
+No Fleet row establishes Conduit task completion, verification, or objective
+acceptance. Installed-app restart recovery and non-OpenCode inventory remain
+outside this disposition.
+
+**Reconsideration trigger:** Revisit only when a separate authorized source
+proves process-to-command or provider-host/turn identity, or when a later slice
+defines the authority needed for stronger lifecycle claims.

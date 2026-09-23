@@ -1,5 +1,4 @@
 #if os(macOS)
-import ConduitCore
 import Darwin
 import Foundation
 
@@ -10,7 +9,7 @@ import Foundation
 /// on the exact runtime launcher identity, process start time, and an
 /// observed descendant relationship. PPID and command name are retained as
 /// observations, not used as ownership proof after reparenting.
-enum MacOSProcessTreeObserver {
+public enum MacOSProcessTreeObserver {
     private static let maximumProcesses = 512
     private static let maximumDepth = 32
 
@@ -28,7 +27,87 @@ enum MacOSProcessTreeObserver {
         case unknown
     }
 
-    static func observe(
+    /// Returns argv only for a process whose PID/start identity still matches
+    /// the just-observed node. Callers must inspect only the allowlisted
+    /// provider executable and discard the arguments after extracting exact
+    /// identity flags; command text is never persisted.
+    public static func arguments(for node: ProcessNodeObservation) -> [String]? {
+        guard node.liveness == .live,
+              ShellProviderCorrelationResolver.isOpenCodeProcessName(
+                node.commandName.value
+              ),
+              let before = readProcess(pid_t(node.pid)),
+              sameProcessIdentity(before, node)
+        else { return nil }
+
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, node.pid]
+        var byteCount = 0
+        let sizeResult = mib.withUnsafeMutableBufferPointer { pointer in
+            sysctl(
+                pointer.baseAddress,
+                u_int(pointer.count),
+                nil,
+                &byteCount,
+                nil,
+                0
+            )
+        }
+        guard sizeResult == 0,
+              byteCount >= MemoryLayout<Int32>.size,
+              byteCount <= 1_048_576
+        else { return nil }
+
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        var resultSize = byteCount
+        let result = mib.withUnsafeMutableBufferPointer { mibPointer in
+            bytes.withUnsafeMutableBytes { buffer in
+                sysctl(
+                    mibPointer.baseAddress,
+                    u_int(mibPointer.count),
+                    buffer.baseAddress,
+                    &resultSize,
+                    nil,
+                    0
+                )
+            }
+        }
+        guard result == 0,
+              resultSize >= MemoryLayout<Int32>.size,
+              resultSize <= bytes.count
+        else { return nil }
+
+        let data = bytes.prefix(resultSize)
+        let argc = data.withUnsafeBytes { raw in
+            raw.loadUnaligned(as: Int32.self)
+        }
+        guard argc > 0, argc <= 256 else { return nil }
+
+        var cursor = MemoryLayout<Int32>.size
+        while cursor < data.count, data[cursor] != 0 { cursor += 1 }
+        guard cursor < data.count else { return nil }
+        while cursor < data.count, data[cursor] == 0 { cursor += 1 }
+
+        var arguments: [String] = []
+        arguments.reserveCapacity(Int(argc))
+        for _ in 0..<argc {
+            guard cursor < data.count else { return nil }
+            let start = cursor
+            while cursor < data.count, data[cursor] != 0 { cursor += 1 }
+            guard cursor < data.count,
+                  cursor - start <= 4096
+            else { return nil }
+            arguments.append(String(decoding: data[start..<cursor], as: UTF8.self))
+            cursor += 1
+        }
+
+        guard let after = readProcess(pid_t(node.pid)),
+              sameProcessIdentity(after, node),
+              sameProcessIdentity(before, node)
+        else { return nil }
+        return arguments
+    }
+
+    public static func observe(
         rootPID: pid_t,
         taskSessionID: String,
         runtimeAttemptID: String?,

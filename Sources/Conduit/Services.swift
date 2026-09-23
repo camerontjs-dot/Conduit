@@ -102,6 +102,11 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     private(set) var usesTmux = false
     private(set) var tmuxSessionName: String?
     private(set) var lastDirectPTYStopRequest: DirectPTYStopRequestResult = .notRequested
+    private(set) var shellTelemetryDiagnostic: String?
+    var onShellTelemetryEvent: ((ShellTelemetryEvent) -> Void)?
+    private let runtimeAttemptID: RuntimeAttemptID
+    private var shellTelemetryServer: ShellTelemetrySocketServer?
+    private var shellTelemetryEnvironment: [String] = []
 
     /// Exact SwiftTerm-owned launcher PID for read-only process-tree
     /// observation. This is intentionally not a descendant cleanup handle.
@@ -201,8 +206,13 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         return usesTmux ? "tmux" : "PTY"
     }
 
-    init(descriptor: SessionDescriptor, useDetachedSessions: Bool) {
+    init(
+        descriptor: SessionDescriptor,
+        runtimeAttemptID: RuntimeAttemptID,
+        useDetachedSessions: Bool
+    ) {
         self.descriptor = descriptor
+        self.runtimeAttemptID = runtimeAttemptID
         self.useDetachedSessions = useDetachedSessions
         self.terminalTitle = descriptor.title
         self.terminalView = ActivityTerminalView(frame: .zero)
@@ -238,6 +248,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         guard lifecycle == .idle else { return }
         launchIssue = nil
         lifecycle.transition(to: .launching)
+        prepareShellTelemetry()
 
         if useDetachedSessions, let tmux = EnvironmentResolver.shared.resolve("tmux") {
             // The descriptor carries the binding so a resumed session attaches
@@ -256,6 +267,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 name: name,
                 directory: descriptor.projectPath.path,
                 command: paneCommand(),
+                sessionEnvironment: shellTelemetryEnvironment,
                 // Only stamp identity when Conduit actually knows it; a
                 // resumed unidentified session keeps its blank record rather
                 // than inheriting a placeholder name.
@@ -268,10 +280,16 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 requireExistingSession: descriptor.requiresExistingTmuxSession == true
             )
             switch ensureResult {
-            case .ready:
+            case .ready(let disposition):
                 attachedAt = Date()
                 usesTmux = true
                 tmuxSessionName = name
+                if disposition != .created {
+                    shellTelemetryServer?.stop()
+                    shellTelemetryServer = nil
+                    shellTelemetryEnvironment = []
+                    shellTelemetryDiagnostic = "The attached tmux Shell predates this runtime's private zsh hook."
+                }
                 terminalView.startProcess(
                     executable: tmux,
                     args: ["attach-session", "-t", "=\(name)"],
@@ -282,6 +300,8 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             case .directPTYFallback:
                 break
             case .blocked(let issue):
+                shellTelemetryServer?.stop()
+                shellTelemetryServer = nil
                 failLaunch(issue)
                 return
             }
@@ -1120,10 +1140,14 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     private func startDirectSession() {
         let agent = descriptor.agent
         let launchArgs = AgentLaunchArguments.resolved(for: agent)
+        let environment = shellTelemetryEnvironment.isEmpty
+            ? nil
+            : Self.mergingTerminalEnvironment(with: shellTelemetryEnvironment)
         if agent.kind == .shell && agent.command.hasPrefix("/") {
             terminalView.startProcess(
                 executable: agent.command,
                 args: launchArgs,
+                environment: environment,
                 currentDirectory: descriptor.projectPath.path
             )
         } else {
@@ -1131,9 +1155,60 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             terminalView.startProcess(
                 executable: "/bin/zsh",
                 args: ["-l", "-c", "exec \(command)"],
+                environment: environment,
                 currentDirectory: descriptor.projectPath.path
             )
         }
+    }
+
+    private func prepareShellTelemetry() {
+        guard descriptor.agent.kind == .shell else { return }
+        let executableName = URL(fileURLWithPath: descriptor.agent.command)
+            .lastPathComponent.lowercased()
+        guard executableName == "zsh" else {
+            shellTelemetryDiagnostic = "The configured Shell executable is not zsh; Shell hook telemetry is UNKNOWN."
+            return
+        }
+        guard let taskSessionID = descriptor.taskSessionID else {
+            shellTelemetryDiagnostic = "The Shell runtime has no durable task identity; Shell hook telemetry is UNKNOWN."
+            return
+        }
+        do {
+            let server = ShellTelemetrySocketServer(
+                taskSessionID: taskSessionID,
+                runtimeAttemptID: runtimeAttemptID
+            ) { [weak self] event in
+                Task { @MainActor in
+                    self?.onShellTelemetryEvent?(event)
+                }
+            }
+            let configuration = try server.start()
+            shellTelemetryServer = server
+            shellTelemetryEnvironment = configuration.environment
+            shellTelemetryDiagnostic = nil
+        } catch {
+            shellTelemetryDiagnostic = "Shell hook telemetry could not start: \(error.localizedDescription)"
+        }
+    }
+
+    private static func mergingTerminalEnvironment(
+        with additions: [String]
+    ) -> [String] {
+        var values = Dictionary(
+            Terminal.getEnvironmentVariables(termName: "xterm-256color").compactMap { entry -> (String, String)? in
+                guard let separator = entry.firstIndex(of: "=") else { return nil }
+                return (
+                    String(entry[..<separator]),
+                    String(entry[entry.index(after: separator)...])
+                )
+            },
+            uniquingKeysWith: { _, new in new }
+        )
+        for entry in additions {
+            guard let separator = entry.firstIndex(of: "=") else { continue }
+            values[String(entry[..<separator])] = String(entry[entry.index(after: separator)...])
+        }
+        return values.keys.sorted().map { "\($0)=\(values[$0] ?? "")" }
     }
 
     /// The command run inside a fresh tmux pane. CLI agents launch under a

@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "disposition": "PASS_FOR_SHELL_PROVIDER_TELEMETRY_CORRELATION",
+  "test": "ShellTelemetrySocketServerTests.testLiveShellOpenCodeSessionCorrelationWhenIsolatedFixtureConfigured",
+  "execution": {
+    "base_commit": "23c33a90f22814a455126113774d919606cc100b",
+    "base_tree": "44908b5cd1c36f0af92bb47f533fc4efe24b36c8",
+    "provider": "OpenCode",
+    "provider_version": "1.18.15",
+    "fixture": "qualification-owned temporary home, data, config, cache, and project",
+    "working_directory": "/private/tmp/conduit-slice9-live-d026a422-f1dd-44ab-8f24-371bed7089cc/project"
+  },
+  "identity_chain": {
+    "task_session_id": "DE322797-0ADC-48D1-AD5F-E6C71D5C018A",
+    "runtime_attempt_id": "88210349-6808-437F-AFE2-41CB4D16F6C5",
+    "shell_execution_id": "6ac76bda-c8a7-4e79-b41a-aaff7d9cd183",
+    "shell_command_id": "6ac76bda-c8a7-4e79-b41a-aaff7d9cd183:1",
+    "shell_delivery": "shell_stdin",
+    "shell_pid": 88718,
+    "shell_pgid": 88718,
+    "provider_process_pid": 88722,
+    "provider_process_name": "opencode",
+    "provider_process_parent_pid": 88718,
+    "provider_process_group_id": 88722,
+    "provider_process_start_time": "2026-09-23T04:13:12Z",
+    "provider_process_ownership": "task_created",
+    "provider_process_ownership_basis": "descendant_observed_after_launcher",
+    "process_tree_coverage": "complete",
+    "provider_session_id": "ses_f33a073f1ffegOrCbOKq2aEwby",
+    "provider_session_identity_source": "exact live argv session flag plus one exact ID in current read-only SQLite persistence inventory",
+    "provider_persistence_exact_count": 1,
+    "fleet_provider_row_correlation": "exact"
+  },
+  "authority_boundaries": {
+    "command_state": "active",
+    "command_exit_status": "UNKNOWN while the exact provider process remained live",
+    "provider_process_liveness": "live at observation time",
+    "provider_host_liveness": "UNKNOWN",
+    "provider_session_persistence": "present in current inventory; persisted turn count 0",
+    "provider_worker_live_freshness": "UNKNOWN",
+    "provider_turn_state": "UNKNOWN",
+    "provider_process_command_id": "UNKNOWN",
+    "task_association": "unbound",
+    "conduit_writer_state": "unclaimed",
+    "pty_capture_quiet": "UNKNOWN",
+    "repository_checkpoint": "UNKNOWN; fixture project was not a Git repository",
+    "conduit_task_complete": "UNKNOWN",
+    "objective_accepted": "UNKNOWN"
+  },
+  "negative_controls": {
+    "command_text_recorded": false,
+    "pty_content_recorded": false,
+    "provider_input_sent": false,
+    "provider_turn_started": false,
+    "session_adopted": false,
+    "writer_claimed": false,
+    "execution_slot_requested_for_observation": false,
+    "process_cleanup_by_fleet": false,
+    "qualification_harness_terminated_after_receipt": true
+  },
+  "post_observation_provider_read": {
+    "session_id_still_present": true,
+    "version": "1.18.15",
+    "cost": 0,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "tokens_reasoning": 0
+  },
+  "limits": [
+    "The live test exercised the production zsh telemetry socket/profile, macOS process observer, read-only OpenCode SQLite observer, resolver, and Fleet provider-row builder.",
+    "The installed Conduit application's Session API endpoint was not live-launched for this test.",
+    "The test harness closed its qualification-owned PTY after collecting the receipt; no Fleet cleanup behavior was exercised."
+  ]
+}

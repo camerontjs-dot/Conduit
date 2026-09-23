@@ -1772,6 +1772,50 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func recordShellTelemetry(
+        _ telemetry: ShellTelemetryEvent,
+        taskSessionID: TaskSessionID
+    ) {
+        _ = appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: taskSessionID,
+                occurredAt: telemetry.observation.observedAt.value ?? Date(),
+                authority: .shellHookObserved,
+                kind: .shellTelemetryRecorded(telemetry)
+            )
+        )
+
+        guard telemetry.phase == .executionStarted
+                || telemetry.phase == .commandStarted
+                || telemetry.phase == .commandExited
+        else { return }
+        let log = TaskSessionEventLog(
+            directory: taskSessionStore.directory,
+            taskSessionID: taskSessionID
+        )
+        let prior = log.read().events.compactMap { event -> ProcessTreeObservation? in
+            guard event.hasValidAuthority,
+                  case .shellProcessObservationRecorded(let observation) = event.kind,
+                  observation.runtimeAttemptID.value == telemetry.runtimeAttemptID
+            else { return nil }
+            return observation
+        }.last
+        let observation = MacOSProcessTreeObserver.observe(
+            rootPID: pid_t(telemetry.shellPID),
+            taskSessionID: taskSessionID.rawValue.uuidString,
+            runtimeAttemptID: telemetry.runtimeAttemptID,
+            prior: prior
+        )
+        _ = appendTaskEvent(
+            TaskSessionEvent(
+                taskSessionID: taskSessionID,
+                occurredAt: Date(),
+                authority: .processObserved,
+                kind: .shellProcessObservationRecorded(observation)
+            )
+        )
+    }
+
     private func workspaceSnapshot(for project: MainframeProject) -> WorkspaceScopeSnapshot {
         if project.isMainframeRoot {
             return .root(
@@ -2547,6 +2591,15 @@ final class AppModel: ObservableObject {
             entry: entry,
             runtimeAttemptID: runtimeAttemptID,
             priorEvents: priorConversation,
+            recordShellTelemetry: { [weak self] telemetry in
+                guard telemetry.runtimeAttemptID == runtimeAttemptID.rawValue.uuidString else {
+                    return
+                }
+                self?.recordShellTelemetry(
+                    telemetry,
+                    taskSessionID: taskSessionID
+                )
+            },
             recordEventRevision: { [weak self] event in
                 self?.recordConversationRevision(
                     event,
@@ -4198,6 +4251,24 @@ final class AppModel: ObservableObject {
         let selectedTasks = Array(
             durableTasks[taskWindow.startIndex..<taskWindow.endIndex]
         )
+        var shellHistoryByTaskID: [TaskSessionID: ShellTelemetryHistorySnapshot] = [:]
+        var shellReadDiagnosticsByTaskID: [TaskSessionID: [String]] = [:]
+        for task in durableTasks {
+            let log = TaskSessionEventLog(
+                directory: taskSessionStore.directory,
+                taskSessionID: task.id
+            )
+            let result = log.read()
+            if let history = ShellTelemetryProjection.latest(
+                taskSessionID: task.id,
+                events: result.events
+            ) {
+                shellHistoryByTaskID[task.id] = history
+            }
+            if !result.diagnostics.isEmpty {
+                shellReadDiagnosticsByTaskID[task.id] = result.diagnostics.map(\.detail)
+            }
+        }
         let threadStore = AdapterThreadStore(
             directory: AdapterThreadStore.defaultDirectory()
         ).loadResult()
@@ -4238,6 +4309,40 @@ final class AppModel: ObservableObject {
             case .closed?: return "closed"
             case .interrupted?: return "interrupted"
             case nil: return nil
+            }
+        }
+
+        let unknownObservationStamp = SupervisionObservationStamp(
+            authority: .unknown,
+            freshness: .unknown,
+            observedAt: .unknown
+        )
+
+        func shellRepositoryCheckpoint(
+            workingDirectory: String
+        ) -> OrchestrationValue<ShellRepositoryCheckpoint> {
+            do {
+                let snapshot = try GitWorkspaceInspector(
+                    timeout: 2,
+                    maximumOutputBytes: 256_000
+                ).snapshot(
+                    startingAt: URL(fileURLWithPath: workingDirectory, isDirectory: true)
+                )
+                return .known(
+                    ShellRepositoryCheckpoint(
+                        repositoryRoot: .known(snapshot.repositoryRoot),
+                        headCommit: .known(snapshot.headSHA),
+                        changedPathCount: snapshot.statusWasTruncated
+                            ? .unknown : .known(snapshot.status.count),
+                        observation: SupervisionObservationStamp(
+                            authority: .repositoryObserved,
+                            freshness: .current,
+                            observedAt: .known(Date())
+                        )
+                    )
+                )
+            } catch {
+                return .unknown
             }
         }
 
@@ -4427,8 +4532,15 @@ final class AppModel: ObservableObject {
                 )
             }
 
-            let processObservation: OrchestrationValue<ProcessTreeObservation>
-            let processReconciliation: OrchestrationValue<ProcessTreeReconciliation>
+            let shellHistory = shellHistoryByTaskID[task.id].flatMap { history in
+                guard let operationalAttempt else { return history }
+                return history.runtimeAttemptID == operationalAttempt.rawValue.uuidString
+                    ? history : nil
+            }
+            let isShellRuntime = live?.descriptor.agent.kind == .shell
+                || shellHistory != nil
+            var processObservation: OrchestrationValue<ProcessTreeObservation>
+            var processReconciliation: OrchestrationValue<ProcessTreeReconciliation>
             if let live {
                 let prior = sessionAPIProcessTreeBaselines[task.id]
                 let observed = sessionAPIObserveProcessTree(
@@ -4446,6 +4558,130 @@ final class AppModel: ObservableObject {
             } else {
                 processObservation = .unknown
                 processReconciliation = .unknown
+            }
+
+            if isShellRuntime {
+                var shellProcessTree: ProcessTreeObservation?
+                var shellDiagnostics = shellReadDiagnosticsByTaskID[task.id] ?? []
+                if let shellHistory {
+                    let rootPID = pid_t(shellHistory.latestEvent.shellPID)
+                    let recordedPID = shellHistory.processObservation?.launcher.value?.pid
+                    let hasRecordedIdentity = shellHistory.processObservation?
+                        .launcher.value?.startIdentity.value?.startTime.value != nil
+                    let directPID = live?.controller.observedDirectPTYProcessID
+                    if let directPID, directPID != rootPID {
+                        shellDiagnostics.append(
+                            "The shell-hook peer PID differs from SwiftTerm's direct runtime PID; Shell process correlation is UNKNOWN."
+                        )
+                    } else if recordedPID == shellHistory.latestEvent.shellPID,
+                              hasRecordedIdentity,
+                              let prior = shellHistory.processObservation {
+                        shellProcessTree = MacOSProcessTreeObserver.observe(
+                            rootPID: rootPID,
+                            taskSessionID: task.id.rawValue.uuidString,
+                            runtimeAttemptID: shellHistory.runtimeAttemptID,
+                            prior: prior,
+                            observedAt: now
+                        )
+                    } else {
+                        shellDiagnostics.append(
+                            "No identity-bound Shell launcher process receipt is available; process and provider correlation remain UNKNOWN."
+                        )
+                    }
+                } else if let directPID = live?.controller.observedDirectPTYProcessID {
+                    let prior = sessionAPIProcessTreeBaselines[task.id]
+                    shellProcessTree = MacOSProcessTreeObserver.observe(
+                        rootPID: directPID,
+                        taskSessionID: task.id.rawValue.uuidString,
+                        runtimeAttemptID: operationalAttempt?.rawValue.uuidString,
+                        prior: prior,
+                        observedAt: now
+                    )
+                    shellDiagnostics.append(
+                        "The Shell launcher process is observed, but no shell-hook command receipt has arrived."
+                    )
+                } else {
+                    shellDiagnostics.append(
+                        live?.controller.shellTelemetryDiagnostic
+                            ?? "No shell-hook command receipt or identity-bound Shell launcher observation is available."
+                    )
+                }
+
+                if let shellProcessTree {
+                    processObservation = .known(shellProcessTree)
+                    processReconciliation = .known(
+                        ProcessTreeReconciler.reconcile(
+                            before: shellHistory?.processObservation
+                                ?? sessionAPIProcessTreeBaselines[task.id],
+                            after: shellProcessTree
+                        )
+                    )
+                }
+
+                let latest = shellHistory?.latestEvent
+                let command = shellHistory?.latestCommandEvent
+                let repositoryCheckpoint: OrchestrationValue<ShellRepositoryCheckpoint>
+                if includeConversation,
+                   let workingDirectory = latest?.workingDirectory.value {
+                    repositoryCheckpoint = shellRepositoryCheckpoint(
+                        workingDirectory: workingDirectory
+                    )
+                } else {
+                    repositoryCheckpoint = .unknown
+                }
+                let liveTelemetryRuntimeAttemptID = live.flatMap { runtime in
+                    runtime.controller.shellTelemetryDiagnostic == nil
+                        ? runtime.runtimeAttemptID.rawValue.uuidString
+                        : nil
+                }
+                let shellObservation = shellHistory?.observationStamp(
+                    liveRuntimeAttemptID: liveTelemetryRuntimeAttemptID
+                ) ?? unknownObservationStamp
+                if live?.controller.shellTelemetryDiagnostic == nil,
+                   latest == nil {
+                    shellDiagnostics.append(
+                        "No Shell hook receipt is present; command completion, PTY quietness, and provider state remain independent UNKNOWNs."
+                    )
+                }
+                shellDiagnostics.append(
+                    "PTY quietness and capture closure are not used as Shell command or provider lifecycle evidence."
+                )
+                fleetTask.shellTelemetry = FleetShellTelemetrySnapshot(
+                    runtimeAttemptID: shellHistory.map {
+                        .known($0.runtimeAttemptID)
+                    } ?? runtimeAttempt,
+                    shellExecutionID: latest.map {
+                        .known($0.shellExecutionID)
+                    } ?? .unknown,
+                    phase: latest.map { .known($0.phase) } ?? .unknown,
+                    commandID: command?.commandID.map(OrchestrationValue.known)
+                        ?? .unknown,
+                    commandState: shellHistory.map {
+                        .known($0.commandState(
+                            liveRuntimeAttemptID: liveTelemetryRuntimeAttemptID
+                        ))
+                    } ?? .unknown,
+                    shellPID: latest.map {
+                        .known($0.shellPID)
+                    } ?? live?.controller.observedDirectPTYProcessID.map {
+                        .known(Int32($0))
+                    } ?? .unknown,
+                    processGroupID: latest?.processGroupID ?? .unknown,
+                    workingDirectory: latest?.workingDirectory ?? .unknown,
+                    exitStatus: command?.phase == .commandExited
+                        ? (command?.exitStatus ?? .unknown) : .unknown,
+                    deliveryTransport: command?.deliveryTransport ?? .unknown,
+                    ptyCaptureQuiet: .unknown,
+                    launcherLiveness: shellProcessTree?.launcher.value.map {
+                        .known($0.liveness)
+                    } ?? .unknown,
+                    processObservation: shellProcessTree.map {
+                        .known($0)
+                    } ?? .unknown,
+                    repositoryCheckpoint: repositoryCheckpoint,
+                    observation: shellObservation,
+                    diagnostics: shellDiagnostics
+                )
             }
 
             fleetTask.runtimeAttemptID = runtimeAttempt
@@ -4555,9 +4791,71 @@ final class AppModel: ObservableObject {
             return matches.count == 1 ? matches[0] : nil
         }
 
+        func shellCorrelationForProvider(
+            _ providerSessionID: String,
+            providerSessionIDs: [String],
+            providerObservation: SupervisionObservationStamp
+        ) -> ShellProviderCorrelation {
+            var matches: [ShellProviderCorrelation] = []
+            for task in allTaskItems {
+                guard let shell = task.shellTelemetry,
+                      let executionID = shell.shellExecutionID.value,
+                      let runtimeAttemptID = shell.runtimeAttemptID.value,
+                      let tree = shell.processObservation.value
+                else { continue }
+                let nodes = [tree.launcher.value].compactMap { $0 }
+                    + tree.descendants
+                let candidates = nodes.compactMap { node -> ShellOpenCodeProcessCandidate? in
+                    guard ShellProviderCorrelationResolver.isOpenCodeProcessName(
+                        node.commandName.value
+                    ),
+                          let arguments = MacOSProcessTreeObserver.arguments(for: node)
+                    else { return nil }
+                    return ShellOpenCodeProcessCandidate(
+                        node: node,
+                        arguments: arguments
+                    )
+                }
+                guard !candidates.isEmpty else { continue }
+                let result = ShellProviderCorrelationResolver.resolve(
+                    taskSessionID: task.task.id.rawValue.uuidString,
+                    runtimeAttemptID: runtimeAttemptID,
+                    shellExecutionID: executionID,
+                    processCandidates: candidates,
+                    processTree: tree,
+                    providerSessionIDs: .known(providerSessionIDs),
+                    providerObservation: providerObservation
+                )
+                if result.providerSessionID.value == providerSessionID
+                    || result.candidateSessionIDs.contains(providerSessionID) {
+                    matches.append(result)
+                }
+            }
+
+            if matches.count == 1, let match = matches.first { return match }
+            if matches.count > 1 {
+                return ShellProviderCorrelation(
+                    kind: .ambiguous,
+                    runtimeAttemptID: matches[0].runtimeAttemptID,
+                    providerSessionID: .known(providerSessionID),
+                    candidateSessionIDs: [providerSessionID],
+                    processObservation: matches[0].processObservation,
+                    providerObservation: providerObservation,
+                    diagnostics: ["Multiple owned Shell executions exposed this exact OpenCode session identity; no task relationship was selected."]
+                )
+            }
+            return ShellProviderCorrelation(
+                kind: .unknown,
+                processObservation: unknownObservationStamp,
+                providerObservation: providerObservation,
+                diagnostics: ["No exact owned Shell process-to-session correlation was observed."]
+            )
+        }
+
         func fleetWorker(
             worker: WorkerLineage,
             authority: ProviderSessionAuthoritySnapshot,
+            shellCorrelation: ShellProviderCorrelation? = nil,
             diagnostics: [String] = []
         ) -> ConduitFleetProviderWorkerSnapshot {
             var association = ConduitFleetSnapshotBuilder.taskAssociation(
@@ -4586,6 +4884,7 @@ final class AppModel: ObservableObject {
                     observedAt: .known(now)
                 ),
                 taskAssociation: association,
+                shellCorrelation: shellCorrelation,
                 diagnostics: diagnostics
             )
         }
@@ -4603,8 +4902,31 @@ final class AppModel: ObservableObject {
                 providerBinding(sessionID)
             }
             providerAvailable = true
-            providerInventory = inventory.map {
-                fleetWorker(worker: $0.worker, authority: $0.authority)
+            // This stamp belongs to the completed persistence inventory read.
+            // Each WorkerLineage keeps its own UNKNOWN freshness relative to a
+            // live provider host; the exact Shell join must not promote that
+            // independent liveness fact.
+            let providerInventoryObservation = SupervisionObservationStamp(
+                authority: .providerObserved,
+                freshness: .current,
+                observedAt: .known(now)
+            )
+            let discoveredProviderIDs = inventory.compactMap {
+                $0.worker.providerSessionID.value
+            }
+            providerInventory = inventory.map { item in
+                let shellCorrelation = item.worker.providerSessionID.value.map {
+                    shellCorrelationForProvider(
+                        $0,
+                        providerSessionIDs: discoveredProviderIDs,
+                        providerObservation: providerInventoryObservation
+                    )
+                }
+                return fleetWorker(
+                    worker: item.worker,
+                    authority: item.authority,
+                    shellCorrelation: shellCorrelation
+                )
             }.sorted {
                 let lhs = $0.worker.runtimeReconciliation?.providerSourceUpdatedAt.value
                     ?? .distantPast
@@ -4676,7 +4998,15 @@ final class AppModel: ObservableObject {
                         }
                     }
                     detailedPage.append(
-                        fleetWorker(worker: worker, authority: observed.authority)
+                        fleetWorker(
+                            worker: worker,
+                            authority: observed.authority,
+                            shellCorrelation: shellCorrelationForProvider(
+                                exactID,
+                                providerSessionIDs: discoveredProviderIDs,
+                                providerObservation: providerInventoryObservation
+                            )
+                        )
                     )
                 } catch {
                     detailedPage.append(
@@ -6559,12 +6889,18 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         entry: SessionEntry,
         runtimeAttemptID: RuntimeAttemptID = RuntimeAttemptID(),
         priorEvents: [SessionPresentationEvent] = [],
+        recordShellTelemetry: ((ShellTelemetryEvent) -> Void)? = nil,
         recordEventRevision: ((SessionPresentationEvent) -> Void)? = nil
     ) {
         self.id = descriptor.id
         self.runtimeAttemptID = runtimeAttemptID
         self.descriptor = descriptor
-        self.controller = TerminalSessionController(descriptor: descriptor, useDetachedSessions: useDetachedSessions)
+        self.controller = TerminalSessionController(
+            descriptor: descriptor,
+            runtimeAttemptID: runtimeAttemptID,
+            useDetachedSessions: useDetachedSessions
+        )
+        self.controller.onShellTelemetryEvent = recordShellTelemetry
         self.recordEventRevision = recordEventRevision
         let opening = SessionPresentation.openingEvent(entry)
         self.presentationEvents = priorEvents + [opening]
