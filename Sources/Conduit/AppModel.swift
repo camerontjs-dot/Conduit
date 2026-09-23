@@ -7685,6 +7685,8 @@ final class TerminalRuntime: ObservableObject, Identifiable {
                         threadID: id
                     )
             }
+        case .turnStarted:
+            break
         case .upsertOutput(let text, let state):
             upsertAdapterOutput(text: text, state: state)
         case .requestApproval(let approval):

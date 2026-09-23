@@ -99,6 +99,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Codex App Server turn interruption now retains the provider's exact active
+  turn ID and sends it with the thread ID. Codex 0.154.0 rejects cancellation
+  without both identities; a thread ID alone is not a turn-cancel request.
+
 - Shell-to-OpenCode correlation now requires complete process-tree coverage
   before returning `exact`. A sole observed session under partial coverage
   remains a candidate, ambiguous coverage remains ambiguous, and unavailable

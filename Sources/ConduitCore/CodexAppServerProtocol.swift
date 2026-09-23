@@ -185,6 +185,7 @@ public struct CodexAppServerApproval: Equatable, Identifiable, Sendable {
 
 public enum CodexAppServerEffect: Equatable, Sendable {
     case threadStarted(id: String)
+    case turnStarted(id: String)
     case upsertOutput(text: String, state: AgentOutputState)
     case requestApproval(CodexAppServerApproval)
     case turnCompleted(status: String)
@@ -194,6 +195,7 @@ public enum CodexAppServerEffect: Equatable, Sendable {
 /// Accumulates app-server notifications into Conversation-shaped effects.
 public struct CodexAppServerMapper: Equatable, Sendable {
     public var threadID: String?
+    public var activeTurnID: String?
     public var accumulatedText = ""
     public var turnActive = false
     public var lastTurnStatus: String?
@@ -234,6 +236,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     }
 
     public mutating func resetTurn() {
+        activeTurnID = nil
         accumulatedText = ""
         turnActive = false
         lastTurnStatus = nil
@@ -253,7 +256,10 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             return []
         case "turn/started":
             turnActive = true
-            return []
+            activeTurnID = params["turn"]?["id"]?.stringValue
+                ?? params["turnId"]?.stringValue
+            guard let activeTurnID else { return [] }
+            return [.turnStarted(id: activeTurnID)]
         case "item/agentMessage/delta":
             let delta = Self.deltaText(in: params)
             guard !delta.isEmpty else { return [] }
@@ -277,6 +283,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             return []
         case "turn/completed":
             turnActive = false
+            activeTurnID = nil
             let status = params["turn"]?["status"]?.stringValue
                 ?? params["status"]?.stringValue
                 ?? "completed"
@@ -422,11 +429,15 @@ public enum CodexAppServerRequests {
         ]
     }
 
-    public static func turnInterrupt(id: Int, threadID: String) -> [String: Any] {
+    public static func turnInterrupt(
+        id: Int,
+        threadID: String,
+        turnID: String
+    ) -> [String: Any] {
         [
             "method": "turn/interrupt",
             "id": id,
-            "params": ["threadId": threadID]
+            "params": ["threadId": threadID, "turnId": turnID]
         ]
     }
 

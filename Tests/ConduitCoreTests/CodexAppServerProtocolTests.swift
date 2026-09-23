@@ -64,6 +64,53 @@ final class CodexAppServerProtocolTests: XCTestCase {
         XCTAssertEqual(mapper.lastTurnStatus, "completed")
     }
 
+    func testMapperCapturesAndClearsExactActiveTurnIdentity() {
+        var mapper = CodexAppServerMapper()
+        let started = mapper.apply(
+            .notification(
+                method: "turn/started",
+                params: .object([
+                    "threadId": .string("thr_1"),
+                    "turn": .object([
+                        "id": .string("turn_1"),
+                        "status": .string("inProgress"),
+                    ]),
+                ])
+            )
+        )
+        XCTAssertEqual(started, [.turnStarted(id: "turn_1")])
+        XCTAssertEqual(mapper.activeTurnID, "turn_1")
+        XCTAssertTrue(mapper.turnActive)
+
+        _ = mapper.apply(
+            .notification(
+                method: "turn/completed",
+                params: .object([
+                    "turn": .object([
+                        "id": .string("turn_1"),
+                        "status": .string("interrupted"),
+                    ]),
+                ])
+            )
+        )
+        XCTAssertNil(mapper.activeTurnID)
+        XCTAssertFalse(mapper.turnActive)
+        XCTAssertEqual(mapper.lastTurnStatus, "interrupted")
+    }
+
+    func testTurnInterruptRequestCarriesExactThreadAndTurnIDs() {
+        let request = CodexAppServerRequests.turnInterrupt(
+            id: 7,
+            threadID: "thr_exact",
+            turnID: "turn_exact"
+        )
+        XCTAssertEqual(request["method"] as? String, "turn/interrupt")
+        let params = request["params"] as? [String: String]
+        XCTAssertEqual(params?["threadId"], "thr_exact")
+        XCTAssertEqual(params?["turnId"], "turn_exact")
+        XCTAssertEqual(params?.count, 2)
+    }
+
     func testMapperThreadStartResponseAndApproval() {
         var mapper = CodexAppServerMapper()
         let started = mapper.apply(
