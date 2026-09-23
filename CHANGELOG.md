@@ -27,6 +27,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- `conduit_observe_worker` now reconciles OpenCode's persisted latest-turn/tool
+  state with a separately stamped, exact-binding Slice 6A process observation.
+  It preserves persisted tool-part identity/status/timestamps, represents stale
+  running state and owned residuals explicitly, and keeps unavailable
+  authorities and turn-to-process correlation UNKNOWN. Observation performs no
+  provider-history rewrite or process cleanup; completion remains separate
+  from objective acceptance (#52, #53).
+
 - Provider-session control is now an explicit authority transition above read-only
   discovery. Conduit may recognize one writer/controller for an existing
   provider session without creating, resuming, prompting, replacing, or
