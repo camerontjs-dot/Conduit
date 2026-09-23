@@ -1,0 +1,22 @@
+{
+  "receiptVersion": 1,
+  "operation": "conduit_list_adapters",
+  "authority": "Installed MainFrame Conduit MCP connector",
+  "mutating": false,
+  "observations": [
+    {
+      "observedAt": "2026-09-23T20:41:38Z",
+      "result": "unavailable",
+      "httpStatus": 404
+    },
+    {
+      "observedAt": "2026-09-23T21:12:18Z",
+      "result": "unavailable",
+      "httpStatus": 429
+    }
+  ],
+  "latest": {
+    "result": "unavailable",
+    "limitation": "The installed connector did not return an adapter catalog. Static source declarations do not establish installed adapter health or availability."
+  }
+}

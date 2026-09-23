@@ -1,0 +1,317 @@
+{
+  "inventory": {
+    "conduitApp": {
+      "installed": true,
+      "version": "0.2.0"
+    },
+    "observedAt": "2026-09-23T21:50:21Z",
+    "privacy": "Authentication commands discard account details and record only a sanitized state; no credential values or existing session content are recorded.",
+    "readiness": {
+      "antigravityAuth": "not inspected",
+      "claudeAuth": "not_authenticated",
+      "codexAuth": "authenticated_status_reported",
+      "geminiApiKeyPresent": false,
+      "grokAuth": "not inspected",
+      "opencodeProviderEntries": "entries_present_unvalidated"
+    },
+    "runtimes": [
+      {
+        "binary": "opencode",
+        "installed": true,
+        "interface": "OpenCode HTTP + SSE",
+        "interfaceAuthority": "opencode serve --help on the observed installation",
+        "interfaceAvailable": true,
+        "runtime": "opencode",
+        "version": "1.18.30"
+      },
+      {
+        "binary": "codex",
+        "installed": true,
+        "interface": "Codex App Server stdio",
+        "interfaceAuthority": "codex app-server --help on the observed installation",
+        "interfaceAvailable": true,
+        "runtime": "codex_app_server",
+        "version": "codex-cli 0.154.0"
+      },
+      {
+        "binary": "claude",
+        "installed": true,
+        "interface": "Claude Code stream-json CLI",
+        "interfaceAuthority": "claude --help on the observed installation",
+        "interfaceAvailable": true,
+        "runtime": "claude",
+        "version": "2.1.235 (Claude Code)"
+      },
+      {
+        "binary": "grok",
+        "installed": true,
+        "interface": "Grok ACP stdio",
+        "interfaceAuthority": "grok agent --help on the observed installation",
+        "interfaceAvailable": true,
+        "runtime": "grok_acp",
+        "version": "grok 1.0.41 (4220f3b224a6) [stable]"
+      },
+      {
+        "binary": "gemini",
+        "installed": true,
+        "interface": "Gemini ACP stdio",
+        "interfaceAuthority": "gemini --help on the observed installation",
+        "interfaceAvailable": true,
+        "runtime": "gemini_acp",
+        "version": "0.46.0"
+      },
+      {
+        "binary": "agy",
+        "installed": true,
+        "interface": "Antigravity stream-json CLI",
+        "interfaceAuthority": "agy --help on the observed installation",
+        "interfaceAvailable": true,
+        "runtime": "antigravity",
+        "version": "1.2.9"
+      },
+      {
+        "binary": "zsh",
+        "installed": true,
+        "interface": "Shell fallback PTY / optional tmux",
+        "interfaceAuthority": "zsh --version on the observed installation",
+        "interfaceAvailable": true,
+        "runtime": "shell",
+        "version": "zsh 5.9 (arm64-apple-darwin26.0)"
+      }
+    ],
+    "supportingTools": {
+      "tmux": {
+        "installed": true,
+        "version": "tmux 3.6b"
+      }
+    }
+  },
+  "observedAt": "2026-09-23T21:50:38Z",
+  "probeReceipts": [
+    {
+      "actions": [
+        {
+          "action": "health",
+          "result": "observed"
+        },
+        {
+          "action": "event-stream-connect",
+          "result": "opened"
+        },
+        {
+          "action": "session-create",
+          "result": "observed"
+        },
+        {
+          "action": "session-list-discovery",
+          "result": "observed"
+        },
+        {
+          "action": "exact-session-read",
+          "result": "observed"
+        },
+        {
+          "action": "observer-release-host-liveness",
+          "result": "host_continued"
+        },
+        {
+          "action": "sse-provider-events",
+          "eventTypes": [
+            "server.connected",
+            "session.created"
+          ],
+          "result": "observed"
+        },
+        {
+          "action": "host-stop",
+          "result": "process_exited"
+        },
+        {
+          "action": "session-read-after-host-restart",
+          "result": "observed"
+        },
+        {
+          "action": "owned-session-delete",
+          "deleteOperation": 200,
+          "result": "deleted"
+        }
+      ],
+      "cleanup": {
+        "eventTypes": [
+          "server.connected",
+          "session.created"
+        ],
+        "ownedProcessIdsExited": true,
+        "providerSessionDeletedAndVerified": true,
+        "qualificationProcessesExited": true,
+        "sessionId": "ses_f2fc068f7ffehKw1WFUdIbrKKl",
+        "temporaryHomeRemoved": true
+      },
+      "identity": {
+        "firstHostProcessTree": [
+          {
+            "command": "opencode",
+            "parentPid": 41870,
+            "pid": 41906
+          }
+        ],
+        "secondHostProcessTree": [
+          {
+            "command": "opencode",
+            "parentPid": 41870,
+            "pid": 41932
+          }
+        ],
+        "sessionId": "ses_f2fc068f7ffehKw1WFUdIbrKKl"
+      },
+      "interface": "OpenCode serve HTTP + SSE",
+      "observedAt": "2026-09-23T21:50:22Z",
+      "procedure": "S10-OPENCODE-OWNED-SESSION-001",
+      "provider": "opencode"
+    },
+    {
+      "actions": [
+        {
+          "action": "initialize",
+          "result": "response"
+        },
+        {
+          "action": "thread/start",
+          "result": "observed",
+          "threadIdReturned": true
+        },
+        {
+          "action": "stdio-client-release",
+          "result": "provider_process_exited"
+        },
+        {
+          "action": "thread/resume",
+          "reason": "{\"code\": -32600, \"message\": \"no rollout found for thread id 01a0d03f-c339-7e72-afce-65a83ecf48dd\"}",
+          "result": "refused",
+          "threadIdMatched": "01a0d03f-c339-7e72-afce-65a83ecf48dd"
+        }
+      ],
+      "cleanup": {
+        "ownedProcessIdsExited": true,
+        "qualificationProcessesExited": true,
+        "temporaryHomeRemoved": true
+      },
+      "identity": {
+        "hostProcessTree": [
+          {
+            "command": "codex",
+            "parentPid": 41870,
+            "pid": 41937
+          },
+          {
+            "command": "git",
+            "parentPid": 41937,
+            "pid": 41938
+          },
+          {
+            "command": "git",
+            "parentPid": 41938,
+            "pid": 41939
+          },
+          {
+            "command": "git-remote-https",
+            "parentPid": 41939,
+            "pid": 41940
+          }
+        ],
+        "threadId": "01a0d03f-c339-7e72-afce-65a83ecf48dd"
+      },
+      "interface": "codex app-server stdio JSON-RPC",
+      "observedAt": "2026-09-23T21:50:34Z",
+      "procedure": "S10-CODEX-OWNED-THREAD-001",
+      "provider": "codex_app_server"
+    },
+    {
+      "actions": [
+        {
+          "action": "acp-initialize",
+          "protocolVersion": 1,
+          "result": "observed"
+        },
+        {
+          "action": "stdio-client-release",
+          "result": "provider_process_exited_on_eof"
+        }
+      ],
+      "cleanup": {
+        "ownedProcessIdsExited": true,
+        "qualificationProcessExited": true,
+        "temporaryHomeRemoved": true
+      },
+      "identity": {
+        "hostProcessTree": [
+          {
+            "command": "grok",
+            "parentPid": 41870,
+            "pid": 41990
+          }
+        ]
+      },
+      "interface": "Grok ACP stdio",
+      "observedAt": "2026-09-23T21:50:35Z",
+      "procedure": "S10-GROK-ACP-INITIALIZE-001",
+      "provider": "grok_acp"
+    },
+    {
+      "actions": [
+        {
+          "action": "tmux-session-discovery",
+          "result": "observed"
+        },
+        {
+          "action": "supervisor-client-attach",
+          "result": "observed"
+        },
+        {
+          "action": "release-supervision",
+          "result": "detached_session_continued"
+        },
+        {
+          "action": "detached-command-liveness",
+          "result": "observed"
+        },
+        {
+          "action": "pty-byte-stream",
+          "result": "observed"
+        },
+        {
+          "action": "owned-host-stop",
+          "result": "processes_exited"
+        }
+      ],
+      "cleanup": {
+        "ownedPidsExited": true,
+        "supervisorClientExited": true,
+        "temporaryHomeRemoved": true,
+        "tmuxServerExited": true,
+        "tmuxSocketRemoved": true,
+        "tmuxSocketRemovedBeforeTemporaryDirectoryRemoval": true
+      },
+      "identity": {
+        "panePid": 42013,
+        "processTree": [
+          {
+            "command": "sleep",
+            "parentPid": 42012,
+            "pid": 42013
+          }
+        ],
+        "supervisorClientPid": 42019,
+        "supervisorClientTty": "/dev/ttys001",
+        "tmuxServerPid": 42012,
+        "tmuxSession": "conduit-s10-2538b27e"
+      },
+      "interface": "zsh process under an isolated tmux server",
+      "observedAt": "2026-09-23T21:50:37Z",
+      "procedure": "S10-SHELL-TMUX-OWNED-SESSION-001",
+      "provider": "shell"
+    }
+  ],
+  "receiptVersion": 1,
+  "scope": "qualification-owned temporary homes/sessions/processes only; no prompts, unrelated sessions, or account authentication"
+}

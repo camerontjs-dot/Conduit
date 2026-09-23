@@ -1,0 +1,822 @@
+{
+  "schemaVersion": "1.0.0",
+  "qualification": {
+    "repository": "camerontjs-dot/Conduit",
+    "issue": 53,
+    "sourceMain": "06efd2b4029c1d13c7a16cbc7e92b38bcb89a7e4",
+    "sourceTree": "cabf1c73731a7777a205ed10b685cefc6d5ece9a",
+    "observedAt": "2026-09-23T21:50:38Z",
+    "claimBoundary": "This matrix records only observations for the listed installed runtime versions and exercised interfaces. It does not claim universal interoperability, completed-turn semantics, or Conduit adapter reachability.",
+    "procedure": {
+      "id": "S10-PROVIDER-CONFORMANCE-1",
+      "script": "scripts/provider-conformance.py",
+      "scriptSha256": "3296361ba016d55526b499925ed713e2be5e5dccaa0e6af56baeaea6a4a17f77"
+    }
+  },
+  "conduitAdapters": {
+    "installedAppVersion": "0.2.0",
+    "liveCatalog": {
+      "result": "unavailable",
+      "authority": "Read-only installed MainFrame Conduit MCP connector call to conduit_list_adapters",
+      "observedAt": "2026-09-23T21:12:18Z",
+      "limitation": "Two live catalog attempts returned HTTP 404 and HTTP 429. This does not establish that source-declared adapters are absent."
+    },
+    "sourceAuthority": "Exact source main 06efd2b4029c1d13c7a16cbc7e92b38bcb89a7e4, StructuredAdapterCatalog.swift and D-040.",
+    "sourceDeclared": [
+      "OpenCode HTTP + SSE",
+      "Codex App Server stdio",
+      "Claude Code stream-json CLI",
+      "Grok ACP stdio",
+      "Gemini ACP stdio",
+      "Antigravity stream-json CLI",
+      "Shell / SwiftTerm PTY"
+    ]
+  },
+  "providers": [
+    {
+      "runtime": "opencode",
+      "installedVersion": "1.18.30",
+      "interface": "OpenCode HTTP + SSE",
+      "adapterStatus": "Source-declared; installed Conduit adapter catalog unavailable, so adapter health is unverified.",
+      "authReadiness": "Provider auth entries are present, but no model reachability call was made.",
+      "authority": "Direct OpenCode serve HTTP endpoints /session and /event, plus the local OS process table; no Conduit adapter call.",
+      "observedAt": "2026-09-23T21:50:22Z",
+      "freshness": "point observation for 1.18.30 at 2026-09-23T21:50:22Z; no later refresh",
+      "procedure": "S10-OPENCODE-OWNED-SESSION-001",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0",
+      "identities": {
+        "firstHostProcessTree": [
+          {
+            "command": "opencode",
+            "parentPid": 41870,
+            "pid": 41906
+          }
+        ],
+        "secondHostProcessTree": [
+          {
+            "command": "opencode",
+            "parentPid": 41870,
+            "pid": 41932
+          }
+        ],
+        "sessionId": "ses_f2fc068f7ffehKw1WFUdIbrKKl"
+      },
+      "capabilities": [
+        {
+          "capability": "external_discovery",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/3",
+          "limitation": "The list contained only the qualification-created session; no operator session list was inspected.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/identity/sessionId"
+        },
+        {
+          "capability": "resumability",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/8",
+          "limitation": "An empty provider session survived a host restart by exact ID; turn history continuity was not tested.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/identity/sessionId"
+        },
+        {
+          "capability": "adoption_connectability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/4",
+          "limitation": "Exact-ID reads and SSE attachment were observed. Conduit task adoption and writer authority were not exercised.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/identity/sessionId"
+        },
+        {
+          "capability": "active_turn_cancellation",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0",
+          "limitation": "No provider turn was started; cancellation of an active turn remains untested."
+        },
+        {
+          "capability": "release_supervision_provider_continues",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/5",
+          "limitation": "Closing the SSE observer left the provider host healthy, but no active turn existed; continuation after Conduit lease release remains untested."
+        },
+        {
+          "capability": "provider_host_stop",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/7",
+          "limitation": "This is direct process termination of the qualification-owned host, not task completion."
+        },
+        {
+          "capability": "permission_approval_awareness",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0",
+          "limitation": "No tool call or permission request was generated."
+        },
+        {
+          "capability": "event_streaming",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/6",
+          "limitation": "Observed server.connected and session.created only; no turn lifecycle events were generated."
+        },
+        {
+          "capability": "process_tree_visibility",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/identity/firstHostProcessTree",
+          "limitation": "The OS tree identifies the host process; it does not map provider sessions to process subtrees."
+        },
+        {
+          "capability": "diff_artifact_telemetry",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0",
+          "limitation": "No provider turn or file edit was created."
+        },
+        {
+          "capability": "exact_session_thread_identity",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/4",
+          "limitation": "The ses_ identity was returned, listed, read, and read again after host restart.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/identity/sessionId"
+        },
+        {
+          "capability": "current_turn_state_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0",
+          "limitation": "No active or completed provider turn was created."
+        },
+        {
+          "capability": "writer_controller_collision_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0",
+          "limitation": "No concurrent controller or writer was attached."
+        }
+      ]
+    },
+    {
+      "runtime": "codex_app_server",
+      "installedVersion": "codex-cli 0.154.0",
+      "interface": "Codex App Server stdio",
+      "adapterStatus": "Source-declared; installed Conduit adapter catalog unavailable, so adapter health is unverified.",
+      "authReadiness": "codex login status reported authenticated; the qualification probe used an isolated temporary CODEX_HOME without account credentials.",
+      "authority": "Direct codex app-server stdio JSON-RPC and the local OS process table; probe used a temporary CODEX_HOME and no account credentials.",
+      "observedAt": "2026-09-23T21:50:34Z",
+      "freshness": "point observation for codex-cli 0.154.0 at 2026-09-23T21:50:34Z; no later refresh",
+      "procedure": "S10-CODEX-OWNED-THREAD-001",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+      "identities": {
+        "hostProcessTree": [
+          {
+            "command": "codex",
+            "parentPid": 41870,
+            "pid": 41937
+          },
+          {
+            "command": "git",
+            "parentPid": 41937,
+            "pid": 41938
+          },
+          {
+            "command": "git",
+            "parentPid": 41938,
+            "pid": 41939
+          },
+          {
+            "command": "git-remote-https",
+            "parentPid": 41939,
+            "pid": 41940
+          }
+        ],
+        "threadId": "01a0d03f-c339-7e72-afce-65a83ecf48dd"
+      },
+      "capabilities": [
+        {
+          "capability": "external_discovery",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+          "limitation": "No thread/list call was made because existing operator thread metadata was out of scope."
+        },
+        {
+          "capability": "resumability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1/actions/3",
+          "limitation": "thread/resume refused the newly-started empty thread with no rollout found. This does not test a thread with a completed turn."
+        },
+        {
+          "capability": "adoption_connectability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1/actions/3",
+          "limitation": "The empty thread was not resumable; Conduit adoption and writer authority were not exercised."
+        },
+        {
+          "capability": "active_turn_cancellation",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+          "limitation": "No turn was started."
+        },
+        {
+          "capability": "release_supervision_provider_continues",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1/actions/2",
+          "limitation": "Closing stdio ended the app-server host, but no active turn existed; provider-task continuation after supervision release remains untested."
+        },
+        {
+          "capability": "provider_host_stop",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1/actions/2",
+          "limitation": "EOF ended the qualification-owned app-server process; its thread identity did not imply a live host."
+        },
+        {
+          "capability": "permission_approval_awareness",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+          "limitation": "No tool call or approval request was generated."
+        },
+        {
+          "capability": "event_streaming",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+          "limitation": "Initialization and thread responses were observed, but no turn event stream was exercised."
+        },
+        {
+          "capability": "process_tree_visibility",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1/identity/hostProcessTree",
+          "limitation": "The OS observed the Codex host and git child processes; no provider-turn process lineage was tested."
+        },
+        {
+          "capability": "diff_artifact_telemetry",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+          "limitation": "No turn or file edit was created."
+        },
+        {
+          "capability": "exact_session_thread_identity",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1/actions/1",
+          "limitation": "thread/start returned this exact UUID; thread/resume was called with the same UUID.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1/identity/threadId"
+        },
+        {
+          "capability": "current_turn_state_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+          "limitation": "No provider turn was active."
+        },
+        {
+          "capability": "writer_controller_collision_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/1",
+          "limitation": "No second writer attempted to resume the qualification thread."
+        }
+      ]
+    },
+    {
+      "runtime": "grok_acp",
+      "installedVersion": "grok 1.0.41 (4220f3b224a6) [stable]",
+      "interface": "Grok ACP stdio",
+      "adapterStatus": "Source-declared; installed Conduit adapter catalog unavailable, so adapter health is unverified.",
+      "authReadiness": "Authentication was not inspected; isolated ACP initialize returned protocolVersion 1.",
+      "authority": "Direct Grok ACP stdio initialize exchange and local OS process table; no provider prompt or account authentication.",
+      "observedAt": "2026-09-23T21:50:35Z",
+      "freshness": "point observation for grok 1.0.41 (4220f3b224a6) [stable] at 2026-09-23T21:50:35Z; no later refresh",
+      "procedure": "S10-GROK-ACP-INITIALIZE-001",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+      "identities": {
+        "hostProcessTree": [
+          {
+            "command": "grok",
+            "parentPid": 41870,
+            "pid": 41990
+          }
+        ]
+      },
+      "capabilities": [
+        {
+          "capability": "external_discovery",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "resumability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "adoption_connectability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "active_turn_cancellation",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "release_supervision_provider_continues",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2/actions/1",
+          "limitation": "ACP initialization had no session or turn; EOF ended the qualification process, but active-task continuation after release remains untested."
+        },
+        {
+          "capability": "provider_host_stop",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2/actions/1",
+          "limitation": "The qualification-owned Grok ACP process exited on stdio EOF and cleanup verified it was gone."
+        },
+        {
+          "capability": "permission_approval_awareness",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "event_streaming",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "process_tree_visibility",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2/identity/hostProcessTree",
+          "limitation": "The ACP host process was visible in the OS process table; no turn descendants were created."
+        },
+        {
+          "capability": "diff_artifact_telemetry",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "exact_session_thread_identity",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "current_turn_state_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        },
+        {
+          "capability": "writer_controller_collision_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/2",
+          "limitation": "ACP initialize succeeded, but no session or turn was created."
+        }
+      ]
+    },
+    {
+      "runtime": "shell",
+      "installedVersion": "zsh 5.9 (arm64-apple-darwin26.0)",
+      "interface": "Shell fallback PTY / optional tmux",
+      "adapterStatus": "Source-declared Shell PTY fallback; live Conduit adapter catalog unavailable.",
+      "authReadiness": "Not applicable to Shell fallback.",
+      "authority": "Qualification-owned zsh process under a private tmux socket; tmux discovery/capture/stop and OS process observations.",
+      "observedAt": "2026-09-23T21:50:37Z",
+      "freshness": "point observation for zsh 5.9 (arm64-apple-darwin26.0) at 2026-09-23T21:50:37Z; no later refresh",
+      "procedure": "S10-SHELL-TMUX-OWNED-SESSION-001",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+      "identities": {
+        "panePid": 42013,
+        "processTree": [
+          {
+            "command": "sleep",
+            "parentPid": 42012,
+            "pid": 42013
+          }
+        ],
+        "supervisorClientPid": 42019,
+        "supervisorClientTty": "/dev/ttys001",
+        "tmuxServerPid": 42012,
+        "tmuxSession": "conduit-s10-2538b27e"
+      },
+      "capabilities": [
+        {
+          "capability": "external_discovery",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/actions/0",
+          "limitation": "tmux listed only the qualification-owned session on a private socket.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/identity/tmuxSession"
+        },
+        {
+          "capability": "resumability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+          "limitation": "A qualification client attached to the exact tmux session, but reattachment after release or provider-host restart was not tested."
+        },
+        {
+          "capability": "adoption_connectability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+          "limitation": "A qualification client attached to the owned tmux session; Conduit task adoption and transfer of writer/controller authority were not tested.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/identity/tmuxSession"
+        },
+        {
+          "capability": "active_turn_cancellation",
+          "result": "unsupported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/actions/5",
+          "limitation": "Shell has no provider turn to cancel. The qualification process was stopped at the session level; that is process control, not provider-turn cancellation."
+        },
+        {
+          "capability": "release_supervision_provider_continues",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/actions/2",
+          "limitation": "An attached tmux client was explicitly detached; the exact session remained listed and its qualification command process stayed alive."
+        },
+        {
+          "capability": "provider_host_stop",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/actions/5",
+          "limitation": "The qualification-owned tmux session was killed and the process was confirmed exited."
+        },
+        {
+          "capability": "permission_approval_awareness",
+          "result": "unsupported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+          "limitation": "The tested Shell interface is raw PTY I/O and exposes no provider permission-request protocol."
+        },
+        {
+          "capability": "event_streaming",
+          "result": "unsupported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/actions/4",
+          "limitation": "PTY output bytes were observed, but Shell exposes no typed provider lifecycle event stream."
+        },
+        {
+          "capability": "process_tree_visibility",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/identity/processTree",
+          "limitation": "The qualification-owned pane process and parent PID were observed; no provider worker tree exists."
+        },
+        {
+          "capability": "diff_artifact_telemetry",
+          "result": "unsupported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+          "limitation": "Shell emits terminal output, not provider-native diff or artifact telemetry."
+        },
+        {
+          "capability": "exact_session_thread_identity",
+          "result": "supported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+          "limitation": "The exact tmux session name and pane PID were recorded; these are Shell execution identities, not provider thread IDs.",
+          "identityRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/identity/tmuxSession"
+        },
+        {
+          "capability": "current_turn_state_visibility",
+          "result": "unsupported",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+          "limitation": "Shell exposes command/process state, not an agent provider turn state."
+        },
+        {
+          "capability": "writer_controller_collision_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3",
+          "limitation": "No concurrent tmux client or writer-collision operation was exercised."
+        }
+      ]
+    },
+    {
+      "runtime": "claude",
+      "installedVersion": "2.1.235 (Claude Code)",
+      "interface": "Claude Code stream-json CLI",
+      "adapterStatus": "Source-declared; installed Conduit adapter catalog unavailable, so adapter health is unverified.",
+      "authReadiness": "claude auth status reported not_authenticated.",
+      "authority": "Installed CLI help plus sanitized readiness signal; no provider session was started. Claude auth status returned loggedIn=false; no provider session or turn was started.",
+      "observedAt": "2026-09-23T21:50:21Z",
+      "freshness": "inventory observation for 2.1.235 (Claude Code) at 2026-09-23T21:50:21Z; no runtime lifecycle probe",
+      "procedure": "S10-INVENTORY-HELP-001",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/2",
+      "limitations": [
+        "Claude auth status returned loggedIn=false; no provider session or turn was started."
+      ],
+      "capabilities": [
+        {
+          "capability": "external_discovery",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "resumability",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "adoption_connectability",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "active_turn_cancellation",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "release_supervision_provider_continues",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "provider_host_stop",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "No qualification-owned provider host or session was started, so local stop and process-tree behavior remain untested even though the native session prerequisite was unavailable."
+        },
+        {
+          "capability": "permission_approval_awareness",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "event_streaming",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "process_tree_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "No qualification-owned provider host or session was started, so local stop and process-tree behavior remain untested even though the native session prerequisite was unavailable."
+        },
+        {
+          "capability": "diff_artifact_telemetry",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "exact_session_thread_identity",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "current_turn_state_visibility",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        },
+        {
+          "capability": "writer_controller_collision_visibility",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/claudeAuth",
+          "limitation": "Claude auth status returned loggedIn=false; no provider session or turn was started."
+        }
+      ]
+    },
+    {
+      "runtime": "gemini_acp",
+      "installedVersion": "0.46.0",
+      "interface": "Gemini ACP stdio",
+      "adapterStatus": "Source-declared; installed Conduit adapter catalog unavailable, so adapter health is unverified.",
+      "authReadiness": "Native Gemini ACP is unavailable without the required API key.",
+      "authority": "Installed CLI help plus sanitized readiness signal; no provider session was started. GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted.",
+      "observedAt": "2026-09-23T21:50:21Z",
+      "freshness": "inventory observation for 0.46.0 at 2026-09-23T21:50:21Z; no runtime lifecycle probe",
+      "procedure": "S10-INVENTORY-HELP-001",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/4",
+      "limitations": [
+        "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+      ],
+      "capabilities": [
+        {
+          "capability": "external_discovery",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "resumability",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "adoption_connectability",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "active_turn_cancellation",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "release_supervision_provider_continues",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "provider_host_stop",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "No qualification-owned provider host or session was started, so local stop and process-tree behavior remain untested even though the native session prerequisite was unavailable."
+        },
+        {
+          "capability": "permission_approval_awareness",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "event_streaming",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "process_tree_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "No qualification-owned provider host or session was started, so local stop and process-tree behavior remain untested even though the native session prerequisite was unavailable."
+        },
+        {
+          "capability": "diff_artifact_telemetry",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "exact_session_thread_identity",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "current_turn_state_visibility",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        },
+        {
+          "capability": "writer_controller_collision_visibility",
+          "result": "unavailable",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+          "limitation": "GEMINI_API_KEY was absent; D-040 requires this key for Gemini ACP. No OAuth or authentication flow was attempted."
+        }
+      ]
+    },
+    {
+      "runtime": "antigravity",
+      "installedVersion": "1.2.9",
+      "interface": "Antigravity stream-json CLI",
+      "adapterStatus": "Source-declared; installed Conduit adapter catalog unavailable, so adapter health is unverified.",
+      "authReadiness": "Authentication was not inspected.",
+      "authority": "agy --help advertised stream-json and conversation options; no live turn or provider operation was invoked.",
+      "observedAt": "2026-09-23T21:50:21Z",
+      "freshness": "inventory observation for 1.2.9 at 2026-09-23T21:50:21Z; no runtime lifecycle probe",
+      "procedure": "S10-INVENTORY-HELP-001",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+      "limitations": [
+        "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+      ],
+      "capabilities": [
+        {
+          "capability": "external_discovery",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "resumability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "adoption_connectability",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "active_turn_cancellation",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "release_supervision_provider_continues",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "provider_host_stop",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "permission_approval_awareness",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "event_streaming",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "process_tree_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "diff_artifact_telemetry",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "exact_session_thread_identity",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "current_turn_state_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        },
+        {
+          "capability": "writer_controller_collision_visibility",
+          "result": "unknown",
+          "evidenceRef": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+          "limitation": "The CLI and stream-json interface are installed, but authentication readiness was not inspected and no provider session or turn was started."
+        }
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "id": "control-positive-opencode-sse",
+      "type": "positive_observation",
+      "provider": "opencode",
+      "capability": "event_streaming",
+      "result": "supported",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/6",
+      "limitation": "A direct provider SSE event was observed for the qualification-owned empty session."
+    },
+    {
+      "id": "control-unsupported-shell-events",
+      "type": "explicit_unsupported",
+      "provider": "shell",
+      "capability": "event_streaming",
+      "result": "unsupported",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/3/actions/4",
+      "limitation": "The qualification Shell PTY carried raw bytes but exposes no typed provider lifecycle event stream."
+    },
+    {
+      "id": "control-unavailable-gemini-acp",
+      "type": "unavailable_runtime",
+      "provider": "gemini_acp",
+      "capability": "active_turn_cancellation",
+      "result": "unavailable",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/readiness/geminiApiKeyPresent",
+      "limitation": "The Gemini binary is installed, but native ACP readiness is blocked by the missing API key."
+    },
+    {
+      "id": "control-unknown-antigravity-writer",
+      "type": "unknown_authority",
+      "provider": "antigravity",
+      "capability": "writer_controller_collision_visibility",
+      "result": "unknown",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/inventory/runtimes/5",
+      "limitation": "No authenticated session, controller identity, or collision evidence was available."
+    },
+    {
+      "id": "control-release-transport-semantics",
+      "type": "semantic_difference",
+      "provider": "opencode",
+      "capability": "release_supervision_provider_continues",
+      "result": "unknown",
+      "receipt": "docs/qualification/receipts/provider-conformance-probes-v2.json#/probeReceipts/0/actions/5",
+      "limitation": "Both observations used qualification-owned idle state; the differing transport consequences do not establish active-turn continuation.",
+      "comparison": {
+        "provider": "codex_app_server",
+        "capability": "release_supervision_provider_continues",
+        "result": "unknown",
+        "observation": "Closing Codex App Server stdio ended the provider host process."
+      },
+      "observation": "Closing OpenCode SSE stopped the observer while the provider host remained healthy."
+    }
+  ],
+  "hostedCI": {
+    "state": "not_run",
+    "executionEvidence": "No Slice 10 hosted run existed when this matrix was frozen. Predecessor Slice 9 PR #70 had a billing-blocked macOS job with zero candidate steps; that run is not Slice 10 execution evidence.",
+    "receipt": "https://github.com/camerontjs-dot/Conduit/actions/runs/35870756392"
+  }
+}

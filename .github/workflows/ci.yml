@@ -17,6 +17,10 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app
       - name: Selftest
         run: swift run conduit-selftest
+      - name: Provider conformance matrix
+        run: |
+          python3 Tests/test_provider_conformance.py
+          python3 scripts/provider-conformance.py validate --input docs/qualification/provider-conformance-v1.json
       - name: Test
         id: test
         shell: bash

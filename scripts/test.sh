@@ -16,6 +16,11 @@ XCODE_DEVELOPER="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 echo "==> conduit-selftest"
 swift run conduit-selftest
 
+echo
+echo "==> provider-conformance matrix"
+python3 Tests/test_provider_conformance.py
+python3 scripts/provider-conformance.py validate --input docs/qualification/provider-conformance-v1.json
+
 if [[ -d "$XCODE_DEVELOPER" ]]; then
     echo
     echo "==> swift test (DEVELOPER_DIR=$XCODE_DEVELOPER)"

@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/camerontjs-dot/Conduit/blob/main/docs/qualification/provider-conformance.schema.json",
+  "title": "Conduit provider capability conformance result",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "qualification",
+    "conduitAdapters",
+    "providers",
+    "controls",
+    "hostedCI"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "qualification": {
+      "type": "object",
+      "required": [
+        "repository",
+        "issue",
+        "sourceMain",
+        "sourceTree",
+        "observedAt",
+        "claimBoundary",
+        "procedure"
+      ],
+      "properties": {
+        "repository": {
+          "const": "camerontjs-dot/Conduit"
+        },
+        "issue": {
+          "const": 53
+        },
+        "sourceMain": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceTree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "claimBoundary": {
+          "type": "string",
+          "minLength": 20
+        },
+        "procedure": {
+          "type": "object",
+          "required": ["id", "script", "scriptSha256"],
+          "properties": {
+            "id": {
+              "const": "S10-PROVIDER-CONFORMANCE-1"
+            },
+            "script": {
+              "const": "scripts/provider-conformance.py"
+            },
+            "scriptSha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "conduitAdapters": {
+      "type": "object",
+      "required": ["installedAppVersion", "liveCatalog", "sourceAuthority", "sourceDeclared"],
+      "properties": {
+        "installedAppVersion": {
+          "type": "string"
+        },
+        "liveCatalog": {
+          "type": "object",
+          "required": ["result", "authority", "observedAt", "limitation"],
+          "properties": {
+            "result": {
+              "enum": ["available", "unavailable", "unknown"]
+            },
+            "authority": {
+              "type": "string"
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "limitation": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sourceAuthority": {
+          "type": "string"
+        },
+        "sourceDeclared": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "providers": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "$ref": "#/$defs/provider"
+      }
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "provider", "capability", "result", "receipt"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "positive_observation",
+              "explicit_unsupported",
+              "unavailable_runtime",
+              "unknown_authority",
+              "semantic_difference"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "result": {
+            "enum": ["supported", "unsupported", "unknown", "unavailable"]
+          },
+          "receipt": {
+            "type": "string"
+          },
+          "limitation": {
+            "type": "string"
+          },
+          "observation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "comparison": {
+            "type": "object",
+            "required": ["provider", "capability", "result", "observation"],
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "capability": {
+                "type": "string"
+              },
+              "result": {
+                "enum": ["supported", "unsupported", "unknown", "unavailable"]
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "result": {
+                  "enum": ["unknown", "unavailable"]
+                }
+              },
+              "required": ["result"]
+            },
+            "then": {
+              "required": ["limitation"]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "semantic_difference"
+                }
+              },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["comparison", "observation"]
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "hostedCI": {
+      "type": "object",
+      "required": ["state", "executionEvidence", "receipt"],
+      "properties": {
+        "state": {
+          "enum": ["green", "failed", "blocked", "not_run", "unknown"]
+        },
+        "executionEvidence": {
+          "type": "string"
+        },
+        "receipt": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "required": [
+        "runtime",
+        "installedVersion",
+        "interface",
+        "adapterStatus",
+        "authReadiness",
+        "authority",
+        "observedAt",
+        "freshness",
+        "procedure",
+        "receipt",
+        "capabilities"
+      ],
+      "properties": {
+        "runtime": {
+          "enum": [
+            "opencode",
+            "codex_app_server",
+            "claude",
+            "grok_acp",
+            "gemini_acp",
+            "antigravity",
+            "shell"
+          ]
+        },
+        "installedVersion": {
+          "type": "string"
+        },
+        "interface": {
+          "type": "string"
+        },
+        "adapterStatus": {
+          "type": "string"
+        },
+        "authReadiness": {
+          "type": "string"
+        },
+        "authority": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "freshness": {
+          "type": "string"
+        },
+        "procedure": {
+          "type": "string"
+        },
+        "receipt": {
+          "type": "string"
+        },
+        "identities": {
+          "type": "object"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 13,
+          "maxItems": 13,
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "capability": {
+      "type": "object",
+      "required": [
+        "capability",
+        "result",
+        "evidenceRef"
+      ],
+      "properties": {
+        "capability": {
+          "enum": [
+            "external_discovery",
+            "resumability",
+            "adoption_connectability",
+            "active_turn_cancellation",
+            "release_supervision_provider_continues",
+            "provider_host_stop",
+            "permission_approval_awareness",
+            "event_streaming",
+            "process_tree_visibility",
+            "diff_artifact_telemetry",
+            "exact_session_thread_identity",
+            "current_turn_state_visibility",
+            "writer_controller_collision_visibility"
+          ]
+        },
+        "result": {
+          "enum": ["supported", "unsupported", "unknown", "unavailable"]
+        },
+        "evidenceRef": {
+          "type": "string"
+        },
+        "identityRef": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "object"
+        },
+        "limitation": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "enum": ["unknown", "unavailable"]
+              }
+            },
+            "required": ["result"]
+          },
+          "then": {
+            "required": ["limitation"]
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
