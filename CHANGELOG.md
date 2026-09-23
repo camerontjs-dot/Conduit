@@ -69,6 +69,18 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   lifecycle preflight can describe unsupported consequences without mapping
   them to a different operation (#53).
 
+- Conduit-managed zsh Shell runtimes now record content-free execution and
+  command lifecycle events, cwd, shell PID/PGID, typed `shell_stdin` delivery,
+  and independent read-only process-tree observations in the existing task
+  event log. PTY quietness, provider liveness, task completion, and objective
+  acceptance remain separate or UNKNOWN (#51, #53).
+
+- `conduit_fleet_snapshot` now adds a read-only Shell correlation to an
+  OpenCode provider row when an owned live process exposes an exact session
+  argument and a current persistence inventory contains that identity once.
+  The join does not bind the session to a Conduit task, adopt it, claim a
+  writer, change capacity, or infer provider-host/turn liveness (#51, #53).
+
 - `conduit_process_tree` now exposes a read-only, identity-bound macOS process
   observation for a live task runtime. It records launcher and descendant PIDs,
   PGIDs, parent relationships at observation time, process start identity,
@@ -86,6 +98,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   do not carry task, lifecycle, verification, health, priority, or Git status.
 
 ### Fixed
+
+- Shell-to-OpenCode correlation now requires complete process-tree coverage
+  before returning `exact`. A sole observed session under partial coverage
+  remains a candidate, ambiguous coverage remains ambiguous, and unavailable
+  coverage returns UNKNOWN (#51, #53).
 
 - Session API liveness no longer depends on successful MainFrame bookmark
   restoration, project scanning, or informational startup probes. The loopback

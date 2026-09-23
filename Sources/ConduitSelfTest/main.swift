@@ -3528,6 +3528,187 @@ check(
         && unsupportedRelease.willStopProvider.state == .unknown
         && unsupportedRelease.unsupportedConsequences.value?.count == 1
 )
+let shellTaskSessionID = TaskSessionID(
+    rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000011")!
+)
+let shellRuntimeAttemptID = "00000000-0000-0000-0000-000000000012"
+let shellExecutionID = "00000000-0000-0000-0000-000000000013"
+let shellObservedAt = Date(timeIntervalSince1970: 1_799_956_800)
+let shellProcessStamp = SupervisionObservationStamp(
+    authority: .processObserved,
+    freshness: .current,
+    observedAt: .known(shellObservedAt)
+)
+let shellProviderStamp = SupervisionObservationStamp(
+    authority: .providerObserved,
+    freshness: .current,
+    observedAt: .known(shellObservedAt)
+)
+let shellLauncher = ProcessNodeObservation(
+    pid: 400,
+    parentPID: .known(300),
+    processGroupID: .known(400),
+    startIdentity: .known(
+        ProcessStartIdentity(startTime: .known(shellObservedAt))
+    ),
+    commandName: .known("zsh"),
+    ownership: .taskCreated,
+    ownershipBasis: .launcherIdentity,
+    liveness: .live,
+    observation: shellProcessStamp
+)
+let shellProviderProcess = ProcessNodeObservation(
+    pid: 401,
+    parentPID: .known(400),
+    processGroupID: .known(400),
+    startIdentity: .known(
+        ProcessStartIdentity(startTime: .known(shellObservedAt.addingTimeInterval(1)))
+    ),
+    commandName: .known("opencode"),
+    ownership: .taskCreated,
+    ownershipBasis: .descendantObservedAfterLauncher,
+    liveness: .live,
+    observation: shellProcessStamp
+)
+let shellProcessTree = ProcessTreeObservation(
+    taskSessionID: shellTaskSessionID.rawValue.uuidString,
+    runtimeAttemptID: .known(shellRuntimeAttemptID),
+    providerTurnID: .unknown,
+    launcher: .known(shellLauncher),
+    descendants: [shellProviderProcess],
+    coverage: .complete,
+    observation: shellProcessStamp
+)
+let shellExactCorrelation = ShellProviderCorrelationResolver.resolve(
+    taskSessionID: shellTaskSessionID.rawValue.uuidString,
+    runtimeAttemptID: shellRuntimeAttemptID,
+    shellExecutionID: shellExecutionID,
+    processCandidates: [
+        ShellOpenCodeProcessCandidate(
+            node: shellProviderProcess,
+            arguments: ["/opt/homebrew/bin/opencode", "run", "--session", "ses_shell_exact"]
+        )
+    ],
+    processTree: shellProcessTree,
+    providerSessionIDs: .known(["ses_shell_exact"]),
+    providerObservation: shellProviderStamp
+)
+check(
+    "Shell correlation requires the owned process and exact persisted provider session",
+    shellExactCorrelation.kind == .exact
+        && shellExactCorrelation.providerSessionID.value == "ses_shell_exact"
+        && shellExactCorrelation.commandID.state == .unknown
+)
+let shellCoverageExpectations: [
+    (ProcessTreeObservationCoverage, ShellProviderCorrelationKind)
+] = [
+    (.complete, .exact),
+    (.partial, .candidate),
+    (.ambiguous, .ambiguous),
+    (.unavailable, .unknown),
+]
+let shellCoverageIsFailClosed = shellCoverageExpectations.allSatisfy { entry in
+    let (coverage, expectedKind) = entry
+    var tree = shellProcessTree
+    tree.coverage = coverage
+    return ShellProviderCorrelationResolver.resolve(
+        taskSessionID: shellTaskSessionID.rawValue.uuidString,
+        runtimeAttemptID: shellRuntimeAttemptID,
+        shellExecutionID: shellExecutionID,
+        processCandidates: [
+            ShellOpenCodeProcessCandidate(
+                node: shellProviderProcess,
+                arguments: [
+                    "/opt/homebrew/bin/opencode",
+                    "run",
+                    "--session",
+                    "ses_shell_exact",
+                ]
+            )
+        ],
+        processTree: tree,
+        providerSessionIDs: .known(["ses_shell_exact"]),
+        providerObservation: shellProviderStamp
+    ).kind == expectedKind
+}
+check(
+    "Shell exact correlation requires complete process-tree coverage",
+    shellCoverageIsFailClosed
+)
+let shellUnrelatedProcess = ProcessNodeObservation(
+    pid: 402,
+    parentPID: .known(300),
+    processGroupID: .known(402),
+    startIdentity: .known(
+        ProcessStartIdentity(startTime: .known(shellObservedAt.addingTimeInterval(-1)))
+    ),
+    commandName: .known("opencode"),
+    ownership: .preExisting,
+    ownershipBasis: .preExistingObservation,
+    liveness: .live,
+    observation: shellProcessStamp
+)
+let shellUnrelatedCorrelation = ShellProviderCorrelationResolver.resolve(
+    taskSessionID: shellTaskSessionID.rawValue.uuidString,
+    runtimeAttemptID: shellRuntimeAttemptID,
+    shellExecutionID: shellExecutionID,
+    processCandidates: [
+        ShellOpenCodeProcessCandidate(
+            node: shellUnrelatedProcess,
+            arguments: ["/opt/homebrew/bin/opencode", "--session", "ses_shell_unrelated"]
+        )
+    ],
+    processTree: shellProcessTree,
+    providerSessionIDs: .known(["ses_shell_unrelated"]),
+    providerObservation: shellProviderStamp
+)
+check(
+    "Shell correlation leaves unrelated provider sessions UNKNOWN",
+    shellUnrelatedCorrelation.kind == .unknown
+        && shellUnrelatedCorrelation.providerSessionID.state == .unknown
+)
+let shellTelemetryEvent = ShellTelemetryEvent(
+    shellExecutionID: shellExecutionID,
+    runtimeAttemptID: shellRuntimeAttemptID,
+    phase: .commandExited,
+    commandID: "\(shellExecutionID):1",
+    commandSequence: 1,
+    shellPID: shellLauncher.pid,
+    processGroupID: shellLauncher.processGroupID,
+    workingDirectory: .known("/tmp/shell-project"),
+    exitStatus: .known(0),
+    deliveryTransport: .known(.shellStdin),
+    observation: SupervisionObservationStamp(
+        authority: .shellHookObserved,
+        freshness: .current,
+        observedAt: .known(shellObservedAt)
+    )
+)
+let shellTaskEvents = [
+    TaskSessionEvent(
+        taskSessionID: shellTaskSessionID,
+        occurredAt: shellObservedAt,
+        recordedAt: shellObservedAt,
+        authority: .shellHookObserved,
+        kind: .shellTelemetryRecorded(shellTelemetryEvent)
+    ),
+    TaskSessionEvent(
+        taskSessionID: shellTaskSessionID,
+        occurredAt: shellObservedAt,
+        recordedAt: shellObservedAt,
+        authority: .processObserved,
+        kind: .shellProcessObservationRecorded(shellProcessTree)
+    ),
+]
+let shellTelemetryProjection = ShellTelemetryProjection.latest(
+    taskSessionID: shellTaskSessionID,
+    events: shellTaskEvents
+)
+check(
+    "Shell command exit stays independent from live child process state",
+    shellTelemetryProjection?.commandState(liveRuntimeAttemptID: shellRuntimeAttemptID) == .exited
+        && shellTelemetryProjection?.processObservation?.descendants.first?.liveness == .live
+)
 
 // MARK: - Summary
 

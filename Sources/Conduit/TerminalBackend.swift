@@ -344,6 +344,7 @@ struct TmuxDriver: Sendable {
         name: String,
         directory: String,
         command: String,
+        sessionEnvironment: [String] = [],
         projectPath: String? = nil,
         agentName: String? = nil,
         taskSessionID: TaskSessionID? = nil,
@@ -369,9 +370,14 @@ struct TmuxDriver: Sendable {
         if requireExistingSession {
             return .blocked(.durableSessionMissing(sessionName: name))
         }
+        var newSessionArguments = ["new-session", "-d", "-s", name, "-c", directory]
+        for entry in sessionEnvironment where Self.isSafeSessionEnvironment(entry) {
+            newSessionArguments += ["-e", entry]
+        }
+        newSessionArguments.append(command)
         let result = SubprocessRunner.run(
             tmuxPath,
-            ["new-session", "-d", "-s", name, "-c", directory, command],
+            newSessionArguments,
             timeout: 8
         )
         guard result.status == 0 else {
@@ -411,6 +417,21 @@ struct TmuxDriver: Sendable {
         applySessionOptions(session: name)
         recordIdentity(session: name, projectPath: projectPath, agentName: agentName)
         return .ready(.created)
+    }
+
+    private static func isSafeSessionEnvironment(_ entry: String) -> Bool {
+        guard let separator = entry.firstIndex(of: "=") else { return false }
+        let name = entry[..<separator]
+        let value = entry[entry.index(after: separator)...]
+        guard let first = name.first,
+              first.isASCII && (first.isLetter || first == "_")
+        else { return false }
+        guard name.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }),
+              !value.contains("\0"),
+              !value.contains("\n"),
+              !value.contains("\r")
+        else { return false }
+        return true
     }
 
     /// Stores identity on the tmux session itself as user options, so discovery

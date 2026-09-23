@@ -137,7 +137,95 @@ public struct TaskSessionMetadata: Codable, Equatable, Sendable {
 public enum TaskSessionEventAuthority: String, Codable, Equatable, Sendable {
     case conduitRecorded
     case processObserved
+    case shellHookObserved
     case operatorAsserted
+}
+
+/// Lifecycle observation emitted by the private zsh hook attached to a
+/// Conduit-owned Shell runtime. This records command boundaries and execution
+/// context only; it never retains command text or terminal output.
+public enum ShellTelemetryPhase: String, Codable, Equatable, Sendable {
+    case executionStarted = "execution_started"
+    case commandStarted = "command_started"
+    case commandExited = "command_exited"
+    case directoryChanged = "directory_changed"
+    case shellExited = "shell_exited"
+}
+
+public struct ShellTelemetryEvent: Codable, Equatable, Sendable {
+    public static let currentSchemaVersion = 1
+
+    public let schemaVersion: Int
+    public let shellExecutionID: String
+    public let runtimeAttemptID: String
+    public let phase: ShellTelemetryPhase
+    public let commandID: String?
+    public let commandSequence: Int?
+    public let shellPID: Int32
+    public let processGroupID: OrchestrationValue<Int32>
+    public let workingDirectory: OrchestrationValue<String>
+    public let exitStatus: OrchestrationValue<Int32>
+    public let deliveryTransport: OrchestrationValue<DeliveryTransport>
+    public let observation: SupervisionObservationStamp
+
+    public init(
+        schemaVersion: Int = ShellTelemetryEvent.currentSchemaVersion,
+        shellExecutionID: String,
+        runtimeAttemptID: String,
+        phase: ShellTelemetryPhase,
+        commandID: String? = nil,
+        commandSequence: Int? = nil,
+        shellPID: Int32,
+        processGroupID: OrchestrationValue<Int32> = .unknown,
+        workingDirectory: OrchestrationValue<String> = .unknown,
+        exitStatus: OrchestrationValue<Int32> = .unknown,
+        deliveryTransport: OrchestrationValue<DeliveryTransport> = .unknown,
+        observation: SupervisionObservationStamp
+    ) {
+        self.schemaVersion = schemaVersion
+        self.shellExecutionID = shellExecutionID
+        self.runtimeAttemptID = runtimeAttemptID
+        self.phase = phase
+        self.commandID = commandID
+        self.commandSequence = commandSequence
+        self.shellPID = shellPID
+        self.processGroupID = processGroupID
+        self.workingDirectory = workingDirectory
+        self.exitStatus = exitStatus
+        self.deliveryTransport = deliveryTransport
+        self.observation = observation
+    }
+
+    /// Rejects malformed hook receipts before they enter the durable task log.
+    public var hasValidIdentity: Bool {
+        guard schemaVersion == Self.currentSchemaVersion,
+              UUID(uuidString: shellExecutionID) != nil,
+              UUID(uuidString: runtimeAttemptID) != nil,
+              shellPID > 0,
+              observation.authority == .shellHookObserved,
+              observation.freshness == .current,
+              observation.observedAt.value != nil
+        else { return false }
+
+        switch phase {
+        case .commandStarted, .commandExited:
+            guard let commandID,
+                  let commandSequence,
+                  commandSequence > 0,
+                  commandID == "\(shellExecutionID):\(commandSequence)",
+                  deliveryTransport.value == .shellStdin
+            else { return false }
+        case .executionStarted, .directoryChanged, .shellExited:
+            guard commandID == nil,
+                  commandSequence == nil,
+                  deliveryTransport.value == nil,
+                  exitStatus.value == nil
+            else { return false }
+        }
+        if phase != .commandExited, exitStatus.value != nil { return false }
+        if let path = workingDirectory.value, !path.hasPrefix("/") { return false }
+        return true
+    }
 }
 
 /// Operational facts only. None of these states asserts task completion,
@@ -187,6 +275,11 @@ public enum TaskSessionEventKind: Codable, Equatable, Sendable {
     /// conversation-retention contract. It distinguishes a legacy task from a
     /// retained task whose conversation source is unexpectedly absent.
     case conversationRetentionEnabled
+    case shellTelemetryRecorded(ShellTelemetryEvent)
+    /// Process topology is sampled independently from shell-hook lifecycle.
+    /// Keeping it in the existing task stream makes a later Fleet reader able
+    /// to revalidate the same launcher identity without retaining PTY history.
+    case shellProcessObservationRecorded(ProcessTreeObservation)
     case operationalStateChanged(TaskSessionOperationalState)
 }
 
@@ -259,6 +352,13 @@ public struct TaskSessionEvent: Identifiable, Codable, Equatable, Sendable {
             return authority == .operatorAsserted
         case .conversationActivityRecorded, .conversationRetentionEnabled:
             return authority == .conduitRecorded
+        case .shellTelemetryRecorded(let telemetry):
+            return authority == .shellHookObserved
+                && telemetry.hasValidIdentity
+        case .shellProcessObservationRecorded(let observation):
+            return authority == .processObserved
+                && observation.taskSessionID == taskSessionID.rawValue.uuidString
+                && observation.observation.authority == .processObserved
         case .operationalStateChanged(let state):
             switch state {
             case .runtimeProvisioning, .runtimeOpened, .runtimeProvisioningFailed:
@@ -390,6 +490,8 @@ public enum TaskSessionProjection {
                 // Enabling a persistence contract is administrative metadata,
                 // not user conversation activity. Do not reorder Recent rows.
                 advancesLastActivity = false
+            case .shellTelemetryRecorded, .shellProcessObservationRecorded:
+                break
             case .operationalStateChanged(let state):
                 operationalState = state
                 operationalStateAt = event.occurredAt

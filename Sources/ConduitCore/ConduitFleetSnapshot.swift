@@ -73,6 +73,83 @@ public struct FleetThreadHandoffHandle: Codable, Equatable, Sendable {
     }
 }
 
+public struct ShellRepositoryCheckpoint: Codable, Equatable, Sendable {
+    public var repositoryRoot: OrchestrationValue<String>
+    public var headCommit: OrchestrationValue<String>
+    public var changedPathCount: OrchestrationValue<Int>
+    public var observation: SupervisionObservationStamp
+
+    public init(
+        repositoryRoot: OrchestrationValue<String>,
+        headCommit: OrchestrationValue<String>,
+        changedPathCount: OrchestrationValue<Int>,
+        observation: SupervisionObservationStamp
+    ) {
+        self.repositoryRoot = repositoryRoot
+        self.headCommit = headCommit
+        self.changedPathCount = changedPathCount
+        self.observation = observation
+    }
+}
+
+/// Shell lifecycle, process topology, and provider correlation are returned
+/// side by side. PTY quietness is intentionally independent and remains
+/// UNKNOWN unless a future source establishes it directly.
+public struct FleetShellTelemetrySnapshot: Codable, Equatable, Sendable {
+    public var runtimeAttemptID: OrchestrationValue<String>
+    public var shellExecutionID: OrchestrationValue<String>
+    public var phase: OrchestrationValue<ShellTelemetryPhase>
+    public var commandID: OrchestrationValue<String>
+    public var commandState: OrchestrationValue<ShellCommandExecutionState>
+    public var shellPID: OrchestrationValue<Int32>
+    public var processGroupID: OrchestrationValue<Int32>
+    public var workingDirectory: OrchestrationValue<String>
+    public var exitStatus: OrchestrationValue<Int32>
+    public var deliveryTransport: OrchestrationValue<DeliveryTransport>
+    public var ptyCaptureQuiet: OrchestrationValue<Bool>
+    public var launcherLiveness: OrchestrationValue<ProcessLiveness>
+    public var processObservation: OrchestrationValue<ProcessTreeObservation>
+    public var repositoryCheckpoint: OrchestrationValue<ShellRepositoryCheckpoint>
+    public var observation: SupervisionObservationStamp
+    public var diagnostics: [String]
+
+    public init(
+        runtimeAttemptID: OrchestrationValue<String> = .unknown,
+        shellExecutionID: OrchestrationValue<String> = .unknown,
+        phase: OrchestrationValue<ShellTelemetryPhase> = .unknown,
+        commandID: OrchestrationValue<String> = .unknown,
+        commandState: OrchestrationValue<ShellCommandExecutionState> = .unknown,
+        shellPID: OrchestrationValue<Int32> = .unknown,
+        processGroupID: OrchestrationValue<Int32> = .unknown,
+        workingDirectory: OrchestrationValue<String> = .unknown,
+        exitStatus: OrchestrationValue<Int32> = .unknown,
+        deliveryTransport: OrchestrationValue<DeliveryTransport> = .unknown,
+        ptyCaptureQuiet: OrchestrationValue<Bool> = .unknown,
+        launcherLiveness: OrchestrationValue<ProcessLiveness> = .unknown,
+        processObservation: OrchestrationValue<ProcessTreeObservation> = .unknown,
+        repositoryCheckpoint: OrchestrationValue<ShellRepositoryCheckpoint> = .unknown,
+        observation: SupervisionObservationStamp,
+        diagnostics: [String] = []
+    ) {
+        self.runtimeAttemptID = runtimeAttemptID
+        self.shellExecutionID = shellExecutionID
+        self.phase = phase
+        self.commandID = commandID
+        self.commandState = commandState
+        self.shellPID = shellPID
+        self.processGroupID = processGroupID
+        self.workingDirectory = workingDirectory
+        self.exitStatus = exitStatus
+        self.deliveryTransport = deliveryTransport
+        self.ptyCaptureQuiet = ptyCaptureQuiet
+        self.launcherLiveness = launcherLiveness
+        self.processObservation = processObservation
+        self.repositoryCheckpoint = repositoryCheckpoint
+        self.observation = observation
+        self.diagnostics = diagnostics
+    }
+}
+
 /// One Conduit-owned task record. Persisted lifecycle and thread handles carry
 /// stale observations until a live runtime or provider read re-establishes
 /// currentness.
@@ -96,6 +173,7 @@ public struct ConduitFleetTaskSnapshot: Codable, Equatable, Sendable {
     public var turn: FleetTurnObservation
     public var processObservation: OrchestrationValue<ProcessTreeObservation>
     public var processReconciliation: OrchestrationValue<ProcessTreeReconciliation>
+    public var shellTelemetry: FleetShellTelemetrySnapshot?
     public var heldPromptCount: OrchestrationValue<Int>
     public var terminal: WorkerTerminalState
     public var observation: SupervisionObservationStamp
@@ -120,6 +198,7 @@ public struct ConduitFleetTaskSnapshot: Codable, Equatable, Sendable {
         turn: FleetTurnObservation,
         processObservation: OrchestrationValue<ProcessTreeObservation>,
         processReconciliation: OrchestrationValue<ProcessTreeReconciliation>,
+        shellTelemetry: FleetShellTelemetrySnapshot? = nil,
         heldPromptCount: OrchestrationValue<Int>,
         terminal: WorkerTerminalState,
         observation: SupervisionObservationStamp
@@ -143,6 +222,7 @@ public struct ConduitFleetTaskSnapshot: Codable, Equatable, Sendable {
         self.turn = turn
         self.processObservation = processObservation
         self.processReconciliation = processReconciliation
+        self.shellTelemetry = shellTelemetry
         self.heldPromptCount = heldPromptCount
         self.terminal = terminal
         self.observation = observation
@@ -220,6 +300,7 @@ public struct ConduitFleetProviderWorkerSnapshot: Codable, Equatable, Sendable {
     public var writerAuthority: ProviderSessionAuthoritySnapshot
     public var writerAuthorityObservation: SupervisionObservationStamp
     public var taskAssociation: FleetTaskAssociation
+    public var shellCorrelation: ShellProviderCorrelation?
     public var diagnostics: [String]
 
     public init(
@@ -228,6 +309,7 @@ public struct ConduitFleetProviderWorkerSnapshot: Codable, Equatable, Sendable {
         writerAuthority: ProviderSessionAuthoritySnapshot,
         writerAuthorityObservation: SupervisionObservationStamp,
         taskAssociation: FleetTaskAssociation,
+        shellCorrelation: ShellProviderCorrelation? = nil,
         diagnostics: [String] = []
     ) {
         self.schemaVersion = schemaVersion
@@ -235,6 +317,7 @@ public struct ConduitFleetProviderWorkerSnapshot: Codable, Equatable, Sendable {
         self.writerAuthority = writerAuthority
         self.writerAuthorityObservation = writerAuthorityObservation
         self.taskAssociation = taskAssociation
+        self.shellCorrelation = shellCorrelation
         self.diagnostics = diagnostics
     }
 
