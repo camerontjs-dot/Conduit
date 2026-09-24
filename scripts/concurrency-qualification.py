@@ -142,12 +142,14 @@ def require_declared_tier(
                 "Conduit task-control slots already used"
             )
         active = summary["provider_reported_active_turns"]
-        if active["total_state"] != "known" or active["total"] != 0:
+        if active["total_state"] == "known" and active["total"] != 0:
             raise QualificationBlocked(
-                "clean provider-turn baseline is not established: "
-                f"state={active['total_state']} total={active['total']!r} "
-                f"unknown_count={active['unknown_count']!r}"
+                "background provider activity is already known at baseline: "
+                f"total={active['total']!r}"
             )
+        summary["background_provider_activity_baseline"] = (
+            "known_zero" if active["total_state"] == "known" else "unknown"
+        )
     return summary
 
 
@@ -158,6 +160,103 @@ def fleet_snapshot(api: Any) -> tuple[dict[str, Any], float]:
     if snapshot.get("error"):
         raise QualificationBlocked(f"Fleet snapshot failed: {snapshot['error']}")
     return snapshot, latency_ms
+
+
+def qualification_task_provider_states(
+    snapshot: dict[str, Any],
+    task_ids: list[str],
+) -> dict[str, Any]:
+    wanted = {task_id.lower(): task_id for task_id in task_ids}
+    rows: dict[str, dict[str, Any]] = {}
+    duplicates: list[str] = []
+
+    for item in (snapshot.get("provider_sessions") or {}).get("items") or []:
+        association = item.get("task_association") or {}
+        if association.get("kind") != "exact":
+            continue
+        task_id = known_value(association.get("task_session_id"))
+        if not isinstance(task_id, str):
+            continue
+        key = task_id.lower()
+        if key not in wanted:
+            continue
+
+        worker = item.get("worker") or {}
+        reconciliation = worker.get("runtime_reconciliation") or {}
+        row = {
+            "task_session_id": wanted[key],
+            "provider_session_id": known_value(worker.get("provider_session_id")),
+            "provider_reported_state": reconciliation.get(
+                "provider_reported_state", "unknown"
+            ),
+            "reconciliation_disposition": reconciliation.get("disposition"),
+            "provider_observation": reconciliation.get("provider_observation"),
+        }
+        if key in rows:
+            duplicates.append(wanted[key])
+        rows[key] = row
+
+    missing = [
+        original for key, original in wanted.items()
+        if key not in rows
+    ]
+    states = [row["provider_reported_state"] for row in rows.values()]
+    return {
+        "rows": list(rows.values()),
+        "missing_task_session_ids": missing,
+        "duplicate_task_session_ids": sorted(set(duplicates)),
+        "active_count": sum(state == "active" for state in states),
+        "inactive_count": sum(state == "inactive" for state in states),
+        "unknown_count": sum(state not in {"active", "inactive"} for state in states),
+        "provider_session_ids": sorted(
+            {
+                row["provider_session_id"]
+                for row in rows.values()
+                if isinstance(row.get("provider_session_id"), str)
+            }
+        ),
+        "all_exact_active": (
+            len(rows) == len(wanted)
+            and not missing
+            and not duplicates
+            and all(state == "active" for state in states)
+        ),
+    }
+
+
+def observe_provider_sessions(
+    api: Any,
+    provider_session_ids: list[str],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for provider_session_id in provider_session_ids:
+        try:
+            observed = api.call(
+                "conduit_observe_worker",
+                provider="opencode",
+                provider_session_id=provider_session_id,
+            )
+            worker = observed.get("worker") or {}
+            reconciliation = worker.get("runtime_reconciliation") or {}
+            rows.append(
+                {
+                    "provider_session_id": provider_session_id,
+                    "provider_reported_state": reconciliation.get(
+                        "provider_reported_state", "unknown"
+                    ),
+                    "reconciliation_disposition": reconciliation.get("disposition"),
+                    "error": observed.get("error"),
+                }
+            )
+        except Exception as exc:
+            rows.append(
+                {
+                    "provider_session_id": provider_session_id,
+                    "provider_reported_state": "unknown",
+                    "error": str(exc),
+                }
+            )
+    return rows
 
 
 def conduit_process_sample() -> dict[str, Any]:
@@ -246,33 +345,38 @@ def create_task(
     }
 
 
-def sample_once(api: Any) -> dict[str, Any]:
+def sample_once(
+    api: Any,
+    task_ids: list[str] | None = None,
+) -> dict[str, Any]:
     snapshot, latency_ms = fleet_snapshot(api)
     return {
         "at": iso_now(),
         "fleet_rpc_latency_ms": latency_ms,
         "fleet_snapshot_age_ms": snapshot_age_ms(snapshot),
         "capacity": capacity_summary(snapshot),
+        "qualification_tasks": qualification_task_provider_states(
+            snapshot, task_ids or []
+        ),
         "conduit_process": conduit_process_sample(),
     }
 
 
 def wait_for_active_tier(
     api: Any,
-    target: int,
+    task_ids: list[str],
     timeout_seconds: int,
     poll_seconds: float,
     samples: list[dict[str, Any]],
-) -> bool:
+) -> dict[str, Any] | None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        sample = sample_once(api)
+        sample = sample_once(api, task_ids)
         samples.append(sample)
-        active = sample["capacity"]["provider_reported_active_turns"]
-        if active["total_state"] == "known" and active["total"] == target:
-            return True
+        if sample["qualification_tasks"]["all_exact_active"]:
+            return sample
         time.sleep(poll_seconds)
-    return False
+    return None
 
 
 def close_tasks(api: Any, task_ids: list[str]) -> list[dict[str, Any]]:
