@@ -253,6 +253,48 @@ class ConcurrencyQualificationTests(unittest.TestCase):
             inactive,
         )
 
+    def test_cleanup_polling_does_not_trigger_pre_teardown_sample(self):
+        sample = {
+            "at": "2026-09-24T16:00:00Z",
+            "capacity": cq.capacity_summary(snapshot(limit=4, used=0)),
+            "qualification_tasks": {},
+            "conduit_process": {
+                "state": "known",
+                "pid": 4321,
+                "process_cpu_percent": 99.0,
+            },
+        }
+        inactive = [
+            {
+                "provider_session_id": "ses-a",
+                "provider_reported_state": "inactive",
+                "error": None,
+            }
+        ]
+        samples = []
+        capture = {"attempted": False, "captured": False}
+
+        with mock.patch.object(cq, "sample_once", return_value=sample), \
+             mock.patch.object(cq, "observe_provider_sessions", return_value=inactive), \
+             mock.patch.object(cq.time, "monotonic", side_effect=[0.0, 0.0, 2.0]), \
+             mock.patch.object(cq.time, "sleep"):
+            reconciled = cq.wait_for_cleanup_reconciliation(
+                object(),
+                ["task-a"],
+                ["ses-a"],
+                1,
+                0,
+                samples,
+                sample_cpu_threshold=80.0,
+                sample_artifact_path=Path("/tmp/slice11.sample.txt"),
+                sample_capture=capture,
+            )
+
+        self.assertTrue(reconciled)
+        self.assertEqual(len(samples), 1)
+        self.assertFalse(capture["attempted"])
+        self.assertFalse(capture["captured"])
+
     def test_numeric_peak_ignores_unknowns(self):
         samples = [
             {"capacity": {"x": {"total": None}}},
