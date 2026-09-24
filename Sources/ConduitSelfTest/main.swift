@@ -3060,6 +3060,26 @@ do {
             !MCPAdmissionPolicy.conduitSessionAPI(writesEnabled: false).writesEnabled
         )
         check("shipped policy is internally valid", shipped.isValid)
+        for value in [4, 6, 8] {
+            let qualified = MCPAdmissionPolicy.conduitSessionAPI(
+                writesEnabled: true,
+                qualificationLiveTaskLimit: value
+            )
+            check(
+                "qualification policy admits the declared live-task tier \(value)",
+                qualified.globalLiveTaskLimit == value
+                    && qualified.perCallerCreateLimit >= value
+            )
+        }
+        for value in [0, 5, 9, 64] {
+            check(
+                "unsupported qualification live-task tier \(value) falls back to four",
+                MCPAdmissionPolicy.conduitSessionAPI(
+                    writesEnabled: true,
+                    qualificationLiveTaskLimit: value
+                ).globalLiveTaskLimit == 4
+            )
+        }
     }
 
     // --- observability -----------------------------------------------------
