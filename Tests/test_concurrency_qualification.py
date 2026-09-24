@@ -1,6 +1,7 @@
 import importlib.util
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "concurrency-qualification.py"
@@ -150,6 +151,63 @@ class ConcurrencyQualificationTests(unittest.TestCase):
         occupied = {"capacity": cq.capacity_summary(snapshot(limit=4, used=1))}
         self.assertFalse(cq.cleanup_reconciled(occupied, inactive, 2))
         self.assertFalse(cq.cleanup_reconciled(clean, inactive[:1], 2))
+
+    def test_hot_cpu_capture_runs_immediately_with_phase(self):
+        sample = {
+            "at": "2026-09-24T16:00:00Z",
+            "conduit_process": {
+                "state": "known",
+                "pid": 4321,
+                "process_cpu_percent": 95.0,
+            },
+        }
+        capture = {"attempted": False, "captured": False}
+        completed = type(
+            "Completed",
+            (),
+            {"returncode": 0, "stderr": ""},
+        )()
+        with mock.patch.object(cq.subprocess, "run", return_value=completed) as run:
+            cq.maybe_capture_sample_if_hot(
+                sample,
+                80.0,
+                Path("/tmp/slice11.sample.txt"),
+                capture,
+                "natural_completion",
+            )
+
+        self.assertTrue(capture["attempted"])
+        self.assertTrue(capture["captured"])
+        self.assertEqual(capture["trigger_phase"], "natural_completion")
+        self.assertEqual(capture["trigger_cpu_percent"], 95.0)
+        run.assert_called_once()
+        self.assertEqual(
+            run.call_args.args[0],
+            ["sample", "4321", "2", "1", "-file", "/tmp/slice11.sample.txt"],
+        )
+
+    def test_below_threshold_does_not_capture(self):
+        sample = {
+            "at": "2026-09-24T16:00:00Z",
+            "conduit_process": {
+                "state": "known",
+                "pid": 4321,
+                "process_cpu_percent": 79.9,
+            },
+        }
+        capture = {"attempted": False, "captured": False}
+        with mock.patch.object(cq.subprocess, "run") as run:
+            cq.maybe_capture_sample_if_hot(
+                sample,
+                80.0,
+                Path("/tmp/slice11.sample.txt"),
+                capture,
+                "active_overlap",
+            )
+
+        self.assertFalse(capture["attempted"])
+        self.assertFalse(capture["captured"])
+        run.assert_not_called()
 
     def test_numeric_peak_ignores_unknowns(self):
         samples = [
