@@ -219,6 +219,13 @@ def qualification_task_provider_states(
             len(rows) == len(wanted)
             and not missing
             and not duplicates
+            and len(
+                {
+                    row["provider_session_id"]
+                    for row in rows.values()
+                    if isinstance(row.get("provider_session_id"), str)
+                }
+            ) == len(wanted)
             and all(state == "active" for state in states)
         ),
     }
@@ -403,27 +410,40 @@ def close_tasks(api: Any, task_ids: list[str]) -> list[dict[str, Any]]:
     return results
 
 
-def cleanup_reconciled(sample: dict[str, Any]) -> bool:
-    capacity = sample["capacity"]
-    active = capacity["provider_reported_active_turns"]
-    return (
-        capacity["task_slots"]["used"] == 0
-        and active["total_state"] == "known"
-        and active["total"] == 0
+def cleanup_reconciled(
+    sample: dict[str, Any],
+    provider_rows: list[dict[str, Any]],
+    expected_provider_sessions: int,
+) -> bool:
+    if sample["capacity"]["task_slots"]["used"] != 0:
+        return False
+    if len(provider_rows) != expected_provider_sessions:
+        return False
+    return all(
+        row.get("provider_reported_state") == "inactive"
+        and not row.get("error")
+        for row in provider_rows
     )
 
 
 def wait_for_cleanup_reconciliation(
     api: Any,
+    task_ids: list[str],
+    provider_session_ids: list[str],
     timeout_seconds: int,
     poll_seconds: float,
     samples: list[dict[str, Any]],
 ) -> bool:
     deadline = time.monotonic() + timeout_seconds
+    expected = len(provider_session_ids)
+    if expected == 0 and task_ids:
+        return False
     while time.monotonic() < deadline:
-        sample = sample_once(api)
+        sample = sample_once(api, task_ids)
+        provider_rows = observe_provider_sessions(api, provider_session_ids)
+        sample["qualification_provider_cleanup"] = provider_rows
         samples.append(sample)
-        if cleanup_reconciled(sample):
+        if cleanup_reconciled(sample, provider_rows, expected):
             return True
         time.sleep(poll_seconds)
     return False
@@ -509,7 +529,8 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     samples: list[dict[str, Any]] = []
     cleanup: list[dict[str, Any]] = []
     active_tier_observed = False
-    cleanup_reconciled = False
+    cleanup_reconciled_ok = False
+    provider_session_ids: list[str] = []
     failure: str | None = None
 
     receipt: dict[str, Any] = {
@@ -562,22 +583,31 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
                     f"{task['result']}"
                 )
 
-        active_tier_observed = wait_for_active_tier(
+        task_ids = [
+            row["task_session_id"]
+            for row in tasks
+            if isinstance(row.get("task_session_id"), str)
+        ]
+        active_sample = wait_for_active_tier(
             api,
-            args.target,
+            task_ids,
             args.active_timeout,
             args.poll_seconds,
             samples,
         )
-        if active_tier_observed:
+        active_tier_observed = active_sample is not None
+        if active_sample is not None:
+            provider_session_ids = active_sample[
+                "qualification_tasks"
+            ]["provider_session_ids"]
             end = time.monotonic() + args.sample_seconds
             while time.monotonic() < end:
-                samples.append(sample_once(api))
+                samples.append(sample_once(api, task_ids))
                 time.sleep(args.poll_seconds)
         else:
             failure = (
-                f"provider-reported active turns never reached an exact known "
-                f"total of {args.target}"
+                "qualification-owned provider sessions never all reached "
+                f"provider-reported active state for tier {args.target}"
             )
     except Exception as exc:
         failure = str(exc)
@@ -587,9 +617,21 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             for row in tasks
             if isinstance(row.get("task_session_id"), str)
         ]
+        if not provider_session_ids:
+            provider_session_ids = sorted(
+                {
+                    provider_session_id
+                    for sample in samples
+                    for provider_session_id in (
+                        sample.get("qualification_tasks") or {}
+                    ).get("provider_session_ids", [])
+                }
+            )
         cleanup.extend(close_tasks(api, task_ids))
-        cleanup_reconciled = wait_for_cleanup_reconciliation(
+        cleanup_reconciled_ok = wait_for_cleanup_reconciliation(
             api,
+            task_ids,
+            provider_session_ids,
             args.cleanup_timeout,
             args.poll_seconds,
             samples,
@@ -597,7 +639,8 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
 
     receipt["finished_at"] = iso_now()
     receipt["active_tier_observed"] = active_tier_observed
-    receipt["cleanup_reconciled"] = cleanup_reconciled
+    receipt["provider_session_ids"] = provider_session_ids
+    receipt["cleanup_reconciled"] = cleanup_reconciled_ok
     receipt["failure"] = failure
     receipt["summary"] = {
         "create_attempts": len(tasks),
@@ -608,7 +651,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             1 for task in tasks if not isinstance(task.get("task_session_id"), str)
         ),
         "active_tier_timeout": not active_tier_observed,
-        "cleanup_reconciled": cleanup_reconciled,
+        "cleanup_reconciled": cleanup_reconciled_ok,
         "peak_fleet_rpc_latency_ms": numeric_peak(
             samples, ("fleet_rpc_latency_ms",)
         ),
@@ -643,7 +686,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     )
     receipt["disposition"] = (
         "PASS_FOR_TIER_OBSERVATION"
-        if active_tier_observed and cleanup_reconciled and failure is None
+        if active_tier_observed and cleanup_reconciled_ok and failure is None
         else "FAIL_OR_INCONCLUSIVE"
     )
     provisional_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
