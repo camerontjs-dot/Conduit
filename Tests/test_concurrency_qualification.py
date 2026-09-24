@@ -92,6 +92,23 @@ class ConcurrencyQualificationTests(unittest.TestCase):
                 4,
             )
 
+    def test_cleanup_requires_slots_and_provider_turns_to_return_to_zero(self):
+        clean = {"capacity": cq.capacity_summary(snapshot(limit=4, used=0, active_total=0))}
+        self.assertTrue(cq.cleanup_reconciled(clean))
+
+        active = {"capacity": cq.capacity_summary(snapshot(limit=4, used=0, active_total=1))}
+        self.assertFalse(cq.cleanup_reconciled(active))
+
+        occupied = {"capacity": cq.capacity_summary(snapshot(limit=4, used=1, active_total=0))}
+        self.assertFalse(cq.cleanup_reconciled(occupied))
+
+        unknown_active = {
+            "capacity": cq.capacity_summary(
+                snapshot(limit=4, used=0, active_total=0, active_unknown=1)
+            )
+        }
+        self.assertFalse(cq.cleanup_reconciled(unknown_active))
+
     def test_numeric_peak_ignores_unknowns(self):
         samples = [
             {"capacity": {"x": {"total": None}}},
