@@ -316,11 +316,13 @@ def conduit_process_sample() -> dict[str, Any]:
         }
 
 
-def hold_objective(token: str, hold_seconds: int) -> str:
+def hold_objective(token: str, hold_seconds: int, output_lines: int) -> str:
     return (
-        "Qualification task. Do not modify files. Use the shell tool to run "
-        f"sleep {hold_seconds} exactly once. After it exits, reply with exactly "
-        f"{token} and no other text."
+        "Qualification task. Do not modify project files. Use the shell tool to "
+        f"run sleep {hold_seconds} exactly once. After it exits, use no more "
+        f"tools and emit exactly {output_lines} newline-separated lines. Prefix "
+        f"every line with {token}- followed by a four-digit line number. Do not "
+        "add prose before or after the numbered lines."
     )
 
 
@@ -332,6 +334,7 @@ def create_task(
     target: int,
     index: int,
     hold_seconds: int,
+    output_lines: int,
     stamp: str,
 ) -> dict[str, Any]:
     token = f"CONDUIT-S11-{target}-{index}-{stamp}"
@@ -340,7 +343,7 @@ def create_task(
         "conduit_create_task",
         agent=agent,
         project_slug=project,
-        objective=hold_objective(token, hold_seconds),
+        objective=hold_objective(token, hold_seconds, output_lines),
         idempotency_key=f"slice11-{target}-{index}-{stamp}",
     )
     return {
@@ -410,6 +413,42 @@ def close_tasks(api: Any, task_ids: list[str]) -> list[dict[str, Any]]:
     return results
 
 
+def provider_sessions_inactive(
+    provider_rows: list[dict[str, Any]],
+    expected_provider_sessions: int,
+) -> bool:
+    return (
+        len(provider_rows) == expected_provider_sessions
+        and all(
+            row.get("provider_reported_state") == "inactive"
+            and not row.get("error")
+            for row in provider_rows
+        )
+    )
+
+
+def wait_for_provider_completion(
+    api: Any,
+    task_ids: list[str],
+    provider_session_ids: list[str],
+    timeout_seconds: int,
+    poll_seconds: float,
+    samples: list[dict[str, Any]],
+) -> bool:
+    if len(provider_session_ids) != len(task_ids) or not provider_session_ids:
+        return False
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        sample = sample_once(api, task_ids)
+        provider_rows = observe_provider_sessions(api, provider_session_ids)
+        sample["qualification_provider_completion"] = provider_rows
+        samples.append(sample)
+        if provider_sessions_inactive(provider_rows, len(provider_session_ids)):
+            return True
+        time.sleep(poll_seconds)
+    return False
+
+
 def cleanup_reconciled(
     sample: dict[str, Any],
     provider_rows: list[dict[str, Any]],
@@ -419,11 +458,7 @@ def cleanup_reconciled(
         return False
     if len(provider_rows) != expected_provider_sessions:
         return False
-    return all(
-        row.get("provider_reported_state") == "inactive"
-        and not row.get("error")
-        for row in provider_rows
-    )
+    return provider_sessions_inactive(provider_rows, expected_provider_sessions)
 
 
 def wait_for_cleanup_reconciliation(
@@ -529,6 +564,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     samples: list[dict[str, Any]] = []
     cleanup: list[dict[str, Any]] = []
     active_tier_observed = False
+    natural_completion_observed = False
     cleanup_reconciled_ok = False
     provider_session_ids: list[str] = []
     failure: str | None = None
@@ -540,7 +576,9 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "agent": args.agent,
         "project": args.project,
         "hold_seconds": args.hold_seconds,
+        "output_lines": args.output_lines,
         "sample_seconds": args.sample_seconds,
+        "completion_timeout": args.completion_timeout,
         "poll_seconds": args.poll_seconds,
         "baseline_fleet_rpc_latency_ms": baseline_latency,
         "baseline": baseline,
@@ -548,6 +586,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "samples": samples,
         "cleanup": cleanup,
         "active_tier_observed": False,
+        "natural_completion_observed": False,
         "cleanup_reconciled": False,
         "ui_responsiveness": {
             "state": "unknown",
@@ -574,6 +613,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
                 target=args.target,
                 index=index + 1,
                 hold_seconds=args.hold_seconds,
+                output_lines=args.output_lines,
                 stamp=stamp,
             )
             tasks.append(task)
@@ -604,6 +644,19 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             while time.monotonic() < end:
                 samples.append(sample_once(api, task_ids))
                 time.sleep(args.poll_seconds)
+            natural_completion_observed = wait_for_provider_completion(
+                api,
+                task_ids,
+                provider_session_ids,
+                args.completion_timeout,
+                args.poll_seconds,
+                samples,
+            )
+            if not natural_completion_observed:
+                failure = (
+                    "qualification-owned provider sessions did not all reach "
+                    "provider-reported inactive state before the completion timeout"
+                )
         else:
             failure = (
                 "qualification-owned provider sessions never all reached "
@@ -639,6 +692,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
 
     receipt["finished_at"] = iso_now()
     receipt["active_tier_observed"] = active_tier_observed
+    receipt["natural_completion_observed"] = natural_completion_observed
     receipt["provider_session_ids"] = provider_session_ids
     receipt["cleanup_reconciled"] = cleanup_reconciled_ok
     receipt["failure"] = failure
@@ -651,6 +705,9 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             1 for task in tasks if not isinstance(task.get("task_session_id"), str)
         ),
         "active_tier_timeout": not active_tier_observed,
+        "natural_completion_timeout": (
+            active_tier_observed and not natural_completion_observed
+        ),
         "cleanup_reconciled": cleanup_reconciled_ok,
         "peak_fleet_rpc_latency_ms": numeric_peak(
             samples, ("fleet_rpc_latency_ms",)
@@ -664,8 +721,11 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "peak_conduit_rss_kib": numeric_peak(
             samples, ("conduit_process", "rss_kib")
         ),
-        "maximum_provider_reported_active_turns": numeric_peak(
+        "maximum_global_provider_reported_active_turns": numeric_peak(
             samples, ("capacity", "provider_reported_active_turns", "total")
+        ),
+        "maximum_qualification_owned_active_turns": numeric_peak(
+            samples, ("qualification_tasks", "active_count")
         ),
         "maximum_provider_hosts": numeric_peak(
             samples, ("capacity", "provider_hosts", "total")
@@ -686,7 +746,12 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     )
     receipt["disposition"] = (
         "PASS_FOR_TIER_OBSERVATION"
-        if active_tier_observed and cleanup_reconciled_ok and failure is None
+        if (
+            active_tier_observed
+            and natural_completion_observed
+            and cleanup_reconciled_ok
+            and failure is None
+        )
         else "FAIL_OR_INCONCLUSIVE"
     )
     provisional_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
@@ -699,10 +764,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--agent", default="OpenCode")
     parser.add_argument("--project", required=True)
     parser.add_argument("--hold-seconds", type=int, default=45)
+    parser.add_argument("--output-lines", type=int, default=160)
     parser.add_argument("--sample-seconds", type=int, default=15)
     parser.add_argument("--active-timeout", type=int, default=75)
+    parser.add_argument("--completion-timeout", type=int, default=240)
     parser.add_argument("--cleanup-timeout", type=int, default=45)
-    parser.add_argument("--poll-seconds", type=float, default=1.0)
+    parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--sample-cpu-threshold", type=float, default=80.0)
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
