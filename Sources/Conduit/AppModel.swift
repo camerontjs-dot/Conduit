@@ -3815,11 +3815,22 @@ final class AppModel: ObservableObject {
         await refreshResources()
     }
 
+    private var sessionAPIQualificationLiveTaskLimit: Int? {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CONDUIT_QUALIFICATION_MODE"] == "1",
+              let raw = environment["CONDUIT_QUALIFICATION_LIVE_TASK_LIMIT"],
+              let value = Int(raw),
+              MCPAdmissionPolicy.supportsQualificationLiveTaskLimit(value)
+        else { return nil }
+        return value
+    }
+
     @discardableResult
     private func rebuildMCPAdmission() -> MCPAdmissionController {
         let controller = MCPAdmissionController(
             policy: .conduitSessionAPI(
-                writesEnabled: settings.enableSessionAPIWrites
+                writesEnabled: settings.enableSessionAPIWrites,
+                qualificationLiveTaskLimit: sessionAPIQualificationLiveTaskLimit
             ),
             initialLiveTaskSessionIDs: Set(
                 sessions
