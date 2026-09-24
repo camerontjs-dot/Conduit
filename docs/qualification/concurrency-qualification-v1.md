@@ -62,14 +62,16 @@ Default runner:
       --project <project-slug> \
       --agent OpenCode
 
-Each task asks OpenCode to run a bounded sleep and then return one token. The sleep is used to create an overlap window without mutating the project.
+Each task asks OpenCode to run a bounded sleep and then emit a fixed-size numbered response. The sleep creates a reliable overlap window without mutating the project; the numbered response creates a controlled streaming/completion phase relevant to #44. Output correctness is not an acceptance condition for this control-plane experiment.
 
 Default timing:
 
 - hold: 45 seconds;
+- streamed response: 160 numbered lines;
 - active-tier acquisition timeout: 75 seconds;
 - overlap sampling: 15 seconds;
-- sample interval: 1 second;
+- natural-completion timeout: 240 seconds;
+- sample interval: 2 seconds;
 - cleanup timeout: 45 seconds.
 
 Change these only as a recorded successor/deviation if they materially affect the result.
@@ -113,7 +115,7 @@ At minimum record:
 - whether a post-completion pin occurs;
 - whether closing a task changes the symptom.
 
-The runner samples Conduit whole-process CPU. If it crosses the configured threshold, it invokes macOS sample and preserves the output beside the JSON receipt. Inspect that artifact for the main-thread stack.
+The runner continues observation through natural provider completion before closing Conduit supervision. It samples Conduit whole-process CPU throughout. If CPU crosses the configured threshold, it invokes macOS `sample` and preserves the output beside the JSON receipt. Inspect that artifact for the main-thread stack.
 
 If the historical pin reproduces, preserve the sample before changing code. Do not infer that non-reproduction proves #44 fixed.
 
@@ -128,7 +130,8 @@ A runner may report PASS_FOR_TIER_OBSERVATION only when:
 - all qualification-owned tasks were created;
 - every qualification-owned task resolved to one exact provider session and every one of those sessions reported `active` during the overlap window;
 - the overlap window was sampled;
-- cleanup returned Conduit task-control occupancy to zero and direct observation of every qualification provider session reported `inactive`;
+- every qualification provider session reached `inactive` naturally before teardown, so post-completion behavior was observable;
+- cleanup returned Conduit task-control occupancy to zero and direct observation of every qualification provider session still reported `inactive`;
 - no harness failure occurred.
 
 This is only a tier-observation disposition. It does not select a production limit.
@@ -141,6 +144,7 @@ FAIL_OR_INCONCLUSIVE includes:
 - create refusal/failure before the tier is reached;
 - missing, duplicate, or non-active exact provider binding for a qualification-owned task;
 - provider-session state becoming materially unknown at the decision boundary;
+- natural provider completion timing out;
 - cleanup not reconciling both Conduit task slots and exact provider-session inactivity;
 - transport failure preventing measurement.
 
