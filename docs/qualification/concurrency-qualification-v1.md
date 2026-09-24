@@ -116,7 +116,7 @@ At minimum record:
 - whether a post-completion pin occurs;
 - whether closing a task changes the symptom.
 
-The runner continues observation through natural provider completion and then holds a 15-second post-completion observation window before closing Conduit supervision. It samples Conduit whole-process CPU throughout. On the first known CPU sample that meets the configured threshold, it invokes macOS `sample` immediately from the live observation loop, before teardown can recover the process. The receipt records the trigger phase (`active_acquisition`, `active_overlap`, `natural_completion`, `post_completion`, or `cleanup`). Inspect the artifact for the main-thread stack.
+The runner continues observation through natural provider completion and then holds a 15-second post-completion observation window before closing Conduit supervision. It samples Conduit whole-process CPU throughout. On the first known pre-teardown CPU sample that meets the configured threshold, it invokes macOS `sample` immediately from the live observation loop, before teardown can recover the process. The receipt records the trigger phase (`active_acquisition`, `active_overlap`, `natural_completion`, or `post_completion`). Cleanup CPU remains recorded after task close but cannot satisfy the #44 pre-teardown sampling boundary. Inspect the artifact for the main-thread stack.
 
 If the historical pin reproduces, preserve the sample before changing code. Do not infer that non-reproduction proves #44 fixed.
 
