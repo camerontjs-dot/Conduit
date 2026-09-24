@@ -685,6 +685,18 @@ public enum ConduitFleetSnapshotBuilder {
         )
     }
 
+    /// Expensive provider detail reads are reserved for sessions where
+    /// Conduit has a current exact task association or recognized writer
+    /// authority. Inventory-only external/historical sessions remain visible
+    /// with UNKNOWN turn/runtime detail rather than making Fleet latency scale
+    /// with the full provider history.
+    public static func requiresDetailedProviderObservation(
+        _ worker: ConduitFleetProviderWorkerSnapshot
+    ) -> Bool {
+        worker.taskAssociation.kind == .exact
+            || worker.writerAuthority.conduitWriterState == .controlled
+    }
+
     public static func providerPage<Item: Codable & Equatable & Sendable>(
         items: [Item],
         cursor: String?,
