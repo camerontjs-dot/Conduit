@@ -29,6 +29,7 @@ final class CodexAppServerClient: ObservableObject {
     }
 
     @Published private(set) var threadID: String?
+    @Published private(set) var activeTurnID: String?
     @Published private(set) var isReady = false
     @Published private(set) var isTurnActive = false
     @Published private(set) var lastTurnStatus: String?
@@ -307,6 +308,7 @@ final class CodexAppServerClient: ObservableObject {
             )
         } else {
             streamPump?.resetTurn()
+            activeTurnID = nil
             send(
                 CodexAppServerRequests.turnStart(
                     id: 0,
@@ -325,8 +327,14 @@ final class CodexAppServerClient: ObservableObject {
     }
 
     func interrupt() {
-        guard let threadID else { return }
-        send(CodexAppServerRequests.turnInterrupt(id: 0, threadID: threadID))
+        guard let threadID, let activeTurnID else { return }
+        send(
+            CodexAppServerRequests.turnInterrupt(
+                id: 0,
+                threadID: threadID,
+                turnID: activeTurnID
+            )
+        )
     }
 
     func respondToApproval(accept: Bool) {
@@ -359,6 +367,7 @@ final class CodexAppServerClient: ObservableObject {
         failPending("Codex app-server stopped.")
         isReady = false
         isTurnActive = false
+        activeTurnID = nil
         lastTurnStatus = nil
         socketPath = nil
     }
@@ -391,6 +400,7 @@ final class CodexAppServerClient: ObservableObject {
         if ignoreProcessExit { return }
         isReady = false
         isTurnActive = false
+        activeTurnID = nil
         failPending("Codex app-server exited.")
         onExited?()
     }
@@ -428,6 +438,7 @@ final class CodexAppServerClient: ObservableObject {
         failPending(message)
         isReady = false
         isTurnActive = false
+        activeTurnID = nil
         onFailed?(message)
         stopProcesses()
     }
@@ -436,12 +447,16 @@ final class CodexAppServerClient: ObservableObject {
         switch effect {
         case .threadStarted(let id):
             threadID = id
+        case .turnStarted(let id):
+            activeTurnID = id
+            isTurnActive = true
         case .upsertOutput:
             isTurnActive = true
         case .requestApproval(let approval):
             pendingApproval = approval
         case .turnCompleted(let status):
             isTurnActive = false
+            activeTurnID = nil
             lastTurnStatus = status
         case .failed(let message):
             lastError = message

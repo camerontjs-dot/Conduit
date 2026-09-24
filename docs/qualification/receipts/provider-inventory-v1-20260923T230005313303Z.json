@@ -1,0 +1,141 @@
+{
+  "adapter_inventory": {
+    "antigravity": "agy -p --output-format stream-json",
+    "claude": "claude -p --output-format stream-json",
+    "codex_app_server": "codex app-server; JSON-RPC stdio",
+    "gemini_acp": "gemini --acp; ACP JSON-RPC; API-key interface only",
+    "grok_acp": "grok agent --no-leader stdio; ACP JSON-RPC",
+    "opencode": "one OpenCode HTTP server lease; HTTP + SSE",
+    "shell": "SwiftTerm PTY / process tree"
+  },
+  "credential_values_recorded": false,
+  "host_platform": "darwin",
+  "observed_at_utc": "2026-09-23T23:00:05.313Z",
+  "receipt_type": "provider-inventory-v1",
+  "runtimes": {
+    "antigravity": {
+      "catalog_probe_exit_code": 0,
+      "cli_interface": {
+        "auth_status_subcommand_exposed": false,
+        "conversation_resume": true,
+        "print_mode": true,
+        "session_delete_flag": false,
+        "stream_json": true
+      },
+      "installed": true,
+      "readiness": "unknown",
+      "readiness_basis": "model catalog succeeds; CLI help exposes no auth status or session deletion operation; no conversation was started",
+      "version": "1.2.9",
+      "version_probe": "agy --version",
+      "version_probe_exit_code": 0
+    },
+    "claude": {
+      "installed": true,
+      "readiness": "unavailable",
+      "readiness_basis": {
+        "auth_method": "none",
+        "logged_in": false,
+        "provider_account_details_recorded": false
+      },
+      "version": "2.1.235 (Claude Code)",
+      "version_probe": "claude --version",
+      "version_probe_exit_code": 0
+    },
+    "codex_app_server": {
+      "installed": true,
+      "readiness": "authenticated",
+      "readiness_basis": "codex login status exit and status text; account identifiers and credential values are not recorded",
+      "version": "codex-cli 0.154.0",
+      "version_probe": "codex --version",
+      "version_probe_exit_code": 0
+    },
+    "desktop_apps": {
+      "Antigravity": {
+        "build": "2.15.1",
+        "installed": true,
+        "version": "2.15.1"
+      },
+      "Antigravity IDE": {
+        "build": "2.5.5",
+        "installed": true,
+        "version": "2.5.5"
+      },
+      "Claude": {
+        "build": "2.7032.0",
+        "installed": true,
+        "version": "2.7032.0"
+      },
+      "Codex": {
+        "installed": false,
+        "version": null
+      },
+      "Gemini": {
+        "build": "1.116.5.889",
+        "installed": true,
+        "version": "1.116.5.889"
+      },
+      "Grok": {
+        "build": "0.58.0",
+        "installed": true,
+        "version": "0.58.0"
+      },
+      "OpenCode": {
+        "build": "1.18.32",
+        "installed": true,
+        "version": "1.18.32"
+      }
+    },
+    "gemini_acp": {
+      "api_key_present": true,
+      "cli_interface": {
+        "acp_flag": true,
+        "delete_session_flag": true,
+        "list_sessions_flag": true,
+        "resume_flag": true
+      },
+      "conduit_auth_method": "gemini-api-key",
+      "installed": true,
+      "readiness": "configured_unverified",
+      "readiness_basis": "GEMINI_API_KEY presence checked in process environment and the same ~/.gemini/.env path Conduit reads; value not recorded. ACP initialize advertised additional auth methods, but no authentication was attempted.",
+      "version": "0.46.0",
+      "version_probe": "gemini --version",
+      "version_probe_exit_code": 0
+    },
+    "grok_acp": {
+      "catalog_probe_exit_code": 0,
+      "installed": true,
+      "readiness": "unknown",
+      "version": "grok 1.0.41 (4220f3b224a6) [stable]",
+      "version_probe": "grok --version",
+      "version_probe_exit_code": 0
+    },
+    "opencode": {
+      "configured_providers": [
+        "Google",
+        "Ollama Cloud",
+        "OpenRouter",
+        "xAI"
+      ],
+      "installed": true,
+      "readiness": "configured_unverified",
+      "version": "1.18.30",
+      "version_probe": "opencode --version",
+      "version_probe_exit_code": 0
+    },
+    "shell": {
+      "executable": "/bin/zsh",
+      "installed": true,
+      "interface": "direct PTY/process",
+      "tmux": {
+        "installed": true,
+        "version": "tmux 3.6b",
+        "version_probe": "tmux -V",
+        "version_probe_exit_code": 0
+      },
+      "version": "zsh 5.9 (arm64-apple-darwin26.0)"
+    }
+  },
+  "schema_version": "1.0.0",
+  "session_content_read": false,
+  "state": "pass"
+}

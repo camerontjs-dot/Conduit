@@ -1,0 +1,2300 @@
+{
+  "candidate": {
+    "branch": "codex/slice10-provider-conformance-lead-20260923",
+    "commit_sha": null,
+    "freeze_record_location": "Exact frozen commit/tree will be recorded in the GitHub #53 candidate receipt and Draft PR after commit.",
+    "freeze_state": "not_frozen_at_matrix_observation",
+    "tree_sha": null
+  },
+  "ci_observation": {
+    "candidate_hosted_ci": "No hosted run exists for this not-yet-frozen candidate at matrix observation.",
+    "green_claim": false,
+    "related_main_or_prior_run": "Current live main run 35889012451 failed before candidate steps: runner_id 0, steps [], billing annotation says recent payments failed or spending limit needs increase. Prior Draft #72 run 35925726306 also had runner_id 0 and zero steps; its cause is unknown from retained GitHub run data. Neither is candidate execution evidence."
+  },
+  "claim_scope": "For the exact installed runtime versions and exercised interfaces, provider outcomes describe native runtime behavior and Conduit outcomes describe the adapter/lifecycle boundary. Each cell links runtime receipts and, where used, current source/test evidence. This is implementation and local qualification evidence, not independent terminal qualification or universal compatibility.",
+  "controls": {
+    "explicitly_unsupported": {
+      "evidence_refs": [
+        "PR63-LIFECYCLE",
+        "LIFECYCLE-PLANNER",
+        "CODEX-NEGATIVE"
+      ],
+      "note": "Structured Codex/ACP/CLI adapters have no Conduit release/detach path; direct PTY cannot detach. The installed Codex server also rejected interrupt without exact turnId, and the repaired exact-ID request later passed.",
+      "result": "unsupported"
+    },
+    "positive_observation": {
+      "evidence_refs": [
+        "OPENCODE-NATIVE",
+        "CODEX-NATIVE",
+        "GROK-NATIVE",
+        "SHELL-PTY"
+      ],
+      "note": "Real scoped discovery, exact identity/resume, active-turn cancellation or OS process-tree/stop properties were observed on qualification-owned resources.",
+      "result": "supported"
+    },
+    "provider_semantic_difference": {
+      "evidence_refs": [
+        "OPENCODE-NATIVE",
+        "CODEX-NATIVE",
+        "GROK-NATIVE"
+      ],
+      "note": "OpenCode reports session busy/idle without a turn ID; Codex reports exact thread and turn IDs/status; Grok ACP reports session-level stopReason cancelled with no turn ID.",
+      "result": "provider_specific"
+    },
+    "unavailable_runtime": {
+      "evidence_refs": [
+        "ENV-INVENTORY"
+      ],
+      "note": "Claude Code is installed but its own read-only auth status says loggedIn=false and authMethod=none; no prompt/session was attempted.",
+      "result": "unavailable"
+    },
+    "unknown_authority": {
+      "evidence_refs": [
+        "CODEX-NATIVE",
+        "ENV-INVENTORY"
+      ],
+      "note": "The exact-cwd Codex thread list was empty before its first turn. This pre-turn absence is preserved as unknown; later scoped discovery after a turn passed.",
+      "result": "unknown"
+    }
+  },
+  "credential_values_recorded": false,
+  "evidence_catalog": {
+    "ACP-ADAPTER": {
+      "artifact": {
+        "path": "Sources/Conduit/GrokACPClient.swift",
+        "sha256": "be5a39358df68c6311637ad2dae09bfac083c37044ffcb18982c3d2914f8994f"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/Conduit/GrokACPClient.swift"
+      },
+      "kind": "source_test",
+      "limitation": "The generic ACP client is configured with provider-specific launch/auth behavior; the direct Grok run is the runtime authority.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "acp-adapter-source-v1"
+    },
+    "ACP-PROTOCOL": {
+      "artifact": {
+        "path": "Sources/ConduitCore/ACPProtocol.swift",
+        "sha256": "496ca6fdae99d5735d38a61fd00dc5fc22d1d0ec6ca4d90cecf40b42834591af"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/ConduitCore/ACPProtocol.swift"
+      },
+      "kind": "source_test",
+      "limitation": "ACP permission and event mapping are adapter-level; the installed Grok permission path was not triggered.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "acp-protocol-source-v1"
+    },
+    "CODEX-ADAPTER": {
+      "artifact": {
+        "path": "Sources/Conduit/CodexAppServerClient.swift",
+        "sha256": "bb70c445990b9050c23ed8ad9b3bb3e42a69c7f499b39ea4d2775a0db011063f"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/Conduit/CodexAppServerClient.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Current adapter captures active turn ID and requires exact thread and turn IDs for interrupt.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "codex-app-server-adapter-source-v1"
+    },
+    "CODEX-FIX-TEST": {
+      "artifact": {
+        "path": "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift",
+        "sha256": "c16be21db8e6059662cd8cf337a5d80d63d03f6db7b6d272c85bc5eb8d154e15"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Deterministic protocol tests accompany the direct installed-runtime interrupted-turn receipt.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "codex-turn-id-interrupt-regression-test-v1"
+    },
+    "CODEX-FIX-TEST-RUN": {
+      "artifact": {
+        "path": "docs/qualification/receipts/codex-protocol-tests-v1-20260923T231911Z.json",
+        "sha256": "b0a766cda5f2fc42e223845dac56295ed0fcd2790314f1117f12c1d8ab0feaf4"
+      },
+      "authority": "Xcode XCTest on the exact candidate worktree; Codex App Server protocol suite only",
+      "freshness": "fresh local test run before candidate freeze",
+      "identity": {
+        "exit_code": 0,
+        "suite": "CodexAppServerProtocolTests",
+        "tests_executed": 17
+      },
+      "kind": "source_test",
+      "limitation": "Focused deterministic regression tests; the separate direct App Server runtime receipt verifies the exact turn/interrupt boundary.",
+      "observed_at_utc": "2026-09-23T23:19:11.455Z",
+      "procedure_id": "codex-exact-turn-interrupt-regression-v1"
+    },
+    "CODEX-NATIVE": {
+      "artifact": {
+        "path": "docs/qualification/receipts/codex-app-server-probe-v1-20260923T222811Z.json",
+        "sha256": "b2ed0808948e2a2b3e0c6fc104f3162bd166143050c29440b0b19241084b478c"
+      },
+      "authority": "Authenticated Codex App Server stdio in a unique empty cwd; all thread lists used the exact cwd; only the qualification thread was resumed and archived",
+      "freshness": "fresh direct observation",
+      "identity": {
+        "provider_host_pids": [
+          50173,
+          50207
+        ],
+        "provider_thread_id": "01a0d062-289f-78d0-a46b-c0e89e3ed33f",
+        "provider_turn_id": "01a0d062-2d3f-70c0-a378-715bb6a5fc7b"
+      },
+      "kind": "runtime_probe",
+      "limitation": "One exact thread and turn were used. The pre-turn cwd-filtered list was empty; no account-wide listing or file-change/diff probe was run.",
+      "observed_at_utc": "2026-09-23T22:28:11.329Z",
+      "procedure_id": "codex-app-server-isolated-thread-v1"
+    },
+    "CODEX-NEGATIVE": {
+      "artifact": {
+        "path": "docs/qualification/receipts/codex-app-server-probe-v1-20260923T221922Z.json",
+        "sha256": "d73cbf598aa7d2b99e8607975c06c1fb3a535f0e50f6c61ac898ad668fde1789"
+      },
+      "authority": "Qualification-owned Codex App Server thread and turn; attempted turn/interrupt without turnId",
+      "freshness": "fresh direct observation",
+      "identity": {
+        "provider_thread_id": "01a0d062-26ed-7a63-9a88-4389d5516289",
+        "provider_turn_id": "01a0d062-2a7d-7430-bc4a-85978b0f1bb0"
+      },
+      "kind": "negative_probe",
+      "limitation": "The exact runtime rejected the incomplete request with missing field turnId. That call was a preserved negative control; a later exact-id call succeeded.",
+      "observed_at_utc": "2026-09-23T22:19:22.438Z",
+      "procedure_id": "codex-interrupt-missing-turn-id-v1"
+    },
+    "CODEX-PROTOCOL": {
+      "artifact": {
+        "path": "Sources/ConduitCore/CodexAppServerProtocol.swift",
+        "sha256": "18b661335b7a911e4eda2d33fa5147e2fcb7cbb38d15f78d00e96a52ac63f9b7"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/ConduitCore/CodexAppServerProtocol.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Current protocol mapper/request builder preserves exact active turn identity.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "codex-app-server-protocol-source-v1"
+    },
+    "CODEX-STREAM-TESTS": {
+      "artifact": {
+        "path": "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift",
+        "sha256": "74ca21e897ec80f984d79af12649e5dd611a3b2058afb87b2947bf7a398cef81"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Event parser tests establish adapter handling, not an additional provider feature.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "codex-app-server-stream-tests-v1"
+    },
+    "CONDUIT-API-SCOPE": {
+      "artifact": {
+        "path": "Sources/Conduit/AppModel.swift",
+        "sha256": "83731dcceaf102e7a0536bd9f71a4e3c1584c9f03943dbee78cec86802d538d5"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/Conduit/AppModel.swift"
+      },
+      "kind": "source_test",
+      "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
+    },
+    "CONFORMANCE-HARNESS": {
+      "artifact": {
+        "path": "scripts/provider-conformance.py",
+        "sha256": "f98ce5e26111e68d8e76a7d24dbede9396b686799263f49684f67842cf08258f"
+      },
+      "authority": "Read-only review of the versioned provider inventory/probe/receipt validator",
+      "freshness": "candidate source snapshot; exact commit/tree recorded in the GitHub candidate receipt",
+      "identity": {
+        "interface": "inventory, provider probes, receipt validation, matrix validation",
+        "path": "scripts/provider-conformance.py"
+      },
+      "kind": "procedure_source",
+      "limitation": "The harness records bounded provider operations; it is not independent terminal qualification.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "provider-conformance-harness-v1"
+    },
+    "CONFORMANCE-SCHEMA": {
+      "artifact": {
+        "path": "docs/qualification/provider-conformance-v1.schema.json",
+        "sha256": "612b6402db13c23793c30a48ab3975916e6fd4f0b89a44fde6ec7077a94fa3f1"
+      },
+      "authority": "Versioned JSON Schema for all seven runtime records and 13 capabilities",
+      "freshness": "candidate source snapshot; exact commit/tree recorded in the GitHub candidate receipt",
+      "identity": {
+        "path": "docs/qualification/provider-conformance-v1.schema.json",
+        "schema_version": "1.0.0"
+      },
+      "kind": "schema",
+      "limitation": "Schema validation checks shape; semantic state and evidence quality still require review.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "provider-conformance-schema-v1"
+    },
+    "ENV-INVENTORY": {
+      "artifact": {
+        "path": "docs/qualification/receipts/provider-inventory-v1-20260923T230005313303Z.json",
+        "sha256": "a5b984a4448020002c44e9eac2441607072a19ab530efc22d6d89fcef702a902"
+      },
+      "authority": "Read-only local executable/app/version inventory; auth values were not recorded",
+      "freshness": "fresh direct observation",
+      "identity": {},
+      "kind": "inventory",
+      "limitation": "No accounts were authenticated or modified; key presence is recorded only as a boolean.",
+      "observed_at_utc": "2026-09-23T23:00:05.313Z",
+      "procedure_id": "provider-inventory-v1"
+    },
+    "GEMINI-INIT": {
+      "artifact": {
+        "path": "docs/qualification/receipts/gemini-acp-probe-v1-20260923T224805Z.json",
+        "sha256": "307e774fec3007317f61ef4460b9a9ec77f7965e4530cac61b8363e2d61cbc9f"
+      },
+      "authority": "Gemini CLI ACP stdio in a unique empty cwd; initialize only, with no authenticate/session/prompt calls",
+      "freshness": "fresh direct observation",
+      "identity": {
+        "provider_host_pid": 52381,
+        "qualification_workspace_label": "conduit-slice10-gemini-2wtpk71h"
+      },
+      "kind": "runtime_probe",
+      "limitation": "ACP initialize succeeded and advertised auth method IDs. No account authentication or provider session/turn was started.",
+      "observed_at_utc": "2026-09-23T22:48:05.053Z",
+      "procedure_id": "gemini-acp-initialize-only-v1"
+    },
+    "GROK-HARNESS-INCONCLUSIVE": {
+      "artifact": {
+        "path": "docs/qualification/receipts/grok-acp-probe-v1-20260923T224011Z.json",
+        "sha256": "1e8ae46a10a474dd1b21aedcab4f020da4a657a34367e8488ec2618d24bfc489"
+      },
+      "authority": "Grok ACP stdio in a unique empty cwd; exact qualification session only",
+      "freshness": "fresh direct observation",
+      "identity": {
+        "provider_session_id": "01a0d06d-28e7-7732-994f-908919af5bdc"
+      },
+      "kind": "negative_probe",
+      "limitation": "The provider accepted exact session/load but omitted an echoed sessionId; the harness incorrectly required an echo. This is a harness false-negative, not a provider resume failure; the corrected successor receipt passes.",
+      "observed_at_utc": "2026-09-23T22:40:11.978Z",
+      "procedure_id": "grok-acp-session-v1-initial-harness"
+    },
+    "GROK-NATIVE": {
+      "artifact": {
+        "path": "docs/qualification/receipts/grok-acp-probe-v1-20260923T224242Z.json",
+        "sha256": "34b1f3e646cc870deaee83915585910287a625d7b9ff17fb3e5946253dd5541f"
+      },
+      "authority": "Grok ACP stdio with --no-leader in a unique empty cwd; exact session/load and exact returned session ID delete only",
+      "freshness": "fresh direct observation",
+      "identity": {
+        "provider_host_pids": [
+          51602,
+          51620
+        ],
+        "provider_session_id": "01a0d06f-759b-7f32-aee5-1e6ad25908a4"
+      },
+      "kind": "runtime_probe",
+      "limitation": "One qualification session was created, cancelled, resumed after host restart, deleted, and exact-load absence verified. ACP returned no provider turn ID.",
+      "observed_at_utc": "2026-09-23T22:42:42.265Z",
+      "procedure_id": "grok-acp-session-v1"
+    },
+    "LIFECYCLE-PLANNER": {
+      "artifact": {
+        "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift",
+        "sha256": "4113d7c4c1ae9f2dbe6c52d3449841507918de6a4e539c1d62d5cc721caca4fb"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Planner behavior is not a direct runtime operation; PR #63 provides the qualified OpenCode/Codex/tmux/direct-PTY cases.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "conduit-lifecycle-preflight-planner-v1"
+    },
+    "LIFECYCLE-TESTS": {
+      "artifact": {
+        "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift",
+        "sha256": "41501c2466e809b2ff06792a4c0b4ddc3b2b8ae21e1f370f314a8ad6b8070307"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Deterministic tests establish planner mapping, not provider runtime behavior.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "lifecycle-preflight-contract-tests-v1"
+    },
+    "MATRIX-CONTRACT-TESTS": {
+      "artifact": {
+        "path": "Tests/test_provider_conformance.py",
+        "sha256": "94cb889dd293c2cbb039b29fb9dfb440e28544e971682a68e6f5d716c230551f"
+      },
+      "authority": "Local standard-library tests for missing states, controls, references, and byte-bound local evidence",
+      "freshness": "candidate source snapshot; exact commit/tree recorded in the GitHub candidate receipt",
+      "identity": {
+        "path": "Tests/test_provider_conformance.py"
+      },
+      "kind": "source_test",
+      "limitation": "Deterministic contract tests do not establish provider behavior.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "provider-conformance-matrix-tests-v1"
+    },
+    "OPENCODE-ADAPTER": {
+      "artifact": {
+        "path": "Sources/Conduit/OpenCodeHTTPClient.swift",
+        "sha256": "cddd5d926526d9705dbe9cf237bd3ce1471e146ddb4eddd51fcc0bed32b7fac0"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/Conduit/OpenCodeHTTPClient.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Source establishes client request/event handling; direct capability claims use the OpenCode native probe or prior qualification.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "opencode-http-adapter-source-v1"
+    },
+    "OPENCODE-NATIVE": {
+      "artifact": {
+        "path": "docs/qualification/receipts/opencode-runtime-probe-v1-20260923T223213Z.json",
+        "sha256": "f60f4d9ff9100afa0758e0f2b7da6e3b5d41ac69f643145a17c6ec5b03705e28"
+      },
+      "authority": "Qualification-owned OpenCode server on a random loopback port; one unique directory-scoped session; no global listing",
+      "freshness": "fresh direct observation",
+      "identity": {
+        "provider_host_pids": [
+          50463,
+          50471
+        ],
+        "provider_session_id": "ses_f2f9a209cffeBQ6QytpmAFB0E3"
+      },
+      "kind": "runtime_probe",
+      "limitation": "One isolated session and one no-tools prompt were exercised. Session status, not a provider turn ID, was observed; diff endpoint returned an empty list.",
+      "observed_at_utc": "2026-09-23T22:32:13.613Z",
+      "procedure_id": "opencode-http-session-v1"
+    },
+    "OPENCODE-TESTS": {
+      "artifact": {
+        "path": "Tests/ConduitCoreTests/OpenCodeConversationActivityTests.swift",
+        "sha256": "f618fae69b74927df3b7467811feff02cc73224c02fdb4de27c68b039f981290"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Tests/ConduitCoreTests/OpenCodeConversationActivityTests.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Adapter unit tests are not substituted for live provider runtime evidence.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "opencode-activity-tests-v1"
+    },
+    "PR62-AUTHORITY": {
+      "artifact": {
+        "url": "https://github.com/camerontjs-dot/Conduit/pull/62#issuecomment-5769476179"
+      },
+      "authority": "Exact candidate PR #62 qualification; isolated OpenCode adoption/controller collision and Codex native active-writer collision",
+      "freshness": "previous exact-candidate qualification; boundary-limited",
+      "identity": {},
+      "kind": "historical_qualification",
+      "limitation": "This evidence covers provider-session authority only. It does not establish lifecycle release or cancellation.",
+      "observed_at_utc": "2026-09-22T00:23:12Z",
+      "procedure_id": "provider-session-authority-independent-qualification"
+    },
+    "PR63-LIFECYCLE": {
+      "artifact": {
+        "url": "https://github.com/camerontjs-dot/Conduit/pull/63#issuecomment-5781150281"
+      },
+      "authority": "Exact candidate PR #63 lifecycle qualification; qualification-owned OpenCode, Codex, tmux, and direct-PTY operations",
+      "freshness": "previous exact-candidate qualification; boundary-limited",
+      "identity": {},
+      "kind": "historical_qualification",
+      "limitation": "OpenCode release was supported only while another lease kept the shared host alive; final lease release was unsupported. Codex structured release had no detach path; direct PTY release was unsupported; explicit host-stop and tmux detach were separately tested.",
+      "observed_at_utc": "2026-09-22T17:40:21Z",
+      "procedure_id": "lifecycle-preflight-independent-qualification"
+    },
+    "PTY-ADAPTER": {
+      "artifact": {
+        "path": "Sources/Conduit/TerminalBackend.swift",
+        "sha256": "3e3b3b80756847e9766b6a28eba0aa5a609c0dacd054c18755a704922ad1c4ea"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/Conduit/TerminalBackend.swift"
+      },
+      "kind": "source_test",
+      "limitation": "PTY byte output and process identity are not provider-native event or turn semantics.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "direct-pty-adapter-source-v1"
+    },
+    "SHELL-PTY": {
+      "artifact": {
+        "path": "docs/qualification/receipts/shell-process-probe-v1-20260923T224240Z.json",
+        "sha256": "507033df46d67b03fc88a30076cdcb5e499a6af86e5168bdf7bc82f9637fd831"
+      },
+      "authority": "Qualification-owned direct PTY and OS process group; no provider session or operator shell reused",
+      "freshness": "fresh direct observation",
+      "identity": {
+        "child_pid": 51604,
+        "process_group_id": 51603,
+        "shell_pid": 51603
+      },
+      "kind": "runtime_probe",
+      "limitation": "Process group and its shell child were visible and stopped. This is OS process evidence, not provider session or turn authority.",
+      "observed_at_utc": "2026-09-23T22:42:40.900Z",
+      "procedure_id": "shell-process-tree-v1"
+    },
+    "SLICE9-SHELL": {
+      "artifact": {
+        "path": "docs/qualification/shell-provider-correlation-live.json",
+        "sha256": "8ff395209169f23a26f112c58f581d04ec7cf356941fc118cffcf20aa7dfc50f"
+      },
+      "authority": "Slice 9 exact candidate live macOS process observer and read-only OpenCode SQLite inventory",
+      "freshness": "previous exact-candidate qualification; direct Shell telemetry boundary",
+      "identity": {
+        "process_tree_coverage": "complete",
+        "provider_process_pid": 88722,
+        "provider_session_id": "ses_f33a073f1ffegOrCbOKq2aEwby",
+        "shell_pid": 88718
+      },
+      "kind": "historical_qualification",
+      "limitation": "One Shell-launched OpenCode provider child and exact session were correlated. This does not establish arbitrary descendant cleanup, writer authority, or provider turn state.",
+      "observed_at_utc": "2026-09-23T04:13:12Z",
+      "procedure_id": "shell-provider-correlation-live"
+    },
+    "STREAMJSON-ADAPTER": {
+      "artifact": {
+        "path": "Sources/Conduit/StreamJSONClient.swift",
+        "sha256": "105a7a46a2da10733b4808959ae91c089d6029972a344007fd82b5466bef81d2"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/Conduit/StreamJSONClient.swift"
+      },
+      "kind": "source_test",
+      "limitation": "Claude and Antigravity use one process per turn; this adapter has no structured pending-approval surface.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "stream-json-adapter-source-v1"
+    },
+    "STRUCTURED-ADAPTER-TESTS": {
+      "artifact": {
+        "path": "Tests/ConduitCoreTests/StructuredAdapterTests.swift",
+        "sha256": "de95f897641533be8064f0129f90cc2afe8f0488f03a31d35bfde60abbedbd08"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Tests/ConduitCoreTests/StructuredAdapterTests.swift"
+      },
+      "kind": "source_test",
+      "limitation": "These tests cover protocol mapping and adapter selection, not live provider permission events.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "structured-adapter-unit-tests-v1"
+    },
+    "STRUCTURED-CATALOG": {
+      "artifact": {
+        "path": "Sources/ConduitCore/StructuredAdapter.swift",
+        "sha256": "c117c5a2dc43230fd9d7c06bd69ee16d58e06614982d277dff24abb1672fb5a5"
+      },
+      "authority": "read-only source and test inspection in the candidate checkout",
+      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "identity": {
+        "path": "Sources/ConduitCore/StructuredAdapter.swift"
+      },
+      "kind": "source_test",
+      "limitation": "The catalog records interfaces and intentional auth/policy constraints; method names alone are not treated as runtime conformance.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "structured-adapter-catalog-source-v1"
+    },
+    "TEST-ENTRYPOINT": {
+      "artifact": {
+        "path": "scripts/test.sh",
+        "sha256": "b422a270f7e333a6f87341aa5d1f4bc43ab9f656273a43437176b70382c629cb"
+      },
+      "authority": "Repository-native full suite entrypoint, including conduit-selftest, provider-conformance contract tests, and Swift XCTest",
+      "freshness": "current candidate source snapshot",
+      "identity": {
+        "path": "scripts/test.sh"
+      },
+      "kind": "procedure_source",
+      "limitation": "This entrypoint does not exercise real installed adapters; direct runtime receipts are separate.",
+      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "procedure_id": "conduit-full-suite-entrypoint-v1"
+    }
+  },
+  "inventory_ref": "ENV-INVENTORY",
+  "matrix_id": "conduit-provider-conformance-v1-2026-09-23",
+  "non_claims": [
+    "No universal interoperability claim is made.",
+    "No existing operator provider session was listed globally, read, adopted, prompted, interrupted, archived, or stopped.",
+    "Provider completion, task completion, verification, and objective acceptance are not inferred from one another.",
+    "Provider identity is not Conduit task identity; provider host, session/thread, turn, and writer authority remain separate.",
+    "Permission awareness and nonempty file diff/artifact telemetry remain unknown unless a live provider event/artifact was observed.",
+    "Gemini authentication was not invoked even though key presence and ACP-advertised methods were recorded as non-secret booleans/IDs.",
+    "Antigravity authentication and conversation cleanup were not attempted because no safe read-only auth status and exact-session deletion path were exposed by the inspected CLI help.",
+    "Shell process-group visibility is not a claim of complete arbitrary descendant cleanup; tmux and direct PTY release semantics differ.",
+    "No active provider turn was left running across release_supervision; active-turn continuation after release remains unknown for OpenCode, Codex, and Grok.",
+    "OpenCode cancel_active_turn support is bounded to an accepted abort request with observed busy-to-idle cessation/session.idle; the tested interface exposed no exact turn ID or explicit terminal cancellation reason."
+  ],
+  "observed_at_utc": "2026-09-23T23:07:42Z",
+  "preserved_runs": [
+    {
+      "classification": "provider request-shape negative control; repaired and requalified",
+      "evidence_ref": "CODEX-NEGATIVE",
+      "note": "Codex 0.154.0 rejected turn/interrupt without turnId; exact threadId+turnId request later produced interrupted status."
+    },
+    {
+      "classification": "qualification harness false-negative; superseded without deleting the receipt",
+      "evidence_ref": "GROK-HARNESS-INCONCLUSIVE",
+      "note": "Grok ACP accepted exact session/load but omitted an echoed ID; the corrected harness uses successful exact request acceptance as the identity binding."
+    }
+  ],
+  "runtimes": {
+    "antigravity": {
+      "adapter_source": [
+        "Sources/Conduit/StreamJSONClient.swift",
+        "Sources/ConduitCore/StreamJSONProtocol.swift",
+        "Sources/ConduitCore/StructuredAdapter.swift"
+      ],
+      "adapter_tests": [
+        "Tests/ConduitCoreTests/StructuredAdapterTests.swift",
+        "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift"
+      ],
+      "capabilities": {
+        "adoptable_connectable": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE",
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish exact-ID connect/adoption; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish exact-ID connect/adoption; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "cancel_active_turn": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish active-turn cancellation; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish active-turn cancellation; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "current_turn_state_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish current turn-state visibility; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish current turn-state visibility; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "diff_artifact_telemetry": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "event_streaming": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish event streaming; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish event streaming; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "exact_session_thread_identity": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish exact session/thread identity; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish exact session/thread identity; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "external_discovery": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE"
+            ],
+            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish external discovery; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "permission_approval_awareness": {
+          "conduit": {
+            "evidence_refs": [
+              "STREAMJSON-ADAPTER"
+            ],
+            "note": "The current StreamJSON adapter exposes no typed pending-approval state or response path.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish permission/approval awareness; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "process_tree_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish process-tree visibility; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish process-tree visibility; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "provider_host_stop": {
+          "conduit": {
+            "evidence_refs": [
+              "LIFECYCLE-PLANNER",
+              "LIFECYCLE-TESTS",
+              "STREAMJSON-ADAPTER"
+            ],
+            "note": "The Conduit structured-host stop path is implemented and its planner is covered by tests, but this provider process was not launched in this qualification. The provider-specific host-stop effect remains unobserved; see the separate provider outcome.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish provider-host stop; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "release_supervision_with_provider_continuing": {
+          "conduit": {
+            "evidence_refs": [
+              "PR63-LIFECYCLE",
+              "LIFECYCLE-PLANNER"
+            ],
+            "note": "The current lifecycle planner has no detach/release path for this structured adapter. The unsupported result does not imply provider-session deletion.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish release supervision while provider continues; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "resumable": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish exact-session/thread resume; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish exact-session/thread resume; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        },
+        "writer_controller_collision_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. Model catalog and CLI help were read; auth status, session, conversation, and turn operations were not safely inspected.",
+            "status": "unknown"
+          }
+        }
+      },
+      "desktop_app_versions": {
+        "Antigravity": "2.15.1",
+        "Antigravity IDE": "2.5.5"
+      },
+      "installed": true,
+      "interface_exercised": "agy --version, models and --help only; no conversation/session/turn was started.",
+      "readiness": "Model catalog succeeds; CLI exposes conversation and stream-json flags but no safe auth status or session deletion command in help. Readiness remains unknown.",
+      "version": "1.2.9"
+    },
+    "claude": {
+      "adapter_source": [
+        "Sources/Conduit/StreamJSONClient.swift",
+        "Sources/ConduitCore/StreamJSONProtocol.swift",
+        "Sources/ConduitCore/StructuredAdapter.swift"
+      ],
+      "adapter_tests": [
+        "Tests/ConduitCoreTests/StructuredAdapterTests.swift",
+        "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift"
+      ],
+      "capabilities": {
+        "adoptable_connectable": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE",
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "cancel_active_turn": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "current_turn_state_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "diff_artifact_telemetry": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "event_streaming": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "exact_session_thread_identity": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "external_discovery": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE"
+            ],
+            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "permission_approval_awareness": {
+          "conduit": {
+            "evidence_refs": [
+              "STREAMJSON-ADAPTER"
+            ],
+            "note": "The current StreamJSON adapter exposes no typed pending-approval state or response path.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "process_tree_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish process-tree visibility; absence of evidence is not treated as unsupported. Claude Code 2.1.235 reports loggedIn=false and authMethod=none; provider operations were not attempted.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish process-tree visibility; absence of evidence is not treated as unsupported. Claude Code 2.1.235 reports loggedIn=false and authMethod=none; provider operations were not attempted.",
+            "status": "unknown"
+          }
+        },
+        "provider_host_stop": {
+          "conduit": {
+            "evidence_refs": [
+              "LIFECYCLE-PLANNER",
+              "LIFECYCLE-TESTS",
+              "STREAMJSON-ADAPTER"
+            ],
+            "note": "The Conduit structured-host stop path is implemented and its planner is covered by tests, but this provider process was not launched in this qualification. The provider-specific host-stop effect remains unobserved; see the separate provider outcome.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish provider-host stop; absence of evidence is not treated as unsupported. Claude Code 2.1.235 reports loggedIn=false and authMethod=none; provider operations were not attempted.",
+            "status": "unknown"
+          }
+        },
+        "release_supervision_with_provider_continuing": {
+          "conduit": {
+            "evidence_refs": [
+              "PR63-LIFECYCLE",
+              "LIFECYCLE-PLANNER"
+            ],
+            "note": "The current lifecycle planner has no detach/release path for this structured adapter. The unsupported result does not imply provider-session deletion.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish release supervision while provider continues; absence of evidence is not treated as unsupported. Claude Code 2.1.235 reports loggedIn=false and authMethod=none; provider operations were not attempted.",
+            "status": "unknown"
+          }
+        },
+        "resumable": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        },
+        "writer_controller_collision_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY"
+            ],
+            "note": "Unavailable through this installed interface at observation time: Claude Code auth status returned loggedIn=false and authMethod=none. No provider operation was attempted.",
+            "status": "unavailable"
+          }
+        }
+      },
+      "desktop_app_versions": {
+        "Claude": "2.7032.0"
+      },
+      "installed": true,
+      "interface_exercised": "Read-only CLI version and auth status only; stream-json provider session was not started.",
+      "readiness": "Claude auth status reports loggedIn=false and authMethod=none",
+      "version": "2.1.235 (Claude Code)"
+    },
+    "codex_app_server": {
+      "adapter_source": [
+        "Sources/Conduit/CodexAppServerClient.swift",
+        "Sources/ConduitCore/CodexAppServerProtocol.swift",
+        "Sources/ConduitCore/CodexAppServerStreamPump.swift"
+      ],
+      "adapter_tests": [
+        "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift",
+        "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift",
+        "Tests/ConduitCoreTests/ProviderSessionAuthorityTests.swift",
+        "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift"
+      ],
+      "capabilities": {
+        "adoptable_connectable": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "A known thread ID can be resumed by the structured adapter. This is task-local reconnect; the separate provider-session adoption API is OpenCode-only.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "An exact known provider identity was connectable. Conduit adoption remains a separate authority action; the note preserves whether this was explicit adoption or exact-ID resume.",
+            "status": "supported"
+          }
+        },
+        "cancel_active_turn": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE",
+              "CODEX-ADAPTER",
+              "CODEX-PROTOCOL",
+              "CODEX-FIX-TEST",
+              "CODEX-NEGATIVE",
+              "CODEX-FIX-TEST-RUN"
+            ],
+            "note": "Installed 0.154.0 accepted turn/interrupt only after Conduit supplied both the exact threadId and turnId; completion reported interrupted.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE",
+              "CODEX-FIX-TEST-RUN"
+            ],
+            "note": "Installed 0.154.0 accepted turn/interrupt only after Conduit supplied both the exact threadId and turnId; completion reported interrupted.",
+            "status": "supported"
+          }
+        },
+        "current_turn_state_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "Provider state was observed at the interface granularity recorded in the note; a session status is not promoted to a provider turn ID.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "Provider state was observed at the interface granularity recorded in the note; a session status is not promoted to a provider turn ID.",
+            "status": "supported"
+          }
+        },
+        "diff_artifact_telemetry": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "CODEX-NATIVE"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. No approval request or file change was induced; OS process evidence is not an in-app child-lineage observation.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "CODEX-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. No approval request or file change was induced; OS process evidence is not an in-app child-lineage observation.",
+            "status": "unknown"
+          }
+        },
+        "event_streaming": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "A real native event/notification stream was opened and event names/status were retained without session text.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "A real native event/notification stream was opened and event names/status were retained without session text.",
+            "status": "supported"
+          }
+        },
+        "exact_session_thread_identity": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "The exact provider-native session/thread identity was returned and matched through the tested request/read/resume boundary.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "The exact provider-native session/thread identity was returned and matched through the tested request/read/resume boundary.",
+            "status": "supported"
+          }
+        },
+        "external_discovery": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE"
+            ],
+            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "Exact-cwd thread/list found the qualification thread after its first turn; the same scoped list was empty before the first turn, so pre-turn persistence timing remains unknown.",
+            "status": "supported"
+          }
+        },
+        "permission_approval_awareness": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE",
+              "CODEX-PROTOCOL",
+              "CODEX-FIX-TEST"
+            ],
+            "note": "Adapter-level structured approval handling is covered by source/tests; no live provider approval was induced in this qualification.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "CODEX-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish permission/approval awareness; absence of evidence is not treated as unsupported. No approval request or file change was induced; OS process evidence is not an in-app child-lineage observation.",
+            "status": "unknown"
+          }
+        },
+        "process_tree_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "CODEX-NATIVE"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish process-tree visibility; absence of evidence is not treated as unsupported. No approval request or file change was induced; OS process evidence is not an in-app child-lineage observation.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "OS process-group membership was observed for the exact qualification-owned process. Coverage does not extend to detached descendants unless the linked prior receipt says so.",
+            "status": "supported"
+          }
+        },
+        "provider_host_stop": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE",
+              "PR63-LIFECYCLE"
+            ],
+            "note": "The qualification-owned host/process group was stopped and OS absence was checked. Persisted session effects are stated separately.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "The qualification-owned host/process group was stopped and OS absence was checked. Persisted session effects are stated separately.",
+            "status": "supported"
+          }
+        },
+        "release_supervision_with_provider_continuing": {
+          "conduit": {
+            "evidence_refs": [
+              "PR63-LIFECYCLE"
+            ],
+            "note": "The current lifecycle planner has no detach/release path for this structured adapter. The unsupported result does not imply provider-session deletion.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "CODEX-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish release supervision while provider continues; absence of evidence is not treated as unsupported. No approval request or file change was induced; OS process evidence is not an in-app child-lineage observation.",
+            "status": "unknown"
+          }
+        },
+        "resumable": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "The exact requested session/thread was accepted after the qualification-owned provider host stopped and restarted. This proves persistence continuity only for the tested identity.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "The exact requested session/thread was accepted after the qualification-owned provider host stopped and restarted. This proves persistence continuity only for the tested identity.",
+            "status": "supported"
+          }
+        },
+        "writer_controller_collision_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "CODEX-NATIVE",
+              "PR62-AUTHORITY"
+            ],
+            "note": "The native provider reported an active-writer collision and Conduit preserved the existing thread; the collision canary is in prior exact qualification PR #62.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CODEX-NATIVE"
+            ],
+            "note": "The native provider reported an active-writer collision and Conduit preserved the existing thread; the collision canary is in prior exact qualification PR #62.",
+            "status": "supported"
+          }
+        }
+      },
+      "desktop_app_versions": {
+        "Codex": null
+      },
+      "installed": true,
+      "interface_exercised": "Codex App Server JSON-RPC stdio; exact-cwd thread/list, thread/resume/archive, turn/start, turn/interrupt with both threadId and turnId, event notifications, host stop/restart.",
+      "readiness": "codex login status authenticated; exact isolated App Server turn started and was interrupted",
+      "version": "codex-cli 0.154.0"
+    },
+    "gemini_acp": {
+      "adapter_source": [
+        "Sources/Conduit/GrokACPClient.swift",
+        "Sources/Conduit/AppModel.swift",
+        "Sources/ConduitCore/ACPProtocol.swift",
+        "Sources/ConduitCore/StructuredAdapter.swift"
+      ],
+      "adapter_tests": [
+        "Tests/ConduitCoreTests/StructuredAdapterTests.swift"
+      ],
+      "capabilities": {
+        "adoptable_connectable": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE",
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish exact-ID connect/adoption; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish exact-ID connect/adoption; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "cancel_active_turn": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish active-turn cancellation; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish active-turn cancellation; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "current_turn_state_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish current turn-state visibility; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish current turn-state visibility; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "diff_artifact_telemetry": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "event_streaming": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish event streaming; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish event streaming; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "exact_session_thread_identity": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish exact session/thread identity; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish exact session/thread identity; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "external_discovery": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE"
+            ],
+            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish external discovery; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "permission_approval_awareness": {
+          "conduit": {
+            "evidence_refs": [
+              "GEMINI-INIT",
+              "ACP-ADAPTER",
+              "ACP-PROTOCOL",
+              "STRUCTURED-ADAPTER-TESTS"
+            ],
+            "note": "Adapter-level structured approval handling is covered by source/tests; no live provider approval was induced in this qualification.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish permission/approval awareness; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "process_tree_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish process-tree visibility; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GEMINI-INIT"
+            ],
+            "note": "Initialize-only ACP process and its OS process group were visible/stoppable. No Gemini session or provider turn existed, so session effects are unknown.",
+            "status": "supported"
+          }
+        },
+        "provider_host_stop": {
+          "conduit": {
+            "evidence_refs": [
+              "GEMINI-INIT",
+              "LIFECYCLE-PLANNER"
+            ],
+            "note": "The Conduit structured-host stop path is implemented and its planner is covered by tests. A qualification-owned native ACP process for this runtime was stopped and verified absent, but this task did not invoke the stop through a Conduit task-level operation; provider-session effects are recorded separately.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GEMINI-INIT"
+            ],
+            "note": "Initialize-only ACP process and its OS process group were visible/stoppable. No Gemini session or provider turn existed, so session effects are unknown.",
+            "status": "supported"
+          }
+        },
+        "release_supervision_with_provider_continuing": {
+          "conduit": {
+            "evidence_refs": [
+              "PR63-LIFECYCLE",
+              "LIFECYCLE-PLANNER"
+            ],
+            "note": "The current lifecycle planner has no detach/release path for this structured adapter. The unsupported result does not imply provider-session deletion.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish release supervision while provider continues; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "resumable": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish exact-session/thread resume; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish exact-session/thread resume; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        },
+        "writer_controller_collision_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GEMINI-INIT"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. ACP initialize only: provider authentication was not attempted even though a local API-key boolean and several advertised auth methods were observed.",
+            "status": "unknown"
+          }
+        }
+      },
+      "desktop_app_versions": {
+        "Gemini": "1.116.5.889"
+      },
+      "installed": true,
+      "interface_exercised": "gemini --acp ACP initialize only; no authenticate, session/new, session/load, prompt, or account mutation.",
+      "readiness": "GEMINI_API_KEY is configured in the environment Conduit reads; ACP initialize advertises four auth method IDs. Authentication was not attempted.",
+      "version": "0.46.0"
+    },
+    "grok_acp": {
+      "adapter_source": [
+        "Sources/Conduit/GrokACPClient.swift",
+        "Sources/ConduitCore/ACPProtocol.swift",
+        "Sources/ConduitCore/StructuredAdapter.swift"
+      ],
+      "adapter_tests": [
+        "Tests/ConduitCoreTests/StructuredAdapterTests.swift"
+      ],
+      "capabilities": {
+        "adoptable_connectable": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE",
+              "ACP-ADAPTER",
+              "ACP-PROTOCOL",
+              "STRUCTURED-ADAPTER-TESTS"
+            ],
+            "note": "The generic ACP adapter can session/load an exact known ID; this is reconnect, not an explicit provider-session adoption claim.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "An exact known provider identity was connectable. Conduit adoption remains a separate authority action; the note preserves whether this was explicit adoption or exact-ID resume.",
+            "status": "supported"
+          }
+        },
+        "cancel_active_turn": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE",
+              "ACP-ADAPTER",
+              "ACP-PROTOCOL",
+              "STRUCTURED-ADAPTER-TESTS"
+            ],
+            "note": "ACP session/prompt returned stopReason=cancelled after exact-session session/cancel. The protocol exposed no stable provider turn ID or active-turn snapshot.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "ACP session/prompt returned stopReason=cancelled after exact-session session/cancel. The protocol exposed no stable provider turn ID or active-turn snapshot.",
+            "status": "supported"
+          }
+        },
+        "current_turn_state_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE",
+              "ACP-ADAPTER",
+              "ACP-PROTOCOL",
+              "STRUCTURED-ADAPTER-TESTS"
+            ],
+            "note": "ACP session/prompt returned stopReason=cancelled after exact-session session/cancel. The protocol exposed no stable provider turn ID or active-turn snapshot.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "ACP session/prompt returned stopReason=cancelled after exact-session session/cancel. The protocol exposed no stable provider turn ID or active-turn snapshot.",
+            "status": "supported"
+          }
+        },
+        "diff_artifact_telemetry": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          }
+        },
+        "event_streaming": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE",
+              "ACP-ADAPTER",
+              "ACP-PROTOCOL",
+              "STRUCTURED-ADAPTER-TESTS"
+            ],
+            "note": "A real native event/notification stream was opened and event names/status were retained without session text.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "A real native event/notification stream was opened and event names/status were retained without session text.",
+            "status": "supported"
+          }
+        },
+        "exact_session_thread_identity": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "The exact provider-native session/thread identity was returned and matched through the tested request/read/resume boundary.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "The exact provider-native session/thread identity was returned and matched through the tested request/read/resume boundary.",
+            "status": "supported"
+          }
+        },
+        "external_discovery": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE"
+            ],
+            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish external discovery; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          }
+        },
+        "permission_approval_awareness": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE",
+              "ACP-ADAPTER",
+              "ACP-PROTOCOL",
+              "STRUCTURED-ADAPTER-TESTS"
+            ],
+            "note": "Adapter-level structured approval handling is covered by source/tests; no live provider approval was induced in this qualification.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish permission/approval awareness; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          }
+        },
+        "process_tree_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish process-tree visibility; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "OS process-group membership was observed for the exact qualification-owned process. Coverage does not extend to detached descendants unless the linked prior receipt says so.",
+            "status": "supported"
+          }
+        },
+        "provider_host_stop": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE",
+              "LIFECYCLE-PLANNER",
+              "ACP-ADAPTER"
+            ],
+            "note": "The Conduit structured-host stop path is implemented and its planner is covered by tests. A qualification-owned native ACP process for this runtime was stopped and verified absent, but this task did not invoke the stop through a Conduit task-level operation; provider-session effects are recorded separately.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "The qualification-owned host/process group was stopped and OS absence was checked. Persisted session effects are stated separately.",
+            "status": "supported"
+          }
+        },
+        "release_supervision_with_provider_continuing": {
+          "conduit": {
+            "evidence_refs": [
+              "PR63-LIFECYCLE"
+            ],
+            "note": "The current lifecycle planner has no detach/release path for this structured adapter. The unsupported result does not imply provider-session deletion.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish release supervision while provider continues; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          }
+        },
+        "resumable": {
+          "conduit": {
+            "evidence_refs": [
+              "GROK-NATIVE",
+              "ACP-ADAPTER",
+              "ACP-PROTOCOL",
+              "STRUCTURED-ADAPTER-TESTS"
+            ],
+            "note": "The exact requested session/thread was accepted after the qualification-owned provider host stopped and restarted. This proves persistence continuity only for the tested identity.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "GROK-NATIVE"
+            ],
+            "note": "The exact requested session/thread was accepted after the qualification-owned provider host stopped and restarted. This proves persistence continuity only for the tested identity.",
+            "status": "supported"
+          }
+        },
+        "writer_controller_collision_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "GROK-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. No account-wide/session-list operation was attempted and no approval, writer collision, or diff/artifact was induced.",
+            "status": "unknown"
+          }
+        }
+      },
+      "desktop_app_versions": {
+        "Grok": "0.58.0"
+      },
+      "installed": true,
+      "interface_exercised": "grok agent --no-leader stdio ACP; initialize/session/new, exact session/prompt cancellation, exact session/load after host restart, exact session deletion and post-delete not-found check.",
+      "readiness": "Native ACP session/prompt succeeded for one isolated default-model prompt; no account status value was recorded",
+      "version": "grok 1.0.41 (4220f3b224a6) [stable]"
+    },
+    "opencode": {
+      "adapter_source": [
+        "Sources/Conduit/OpenCodeHTTPClient.swift",
+        "Sources/ConduitCore/OpenCodeHTTPProtocol.swift",
+        "Sources/ConduitCore/OpenCodeConversationActivity.swift"
+      ],
+      "adapter_tests": [
+        "Tests/ConduitCoreTests/OpenCodeConversationActivityTests.swift",
+        "Tests/ConduitCoreTests/StructuredAdapterTests.swift",
+        "Tests/ConduitCoreTests/ProviderSessionAuthorityTests.swift",
+        "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift"
+      ],
+      "capabilities": {
+        "adoptable_connectable": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE",
+              "PR62-AUTHORITY"
+            ],
+            "note": "An exact known provider identity was connectable. Conduit adoption remains a separate authority action; the note preserves whether this was explicit adoption or exact-ID resume.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "An exact known provider identity was connectable. Conduit adoption remains a separate authority action; the note preserves whether this was explicit adoption or exact-ID resume.",
+            "status": "supported"
+          }
+        },
+        "cancel_active_turn": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "OpenCode accepted the qualification-owned abort request (HTTP 200); the observed session moved busy to idle and emitted session.idle, while assistant message status remained null. The tested interface exposed no exact turn ID or explicit terminal cancellation reason. Provider host stop and task completion are separate.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "OpenCode accepted the qualification-owned abort request (HTTP 200); the observed session moved busy to idle and emitted session.idle, while assistant message status remained null. The tested interface exposed no exact turn ID or explicit terminal cancellation reason. Provider host stop and task completion are separate.",
+            "status": "supported"
+          }
+        },
+        "current_turn_state_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "OpenCode session.status changed busy to idle around the exact abort; the message status field was null and this interface exposed no exact provider turn ID.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "OpenCode session.status changed busy to idle around the exact abort; the message status field was null and this interface exposed no exact provider turn ID.",
+            "status": "supported"
+          }
+        },
+        "diff_artifact_telemetry": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "OPENCODE-NATIVE"
+            ],
+            "note": "A native diff surface was queried, but no nonempty artifact was observed; end-to-end Conduit artifact telemetry remains unknown.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "OPENCODE-NATIVE"
+            ],
+            "note": "The exact native session diff endpoint returned HTTP 200 with an empty list. No nonempty file change was created, so end-to-end diff/artifact telemetry remains unknown.",
+            "status": "unknown"
+          }
+        },
+        "event_streaming": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "A real native event/notification stream was opened and event names/status were retained without session text.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "A real native event/notification stream was opened and event names/status were retained without session text.",
+            "status": "supported"
+          }
+        },
+        "exact_session_thread_identity": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "The exact provider-native session/thread identity was returned and matched through the tested request/read/resume boundary.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "The exact provider-native session/thread identity was returned and matched through the tested request/read/resume boundary.",
+            "status": "supported"
+          }
+        },
+        "external_discovery": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE",
+              "PR62-AUTHORITY"
+            ],
+            "note": "A scoped native list returned the exact qualification-owned identity. Scope and pre-turn timing limits are retained in the linked evidence.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "A scoped native list returned the exact qualification-owned identity. Scope and pre-turn timing limits are retained in the linked evidence.",
+            "status": "supported"
+          }
+        },
+        "permission_approval_awareness": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "OPENCODE-NATIVE"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish permission/approval awareness; absence of evidence is not treated as unsupported. No permission request or nonempty file diff was induced; writer collision on the provider itself was not observed.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "OPENCODE-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish permission/approval awareness; absence of evidence is not treated as unsupported. No permission request or nonempty file diff was induced; writer collision on the provider itself was not observed.",
+            "status": "unknown"
+          }
+        },
+        "process_tree_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE",
+              "SLICE9-SHELL"
+            ],
+            "note": "OS process-group membership was observed for the exact qualification-owned process. Coverage does not extend to detached descendants unless the linked prior receipt says so.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "OS process-group membership was observed for the exact qualification-owned process. Coverage does not extend to detached descendants unless the linked prior receipt says so.",
+            "status": "supported"
+          }
+        },
+        "provider_host_stop": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE",
+              "PR63-LIFECYCLE"
+            ],
+            "note": "The qualification-owned host/process group was stopped and OS absence was checked. Persisted session effects are stated separately.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "The qualification-owned host/process group was stopped and OS absence was checked. Persisted session effects are stated separately.",
+            "status": "supported"
+          }
+        },
+        "release_supervision_with_provider_continuing": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE",
+              "PR63-LIFECYCLE"
+            ],
+            "note": "Conduit release is supported only while another OpenCode lease keeps the shared host alive. The prior live release case used idle work; whether an active turn continues after releasing its own supervision remains unknown. Final-lease release is unsupported because it would stop the host.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "OPENCODE-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish release supervision while provider continues; absence of evidence is not treated as unsupported. No permission request or nonempty file diff was induced; writer collision on the provider itself was not observed.",
+            "status": "unknown"
+          }
+        },
+        "resumable": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "The exact requested session/thread was accepted after the qualification-owned provider host stopped and restarted. This proves persistence continuity only for the tested identity.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE"
+            ],
+            "note": "The exact requested session/thread was accepted after the qualification-owned provider host stopped and restarted. This proves persistence continuity only for the tested identity.",
+            "status": "supported"
+          }
+        },
+        "writer_controller_collision_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "OPENCODE-NATIVE",
+              "PR62-AUTHORITY"
+            ],
+            "note": "A competing writer/controller was identified and the original provider identity/history was preserved under the exact prior authority qualification.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "OPENCODE-NATIVE"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. No permission request or nonempty file diff was induced; writer collision on the provider itself was not observed.",
+            "status": "unknown"
+          }
+        }
+      },
+      "desktop_app_versions": {
+        "OpenCode": "1.18.32"
+      },
+      "installed": true,
+      "interface_exercised": "OpenCode HTTP server with installed /doc OpenAPI; directory-filtered session list, exact session read, SSE, prompt_async/abort, diff, server stop/restart, exact delete/404.",
+      "readiness": "configured providers listed; authentication remains unverified by inventory; isolated xAI request was accepted then cancelled before transcript capture",
+      "version": "1.18.30"
+    },
+    "shell_fallback": {
+      "adapter_source": [
+        "Sources/Conduit/TerminalBackend.swift",
+        "Sources/ConduitCore/StructuredAdapter.swift",
+        "Sources/Conduit/AppModel.swift"
+      ],
+      "adapter_tests": [
+        "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift",
+        "Tests/ConduitCoreTests/SessionCloseSemanticsTests.swift",
+        "Tests/ConduitCoreTests/MainframeLifecycleTests.swift"
+      ],
+      "capabilities": {
+        "adoptable_connectable": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE"
+            ],
+            "note": "The current Conduit explicit provider-session adoption API is OpenCode-only. A task-local exact-ID resume, where separately tested, is not relabeled as adoption.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "Shell/tmux process identity is not a provider session/thread identity and does not confer provider adoption authority.",
+            "status": "unsupported"
+          }
+        },
+        "cancel_active_turn": {
+          "conduit": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "The Shell PTY can receive Ctrl-C, but that is raw process input and is not a provider-defined turn cancellation contract.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "The Shell PTY can receive Ctrl-C, but that is raw process input and is not a provider-defined turn cancellation contract.",
+            "status": "unsupported"
+          }
+        },
+        "current_turn_state_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "The Shell process/PTY does not expose provider turn identity or provider-reported turn state.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "Shell process state is not a provider-reported turn state; no child provider was launched in this probe.",
+            "status": "unsupported"
+          }
+        },
+        "diff_artifact_telemetry": {
+          "conduit": {
+            "evidence_refs": [
+              "ENV-INVENTORY",
+              "SHELL-PTY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish diff/artifact telemetry; absence of evidence is not treated as unsupported. The active Conduit Shell mode was not inspected. Direct PTY and tmux have different resume/release semantics; no provider session exists in the direct PTY probe.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "SHELL-PTY"
+            ],
+            "note": "No provider-native diff/artifact API is exposed by the tested Shell fallback interface.",
+            "status": "unsupported"
+          }
+        },
+        "event_streaming": {
+          "conduit": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "The Shell path carries PTY bytes; it does not expose typed provider-native lifecycle events.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "The Shell fallback exposes PTY bytes, not a provider-native typed event stream.",
+            "status": "unsupported"
+          }
+        },
+        "exact_session_thread_identity": {
+          "conduit": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "This interface has no provider session/thread identity. Conduit task and runtime-attempt IDs remain separate.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "This Shell interface has no provider session/thread ID; Conduit task and runtime-attempt identities remain separate.",
+            "status": "unsupported"
+          }
+        },
+        "external_discovery": {
+          "conduit": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE"
+            ],
+            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "status": "unsupported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "CONDUIT-API-SCOPE",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "The Shell fallback has no provider-native session inventory protocol; a child provider launched inside Shell is a separate runtime identity.",
+            "status": "unsupported"
+          }
+        },
+        "permission_approval_awareness": {
+          "conduit": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG",
+              "ENV-INVENTORY",
+              "SHELL-PTY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish permission/approval awareness; absence of evidence is not treated as unsupported. The active Conduit Shell mode was not inspected. Direct PTY and tmux have different resume/release semantics; no provider session exists in the direct PTY probe.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "The Shell PTY can carry terminal text/input, but this interface emits no typed provider approval event.",
+            "status": "unsupported"
+          }
+        },
+        "process_tree_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "SHELL-PTY",
+              "SLICE9-SHELL"
+            ],
+            "note": "Slice 9 observed a complete process-tree path for one Shell-launched OpenCode child and exact provider session; arbitrary detached descendants remain outside that claim.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "SHELL-PTY",
+              "SLICE9-SHELL"
+            ],
+            "note": "OS process-group membership was observed for the exact qualification-owned process. Coverage does not extend to detached descendants unless the linked prior receipt says so.",
+            "status": "supported"
+          }
+        },
+        "provider_host_stop": {
+          "conduit": {
+            "evidence_refs": [
+              "SHELL-PTY",
+              "PR63-LIFECYCLE"
+            ],
+            "note": "A direct PTY host stop was separately qualified through exact process exit. This stops the Shell process, not an unrelated provider child.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "SHELL-PTY",
+              "PR63-LIFECYCLE"
+            ],
+            "note": "The qualification-owned zsh process group and child were stopped and verified absent; this is local Shell process authority, not a separate provider-host lifecycle API.",
+            "status": "supported"
+          }
+        },
+        "release_supervision_with_provider_continuing": {
+          "conduit": {
+            "evidence_refs": [
+              "SHELL-PTY",
+              "PR63-LIFECYCLE"
+            ],
+            "note": "Mode-dependent: prior qualification supported tmux detach while the session continued; direct PTY release is unsupported because it has no detach path. Active Shell mode was not read.",
+            "status": "supported"
+          },
+          "provider": {
+            "evidence_refs": [
+              "PR63-LIFECYCLE",
+              "ENV-INVENTORY",
+              "SHELL-PTY"
+            ],
+            "note": "Unknown for the provider boundary: the probe did not establish release supervision while provider continues; absence of evidence is not treated as unsupported. The active Conduit Shell mode was not inspected. Direct PTY and tmux have different resume/release semantics; no provider session exists in the direct PTY probe.",
+            "status": "unknown"
+          }
+        },
+        "resumable": {
+          "conduit": {
+            "evidence_refs": [
+              "SHELL-PTY",
+              "PR63-LIFECYCLE",
+              "ENV-INVENTORY"
+            ],
+            "note": "The prior tmux release receipt preserved the exact session handle and confirmed the pane remained alive after client detach, but did not record a resume/reattach operation. Direct PTY is not resumable. Active Shell mode and restore preference were not inspected, so exact-session resume remains unknown.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "SHELL-PTY"
+            ],
+            "note": "The tested interface does not provide an independent provider session resume contract for this runtime mode.",
+            "status": "unsupported"
+          }
+        },
+        "writer_controller_collision_visibility": {
+          "conduit": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG",
+              "ENV-INVENTORY",
+              "SHELL-PTY"
+            ],
+            "note": "Unknown for the conduit boundary: the probe did not establish writer/controller collision visibility; absence of evidence is not treated as unsupported. The active Conduit Shell mode was not inspected. Direct PTY and tmux have different resume/release semantics; no provider session exists in the direct PTY probe.",
+            "status": "unknown"
+          },
+          "provider": {
+            "evidence_refs": [
+              "PTY-ADAPTER",
+              "STRUCTURED-CATALOG"
+            ],
+            "note": "This Shell interface has no provider session/controller identity; a child provider collision remains outside this probe.",
+            "status": "unsupported"
+          }
+        }
+      },
+      "desktop_app_versions": {},
+      "installed": true,
+      "interface_exercised": "Qualification-owned zsh PTY/process group; exact parent/child membership and stop. tmux version only; no tmux operator session was inspected.",
+      "mode_notes": [
+        "Direct PTY release is unsupported because it has no detach path; tmux detach was qualified separately and can keep its shell session running.",
+        "The active Conduit restoreSessions mode was not inspected. The matrix reports both backend semantics and does not claim which one this task would select."
+      ],
+      "readiness": "Local Shell is available; active direct-PTY vs tmux restore mode was not inspected. No tmux session list was read.",
+      "version": "zsh 5.9 (arm64-apple-darwin26.0); tmux 3.6b installed"
+    }
+  },
+  "schema_version": "1.0.0",
+  "session_content_read": false,
+  "starting_main": {
+    "authority": "Live GitHub REST commit lookup; main SHA and tree were rechecked during this work.",
+    "sha": "06efd2b4029c1d13c7a16cbc7e92b38bcb89a7e4",
+    "tree_sha": "cabf1c73731a7777a205ed10b685cefc6d5ece9a"
+  }
+}
