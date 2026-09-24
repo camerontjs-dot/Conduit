@@ -70,6 +70,19 @@ class ProviderConformanceResultTests(unittest.TestCase):
 
     def test_opencode_cancel_active_turn_preserves_observed_limit(self) -> None:
         document = self.read_matrix()
+        procedure = (ROOT / "docs/qualification/provider-conformance-v1.md").read_text(encoding="utf-8")
+        expected_contract = (
+            "For this matrix, `cancel_active_turn` may be `supported` when the tested "
+            "interface accepts the request during an active exact session or turn scope and "
+            "shows an observable cessation transition for that scope (for example, `busy` → "
+            "`idle`). An explicit provider terminal cancellation reason or stable provider "
+            "turn ID is not required. Record either as unknown when absent and preserve the "
+            "provider's native cancellation scope in the outcome note. Session-level "
+            "cancellation, exact-turn interruption, and an accepted abort followed by idle "
+            "are different observations. This status does not imply provider-host stop, "
+            "Conduit task completion, verification, or objective acceptance."
+        )
+        self.assertIn(" ".join(expected_contract.split()), " ".join(procedure.split()))
         evidence = document["evidence_catalog"]["OPENCODE-NATIVE"]["artifact"]
         receipt = json.loads((ROOT / evidence["path"]).read_text(encoding="utf-8"))
         turn_probe = receipt["observations"]["turn_probe"]

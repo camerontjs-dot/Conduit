@@ -9,6 +9,16 @@ listed separately. `supported`, `unsupported`, `unknown`, and
 `unavailable` are distinct states. A method name or CLI flag is not
 sufficient evidence for `supported`.
 
+For this matrix, `cancel_active_turn` may be `supported` when the tested
+interface accepts the request during an active exact session or turn scope and
+shows an observable cessation transition for that scope (for example, `busy` →
+`idle`). An explicit provider terminal cancellation reason or stable provider
+turn ID is not required. Record either as unknown when absent and preserve the
+provider's native cancellation scope in the outcome note. Session-level
+cancellation, exact-turn interruption, and an accepted abort followed by idle
+are different observations. This status does not imply provider-host stop,
+Conduit task completion, verification, or objective acceptance.
+
 The result is bounded to the installed versions and interfaces named in each
 runtime entry. It is implementation and local-probe evidence, not independent
 terminal qualification. Do not use it as a universal provider compatibility

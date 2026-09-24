@@ -345,7 +345,7 @@
     "MATRIX-CONTRACT-TESTS": {
       "artifact": {
         "path": "Tests/test_provider_conformance.py",
-        "sha256": "222f894ac7bca07e483189e68643a191dc62ef9a8a58d89d19798b181df9fa72"
+        "sha256": "94cb889dd293c2cbb039b29fb9dfb440e28544e971682a68e6f5d716c230551f"
       },
       "authority": "Local standard-library tests for missing states, controls, references, and byte-bound local evidence",
       "freshness": "candidate source snapshot; exact commit/tree recorded in the GitHub candidate receipt",
