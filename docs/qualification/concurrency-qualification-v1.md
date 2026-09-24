@@ -42,15 +42,16 @@ For each tier:
 1. Use the same exact candidate tree.
 2. Use the same OpenCode version, model, prompt shape, hold duration, sampling interval, and project unless a deviation is recorded.
 3. Begin from zero used Conduit task-control slots.
-4. Require provider-reported active-turn total to be exact and known at baseline, with total zero.
-5. Create only qualification-owned tasks.
-6. Do not modify project files from the workload.
-7. Preserve every failed or incomplete tier.
-8. Close all qualification-owned tasks and verify Conduit task-control occupancy returns to zero.
-9. Do not convert provider completion into task completion, verification, or objective acceptance.
-10. Do not convert provider-reported active turns into provider-neutral execution-slot occupancy. The Fleet snapshot intentionally reports the latter as UNKNOWN.
+4. If the global provider-reported active-turn total is known and non-zero at baseline, stop as contaminated. If it is UNKNOWN because the provider inventory is larger than the detailed Fleet page, preserve that UNKNOWN rather than pretending the historical remainder is inactive.
+5. Create only qualification-owned tasks and identify their exact provider-session bindings from the Fleet snapshot.
+6. Establish the requested tier only when every qualification-owned task has one exact provider association and each associated provider session reports `active`.
+7. Do not modify project files from the workload.
+8. Preserve every failed or incomplete tier.
+9. Close all qualification-owned tasks, verify Conduit task-control occupancy returns to zero, and directly observe the exact provider session IDs until each reports `inactive`.
+10. Do not convert provider completion into task completion, verification, or objective acceptance.
+11. Do not convert provider-reported active turns into provider-neutral execution-slot occupancy. The Fleet snapshot intentionally reports the latter as UNKNOWN.
 
-If another Conduit task or provider turn becomes active during a tier, classify the run as contaminated unless the effect can be mechanically excluded.
+Avoid unrelated OpenCode work during a decisive tier. If other live provider work is observed and its resource effect cannot be mechanically excluded, classify the tier as contaminated. A global active-turn total that remains UNKNOWN solely because historical provider inventory exceeds the detailed Fleet page is retained as a limitation; it is not rewritten as zero.
 
 ## Workload
 
@@ -83,7 +84,9 @@ The runner records:
 - queued prompt reservations;
 - discovered provider sessions;
 - supervised provider sessions;
-- provider-reported active turns;
+- global provider-reported active-turn count when the full authority is knowable;
+- exact provider-reported state for every qualification-owned task/provider-session binding;
+- exact provider session IDs used for post-close reconciliation;
 - provider host count;
 - observed live child-process count;
 - explicit UNKNOWN state for provider-neutral execution-slot occupancy;
@@ -121,11 +124,11 @@ A future successor may add numeric main-thread CPU instrumentation. Until then t
 A runner may report PASS_FOR_TIER_OBSERVATION only when:
 
 - the live Fleet snapshot reported exactly the requested qualification limit;
-- the clean baseline was established;
+- the clean Conduit task-slot baseline was established and no known background provider turn was active;
 - all qualification-owned tasks were created;
-- provider-reported active turns reached an exact known total equal to the tier;
+- every qualification-owned task resolved to one exact provider session and every one of those sessions reported `active` during the overlap window;
 - the overlap window was sampled;
-- cleanup returned Conduit task-control occupancy to zero;
+- cleanup returned Conduit task-control occupancy to zero and direct observation of every qualification provider session reported `inactive`;
 - no harness failure occurred.
 
 This is only a tier-observation disposition. It does not select a production limit.
@@ -134,11 +137,11 @@ FAIL_OR_INCONCLUSIVE includes:
 
 - effective limit mismatch;
 - contaminated/non-zero baseline;
-- unknown baseline active-turn total;
+- known background provider activity at baseline;
 - create refusal/failure before the tier is reached;
-- active-turn total never reaching the tier;
-- Fleet observation becoming materially unknown;
-- cleanup not reconciling;
+- missing, duplicate, or non-active exact provider binding for a qualification-owned task;
+- provider-session state becoming materially unknown at the decision boundary;
+- cleanup not reconciling both Conduit task slots and exact provider-session inactivity;
 - transport failure preventing measurement.
 
 ## Slice 11 decision record
