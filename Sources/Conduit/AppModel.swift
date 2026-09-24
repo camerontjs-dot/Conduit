@@ -4954,6 +4954,16 @@ final class AppModel: ObservableObject {
                 observedAt: now
             )
             for inventoryWorker in providerPage.items {
+                guard ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(
+                    inventoryWorker
+                ) else {
+                    var inventoryOnly = inventoryWorker
+                    inventoryOnly.diagnostics.append(
+                        "Provider detail read was intentionally skipped for this inventory-only session so Fleet latency does not scale with unrelated provider history; turn/runtime detail remains UNKNOWN."
+                    )
+                    detailedPage.append(inventoryOnly)
+                    continue
+                }
                 guard let exactID = inventoryWorker.worker.providerSessionID.value else {
                     detailedPage.append(
                         fleetWorker(
