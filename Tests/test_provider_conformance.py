@@ -68,6 +68,38 @@ class ProviderConformanceResultTests(unittest.TestCase):
             "provider_specific",
         )
 
+    def test_opencode_cancel_active_turn_preserves_observed_limit(self) -> None:
+        document = self.read_matrix()
+        evidence = document["evidence_catalog"]["OPENCODE-NATIVE"]["artifact"]
+        receipt = json.loads((ROOT / evidence["path"]).read_text(encoding="utf-8"))
+        turn_probe = receipt["observations"]["turn_probe"]
+
+        self.assertTrue(turn_probe["accepted"])
+        self.assertEqual(turn_probe["abort_http_status"], 200)
+        self.assertEqual(turn_probe["active_session_status_observed"]["status"], "busy")
+        self.assertEqual(turn_probe["terminal_session_or_message_event"]["status"], "idle")
+        self.assertIsNone(
+            receipt["observations"]["message_state_readback"]["assistant_message_states"][0]["status"]
+        )
+        self.assertIn(
+            "session.idle",
+            [event["type"] for event in receipt["observations"]["event_stream"]["events"]],
+        )
+
+        expected_note = (
+            "OpenCode accepted the qualification-owned abort request (HTTP 200); "
+            "the observed session moved busy to idle and emitted session.idle, while "
+            "assistant message status remained null. The tested interface exposed no exact "
+            "turn ID or explicit terminal cancellation reason. Provider host stop and task "
+            "completion are separate."
+        )
+        for layer in ("provider", "conduit"):
+            outcome = document["runtimes"]["opencode"]["capabilities"]["cancel_active_turn"][layer]
+            self.assertEqual(outcome["status"], "supported")
+            self.assertEqual(outcome["note"], expected_note)
+            self.assertNotIn("cancelled/interrupted outcome", outcome["note"])
+
+
     def test_invalid_status_is_rejected(self) -> None:
         document = self.read_matrix()
         document["runtimes"]["opencode"]["capabilities"]["event_streaming"]["provider"]["status"] = "maybe"

@@ -345,7 +345,7 @@
     "MATRIX-CONTRACT-TESTS": {
       "artifact": {
         "path": "Tests/test_provider_conformance.py",
-        "sha256": "bff97713850d01bcb592eafa1df70f2dde50ce36f3f9bf0ed3227c2a749429ae"
+        "sha256": "222f894ac7bca07e483189e68643a191dc62ef9a8a58d89d19798b181df9fa72"
       },
       "authority": "Local standard-library tests for missing states, controls, references, and byte-bound local evidence",
       "freshness": "candidate source snapshot; exact commit/tree recorded in the GitHub candidate receipt",
@@ -552,7 +552,8 @@
     "Gemini authentication was not invoked even though key presence and ACP-advertised methods were recorded as non-secret booleans/IDs.",
     "Antigravity authentication and conversation cleanup were not attempted because no safe read-only auth status and exact-session deletion path were exposed by the inspected CLI help.",
     "Shell process-group visibility is not a claim of complete arbitrary descendant cleanup; tmux and direct PTY release semantics differ.",
-    "No active provider turn was left running across release_supervision; active-turn continuation after release remains unknown for OpenCode, Codex, and Grok."
+    "No active provider turn was left running across release_supervision; active-turn continuation after release remains unknown for OpenCode, Codex, and Grok.",
+    "OpenCode cancel_active_turn support is bounded to an accepted abort request with observed busy-to-idle cessation/session.idle; the tested interface exposed no exact turn ID or explicit terminal cancellation reason."
   ],
   "observed_at_utc": "2026-09-23T23:07:42Z",
   "preserved_runs": [
@@ -1822,14 +1823,14 @@
             "evidence_refs": [
               "OPENCODE-NATIVE"
             ],
-            "note": "A live qualification-owned turn accepted the exact cancel/abort operation and reported a cancelled/interrupted outcome. Provider host stop and task completion are separate.",
+            "note": "OpenCode accepted the qualification-owned abort request (HTTP 200); the observed session moved busy to idle and emitted session.idle, while assistant message status remained null. The tested interface exposed no exact turn ID or explicit terminal cancellation reason. Provider host stop and task completion are separate.",
             "status": "supported"
           },
           "provider": {
             "evidence_refs": [
               "OPENCODE-NATIVE"
             ],
-            "note": "A live qualification-owned turn accepted the exact cancel/abort operation and reported a cancelled/interrupted outcome. Provider host stop and task completion are separate.",
+            "note": "OpenCode accepted the qualification-owned abort request (HTTP 200); the observed session moved busy to idle and emitted session.idle, while assistant message status remained null. The tested interface exposed no exact turn ID or explicit terminal cancellation reason. Provider host stop and task completion are separate.",
             "status": "supported"
           }
         },
