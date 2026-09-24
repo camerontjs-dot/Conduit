@@ -71,6 +71,7 @@ Default timing:
 - active-tier acquisition timeout: 75 seconds;
 - overlap sampling: 15 seconds;
 - natural-completion timeout: 240 seconds;
+- pre-teardown post-completion observation: 15 seconds;
 - sample interval: 2 seconds;
 - cleanup timeout: 45 seconds.
 
@@ -115,7 +116,7 @@ At minimum record:
 - whether a post-completion pin occurs;
 - whether closing a task changes the symptom.
 
-The runner continues observation through natural provider completion before closing Conduit supervision. It samples Conduit whole-process CPU throughout. If CPU crosses the configured threshold, it invokes macOS `sample` and preserves the output beside the JSON receipt. Inspect that artifact for the main-thread stack.
+The runner continues observation through natural provider completion and then holds a 15-second post-completion observation window before closing Conduit supervision. It samples Conduit whole-process CPU throughout. On the first known CPU sample that meets the configured threshold, it invokes macOS `sample` immediately from the live observation loop, before teardown can recover the process. The receipt records the trigger phase (`active_acquisition`, `active_overlap`, `natural_completion`, `post_completion`, or `cleanup`). Inspect the artifact for the main-thread stack.
 
 If the historical pin reproduces, preserve the sample before changing code. Do not infer that non-reproduction proves #44 fixed.
 
@@ -130,7 +131,8 @@ A runner may report PASS_FOR_TIER_OBSERVATION only when:
 - all qualification-owned tasks were created;
 - every qualification-owned task resolved to one exact provider session and every one of those sessions reported `active` during the overlap window;
 - the overlap window was sampled;
-- every qualification provider session reached `inactive` naturally before teardown, so post-completion behavior was observable;
+- every qualification provider session reached `inactive` naturally before teardown;
+- those provider sessions remained inactive through the full pre-teardown post-completion observation window, during which threshold-triggered sampling remained armed;
 - cleanup returned Conduit task-control occupancy to zero and direct observation of every qualification provider session still reported `inactive`;
 - no harness failure occurred.
 
@@ -145,6 +147,8 @@ FAIL_OR_INCONCLUSIVE includes:
 - missing, duplicate, or non-active exact provider binding for a qualification-owned task;
 - provider-session state becoming materially unknown at the decision boundary;
 - natural provider completion timing out;
+- provider sessions failing to remain inactive through the pre-teardown post-completion window;
+- a CPU threshold crossing where macOS `sample` fails to preserve the stack;
 - cleanup not reconciling both Conduit task slots and exact provider-session inactivity;
 - transport failure preventing measurement.
 
