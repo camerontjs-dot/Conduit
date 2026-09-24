@@ -536,14 +536,10 @@ def wait_for_cleanup_reconciliation(
         sample = sample_once(api, task_ids)
         provider_rows = observe_provider_sessions(api, provider_session_ids)
         sample["qualification_provider_cleanup"] = provider_rows
-        record_sample(
-            samples,
-            sample,
-            threshold=sample_cpu_threshold,
-            artifact_path=sample_artifact_path,
-            capture=sample_capture,
-            phase="cleanup",
-        )
+        # Cleanup happens after Conduit task close/release. Preserve its CPU
+        # and reconciliation metrics, but do not use post-close activity as
+        # evidence for the #44 pre-teardown sampling boundary.
+        samples.append(sample)
         if cleanup_reconciled(sample, provider_rows, expected):
             return True
         time.sleep(poll_seconds)
