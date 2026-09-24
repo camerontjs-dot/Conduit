@@ -628,6 +628,19 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
 
     baseline_snapshot, baseline_latency = fleet_snapshot(api)
     baseline = require_declared_tier(baseline_snapshot, args.target)
+    receipt_path = receipt_path_for(args.target, args.output)
+    sample_artifact_path = receipt_path.with_suffix(".sample.txt")
+    sample_capture: dict[str, Any] = {
+        "attempted": False,
+        "captured": False,
+        "threshold_cpu_percent": args.sample_cpu_threshold,
+        "artifact_path": str(sample_artifact_path),
+        "basis": (
+            "Capture is triggered from the live observation loop at the first "
+            "known Conduit process CPU sample meeting the threshold. It is not "
+            "deferred until teardown."
+        ),
+    }
     stamp = str(int(time.time()))
     tasks: list[dict[str, Any]] = []
     samples: list[dict[str, Any]] = []
@@ -703,6 +716,9 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             args.active_timeout,
             args.poll_seconds,
             samples,
+            sample_cpu_threshold=args.sample_cpu_threshold,
+            sample_artifact_path=sample_artifact_path,
+            sample_capture=sample_capture,
         )
         active_tier_observed = active_sample is not None
         if active_sample is not None:
@@ -711,7 +727,15 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             ]["provider_session_ids"]
             end = time.monotonic() + args.sample_seconds
             while time.monotonic() < end:
-                samples.append(sample_once(api, task_ids))
+                sample = sample_once(api, task_ids)
+                record_sample(
+                    samples,
+                    sample,
+                    threshold=args.sample_cpu_threshold,
+                    artifact_path=sample_artifact_path,
+                    capture=sample_capture,
+                    phase="active_overlap",
+                )
                 time.sleep(args.poll_seconds)
             natural_completion_observed = wait_for_provider_completion(
                 api,
@@ -720,6 +744,9 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
                 args.completion_timeout,
                 args.poll_seconds,
                 samples,
+                sample_cpu_threshold=args.sample_cpu_threshold,
+                sample_artifact_path=sample_artifact_path,
+                sample_capture=sample_capture,
             )
             if not natural_completion_observed:
                 failure = (
@@ -757,6 +784,9 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             args.cleanup_timeout,
             args.poll_seconds,
             samples,
+            sample_cpu_threshold=args.sample_cpu_threshold,
+            sample_artifact_path=sample_artifact_path,
+            sample_capture=sample_capture,
         )
 
     receipt["finished_at"] = iso_now()
@@ -809,10 +839,17 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         ),
     }
 
-    provisional_path = write_receipt(receipt, args.output)
-    receipt["high_cpu_sample"] = capture_sample_if_hot(
-        samples, args.sample_cpu_threshold, provisional_path
-    )
+    if not sample_capture.get("attempted"):
+        peak = numeric_peak(samples, ("conduit_process", "process_cpu_percent"))
+        sample_capture["reason"] = (
+            f"no known Conduit process CPU sample met threshold "
+            f"{args.sample_cpu_threshold}; observed peak={peak!r}"
+        )
+    elif not sample_capture.get("captured") and failure is None:
+        failure = "high-CPU threshold crossed but macOS sample capture failed"
+        receipt["failure"] = failure
+
+    receipt["high_cpu_sample"] = sample_capture
     receipt["disposition"] = (
         "PASS_FOR_TIER_OBSERVATION"
         if (
@@ -823,8 +860,8 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         )
         else "FAIL_OR_INCONCLUSIVE"
     )
-    provisional_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
-    return receipt, provisional_path
+    write_receipt(receipt, receipt_path)
+    return receipt, receipt_path
 
 
 def parse_args() -> argparse.Namespace:
