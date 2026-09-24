@@ -342,6 +342,58 @@ final class ConduitFleetSnapshotTests: XCTestCase {
         XCTAssertEqual(queuedDiscovered.turns.first?.state, .queued)
     }
 
+    func testProviderDetailExpansionIsBoundedToExactOrControlledSessions() {
+        let taskID = UUID()
+        let attempt = UUID().uuidString
+        let tasks = [
+            FleetTaskIdentity(
+                taskSessionID: taskID.uuidString,
+                runtimeAttemptID: .known(attempt),
+                observation: stamp(.conduitRecorded, .current)
+            )
+        ]
+        let exact = wrapped(
+            worker(
+                sessionID: "ses_exact_detail",
+                taskID: taskID.uuidString,
+                attemptID: attempt,
+                relationship: .discovered,
+                reportedState: .unknown
+            ),
+            tasks: tasks
+        )
+        let controlled = wrapped(
+            worker(
+                sessionID: "ses_controlled_detail",
+                taskID: nil,
+                attemptID: nil,
+                relationship: .adopted,
+                reportedState: .unknown
+            ),
+            tasks: []
+        )
+        let inventoryOnly = wrapped(
+            worker(
+                sessionID: "ses_inventory_only",
+                taskID: nil,
+                attemptID: nil,
+                relationship: .discovered,
+                reportedState: .unknown
+            ),
+            tasks: []
+        )
+
+        XCTAssertTrue(
+            ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(exact)
+        )
+        XCTAssertTrue(
+            ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(controlled)
+        )
+        XCTAssertFalse(
+            ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(inventoryOnly)
+        )
+    }
+
     func testUnavailableProviderAndProcessFactsRemainUnknown() {
         let taskSlots = ConduitTaskControlSlotSnapshot(
             used: .unknown,
