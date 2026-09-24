@@ -15,9 +15,28 @@ def known(value):
     return {"state": "known", "value": value}
 
 
+def provider_row(task_id, provider_session_id, state="active"):
+    return {
+        "task_association": {
+            "kind": "exact",
+            "task_session_id": known(task_id),
+        },
+        "worker": {
+            "provider_session_id": known(provider_session_id),
+            "runtime_reconciliation": {
+                "provider_reported_state": state,
+                "disposition": (
+                    "consistent_active" if state == "active" else "consistent_inactive"
+                ),
+            },
+        },
+    }
+
+
 def snapshot(limit=4, used=0, active_total=0, active_unknown=0):
     return {
         "observed_at": "2026-09-24T16:00:00Z",
+        "provider_sessions": {"items": []},
         "capacity": {
             "task_control_slots": {
                 "used": known(used),
@@ -85,29 +104,52 @@ class ConcurrencyQualificationTests(unittest.TestCase):
         with self.assertRaises(cq.QualificationBlocked):
             cq.require_declared_tier(snapshot(limit=4, used=1), 4)
 
-    def test_clean_baseline_rejects_unknown_provider_activity(self):
+    def test_clean_baseline_preserves_unknown_background_provider_activity(self):
+        summary = cq.require_declared_tier(
+            snapshot(limit=4, active_total=0, active_unknown=1),
+            4,
+        )
+        self.assertEqual(summary["background_provider_activity_baseline"], "unknown")
+
+    def test_clean_baseline_rejects_known_background_provider_activity(self):
         with self.assertRaises(cq.QualificationBlocked):
-            cq.require_declared_tier(
-                snapshot(limit=4, active_total=0, active_unknown=1),
-                4,
-            )
+            cq.require_declared_tier(snapshot(limit=4, active_total=1), 4)
 
-    def test_cleanup_requires_slots_and_provider_turns_to_return_to_zero(self):
-        clean = {"capacity": cq.capacity_summary(snapshot(limit=4, used=0, active_total=0))}
-        self.assertTrue(cq.cleanup_reconciled(clean))
+    def test_owned_active_tier_requires_exact_task_associations(self):
+        fixture = snapshot(limit=6, used=2, active_unknown=1)
+        fixture["provider_sessions"]["items"] = [
+            provider_row("TASK-A", "ses-a", "active"),
+            provider_row("TASK-B", "ses-b", "active"),
+        ]
+        observed = cq.qualification_task_provider_states(
+            fixture,
+            ["task-a", "task-b"],
+        )
+        self.assertTrue(observed["all_exact_active"])
+        self.assertEqual(observed["active_count"], 2)
+        self.assertEqual(observed["provider_session_ids"], ["ses-a", "ses-b"])
 
-        active = {"capacity": cq.capacity_summary(snapshot(limit=4, used=0, active_total=1))}
-        self.assertFalse(cq.cleanup_reconciled(active))
+        missing = cq.qualification_task_provider_states(fixture, ["task-a", "task-c"])
+        self.assertFalse(missing["all_exact_active"])
+        self.assertEqual(missing["missing_task_session_ids"], ["task-c"])
 
-        occupied = {"capacity": cq.capacity_summary(snapshot(limit=4, used=1, active_total=0))}
-        self.assertFalse(cq.cleanup_reconciled(occupied))
+    def test_cleanup_requires_slots_and_exact_provider_sessions_inactive(self):
+        clean = {"capacity": cq.capacity_summary(snapshot(limit=4, used=0))}
+        inactive = [
+            {"provider_session_id": "ses-a", "provider_reported_state": "inactive", "error": None},
+            {"provider_session_id": "ses-b", "provider_reported_state": "inactive", "error": None},
+        ]
+        self.assertTrue(cq.cleanup_reconciled(clean, inactive, 2))
 
-        unknown_active = {
-            "capacity": cq.capacity_summary(
-                snapshot(limit=4, used=0, active_total=0, active_unknown=1)
-            )
-        }
-        self.assertFalse(cq.cleanup_reconciled(unknown_active))
+        active = [
+            {"provider_session_id": "ses-a", "provider_reported_state": "active", "error": None},
+            {"provider_session_id": "ses-b", "provider_reported_state": "inactive", "error": None},
+        ]
+        self.assertFalse(cq.cleanup_reconciled(clean, active, 2))
+
+        occupied = {"capacity": cq.capacity_summary(snapshot(limit=4, used=1))}
+        self.assertFalse(cq.cleanup_reconciled(occupied, inactive, 2))
+        self.assertFalse(cq.cleanup_reconciled(clean, inactive[:1], 2))
 
     def test_numeric_peak_ignores_unknowns(self):
         samples = [
