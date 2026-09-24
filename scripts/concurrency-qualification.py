@@ -378,11 +378,22 @@ def wait_for_active_tier(
     timeout_seconds: int,
     poll_seconds: float,
     samples: list[dict[str, Any]],
+    *,
+    sample_cpu_threshold: float,
+    sample_artifact_path: Path,
+    sample_capture: dict[str, Any],
 ) -> dict[str, Any] | None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         sample = sample_once(api, task_ids)
-        samples.append(sample)
+        record_sample(
+            samples,
+            sample,
+            threshold=sample_cpu_threshold,
+            artifact_path=sample_artifact_path,
+            capture=sample_capture,
+            phase="active_acquisition",
+        )
         if sample["qualification_tasks"]["all_exact_active"]:
             return sample
         time.sleep(poll_seconds)
@@ -434,6 +445,10 @@ def wait_for_provider_completion(
     timeout_seconds: int,
     poll_seconds: float,
     samples: list[dict[str, Any]],
+    *,
+    sample_cpu_threshold: float,
+    sample_artifact_path: Path,
+    sample_capture: dict[str, Any],
 ) -> bool:
     if len(provider_session_ids) != len(task_ids) or not provider_session_ids:
         return False
@@ -442,7 +457,14 @@ def wait_for_provider_completion(
         sample = sample_once(api, task_ids)
         provider_rows = observe_provider_sessions(api, provider_session_ids)
         sample["qualification_provider_completion"] = provider_rows
-        samples.append(sample)
+        record_sample(
+            samples,
+            sample,
+            threshold=sample_cpu_threshold,
+            artifact_path=sample_artifact_path,
+            capture=sample_capture,
+            phase="natural_completion",
+        )
         if provider_sessions_inactive(provider_rows, len(provider_session_ids)):
             return True
         time.sleep(poll_seconds)
@@ -468,6 +490,10 @@ def wait_for_cleanup_reconciliation(
     timeout_seconds: int,
     poll_seconds: float,
     samples: list[dict[str, Any]],
+    *,
+    sample_cpu_threshold: float,
+    sample_artifact_path: Path,
+    sample_capture: dict[str, Any],
 ) -> bool:
     deadline = time.monotonic() + timeout_seconds
     expected = len(provider_session_ids)
@@ -477,7 +503,14 @@ def wait_for_cleanup_reconciliation(
         sample = sample_once(api, task_ids)
         provider_rows = observe_provider_sessions(api, provider_session_ids)
         sample["qualification_provider_cleanup"] = provider_rows
-        samples.append(sample)
+        record_sample(
+            samples,
+            sample,
+            threshold=sample_cpu_threshold,
+            artifact_path=sample_artifact_path,
+            capture=sample_capture,
+            phase="cleanup",
+        )
         if cleanup_reconciled(sample, provider_rows, expected):
             return True
         time.sleep(poll_seconds)
@@ -498,52 +531,88 @@ def numeric_peak(samples: list[dict[str, Any]], path: tuple[str, ...]) -> float 
     return max(values) if values else None
 
 
-def capture_sample_if_hot(
-    samples: list[dict[str, Any]],
+def maybe_capture_sample_if_hot(
+    sample: dict[str, Any],
     threshold: float,
-    receipt_path: Path,
-) -> dict[str, Any]:
-    peak = numeric_peak(samples, ("conduit_process", "process_cpu_percent"))
-    if peak is None or peak < threshold:
-        return {
+    artifact_path: Path,
+    capture: dict[str, Any],
+    phase: str,
+) -> None:
+    if capture.get("attempted"):
+        return
+    process = sample.get("conduit_process") or {}
+    cpu = process.get("process_cpu_percent")
+    pid = process.get("pid")
+    if (
+        process.get("state") != "known"
+        or not isinstance(cpu, (int, float))
+        or not math.isfinite(float(cpu))
+        or float(cpu) < threshold
+    ):
+        return
+
+    capture.update(
+        {
+            "attempted": True,
             "captured": False,
-            "reason": f"Conduit process CPU peak {peak!r} below threshold {threshold}",
+            "triggered_at": sample.get("at"),
+            "trigger_phase": phase,
+            "trigger_cpu_percent": float(cpu),
+            "pid": pid,
+            "artifact_path": str(artifact_path),
+            "basis": (
+                "Triggered immediately from a live Conduit process CPU sample "
+                "before qualification teardown. Inspect the macOS sample for "
+                "the main-thread stack; process CPU is not main-thread CPU."
+            ),
         }
-    known = next(
-        (
-            s["conduit_process"]
-            for s in reversed(samples)
-            if (s.get("conduit_process") or {}).get("state") == "known"
-        ),
-        None,
     )
-    if not known:
-        return {"captured": False, "reason": "Conduit PID unavailable"}
-    path = receipt_path.with_suffix(".sample.txt")
-    cmd = ["sample", str(known["pid"]), "2", "1", "-file", str(path)]
-    run = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-    return {
-        "captured": run.returncode == 0,
-        "path": str(path) if run.returncode == 0 else None,
-        "command": cmd,
-        "exit_code": run.returncode,
-        "stderr": run.stderr[-1000:],
-        "basis": (
-            "Triggered by whole-process CPU. Inspect the sample for the main "
-            "thread; the harness does not convert it into a numeric main-thread "
-            "CPU percentage."
-        ),
-    }
+    if not isinstance(pid, int):
+        capture["error"] = "Conduit PID unavailable at threshold crossing"
+        return
+
+    cmd = ["sample", str(pid), "2", "1", "-file", str(artifact_path)]
+    capture["command"] = cmd
+    try:
+        run = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        capture["exit_code"] = run.returncode
+        capture["stderr"] = run.stderr[-1000:]
+        capture["captured"] = run.returncode == 0
+        if run.returncode != 0:
+            capture["error"] = "macOS sample command failed"
+    except Exception as exc:
+        capture["error"] = str(exc)
 
 
-def write_receipt(receipt: dict[str, Any], requested_path: Path | None) -> Path:
+def record_sample(
+    samples: list[dict[str, Any]],
+    sample: dict[str, Any],
+    *,
+    threshold: float,
+    artifact_path: Path,
+    capture: dict[str, Any],
+    phase: str,
+) -> None:
+    samples.append(sample)
+    maybe_capture_sample_if_hot(
+        sample,
+        threshold,
+        artifact_path,
+        capture,
+        phase,
+    )
+
+
+def receipt_path_for(target_tier: int, requested_path: Path | None) -> Path:
     RECEIPT_DIR.mkdir(parents=True, exist_ok=True)
     if requested_path is not None:
-        path = requested_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-    else:
-        stamp = utc_now().strftime("%Y%m%dT%H%M%SZ")
-        path = RECEIPT_DIR / f"slice11-concurrency-{receipt['target_tier']}-{stamp}.json"
+        requested_path.parent.mkdir(parents=True, exist_ok=True)
+        return requested_path
+    stamp = utc_now().strftime("%Y%m%dT%H%M%SZ")
+    return RECEIPT_DIR / f"slice11-concurrency-{target_tier}-{stamp}.json"
+
+
+def write_receipt(receipt: dict[str, Any], path: Path) -> Path:
     path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     return path
 
