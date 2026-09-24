@@ -299,7 +299,17 @@ def close_tasks(api: Any, task_ids: list[str]) -> list[dict[str, Any]]:
     return results
 
 
-def wait_for_slot_cleanup(
+def cleanup_reconciled(sample: dict[str, Any]) -> bool:
+    capacity = sample["capacity"]
+    active = capacity["provider_reported_active_turns"]
+    return (
+        capacity["task_slots"]["used"] == 0
+        and active["total_state"] == "known"
+        and active["total"] == 0
+    )
+
+
+def wait_for_cleanup_reconciliation(
     api: Any,
     timeout_seconds: int,
     poll_seconds: float,
@@ -309,7 +319,7 @@ def wait_for_slot_cleanup(
     while time.monotonic() < deadline:
         sample = sample_once(api)
         samples.append(sample)
-        if sample["capacity"]["task_slots"]["used"] == 0:
+        if cleanup_reconciled(sample):
             return True
         time.sleep(poll_seconds)
     return False
@@ -474,7 +484,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
             if isinstance(row.get("task_session_id"), str)
         ]
         cleanup.extend(close_tasks(api, task_ids))
-        cleanup_reconciled = wait_for_slot_cleanup(
+        cleanup_reconciled = wait_for_cleanup_reconciliation(
             api,
             args.cleanup_timeout,
             args.poll_seconds,
@@ -486,9 +496,15 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     receipt["cleanup_reconciled"] = cleanup_reconciled
     receipt["failure"] = failure
     receipt["summary"] = {
+        "create_attempts": len(tasks),
+        "successful_creates": sum(
+            1 for task in tasks if isinstance(task.get("task_session_id"), str)
+        ),
         "create_failures": sum(
             1 for task in tasks if not isinstance(task.get("task_session_id"), str)
         ),
+        "active_tier_timeout": not active_tier_observed,
+        "cleanup_reconciled": cleanup_reconciled,
         "peak_fleet_rpc_latency_ms": numeric_peak(
             samples, ("fleet_rpc_latency_ms",)
         ),
