@@ -209,6 +209,50 @@ class ConcurrencyQualificationTests(unittest.TestCase):
         self.assertFalse(capture["captured"])
         run.assert_not_called()
 
+    def test_post_completion_window_observes_before_teardown(self):
+        sample = {
+            "at": "2026-09-24T16:00:00Z",
+            "capacity": cq.capacity_summary(snapshot(limit=4, used=4)),
+            "qualification_tasks": {},
+            "conduit_process": {
+                "state": "known",
+                "pid": 4321,
+                "process_cpu_percent": 10.0,
+            },
+        }
+        inactive = [
+            {
+                "provider_session_id": "ses-a",
+                "provider_reported_state": "inactive",
+                "error": None,
+            }
+        ]
+        samples = []
+        capture = {"attempted": False, "captured": False}
+
+        with mock.patch.object(cq, "sample_once", return_value=sample), \
+             mock.patch.object(cq, "observe_provider_sessions", return_value=inactive), \
+             mock.patch.object(cq.time, "monotonic", side_effect=[0.0, 0.0, 2.0]), \
+             mock.patch.object(cq.time, "sleep"):
+            observed = cq.observe_post_completion_window(
+                object(),
+                ["task-a"],
+                ["ses-a"],
+                1,
+                0,
+                samples,
+                sample_cpu_threshold=80.0,
+                sample_artifact_path=Path("/tmp/slice11.sample.txt"),
+                sample_capture=capture,
+            )
+
+        self.assertTrue(observed)
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(
+            samples[0]["qualification_provider_post_completion"],
+            inactive,
+        )
+
     def test_numeric_peak_ignores_unknowns(self):
         samples = [
             {"capacity": {"x": {"total": None}}},
