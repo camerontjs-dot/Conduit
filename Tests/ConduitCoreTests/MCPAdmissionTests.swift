@@ -429,6 +429,33 @@ final class MCPAdmissionTests: XCTestCase {
         )
     }
 
+    func testQualificationLiveTaskLimitIsExplicitAndBounded() {
+        for value in [4, 6, 8] {
+            let qualified = MCPAdmissionPolicy.conduitSessionAPI(
+                writesEnabled: true,
+                qualificationLiveTaskLimit: value
+            )
+            XCTAssertEqual(qualified.globalLiveTaskLimit, value)
+            XCTAssertGreaterThanOrEqual(
+                qualified.perCallerCreateLimit,
+                value,
+                "qualification must not hit the per-caller create budget before the requested tier"
+            )
+        }
+
+        for value in [0, 5, 9, 64] {
+            let rejected = MCPAdmissionPolicy.conduitSessionAPI(
+                writesEnabled: true,
+                qualificationLiveTaskLimit: value
+            )
+            XCTAssertEqual(
+                rejected.globalLiveTaskLimit,
+                4,
+                "unsupported qualification limits must fall back to the shipped ceiling"
+            )
+        }
+    }
+
     // MARK: - Observability
 
     func testSnapshotReportsCommittedCapacity() throws {
