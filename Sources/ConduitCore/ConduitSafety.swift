@@ -481,16 +481,32 @@ public struct MCPAdmissionPolicy: Equatable, Sendable {
     ///
     /// Prompt queue depths are depth, not rate, and stay at the conservative
     /// defaults.
+    public static let qualificationLiveTaskLimits: Set<Int> = [4, 6, 8]
+
+    public static func supportsQualificationLiveTaskLimit(_ value: Int) -> Bool {
+        qualificationLiveTaskLimits.contains(value)
+    }
+
     public static func conduitSessionAPI(
-        writesEnabled: Bool
+        writesEnabled: Bool,
+        qualificationLiveTaskLimit: Int? = nil
     ) -> MCPAdmissionPolicy {
-        MCPAdmissionPolicy(
+        // Slice 11 needs to pressure-test 4 / 6 / 8 active runtimes without
+        // silently changing the shipped admission ceiling. The optional value
+        // is therefore an explicit qualification aperture. Unsupported values
+        // fail closed to the shipped limit, and the Fleet snapshot reports the
+        // effective limit so a qualification harness can verify what actually
+        // ran.
+        let effectiveLiveTaskLimit = qualificationLiveTaskLimit.flatMap {
+            supportsQualificationLiveTaskLimit($0) ? $0 : nil
+        } ?? 4
+        return MCPAdmissionPolicy(
             writesEnabled: writesEnabled,
             // ChatGPT does not send an idempotency key, so requiring one would
             // refuse every call. It stays opt-in.
             requireCreateIdempotency: false,
-            globalLiveTaskLimit: 4,
-            perCallerCreateLimit: 6,
+            globalLiveTaskLimit: effectiveLiveTaskLimit,
+            perCallerCreateLimit: max(6, effectiveLiveTaskLimit + 2),
             perCallerWriteLimit: 30,
             resourcePolicy: .conduitSampledMetrics
         )
