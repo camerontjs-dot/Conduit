@@ -471,6 +471,39 @@ def wait_for_provider_completion(
     return False
 
 
+def observe_post_completion_window(
+    api: Any,
+    task_ids: list[str],
+    provider_session_ids: list[str],
+    duration_seconds: int,
+    poll_seconds: float,
+    samples: list[dict[str, Any]],
+    *,
+    sample_cpu_threshold: float,
+    sample_artifact_path: Path,
+    sample_capture: dict[str, Any],
+) -> bool:
+    if duration_seconds <= 0:
+        return False
+    deadline = time.monotonic() + duration_seconds
+    while time.monotonic() < deadline:
+        sample = sample_once(api, task_ids)
+        provider_rows = observe_provider_sessions(api, provider_session_ids)
+        sample["qualification_provider_post_completion"] = provider_rows
+        record_sample(
+            samples,
+            sample,
+            threshold=sample_cpu_threshold,
+            artifact_path=sample_artifact_path,
+            capture=sample_capture,
+            phase="post_completion",
+        )
+        if not provider_sessions_inactive(provider_rows, len(provider_session_ids)):
+            return False
+        time.sleep(poll_seconds)
+    return True
+
+
 def cleanup_reconciled(
     sample: dict[str, Any],
     provider_rows: list[dict[str, Any]],
@@ -647,6 +680,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     cleanup: list[dict[str, Any]] = []
     active_tier_observed = False
     natural_completion_observed = False
+    post_completion_window_observed = False
     cleanup_reconciled_ok = False
     provider_session_ids: list[str] = []
     failure: str | None = None
@@ -661,6 +695,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "output_lines": args.output_lines,
         "sample_seconds": args.sample_seconds,
         "completion_timeout": args.completion_timeout,
+        "post_completion_seconds": args.post_completion_seconds,
         "poll_seconds": args.poll_seconds,
         "baseline_fleet_rpc_latency_ms": baseline_latency,
         "baseline": baseline,
@@ -669,6 +704,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "cleanup": cleanup,
         "active_tier_observed": False,
         "natural_completion_observed": False,
+        "post_completion_window_observed": False,
         "cleanup_reconciled": False,
         "ui_responsiveness": {
             "state": "unknown",
@@ -753,6 +789,23 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
                     "qualification-owned provider sessions did not all reach "
                     "provider-reported inactive state before the completion timeout"
                 )
+            else:
+                post_completion_window_observed = observe_post_completion_window(
+                    api,
+                    task_ids,
+                    provider_session_ids,
+                    args.post_completion_seconds,
+                    args.poll_seconds,
+                    samples,
+                    sample_cpu_threshold=args.sample_cpu_threshold,
+                    sample_artifact_path=sample_artifact_path,
+                    sample_capture=sample_capture,
+                )
+                if not post_completion_window_observed:
+                    failure = (
+                        "provider sessions did not remain inactive throughout "
+                        "the pre-teardown post-completion observation window"
+                    )
         else:
             failure = (
                 "qualification-owned provider sessions never all reached "
@@ -792,6 +845,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
     receipt["finished_at"] = iso_now()
     receipt["active_tier_observed"] = active_tier_observed
     receipt["natural_completion_observed"] = natural_completion_observed
+    receipt["post_completion_window_observed"] = post_completion_window_observed
     receipt["provider_session_ids"] = provider_session_ids
     receipt["cleanup_reconciled"] = cleanup_reconciled_ok
     receipt["failure"] = failure
@@ -807,6 +861,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "natural_completion_timeout": (
             active_tier_observed and not natural_completion_observed
         ),
+        "post_completion_window_observed": post_completion_window_observed,
         "cleanup_reconciled": cleanup_reconciled_ok,
         "peak_fleet_rpc_latency_ms": numeric_peak(
             samples, ("fleet_rpc_latency_ms",)
@@ -855,6 +910,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         if (
             active_tier_observed
             and natural_completion_observed
+            and post_completion_window_observed
             and cleanup_reconciled_ok
             and failure is None
         )
@@ -874,6 +930,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-seconds", type=int, default=15)
     parser.add_argument("--active-timeout", type=int, default=75)
     parser.add_argument("--completion-timeout", type=int, default=240)
+    parser.add_argument("--post-completion-seconds", type=int, default=15)
     parser.add_argument("--cleanup-timeout", type=int, default=45)
     parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--sample-cpu-threshold", type=float, default=80.0)
