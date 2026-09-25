@@ -92,6 +92,131 @@ final class StructuredPromptHoldTests: XCTestCase {
         )
     }
 
+    // MARK: - Active-turn semantics (Slice 4, issue #77)
+
+    func testAReadyActiveTurnWithQueuePolicyHoldsRatherThanSending() {
+        // OpenCode/Grok/StreamJSON have no proven active-turn steering: a
+        // second sendTurn resets turn-local state or throws overlap. Sending
+        // now would collide with the active turn and corrupt observation.
+        XCTAssertEqual(
+            StructuredPromptHold.disposition(
+                text: "follow-up",
+                usesStructuredHost: true,
+                isReady: true,
+                isTurnActive: true,
+                activeTurnPolicy: .queue
+            ),
+            .hold
+        )
+    }
+
+    func testAReadyActiveTurnWithSteerPolicySendsNow() {
+        // Codex turn/steer is a genuine provider-supported steering path.
+        // Queueing it would misreport steering as queueing.
+        XCTAssertEqual(
+            StructuredPromptHold.disposition(
+                text: "steer this",
+                usesStructuredHost: true,
+                isReady: true,
+                isTurnActive: true,
+                activeTurnPolicy: .steer
+            ),
+            .sendNow
+        )
+    }
+
+    func testAReadyInactiveTurnSendsNowUnderEitherPolicy() {
+        for policy in [
+            StructuredPromptHold.ActiveTurnInputPolicy.queue,
+            StructuredPromptHold.ActiveTurnInputPolicy.steer,
+        ] {
+            XCTAssertEqual(
+                StructuredPromptHold.disposition(
+                    text: "go",
+                    usesStructuredHost: true,
+                    isReady: true,
+                    isTurnActive: false,
+                    activeTurnPolicy: policy
+                ),
+                .sendNow,
+                "policy: \(policy)"
+            )
+        }
+    }
+
+    func testAPTYPromptIsUnaffectedByActiveTurnSemantics() {
+        // PTY/Shell controllers queue internally with their own semantics.
+        // Active-turn policy must not reroute them.
+        for policy in [
+            StructuredPromptHold.ActiveTurnInputPolicy.queue,
+            StructuredPromptHold.ActiveTurnInputPolicy.steer,
+        ] {
+            XCTAssertEqual(
+                StructuredPromptHold.disposition(
+                    text: "go",
+                    usesStructuredHost: false,
+                    isReady: false,
+                    isTurnActive: true,
+                    activeTurnPolicy: policy
+                ),
+                .sendNow,
+                "policy: \(policy)"
+            )
+        }
+    }
+
+    func testANotReadyHostHoldsRegardlessOfTurnState() {
+        for active in [false, true] {
+            XCTAssertEqual(
+                StructuredPromptHold.disposition(
+                    text: "objective",
+                    usesStructuredHost: true,
+                    isReady: false,
+                    isTurnActive: active,
+                    activeTurnPolicy: .queue
+                ),
+                .hold,
+                "isTurnActive: \(active)"
+            )
+        }
+    }
+
+    func testOmittedActiveTurnParametersPreservePreviousBehavior() {
+        // Existing callers pass readiness only. A ready host with no active
+        // turn information must keep sending immediately.
+        XCTAssertEqual(
+            StructuredPromptHold.disposition(
+                text: "go",
+                usesStructuredHost: true,
+                isReady: true
+            ),
+            .sendNow
+        )
+        XCTAssertEqual(
+            StructuredPromptHold.disposition(
+                text: "go",
+                usesStructuredHost: true,
+                isReady: false
+            ),
+            .hold
+        )
+    }
+
+    func testHoldReasonDistinguishesReadinessFromAnActiveTurn() {
+        XCTAssertEqual(
+            StructuredPromptHold.holdReason(isReady: false, isTurnActive: false),
+            .awaitingReadiness
+        )
+        XCTAssertEqual(
+            StructuredPromptHold.holdReason(isReady: false, isTurnActive: true),
+            .awaitingReadiness
+        )
+        XCTAssertEqual(
+            StructuredPromptHold.holdReason(isReady: true, isTurnActive: true),
+            .queuedBehindActiveTurn
+        )
+    }
+
     // MARK: - Resolutions
 
     func testDeliveredResolvesToDeliveredWithNoReason() {

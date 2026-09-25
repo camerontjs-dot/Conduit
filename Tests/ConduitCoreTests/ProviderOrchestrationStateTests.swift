@@ -333,4 +333,70 @@ final class ProviderOrchestrationStateTests: XCTestCase {
         XCTAssertEqual(preflight.willStopProvider.state, .unknown)
         XCTAssertEqual(preflight.unsupportedConsequences.value?.count, 1)
     }
+
+    // MARK: - Slice 4 typed delivery (issue #77)
+
+    func testShellStdinIsNeverRelabeledAsAnAgentPrompt() {
+        // Free-form Shell stdin and structured agent prompts are distinct
+        // transports. Collapsing them would upgrade a terminal write into a
+        // claim of agent instruction.
+        XCTAssertNotEqual(
+            DeliveryTransport.shellStdin,
+            DeliveryTransport.agentPrompt
+        )
+        XCTAssertEqual(DeliveryTransport.shellStdin.rawValue, "shell_stdin")
+        XCTAssertEqual(DeliveryTransport.agentPrompt.rawValue, "agent_prompt")
+        XCTAssertEqual(
+            DeliveryTransport(rawValue: "shell_stdin"),
+            .shellStdin,
+            "a shell_stdin record must decode back to shell_stdin, never agent_prompt"
+        )
+        let shellRecord = PromptDeliveryRecord(
+            eventID: .known("shell-event"),
+            transport: .shellStdin,
+            state: .accepted,
+            contentDigest: .known("digest-a"),
+            queuedBehindActiveTurn: .known(false),
+            providerTurnID: .unknown
+        )
+        XCTAssertEqual(shellRecord.transport, .shellStdin)
+        XCTAssertNotEqual(shellRecord.transport, .agentPrompt)
+    }
+
+    func testQueuedStructuredPromptKeepsItsDeliveryVocabulary() {
+        let record = PromptDeliveryRecord(
+            eventID: .known("agent-event"),
+            transport: .agentPrompt,
+            state: .queued,
+            contentDigest: .known("digest-b"),
+            queuedBehindActiveTurn: .known(true),
+            providerTurnID: .unknown
+        )
+        XCTAssertEqual(record.state, .queued)
+        XCTAssertEqual(record.queuedBehindActiveTurn.value, true)
+        XCTAssertEqual(record.transport, .agentPrompt)
+    }
+
+    func testProviderTurnCompletionStaysIndependentOfObjectiveAcceptance() {
+        // A completed provider turn is a runtime observation. It never
+        // settles verification or the supervisor's objective acceptance.
+        let turn = ProviderTurnLineage(
+            turnID: .known("turn-complete"),
+            state: .completed,
+            model: .unknown,
+            observation: SupervisionObservationStamp(
+                authority: .providerObserved,
+                freshness: .current,
+                observedAt: .known(Date(timeIntervalSince1970: 1_799_956_800))
+            )
+        )
+        let terminal = WorkerTerminalState(
+            receipt: .present,
+            verification: .notPerformed,
+            objectiveAcceptance: .pending
+        )
+        XCTAssertEqual(turn.state, .completed)
+        XCTAssertEqual(terminal.verification, .notPerformed)
+        XCTAssertEqual(terminal.objectiveAcceptance, .pending)
+    }
 }

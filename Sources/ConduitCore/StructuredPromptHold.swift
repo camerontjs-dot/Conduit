@@ -39,9 +39,40 @@ public enum StructuredPromptHold {
         case discard
     }
 
+    /// What a structured provider does with a second prompt while one of its
+    /// turns is still active.
+    ///
+    /// Provider differences are preserved rather than normalized: Codex
+    /// app-server exposes a genuine in-turn steering path (`turn/steer`),
+    /// while OpenCode HTTP and Grok ACP reset turn-local state and send
+    /// another turn-start unaudited, and StreamJSON rejects overlap outright.
+    /// Only proven steering may steer; everything else queues behind the
+    /// active turn so Conduit can guarantee eventual ordered delivery.
+    public enum ActiveTurnInputPolicy: Equatable, Sendable {
+        /// Proven provider-native in-turn steering (Codex `turn/steer`).
+        case steer
+        /// Active-turn steering is unsupported or unproven: the prompt waits
+        /// for the active turn's terminal observation, then goes as its own
+        /// turn. Never claim steering merely because a write was accepted.
+        case queue
+    }
+
+    /// Why Conduit is holding a prompt.
+    ///
+    /// The two reasons have different bounds. A readiness hold ends when the
+    /// host reports ready or the readiness grace runs out. A prompt queued
+    /// behind an active turn is bounded by that turn's terminal observation
+    /// (or teardown) — the readiness clock must not abandon a prompt that is
+    /// waiting behind a legitimately long turn.
+    public enum HoldReason: Equatable, Sendable {
+        /// The structured host has not reported ready yet.
+        case awaitingReadiness
+        /// The host is ready but a non-steering provider turn is active.
+        case queuedBehindActiveTurn
+    }
+
     /// How a held prompt finished. Every hold reaches one of these.
-    public enum Resolution: Equatable, Sendable {
-        /// The host became ready and accepted it.
+    public enum Resolution: Equatable, Sendable {        /// The host became ready and accepted it.
         case delivered
         /// The host became ready and refused it.
         case refused(String)
@@ -82,16 +113,38 @@ public enum StructuredPromptHold {
     /// A PTY is `sendNow` because its controller already queues internally;
     /// routing it through a hold would duplicate a mechanism that works and
     /// re-introduce the double-delivery this vocabulary was built to prevent.
+    ///
+    /// A ready structured host with an active turn sends immediately only
+    /// under proven steering (`.steer`). Under `.queue` the prompt is held
+    /// behind the active turn: the provider clients without steering reset
+    /// turn-local state and start another turn underneath the running one,
+    /// which is the observation-corruption collision Slice 4 removes.
     public static func disposition(
         text: String,
         usesStructuredHost: Bool,
-        isReady: Bool
+        isReady: Bool,
+        isTurnActive: Bool = false,
+        activeTurnPolicy: ActiveTurnInputPolicy = .queue
     ) -> Disposition {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .discard
         }
         guard usesStructuredHost else { return .sendNow }
-        return isReady ? .sendNow : .hold
+        guard isReady else { return .hold }
+        if isTurnActive, activeTurnPolicy == .queue { return .hold }
+        return .sendNow
+    }
+
+    /// Name why a held prompt is being held.
+    ///
+    /// Call only for prompts `disposition` already routed to `.hold`: a
+    /// host that is not ready holds for readiness whatever the turn state,
+    /// and a ready host holds only behind an active turn.
+    public static func holdReason(
+        isReady: Bool,
+        isTurnActive: Bool
+    ) -> HoldReason {
+        (isReady && isTurnActive) ? .queuedBehindActiveTurn : .awaitingReadiness
     }
 
     /// Whether a prompt held since `heldAt` has outlived the grace period.

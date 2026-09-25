@@ -3151,6 +3151,27 @@ final class AppModel: ObservableObject {
         }
         let agentName = runtime.controller.descriptor.agent.name
         if runtime.structuredIsReady {
+            if StructuredPromptHold.disposition(
+                text: assembled,
+                usesStructuredHost: runtime.usesStructuredHost,
+                isReady: true,
+                isTurnActive: runtime.structuredTurnActive,
+                activeTurnPolicy: runtime.structuredActiveTurnPolicy
+            ) == .hold {
+                // Ready, but a non-steering provider turn is active. Queue
+                // behind it — the same ordered queue the Session API uses —
+                // rather than starting a second turn underneath the running
+                // one. The prompt event stays queued and the composer is
+                // already cleared, because Conduit now owns delivery.
+                runtime.holdPrompt(
+                    eventID: eventID,
+                    text: assembled,
+                    reason: .queuedBehindActiveTurn
+                )
+                statusMessage = "A provider turn is still active. The prompt "
+                    + "is queued behind it and will send when the turn ends."
+                return
+            }
             let delivered = runtime.sendStructuredPrompt(text: assembled)
             runtime.updatePromptDelivery(
                 eventID: eventID,
@@ -6118,20 +6139,44 @@ final class AppModel: ObservableObject {
         if StructuredPromptHold.disposition(
             text: text,
             usesStructuredHost: runtime.usesStructuredHost,
-            isReady: runtime.structuredIsReady
+            isReady: runtime.structuredIsReady,
+            isTurnActive: runtime.structuredTurnActive,
+            activeTurnPolicy: runtime.structuredActiveTurnPolicy
         ) == .hold {
-            runtime.holdPromptUntilReady(eventID: eventID, text: text)
+            // Two holds, one promise. A host that is not ready yet holds for
+            // readiness; a ready host with an active non-steering turn holds
+            // behind that turn. Either way the durable prompt event already
+            // exists as queued, the caller must not resend, and the outcome
+            // lands on that same event.
+            let reason = StructuredPromptHold.holdReason(
+                isReady: runtime.structuredIsReady,
+                isTurnActive: runtime.structuredTurnActive
+            )
+            runtime.holdPrompt(eventID: eventID, text: text, reason: reason)
+            let queuedBehindActiveTurn =
+                reason == .queuedBehindActiveTurn
+            let authority: String
+            if queuedBehindActiveTurn {
+                authority = "prompt accepted while a provider turn is active; "
+                    + "Conduit owns delivery and will send it after the "
+                    + "current turn reaches a terminal observation. Do not "
+                    + "resend. The outcome is recorded on the prompt event, "
+                    + "readable through conduit_session_events."
+            } else {
+                authority = "prompt accepted before the runtime was ready; "
+                    + "Conduit owns delivery and will complete it when the host "
+                    + "reports ready. Do not resend. The outcome is recorded on "
+                    + "the prompt event, readable through conduit_session_events."
+            }
             return [
                 "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
                 "delivered": false,
                 "delivery": "queued",
+                "queued_behind_active_turn": queuedBehindActiveTurn,
                 "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
                 "origin": origin.rawValue,
-                "ready": false,
-                "authority": "prompt accepted before the runtime was ready; "
-                    + "Conduit owns delivery and will complete it when the host "
-                    + "reports ready. Do not resend. The outcome is recorded on "
-                    + "the prompt event, readable through conduit_session_events.",
+                "ready": runtime.structuredIsReady,
+                "authority": authority,
             ]
         }
         if runtime.structuredIsReady {
@@ -6829,6 +6874,17 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             || openCode?.isTurnActive == true
             || streamJSON?.isTurnActive == true
     }
+    /// Which active-turn input semantic applies to the live structured host.
+    ///
+    /// Codex app-server steers an active turn via `turn/steer`, an explicit
+    /// provider-supported path. Every other structured client either resets
+    /// turn-local state and sends another turn-start unaudited (OpenCode
+    /// HTTP, Grok ACP) or rejects overlap outright (StreamJSON), so active-
+    /// turn steering there is unsupported or unproven and second prompts
+    /// queue behind the active turn instead.
+    var structuredActiveTurnPolicy: StructuredPromptHold.ActiveTurnInputPolicy {
+        appServer != nil ? .steer : .queue
+    }
     var structuredLastTurnStatus: String? {
         appServer?.lastTurnStatus
             ?? grokACP?.lastTurnStatus
@@ -7320,19 +7376,24 @@ final class TerminalRuntime: ObservableObject, Identifiable {
 
     // MARK: - Held prompts
 
-    /// A prompt Conduit accepted on behalf of a structured host that was not
-    /// ready to take it yet.
-    private struct HeldPrompt {
-        let eventID: UUID
-        let text: String
-        let heldAt: Date
-    }
-
-    private var heldPrompts: [HeldPrompt] = []
+    /// Prompts Conduit accepted on behalf of a structured host that could
+    /// not take them yet — either still starting, or mid-turn on a provider
+    /// without proven steering. One arrival order, released one per
+    /// provider turn; see `StructuredPromptQueue`.
+    private var heldQueue = StructuredPromptQueue()
     private var holdExpiry: Task<Void, Never>?
 
+    /// The last provider-turn activity Conduit observed. Every client clears
+    /// its own `isTurnActive` before forwarding terminal effects, so the
+    /// active → inactive edge is the deterministic signal that the preceding
+    /// provider turn reached a terminal observation — the only thing that
+    /// may release the next queued prompt. A `.failed` effect that leaves
+    /// the turn active (a late or transient provider error) produces no
+    /// edge and advances nothing.
+    private var observedProviderTurnActive = false
+
     /// How many prompts Conduit is currently holding for this runtime.
-    var heldPromptCount: Int { heldPrompts.count }
+    var heldPromptCount: Int { heldQueue.count }
 
     /// Take ownership of a prompt the structured host cannot accept yet.
     ///
@@ -7340,37 +7401,42 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     /// exactly this: Conduit owns delivery and the caller must not resend. The
     /// prompt event is recorded before the hold, so the promise is visible in
     /// `conduit_session_events` as a queued prompt rather than as nothing at
-    /// all, and its real outcome lands on that same event.
-    func holdPromptUntilReady(eventID: UUID, text: String) {
-        heldPrompts.append(
-            HeldPrompt(eventID: eventID, text: text, heldAt: Date())
-        )
+    /// all, and its real outcome lands on that same event — the event is
+    /// never re-recorded, so IDs and content digests stay stable.
+    func holdPrompt(
+        eventID: UUID,
+        text: String,
+        reason: StructuredPromptHold.HoldReason
+    ) {
+        heldQueue.enqueue(eventID: eventID, text: text, reason: reason)
         scheduleHoldExpiry()
     }
 
-    /// Deliver everything Conduit promised to deliver, in arrival order.
+    /// Release at most one held prompt.
     ///
-    /// Order matters: an orchestrator can create a task with an objective and
-    /// send a follow-up before the host finishes starting, and the follow-up
-    /// must not overtake the objective.
+    /// Release requires a ready runtime and, on providers without proven
+    /// steering, no active turn: the released prompt becomes the next
+    /// provider turn, and the following prompt waits for that turn's
+    /// terminal observation (see `observeProviderTurnTransition`). Order is
+    /// arrival order, so a follow-up can never overtake the objective it
+    /// followed.
     func deliverHeldPrompts() {
-        guard !heldPrompts.isEmpty, structuredIsReady else { return }
-        let pending = heldPrompts
-        heldPrompts = []
-        holdExpiry?.cancel()
-        holdExpiry = nil
-        for prompt in pending {
-            let delivered = sendStructuredPrompt(text: prompt.text)
-            resolve(
-                prompt,
-                with: delivered
-                    ? .delivered
-                    : .refused(
-                        "\(descriptor.agent.name) refused the prompt Conduit "
-                            + "was holding for it"
-                    )
-            )
-        }
+        guard let next = heldQueue.releaseNext(
+            isReady: structuredIsReady,
+            isTurnActive: structuredTurnActive,
+            policy: structuredActiveTurnPolicy
+        ) else { return }
+        scheduleHoldExpiry()
+        let delivered = sendStructuredPrompt(text: next.text)
+        resolve(
+            next,
+            with: delivered
+                ? .delivered
+                : .refused(
+                    "\(descriptor.agent.name) refused the prompt Conduit "
+                        + "was holding for it"
+                )
+        )
     }
 
     /// Break the promise out loud.
@@ -7380,9 +7446,8 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     /// forever, because a caller waiting on `queued` has been told not to
     /// resend and would otherwise wait on nothing.
     func abandonHeldPrompts() {
-        guard !heldPrompts.isEmpty else { return }
-        let pending = heldPrompts
-        heldPrompts = []
+        let pending = heldQueue.drainForTeardown()
+        guard !pending.isEmpty else { return }
         holdExpiry?.cancel()
         holdExpiry = nil
         let resolution = StructuredPromptHold.teardownResolution(
@@ -7392,7 +7457,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     }
 
     private func resolve(
-        _ prompt: HeldPrompt,
+        _ prompt: StructuredPromptQueue.Entry,
         with resolution: StructuredPromptHold.Resolution
     ) {
         updatePromptDelivery(
@@ -7404,10 +7469,30 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
     }
 
+    /// Sync observed turn state and, on a genuine active → inactive edge,
+    /// release at most one queued prompt.
+    ///
+    /// The edge is the deterministic signal that the preceding provider
+    /// turn reached a terminal observation. Every client clears its own
+    /// `isTurnActive` before forwarding terminal effects, so by the time an
+    /// effect reaches `applyStructuredEffect` / `applyAppServerEffect` the
+    /// turn flag already reflects the outcome: `.turnCompleted` and a
+    /// genuinely terminal `.failed` produce the edge, while a late or
+    /// transient `.failed` that leaves the turn active produces none and
+    /// the queue does not advance.
+    private func observeProviderTurnTransition() {
+        let nowActive = structuredTurnActive
+        let wasActive = observedProviderTurnActive
+        observedProviderTurnActive = nowActive
+        if wasActive, !nowActive {
+            deliverHeldPrompts()
+        }
+    }
+
     /// Re-arm the deadline for the oldest hold still outstanding.
     private func scheduleHoldExpiry() {
         holdExpiry?.cancel()
-        guard let earliest = heldPrompts.map(\.heldAt).min() else {
+        guard let earliest = heldQueue.oldestHeldAt else {
             holdExpiry = nil
             return
         }
@@ -7425,16 +7510,14 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     }
 
     private func expireHeldPrompts() {
-        let now = Date()
-        let expired = heldPrompts.filter {
-            StructuredPromptHold.hasExpired(heldAt: $0.heldAt, now: now)
-        }
+        // Only readiness holds run against the readiness clock. Prompts
+        // queued behind an active turn are bounded by that turn, not by
+        // startup grace, and survive this sweep by construction.
+        let expired = heldQueue.expireReadinessHolds(now: Date())
         guard !expired.isEmpty else {
             scheduleHoldExpiry()
             return
         }
-        let expiredIDs = Set(expired.map(\.eventID))
-        heldPrompts.removeAll { expiredIDs.contains($0.eventID) }
         let resolution = StructuredPromptHold.expiryResolution(
             agentName: descriptor.agent.name
         )
@@ -7459,6 +7542,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         openCode = nil
         streamJSON?.stop()
         streamJSON = nil
+        observedProviderTurnActive = false
         pendingAppServerApproval = nil
         pendingStructuredApproval = nil
     }
@@ -7480,28 +7564,37 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     }
 
     func sendStructuredPrompt(text: String) -> Bool {
+        let delivered: Bool
         if appServer != nil {
-            return sendAppServerPrompt(text: text)
+            delivered = sendAppServerPrompt(text: text)
+        } else {
+            do {
+                if let grokACP {
+                    try grokACP.sendTurn(text: text)
+                    delivered = true
+                } else if let openCode {
+                    try openCode.sendTurn(text: text)
+                    delivered = true
+                } else if let streamJSON {
+                    try streamJSON.sendTurn(text: text)
+                    delivered = true
+                } else {
+                    conversationCaptureNotice = "No structured adapter is attached."
+                    return false
+                }
+            } catch {
+                conversationCaptureNotice = error.localizedDescription
+                return false
+            }
         }
-        do {
-            if let grokACP {
-                try grokACP.sendTurn(text: text)
-                return true
-            }
-            if let openCode {
-                try openCode.sendTurn(text: text)
-                return true
-            }
-            if let streamJSON {
-                try streamJSON.sendTurn(text: text)
-                return true
-            }
-            conversationCaptureNotice = "No structured adapter is attached."
-            return false
-        } catch {
-            conversationCaptureNotice = error.localizedDescription
-            return false
+        if delivered {
+            // A Conduit-initiated send just opened (or, under Codex
+            // steering, joined) a provider turn. Sync the edge detector so
+            // only a genuine active → inactive observation later releases
+            // the next queued prompt.
+            observedProviderTurnActive = structuredTurnActive
         }
+        return delivered
     }
 
     func interruptStructuredAdapter() {
@@ -7679,6 +7772,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         case .failed(let message):
             conversationCaptureNotice = message
         }
+        observeProviderTurnTransition()
     }
 
     private func applyAppServerEffect(_ effect: CodexAppServerEffect) {
@@ -7703,6 +7797,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         case .failed(let message):
             conversationCaptureNotice = message
         }
+        observeProviderTurnTransition()
     }
 
     private func upsertAdapterOutput(text: String, state: AgentOutputState) {
