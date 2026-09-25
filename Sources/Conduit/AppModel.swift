@@ -1804,6 +1804,7 @@ final class AppModel: ObservableObject {
             rootPID: pid_t(telemetry.shellPID),
             taskSessionID: taskSessionID.rawValue.uuidString,
             runtimeAttemptID: telemetry.runtimeAttemptID,
+            rootOwnership: .taskCreated,
             prior: prior
         )
         _ = appendTaskEvent(
@@ -4580,6 +4581,7 @@ final class AppModel: ObservableObject {
                             rootPID: rootPID,
                             taskSessionID: task.id.rawValue.uuidString,
                             runtimeAttemptID: shellHistory.runtimeAttemptID,
+                            rootOwnership: .taskCreated,
                             prior: prior,
                             observedAt: now
                         )
@@ -4594,6 +4596,7 @@ final class AppModel: ObservableObject {
                         rootPID: directPID,
                         taskSessionID: task.id.rawValue.uuidString,
                         runtimeAttemptID: operationalAttempt?.rawValue.uuidString,
+                        rootOwnership: .taskCreated,
                         prior: prior,
                         observedAt: now
                     )
@@ -6306,7 +6309,7 @@ final class AppModel: ObservableObject {
             OrchestrationValue<String>.known($0.runtimeAttemptID.rawValue.uuidString)
         } ?? prior?.runtimeAttemptID ?? .unknown
 
-        guard let rootPID = sessionAPIProcessTreeRootPID(
+        guard let root = sessionAPIProcessTreeRoot(
             runtime: runtime,
             prior: prior
         ) else {
@@ -6329,23 +6332,24 @@ final class AppModel: ObservableObject {
         }
 
         return MacOSProcessTreeObserver.observe(
-            rootPID: rootPID,
+            rootPID: root.pid,
             taskSessionID: taskRawID,
             runtimeAttemptID: runtimeAttemptID.value,
+            rootOwnership: root.ownership,
             providerTurnID: nil,
             prior: prior
         )
     }
 
-    private func sessionAPIProcessTreeRootPID(
+    private func sessionAPIProcessTreeRoot(
         runtime: TerminalRuntime?,
         prior: ProcessTreeObservation?
-    ) -> pid_t? {
+    ) -> (pid: pid_t, ownership: ProcessOwnership)? {
         if let direct = runtime?.controller.observedDirectPTYProcessID {
-            return direct
+            return (direct, .taskCreated)
         }
-        if let priorPID = prior?.launcher.value?.pid, priorPID > 0 {
-            return pid_t(priorPID)
+        if let priorLauncher = prior?.launcher.value, priorLauncher.pid > 0 {
+            return (pid_t(priorLauncher.pid), priorLauncher.ownership)
         }
         guard let hostIdentifier = sessionAPIProviderHostIdentifier(for: runtime) else {
             return nil
@@ -6358,7 +6362,10 @@ final class AppModel: ObservableObject {
         else {
             return nil
         }
-        return pid_t(pid)
+        // Provider-host identity is an observation root, not task ownership.
+        // Structured providers may share a host across tasks or predate the
+        // task by hours. Without task-specific identity evidence, fail closed.
+        return (pid_t(pid), .unknown)
     }
 
     private func sessionAPIProviderHostIdentifier(
