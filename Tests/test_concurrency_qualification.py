@@ -276,6 +276,68 @@ class ConcurrencyQualificationTests(unittest.TestCase):
         self.assertEqual(rows[0]["provider_turns"][0]["state"], "ambiguous")
         self.assertIsNone(rows[0]["error"])
 
+    def test_observe_provider_sessions_reads_swift_camel_case_worker_contract(self):
+        reconciliation = {
+            "providerReportedState": "inactive",
+            "disposition": "consistent_inactive",
+            "providerObservation": {"authority": "providerObserved"},
+            "processObservation": known({"coverage": "complete", "pids": []}),
+        }
+        api = mock.Mock()
+        api.call.return_value = {
+            "worker": {
+                "providerSessionID": known("ses-a"),
+                "runtimeReconciliation": reconciliation,
+                "turns": [{"turnID": known("message-1"), "state": "completed"}],
+            }
+        }
+
+        rows = cq.observe_provider_sessions(api, ["ses-a"])
+
+        self.assertEqual(rows[0]["provider_reported_state"], "inactive")
+        self.assertEqual(
+            rows[0]["reconciliation_source"], "worker.runtime_reconciliation"
+        )
+        self.assertEqual(rows[0]["observed_provider_session_id"], "ses-a")
+        self.assertEqual(rows[0]["worker_runtime_reconciliation"], reconciliation)
+        self.assertEqual(
+            rows[0]["observation_error_class"], "none"
+        )
+
+    def test_observe_provider_sessions_reads_camel_case_top_level_error_contract(self):
+        reconciliation = {
+            "providerReportedState": "unknown",
+            "disposition": "insufficient_observation",
+            "diagnostics": [
+                "OpenCode persistence was unavailable: database is locked"
+            ],
+            "unknownFacts": ["Provider activity remains UNKNOWN."],
+            "processObservation": known({"coverage": "complete", "pids": []}),
+        }
+        api = mock.Mock()
+        api.call.return_value = {
+            "error": "database is locked",
+            "provider": "opencode",
+            "provider_session_id": "ses-a",
+            "reconciliation": reconciliation,
+        }
+
+        rows = cq.observe_provider_sessions(api, ["ses-a"])
+
+        self.assertEqual(rows[0]["provider_reported_state"], "unknown")
+        self.assertEqual(
+            rows[0]["response_class"], "tool_error_with_top_level_reconciliation"
+        )
+        self.assertEqual(
+            rows[0]["observation_error_class"], "persistence_unavailable"
+        )
+        self.assertEqual(rows[0]["top_level_reconciliation"], reconciliation)
+        self.assertEqual(
+            rows[0]["top_level_reconciliation"]["processObservation"],
+            known({"coverage": "complete", "pids": []}),
+        )
+        self.assertFalse(cq.provider_sessions_inactive(rows, 1))
+
     def test_observe_provider_sessions_marks_missing_reconciliation_malformed(self):
         api = mock.Mock()
         api.call.return_value = {"worker": {"provider_session_id": known("ses-a")}}

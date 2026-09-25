@@ -65,6 +65,13 @@ def known_value(field: Any) -> Any | None:
     return field.get("value")
 
 
+def _field(mapping: dict[str, Any], snake_case: str, camel_case: str) -> Any:
+    """Read stable MCP snake-case fields and Swift Codable camel-case fields."""
+    if snake_case in mapping:
+        return mapping[snake_case]
+    return mapping.get(camel_case)
+
+
 def capacity_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     capacity = snapshot.get("capacity") or {}
     slots = capacity.get("task_control_slots") or {}
@@ -320,8 +327,8 @@ def _observation_error_class(
         return "malformed_observation"
 
     error = observed.get("error") if isinstance(observed, dict) else None
-    diagnostics = reconciliation.get("diagnostics") or []
-    unknown_facts = reconciliation.get("unknown_facts") or []
+    diagnostics = _field(reconciliation, "diagnostics", "diagnostics") or []
+    unknown_facts = _field(reconciliation, "unknown_facts", "unknownFacts") or []
     detail = " ".join(
         [str(error or "")]
         + [str(value) for value in diagnostics]
@@ -343,7 +350,9 @@ def _observation_error_class(
             return "snapshot_changed_during_read"
         return "provider_observation_error"
 
-    if reconciliation.get("provider_reported_state") == "unknown":
+    if _field(
+        reconciliation, "provider_reported_state", "providerReportedState"
+    ) == "unknown":
         if "ambiguous" in detail:
             return "provider_state_ambiguous"
         return "provider_state_unknown"
@@ -365,7 +374,9 @@ def observe_provider_sessions(
             observed_object = observed if isinstance(observed, dict) else {}
             raw_worker = observed_object.get("worker")
             worker = raw_worker if isinstance(raw_worker, dict) else {}
-            raw_worker_reconciliation = worker.get("runtime_reconciliation")
+            raw_worker_reconciliation = _field(
+                worker, "runtime_reconciliation", "runtimeReconciliation"
+            )
             worker_reconciliation = (
                 raw_worker_reconciliation
                 if isinstance(raw_worker_reconciliation, dict)
@@ -386,7 +397,9 @@ def observe_provider_sessions(
             else:
                 reconciliation = {}
                 reconciliation_source = None
-            reported_state = reconciliation.get("provider_reported_state")
+            reported_state = _field(
+                reconciliation, "provider_reported_state", "providerReportedState"
+            )
             if reported_state not in {"active", "inactive", "unknown"}:
                 reported_state = "unknown"
             response_class = _observation_response_class(
@@ -402,7 +415,9 @@ def observe_provider_sessions(
                 {
                     "provider_session_id": provider_session_id,
                     "provider_reported_state": reported_state,
-                    "reconciliation_disposition": reconciliation.get("disposition"),
+                    "reconciliation_disposition": _field(
+                        reconciliation, "disposition", "disposition"
+                    ),
                     "reconciliation_source": reconciliation_source,
                     "worker_runtime_reconciliation": worker_reconciliation,
                     "top_level_reconciliation": top_level_reconciliation,
@@ -412,7 +427,13 @@ def observe_provider_sessions(
                     "observed_provider": observed_object.get("provider"),
                     "observed_provider_session_id": (
                         observed_object.get("provider_session_id")
-                        or known_value(worker.get("provider_session_id"))
+                        or known_value(
+                            _field(
+                                worker,
+                                "provider_session_id",
+                                "providerSessionID",
+                            )
+                        )
                     ),
                     "response_class": response_class,
                     "observation_error_class": _observation_error_class(
