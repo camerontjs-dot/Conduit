@@ -99,6 +99,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Process-tree observation no longer treats a shared/pre-existing provider host
+  as task-created merely because its PID is selected as an observation root.
+  Descendants inherit no task ownership from topology/start ordering unless
+  the root itself has task-specific identity-bound ownership evidence (#53,
+  #75, #78; discovered during PR #79 qualification).
+
 - Codex App Server turn interruption now retains the provider's exact active
   turn ID and sends it with the thread ID. Codex 0.154.0 rejects cancellation
   without both identities; a thread ID alone is not a turn-cancel request.
