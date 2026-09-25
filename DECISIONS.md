@@ -1800,10 +1800,15 @@ descendant state needed to distinguish parent exit from lifecycle completion.
    process facts, PGID, parent relationship at observation time, macOS start
    identity where available, liveness/exit, observation authority/freshness,
    and explicit task-created, pre-existing, or UNKNOWN ownership.
-3. Task ownership is established from the identity-bound launcher and observed
-   descendant topology plus process start identity. PPID, command name, timing,
-   or proximity alone never proves ownership, and a reparented child retains a
-   task-created classification only through its prior process identity.
+3. An observation root is not ownership evidence. Task-created root ownership
+   requires task-specific identity-bound evidence, currently the direct
+   SwiftTerm PTY launcher or a matching prior task-owned process identity. A
+   provider-host PID used only as an observation root remains UNKNOWN unless
+   separate task-specific evidence establishes ownership. Descendant topology
+   and start ordering can derive task-created ownership only beneath an already
+   task-owned root. PPID, command name, timing, or proximity alone never proves
+   ownership, and a reparented child retains a task-created classification only
+   through its prior process identity.
 4. A parent exit produces a complete postcondition only when a before/after
    observation is complete and no owned or UNKNOWN residual remains. Partial,
    ambiguous, or unavailable observations remain incomplete/UNKNOWN.
@@ -1817,7 +1822,8 @@ descendant state needed to distinguish parent exit from lifecycle completion.
 
 **Consequences:** A supervisor can distinguish parent exit, owned residual,
 pre-existing residual, UNKNOWN ownership, live parent, and unavailable
-observation. Direct PTY stop still signals only the exact launcher and keeps
+observation. Shared or pre-existing provider hosts remain observable without
+being converted into task ownership. Direct PTY stop still signals only the exact launcher and keeps
 capacity occupied until the existing process-exit callback; the new process
 receipt adds evidence without turning observation into cleanup or completion.
 
