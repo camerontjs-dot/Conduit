@@ -191,6 +191,11 @@ def qualification_task_provider_states(
             ),
             "reconciliation_disposition": reconciliation.get("disposition"),
             "provider_observation": reconciliation.get("provider_observation"),
+            "task_association": association,
+            "provider_runtime_reconciliation": reconciliation,
+            "provider_turns": worker.get("turns") or [],
+            "provider_worker_observation": worker.get("observation"),
+            "provider_row_diagnostics": item.get("diagnostics") or [],
         }
         if key in rows:
             duplicates.append(wanted[key])
@@ -231,6 +236,120 @@ def qualification_task_provider_states(
     }
 
 
+def qualification_task_observations(
+    snapshot: dict[str, Any],
+    task_ids: list[str],
+) -> dict[str, Any]:
+    """Preserve bounded task delivery/turn authority from the same Fleet read."""
+    wanted = {task_id.lower(): task_id for task_id in task_ids}
+    rows: dict[str, dict[str, Any]] = {}
+    duplicates: list[str] = []
+
+    task_page = snapshot.get("tasks") or {}
+    for item in task_page.get("items") or []:
+        task = item.get("task") or {}
+        task_id = task.get("id")
+        if not isinstance(task_id, str):
+            continue
+        key = task_id.lower()
+        if key not in wanted:
+            continue
+
+        row = {
+            "task_session_id": wanted[key],
+            "runtime_attempt_id": item.get("runtime_attempt_id"),
+            "lifecycle": item.get("lifecycle"),
+            "runtime_observation": item.get("runtime_observation"),
+            "provider_session_id": item.get("provider_session_id"),
+            "provider_handle_observation": item.get(
+                "provider_handle_observation"
+            ),
+            "turn_observation": item.get("turn"),
+            "held_prompt_count": item.get("held_prompt_count"),
+            "process_observation": item.get("process_observation"),
+            "process_reconciliation": item.get("process_reconciliation"),
+            "observation": item.get("observation"),
+        }
+        if key in rows:
+            duplicates.append(wanted[key])
+        rows[key] = row
+
+    missing = [original for key, original in wanted.items() if key not in rows]
+    return {
+        "rows": list(rows.values()),
+        "missing_task_session_ids": missing,
+        "duplicate_task_session_ids": sorted(set(duplicates)),
+    }
+
+
+def _observation_response_class(
+    observed: Any,
+    worker: dict[str, Any],
+    worker_reconciliation: dict[str, Any] | None,
+    top_level_reconciliation: dict[str, Any] | None,
+) -> str:
+    if not isinstance(observed, dict):
+        return "malformed_non_object_response"
+    if observed.get("error"):
+        if top_level_reconciliation is not None:
+            return "tool_error_with_top_level_reconciliation"
+        if worker_reconciliation is not None:
+            return "tool_error_with_worker_reconciliation"
+        return "tool_error_without_reconciliation"
+    if worker_reconciliation is not None:
+        return "worker_reconciliation"
+    if top_level_reconciliation is not None:
+        return "top_level_reconciliation_without_error"
+    if worker:
+        return "worker_missing_reconciliation"
+    return "response_missing_worker_and_reconciliation"
+
+
+def _observation_error_class(
+    observed: Any,
+    reconciliation: dict[str, Any],
+    response_class: str,
+) -> str:
+    """Classify the observed failure shape without upgrading UNKNOWN state."""
+    if response_class == "client_exception":
+        return "client_observer_exception"
+    if response_class.startswith("malformed_") or response_class in {
+        "worker_missing_reconciliation",
+        "response_missing_worker_and_reconciliation",
+    }:
+        return "malformed_observation"
+
+    error = observed.get("error") if isinstance(observed, dict) else None
+    diagnostics = reconciliation.get("diagnostics") or []
+    unknown_facts = reconciliation.get("unknown_facts") or []
+    detail = " ".join(
+        [str(error or "")]
+        + [str(value) for value in diagnostics]
+        + [str(value) for value in unknown_facts]
+    ).lower()
+
+    if error:
+        if "session not found" in detail or "unknown session" in detail:
+            return "session_not_found"
+        if (
+            "persistence was unavailable" in detail
+            or "sqlite" in detail
+            or "database is locked" in detail
+        ):
+            return "persistence_unavailable"
+        if "snapshot" in detail and (
+            "changed" in detail or "during read" in detail
+        ):
+            return "snapshot_changed_during_read"
+        return "provider_observation_error"
+
+    if reconciliation.get("provider_reported_state") == "unknown":
+        if "ambiguous" in detail:
+            return "provider_state_ambiguous"
+        return "provider_state_unknown"
+    return "none"
+
+
 def observe_provider_sessions(
     api: Any,
     provider_session_ids: list[str],
@@ -243,16 +362,70 @@ def observe_provider_sessions(
                 provider="opencode",
                 provider_session_id=provider_session_id,
             )
-            worker = observed.get("worker") or {}
-            reconciliation = worker.get("runtime_reconciliation") or {}
+            observed_object = observed if isinstance(observed, dict) else {}
+            raw_worker = observed_object.get("worker")
+            worker = raw_worker if isinstance(raw_worker, dict) else {}
+            raw_worker_reconciliation = worker.get("runtime_reconciliation")
+            worker_reconciliation = (
+                raw_worker_reconciliation
+                if isinstance(raw_worker_reconciliation, dict)
+                else None
+            )
+            raw_top_level_reconciliation = observed_object.get("reconciliation")
+            top_level_reconciliation = (
+                raw_top_level_reconciliation
+                if isinstance(raw_top_level_reconciliation, dict)
+                else None
+            )
+            if worker_reconciliation is not None:
+                reconciliation = worker_reconciliation
+                reconciliation_source = "worker.runtime_reconciliation"
+            elif top_level_reconciliation is not None:
+                reconciliation = top_level_reconciliation
+                reconciliation_source = "reconciliation"
+            else:
+                reconciliation = {}
+                reconciliation_source = None
+            reported_state = reconciliation.get("provider_reported_state")
+            if reported_state not in {"active", "inactive", "unknown"}:
+                reported_state = "unknown"
+            response_class = _observation_response_class(
+                observed,
+                worker,
+                worker_reconciliation,
+                top_level_reconciliation,
+            )
+            response_text = observed_object.get("_text")
+            if not isinstance(response_text, str):
+                response_text = None
             rows.append(
                 {
                     "provider_session_id": provider_session_id,
-                    "provider_reported_state": reconciliation.get(
-                        "provider_reported_state", "unknown"
-                    ),
+                    "provider_reported_state": reported_state,
                     "reconciliation_disposition": reconciliation.get("disposition"),
-                    "error": observed.get("error"),
+                    "reconciliation_source": reconciliation_source,
+                    "worker_runtime_reconciliation": worker_reconciliation,
+                    "top_level_reconciliation": top_level_reconciliation,
+                    "provider_turns": worker.get("turns") or [],
+                    "provider_worker_observation": worker.get("observation"),
+                    "provider_authority": observed_object.get("authority"),
+                    "observed_provider": observed_object.get("provider"),
+                    "observed_provider_session_id": (
+                        observed_object.get("provider_session_id")
+                        or known_value(worker.get("provider_session_id"))
+                    ),
+                    "response_class": response_class,
+                    "observation_error_class": _observation_error_class(
+                        observed, reconciliation, response_class
+                    ),
+                    "response_top_level_keys": sorted(observed_object.keys()),
+                    "response_text_excerpt": (
+                        response_text[:1000] if response_text is not None else None
+                    ),
+                    "response_text_truncated": (
+                        len(response_text) > 1000 if response_text is not None else False
+                    ),
+                    "error": observed_object.get("error"),
                 }
             )
         except Exception as exc:
@@ -260,6 +433,19 @@ def observe_provider_sessions(
                 {
                     "provider_session_id": provider_session_id,
                     "provider_reported_state": "unknown",
+                    "reconciliation_source": None,
+                    "worker_runtime_reconciliation": None,
+                    "top_level_reconciliation": None,
+                    "provider_turns": [],
+                    "provider_worker_observation": None,
+                    "provider_authority": None,
+                    "observed_provider": None,
+                    "observed_provider_session_id": None,
+                    "response_class": "client_exception",
+                    "observation_error_class": "client_observer_exception",
+                    "response_top_level_keys": [],
+                    "response_text_excerpt": None,
+                    "response_text_truncated": False,
                     "error": str(exc),
                 }
             )
@@ -366,6 +552,9 @@ def sample_once(
         "fleet_snapshot_age_ms": snapshot_age_ms(snapshot),
         "capacity": capacity_summary(snapshot),
         "qualification_tasks": qualification_task_provider_states(
+            snapshot, task_ids or []
+        ),
+        "qualification_task_observations": qualification_task_observations(
             snapshot, task_ids or []
         ),
         "conduit_process": conduit_process_sample(),

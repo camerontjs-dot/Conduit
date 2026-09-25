@@ -134,6 +134,221 @@ class ConcurrencyQualificationTests(unittest.TestCase):
         self.assertFalse(missing["all_exact_active"])
         self.assertEqual(missing["missing_task_session_ids"], ["task-c"])
 
+    def test_active_samples_preserve_exact_provider_and_task_turn_evidence(self):
+        fixture = snapshot(limit=4, used=1)
+        provider = provider_row("task-a", "ses-a", "unknown")
+        provider["worker"]["runtime_reconciliation"].update(
+            {
+                "latest_provider_turn_id": known("message-7"),
+                "provider_activities": known(
+                    [
+                        {
+                            "part_id": known("part-2"),
+                            "message_id": known("message-7"),
+                            "call_id": known("call-3"),
+                            "kind": known("tool"),
+                            "tool_name": known("shell"),
+                            "reported_status": known("running"),
+                        }
+                    ]
+                ),
+                "process_observation": known({"coverage": "complete"}),
+                "diagnostics": ["latest assistant message is not complete"],
+            }
+        )
+        provider["worker"]["turns"] = [
+            {"turn_id": known("message-7"), "state": "active"}
+        ]
+        fixture["provider_sessions"]["items"] = [provider]
+        fixture["tasks"] = {
+            "items": [
+                {
+                    "task": {"id": "TASK-A"},
+                    "runtime_attempt_id": known("attempt-a"),
+                    "lifecycle": known("running"),
+                    "provider_session_id": known("ses-a"),
+                    "turn": {
+                        "turn": known(
+                            {"state": "active", "status": "running"}
+                        ),
+                        "last_prompt_delivery": known("delivered"),
+                        "pending_input": known("none"),
+                        "observation": {"authority": "conduit_recorded"},
+                    },
+                    "process_observation": known({"coverage": "complete"}),
+                }
+            ]
+        }
+
+        provider_states = cq.qualification_task_provider_states(
+            fixture, ["task-a"]
+        )
+        task_states = cq.qualification_task_observations(fixture, ["task-a"])
+        provider_state = provider_states["rows"][0]
+        task_state = task_states["rows"][0]
+
+        self.assertEqual(
+            provider_state["provider_runtime_reconciliation"][
+                "latest_provider_turn_id"
+            ],
+            known("message-7"),
+        )
+        self.assertEqual(
+            provider_state["provider_runtime_reconciliation"][
+                "provider_activities"
+            ]["value"][0]["reported_status"],
+            known("running"),
+        )
+        self.assertEqual(provider_state["provider_turns"][0]["state"], "active")
+        self.assertEqual(
+            task_state["turn_observation"]["last_prompt_delivery"],
+            known("delivered"),
+        )
+        self.assertEqual(
+            task_state["turn_observation"]["turn"]["value"]["state"],
+            "active",
+        )
+        self.assertEqual(task_state["provider_session_id"], known("ses-a"))
+
+    def test_observe_provider_sessions_preserves_top_level_error_reconciliation(self):
+        reconciliation = {
+            "provider_reported_state": "unknown",
+            "disposition": "insufficient_observation",
+            "diagnostics": ["OpenCode persistence was unavailable: database is locked"],
+            "process_observation": known({"coverage": "complete", "pids": []}),
+        }
+        api = mock.Mock()
+        api.call.return_value = {
+            "error": "database is locked",
+            "provider": "opencode",
+            "provider_session_id": "ses-a",
+            "authority": "provider persistence unavailable",
+            "reconciliation": reconciliation,
+        }
+
+        rows = cq.observe_provider_sessions(api, ["ses-a"])
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["provider_reported_state"], "unknown")
+        self.assertEqual(
+            rows[0]["reconciliation_disposition"], "insufficient_observation"
+        )
+        self.assertEqual(rows[0]["reconciliation_source"], "reconciliation")
+        self.assertEqual(
+            rows[0]["response_class"], "tool_error_with_top_level_reconciliation"
+        )
+        self.assertEqual(
+            rows[0]["observation_error_class"], "persistence_unavailable"
+        )
+        self.assertEqual(rows[0]["error"], "database is locked")
+        self.assertEqual(rows[0]["observed_provider"], "opencode")
+        self.assertEqual(rows[0]["observed_provider_session_id"], "ses-a")
+        self.assertEqual(rows[0]["top_level_reconciliation"], reconciliation)
+        self.assertIsNone(rows[0]["worker_runtime_reconciliation"])
+        self.assertEqual(
+            rows[0]["top_level_reconciliation"]["process_observation"],
+            known({"coverage": "complete", "pids": []}),
+        )
+        self.assertFalse(cq.provider_sessions_inactive(rows, 1))
+
+    def test_observe_provider_sessions_keeps_worker_reconciliation_and_unknown(self):
+        reconciliation = {
+            "provider_reported_state": "unknown",
+            "disposition": "insufficient_observation",
+            "diagnostics": ["provider turn state remains ambiguous"],
+        }
+        api = mock.Mock()
+        api.call.return_value = {
+            "worker": {
+                "runtime_reconciliation": reconciliation,
+                "turns": [{"turn_id": known("message-1"), "state": "ambiguous"}],
+            }
+        }
+
+        rows = cq.observe_provider_sessions(api, ["ses-a"])
+
+        self.assertEqual(rows[0]["provider_reported_state"], "unknown")
+        self.assertEqual(
+            rows[0]["reconciliation_source"], "worker.runtime_reconciliation"
+        )
+        self.assertEqual(rows[0]["response_class"], "worker_reconciliation")
+        self.assertEqual(rows[0]["worker_runtime_reconciliation"], reconciliation)
+        self.assertEqual(rows[0]["provider_turns"][0]["state"], "ambiguous")
+        self.assertIsNone(rows[0]["error"])
+
+    def test_observe_provider_sessions_marks_missing_reconciliation_malformed(self):
+        api = mock.Mock()
+        api.call.return_value = {"worker": {"provider_session_id": known("ses-a")}}
+
+        rows = cq.observe_provider_sessions(api, ["ses-a"])
+
+        self.assertEqual(rows[0]["provider_reported_state"], "unknown")
+        self.assertIsNone(rows[0]["reconciliation_source"])
+        self.assertEqual(rows[0]["response_class"], "worker_missing_reconciliation")
+        self.assertEqual(
+            rows[0]["observation_error_class"], "malformed_observation"
+        )
+        self.assertIsNone(rows[0]["error"])
+        self.assertFalse(cq.provider_sessions_inactive(rows, 1))
+
+    def test_observe_provider_sessions_marks_explicit_provider_ambiguity(self):
+        api = mock.Mock()
+        api.call.return_value = {
+            "worker": {
+                "runtime_reconciliation": {
+                    "provider_reported_state": "unknown",
+                    "disposition": "insufficient_observation",
+                    "diagnostics": [
+                        "Persisted provider state is ambiguous while a tool part is running."
+                    ],
+                }
+            }
+        }
+
+        rows = cq.observe_provider_sessions(api, ["ses-a"])
+
+        self.assertEqual(rows[0]["provider_reported_state"], "unknown")
+        self.assertEqual(
+            rows[0]["observation_error_class"], "provider_state_ambiguous"
+        )
+        self.assertFalse(cq.provider_sessions_inactive(rows, 1))
+
+    def test_observe_provider_sessions_distinguishes_provider_error_classes(self):
+        unknown = {
+            "provider_reported_state": "unknown",
+            "disposition": "insufficient_observation",
+            "diagnostics": [],
+        }
+        api = mock.Mock()
+        api.call.side_effect = [
+            {
+                "error": "OpenCode provider session not found in persistence: ses-a",
+                "reconciliation": unknown,
+            },
+            {
+                "error": "provider snapshot changed during read",
+                "reconciliation": unknown,
+            },
+            {"error": "unexpected provider observer failure"},
+        ]
+
+        rows = cq.observe_provider_sessions(api, ["ses-a", "ses-b", "ses-c"])
+
+        self.assertEqual(
+            [row["observation_error_class"] for row in rows],
+            [
+                "session_not_found",
+                "snapshot_changed_during_read",
+                "provider_observation_error",
+            ],
+        )
+        self.assertTrue(
+            all(row["provider_reported_state"] == "unknown" for row in rows)
+        )
+        self.assertTrue(
+            all(not cq.provider_sessions_inactive([row], 1) for row in rows)
+        )
+
     def test_cleanup_requires_slots_and_exact_provider_sessions_inactive(self):
         clean = {"capacity": cq.capacity_summary(snapshot(limit=4, used=0))}
         inactive = [
