@@ -4943,6 +4943,16 @@ final class AppModel: ObservableObject {
                 observedAt: now
             )
             for inventoryWorker in providerPage.items {
+                guard ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(
+                    inventoryWorker
+                ) else {
+                    detailedPage.append(
+                        ConduitFleetSnapshotBuilder.markingProviderDetailSkipped(
+                            inventoryWorker
+                        )
+                    )
+                    continue
+                }
                 guard let exactID = inventoryWorker.worker.providerSessionID.value else {
                     detailedPage.append(
                         fleetWorker(

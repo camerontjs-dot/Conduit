@@ -99,6 +99,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Fleet keeps every provider inventory row visible but reads expensive
+  turn/runtime detail only for sessions with a current exact Conduit task
+  association or current Conduit writer authority. Skipped historical/external
+  detail stays UNKNOWN with an inspectable reason; inventory alone does not
+  grant authority (#75, discovered during #74).
+
 - Codex App Server turn interruption now retains the provider's exact active
   turn ID and sends it with the thread ID. Codex 0.154.0 rejects cancellation
   without both identities; a thread ID alone is not a turn-cancel request.
