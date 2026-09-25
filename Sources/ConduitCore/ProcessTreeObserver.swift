@@ -5,10 +5,11 @@ import Foundation
 /// macOS process observation for the provider-neutral Core read model.
 ///
 /// This observer is deliberately read-only. It uses libproc snapshots and
-/// `kill(pid, 0)` probes only; it never signals a process. Ownership is based
-/// on the exact runtime launcher identity, process start time, and an
-/// observed descendant relationship. PPID and command name are retained as
-/// observations, not used as ownership proof after reparenting.
+/// `kill(pid, 0)` probes only; it never signals a process. The caller must
+/// explicitly supply whether the selected root has task-specific ownership
+/// evidence. A root PID used only for observation defaults to UNKNOWN and
+/// cannot grant ownership to descendants from topology or timing alone. PPID
+/// and command name are retained as observations, not ownership proof.
 public enum MacOSProcessTreeObserver {
     private static let maximumProcesses = 512
     private static let maximumDepth = 32
@@ -111,6 +112,7 @@ public enum MacOSProcessTreeObserver {
         rootPID: pid_t,
         taskSessionID: String,
         runtimeAttemptID: String?,
+        rootOwnership: ProcessOwnership = .unknown,
         providerTurnID: String? = nil,
         prior: ProcessTreeObservation? = nil,
         observedAt: Date = Date()
@@ -144,9 +146,9 @@ public enum MacOSProcessTreeObserver {
         }()
 
         if let rootInfo {
-            let rootOwnership: (ProcessOwnership, ProcessOwnershipBasis)
+            let rootClassification: (ProcessOwnership, ProcessOwnershipBasis)
             if let priorLauncher, priorRootMatches {
-                rootOwnership = (
+                rootClassification = (
                     priorLauncher.ownership,
                     .preservedFromPriorIdentity
                 )
@@ -154,19 +156,22 @@ public enum MacOSProcessTreeObserver {
                 diagnostics.append(
                     "launcher PID was observed with a different start identity; PID reuse or runtime replacement is ambiguous"
                 )
-                rootOwnership = (.unknown, .notEstablished)
+                rootClassification = (.unknown, .notEstablished)
             } else {
-                rootOwnership = (.taskCreated, .launcherIdentity)
+                rootClassification = initialRootClassification(
+                    requestedOwnership: rootOwnership
+                )
             }
             let launcher = node(
                 info: rootInfo,
-                ownership: rootOwnership.0,
-                ownershipBasis: rootOwnership.1,
+                ownership: rootClassification.0,
+                ownershipBasis: rootClassification.1,
                 liveness: .live,
                 observation: stamp
             )
             let walk = walkDescendants(
                 root: rootInfo,
+                rootOwnership: rootClassification.0,
                 prior: prior,
                 observation: stamp,
                 diagnostics: &diagnostics
@@ -253,6 +258,7 @@ public enum MacOSProcessTreeObserver {
 
     private static func walkDescendants(
         root: RawProcessInfo,
+        rootOwnership: ProcessOwnership,
         prior: ProcessTreeObservation?,
         observation: SupervisionObservationStamp,
         diagnostics: inout [String]
@@ -317,7 +323,8 @@ public enum MacOSProcessTreeObserver {
                 } else {
                     ownership = ownershipForNewDescendant(
                         childInfo,
-                        launcher: root
+                        launcher: root,
+                        rootOwnership: rootOwnership
                     )
                 }
                 nodes.append(
@@ -411,14 +418,43 @@ public enum MacOSProcessTreeObserver {
         return result
     }
 
-    private static func ownershipForNewDescendant(
-        _ info: RawProcessInfo,
-        launcher: RawProcessInfo
+    static func initialRootClassification(
+        requestedOwnership: ProcessOwnership
     ) -> (ProcessOwnership, ProcessOwnershipBasis) {
-        guard info.startTime >= launcher.startTime else {
+        switch requestedOwnership {
+        case .taskCreated:
+            return (.taskCreated, .launcherIdentity)
+        case .preExisting:
+            return (.preExisting, .preExistingObservation)
+        case .unknown:
+            return (.unknown, .notEstablished)
+        }
+    }
+
+    static func classifyNewDescendantOwnership(
+        descendantStartTime: Date,
+        launcherStartTime: Date,
+        rootOwnership: ProcessOwnership
+    ) -> (ProcessOwnership, ProcessOwnershipBasis) {
+        guard rootOwnership == .taskCreated else {
+            return (.unknown, .notEstablished)
+        }
+        guard descendantStartTime >= launcherStartTime else {
             return (.preExisting, .preExistingObservation)
         }
         return (.taskCreated, .descendantObservedAfterLauncher)
+    }
+
+    private static func ownershipForNewDescendant(
+        _ info: RawProcessInfo,
+        launcher: RawProcessInfo,
+        rootOwnership: ProcessOwnership
+    ) -> (ProcessOwnership, ProcessOwnershipBasis) {
+        classifyNewDescendantOwnership(
+            descendantStartTime: info.startTime,
+            launcherStartTime: launcher.startTime,
+            rootOwnership: rootOwnership
+        )
     }
 
     private static func node(
