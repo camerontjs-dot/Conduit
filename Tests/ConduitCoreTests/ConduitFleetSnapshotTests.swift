@@ -366,6 +366,133 @@ final class ConduitFleetSnapshotTests: XCTestCase {
         XCTAssertEqual(capacity.actualExecutionSlotOccupancy.state, .unknown)
     }
 
+    func testDetailedProviderObservationRequiresCurrentConduitAuthority() {
+        let taskID = UUID()
+        let attemptID = UUID().uuidString
+        let currentTask = FleetTaskIdentity(
+            taskSessionID: taskID.uuidString,
+            runtimeAttemptID: .known(attemptID),
+            observation: stamp(.conduitRecorded, .current)
+        )
+        let exact = wrapped(
+            worker(
+                sessionID: "ses_current_exact_detail",
+                taskID: taskID.uuidString,
+                attemptID: attemptID,
+                relationship: .discovered,
+                reportedState: .unknown
+            ),
+            tasks: [currentTask]
+        )
+        let controlled = wrapped(
+            worker(
+                sessionID: "ses_current_writer_detail",
+                taskID: nil,
+                attemptID: nil,
+                relationship: .adopted,
+                reportedState: .unknown
+            ),
+            tasks: []
+        )
+        let historical = wrapped(
+            worker(
+                sessionID: "ses_historical_inventory_only",
+                taskID: nil,
+                attemptID: nil,
+                relationship: .historical,
+                reportedState: .unknown
+            ),
+            tasks: []
+        )
+        let staleExact = wrapped(
+            worker(
+                sessionID: "ses_stale_exact_inventory_only",
+                taskID: taskID.uuidString,
+                attemptID: attemptID,
+                relationship: .discovered,
+                reportedState: .unknown
+            ),
+            tasks: [FleetTaskIdentity(
+                taskSessionID: taskID.uuidString,
+                runtimeAttemptID: .known(attemptID),
+                observation: stamp(.conduitRecorded, .stale)
+            )]
+        )
+
+        XCTAssertEqual(exact.taskAssociation.kind, .exact)
+        XCTAssertEqual(exact.taskAssociation.taskIdentityObservation.freshness, .current)
+        XCTAssertTrue(ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(exact))
+
+        XCTAssertEqual(controlled.writerAuthority.conduitWriterState, .controlled)
+        XCTAssertEqual(controlled.writerAuthorityObservation.freshness, .current)
+        XCTAssertTrue(ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(controlled))
+
+        XCTAssertEqual(historical.worker.origin, .externalProviderClient)
+        XCTAssertEqual(historical.worker.relationship, .historical)
+        XCTAssertFalse(ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(historical))
+
+        XCTAssertEqual(staleExact.taskAssociation.kind, .exact)
+        XCTAssertEqual(staleExact.taskAssociation.taskIdentityObservation.freshness, .stale)
+        XCTAssertFalse(ConduitFleetSnapshotBuilder.requiresDetailedProviderObservation(staleExact))
+        XCTAssertEqual(
+            ConduitFleetSnapshotBuilder.markingProviderDetailSkipped(exact),
+            exact,
+            "a row that requires detail must not be relabeled as skipped"
+        )
+    }
+
+    func testSkippedProviderDetailPreservesVisibleInventoryUnknownsAndAuthority() throws {
+        let inventoryOnly = wrapped(
+            worker(
+                sessionID: "ses_inventory_only_unknown_detail",
+                taskID: nil,
+                attemptID: nil,
+                relationship: .historical,
+                reportedState: .unknown
+            ),
+            tasks: []
+        )
+        let skipped = ConduitFleetSnapshotBuilder.markingProviderDetailSkipped(
+            inventoryOnly
+        )
+        let page = ConduitFleetSnapshotBuilder.providerPage(
+            items: [skipped],
+            cursor: nil,
+            limit: 200,
+            observedAt: now
+        )
+
+        XCTAssertEqual(page.returned, 1)
+        let visible = try XCTUnwrap(page.items.first)
+        XCTAssertEqual(visible.worker.providerSessionID.value, "ses_inventory_only_unknown_detail")
+        XCTAssertEqual(visible.diagnostics.count, 1)
+        XCTAssertTrue(visible.diagnostics[0].contains("no current exact Conduit task association"))
+        XCTAssertTrue(visible.diagnostics[0].contains("inventory row remains visible"))
+        XCTAssertTrue(visible.diagnostics[0].contains("detail remains UNKNOWN"))
+
+        XCTAssertEqual(visible.worker, inventoryOnly.worker)
+        XCTAssertEqual(visible.taskAssociation, inventoryOnly.taskAssociation)
+        XCTAssertEqual(visible.writerAuthority, inventoryOnly.writerAuthority)
+        XCTAssertEqual(visible.worker.origin, .externalProviderClient)
+        XCTAssertEqual(visible.worker.relationship, .historical)
+        XCTAssertEqual(visible.taskAssociation.kind, .unbound)
+        XCTAssertEqual(visible.writerAuthority.conduitWriterState, .unclaimed)
+        XCTAssertFalse(visible.writerAuthority.writerControllerID.isKnown)
+        XCTAssertEqual(
+            visible.worker.runtimeReconciliation?.providerReportedState,
+            .unknown
+        )
+        XCTAssertEqual(
+            visible.worker.runtimeReconciliation?.providerObservation.freshness,
+            .unknown
+        )
+        XCTAssertEqual(
+            visible.worker.runtimeReconciliation?.processObservation.state,
+            .unknown
+        )
+        XCTAssertEqual(visible.worker.turns.first?.state, .ambiguous)
+    }
+
     func testApprovalFailureAndContradictoryTurnAuthoritiesStaySeparate() throws {
         let pendingApproval = FleetTurnObservation(
             turn: .known(ConduitSessionTurnSnapshot(

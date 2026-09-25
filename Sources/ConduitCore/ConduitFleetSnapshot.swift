@@ -685,6 +685,39 @@ public enum ConduitFleetSnapshotBuilder {
         )
     }
 
+    /// Expensive provider detail reads are needed when the current Conduit
+    /// task inventory proves an exact task/runtime association or the current
+    /// writer registry recognizes Conduit's controller authority. Inventory-
+    /// only external and historical sessions stay visible without expanding
+    /// their persisted turn/runtime detail.
+    public static func requiresDetailedProviderObservation(
+        _ worker: ConduitFleetProviderWorkerSnapshot
+    ) -> Bool {
+        let hasCurrentExactTaskAssociation =
+            worker.taskAssociation.kind == .exact
+                && worker.taskAssociation.taskIdentityObservation.freshness == .current
+        let hasCurrentWriterAuthority =
+            worker.writerAuthority.conduitWriterState == .controlled
+                && worker.writerAuthorityObservation.freshness == .current
+        return hasCurrentExactTaskAssociation || hasCurrentWriterAuthority
+    }
+
+    /// Preserve an inventory row when its expensive provider detail read is
+    /// not justified. This records the reason without changing worker state,
+    /// task association, or writer authority.
+    public static func markingProviderDetailSkipped(
+        _ worker: ConduitFleetProviderWorkerSnapshot
+    ) -> ConduitFleetProviderWorkerSnapshot {
+        guard !requiresDetailedProviderObservation(worker) else { return worker }
+
+        var inventoryOnly = worker
+        let reason = "Detailed provider observation was skipped because this session has no current exact Conduit task association or current Conduit writer authority. The inventory row remains visible; provider turn/runtime detail remains UNKNOWN."
+        if !inventoryOnly.diagnostics.contains(reason) {
+            inventoryOnly.diagnostics.append(reason)
+        }
+        return inventoryOnly
+    }
+
     public static func providerPage<Item: Codable & Equatable & Sendable>(
         items: [Item],
         cursor: String?,
