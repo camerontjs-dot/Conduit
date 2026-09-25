@@ -366,4 +366,47 @@ final class ProcessTreeReconciliationTests: XCTestCase {
         XCTAssertEqual(result.disposition, .parentStillLive)
         XCTAssertEqual(result.postcondition, .pending)
     }
+
+#if os(macOS)
+    func testSharedObservationRootDoesNotAcquireTaskOwnership() {
+        let root = MacOSProcessTreeObserver.initialRootClassification(
+            requestedOwnership: .unknown
+        )
+        XCTAssertEqual(root.0, .unknown)
+        XCTAssertEqual(root.1, .notEstablished)
+
+        let descendant = MacOSProcessTreeObserver.classifyNewDescendantOwnership(
+            descendantStartTime: childStarted,
+            launcherStartTime: launcherStarted,
+            rootOwnership: .unknown
+        )
+        XCTAssertEqual(descendant.0, .unknown)
+        XCTAssertEqual(descendant.1, .notEstablished)
+
+        let preExistingRootDescendant = MacOSProcessTreeObserver.classifyNewDescendantOwnership(
+            descendantStartTime: childStarted,
+            launcherStartTime: launcherStarted,
+            rootOwnership: .preExisting
+        )
+        XCTAssertEqual(preExistingRootDescendant.0, .unknown)
+        XCTAssertEqual(preExistingRootDescendant.1, .notEstablished)
+    }
+
+    func testTaskCreatedLauncherStillAuthorizesLaterDescendantOwnership() {
+        let root = MacOSProcessTreeObserver.initialRootClassification(
+            requestedOwnership: .taskCreated
+        )
+        XCTAssertEqual(root.0, .taskCreated)
+        XCTAssertEqual(root.1, .launcherIdentity)
+
+        let descendant = MacOSProcessTreeObserver.classifyNewDescendantOwnership(
+            descendantStartTime: childStarted,
+            launcherStartTime: launcherStarted,
+            rootOwnership: .taskCreated
+        )
+        XCTAssertEqual(descendant.0, .taskCreated)
+        XCTAssertEqual(descendant.1, .descendantObservedAfterLauncher)
+    }
+#endif
+
 }
