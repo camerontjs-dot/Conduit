@@ -368,6 +368,18 @@ final class ProcessTreeReconciliationTests: XCTestCase {
     }
 
 #if os(macOS)
+    func testUnqualifiedObservationRootFailsClosedToUnknown() throws {
+        let observation = MacOSProcessTreeObserver.observe(
+            rootPID: getpid(),
+            taskSessionID: taskID,
+            runtimeAttemptID: attemptID,
+            observedAt: observedAt
+        )
+        let launcher = try XCTUnwrap(observation.launcher.value)
+        XCTAssertEqual(launcher.ownership, .unknown)
+        XCTAssertEqual(launcher.ownershipBasis, .notEstablished)
+    }
+
     func testSharedObservationRootDoesNotAcquireTaskOwnership() {
         let root = MacOSProcessTreeObserver.initialRootClassification(
             requestedOwnership: .unknown
