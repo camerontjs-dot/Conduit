@@ -1359,6 +1359,168 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Runs one scoped MindGraph query using the compact Stage 1A nomination
+    /// transport. No full source chunk is returned by this method.
+    func queryMindGraphNominations(
+        question: String,
+        scope: MindGraphScope,
+        topK: Int = 8
+    ) async -> Result<[MindGraphNomination], MindGraphQueryError> {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .failure(.emptyQuestion) }
+
+        guard let binary = MindGraphQuerySupport.resolveBinary(
+            mainframeRoot: settings.mainframeRoot
+        ) else {
+            return .failure(.binaryNotFound)
+        }
+        let db = MindGraphQuerySupport.databaseURL(for: scope)
+        guard FileManager.default.fileExists(atPath: db.path) else {
+            return .failure(.databaseMissing(db.path))
+        }
+
+        let cappedTopK = max(1, min(30, topK))
+        let result = await BlockingWork.run(qos: .userInitiated) {
+            SubprocessRunner.run(
+                binary.path,
+                [
+                    "query",
+                    trimmed,
+                    "--db", db.path,
+                    "--top-k", "\(cappedTopK)",
+                    "--json",
+                    "--envelope",
+                    "--nominations",
+                    "--no-intent",
+                ],
+                timeout: 90
+            )
+        }
+
+        if result.timedOut {
+            return .failure(.timedOut)
+        }
+        do {
+            let nominations = try MindGraphQuerySupport.decodeNominations(
+                from: Data(result.output.utf8),
+                scope: scope
+            )
+            if result.status != 0 && nominations.isEmpty {
+                return .failure(
+                    .processFailed(status: result.status, message: result.output)
+                )
+            }
+            return .success(nominations)
+        } catch let error as MindGraphQueryError {
+            if result.status != 0 {
+                return .failure(
+                    .processFailed(status: result.status, message: result.output)
+                )
+            }
+            return .failure(error)
+        } catch {
+            return .failure(.invalidJSON(error.localizedDescription))
+        }
+    }
+
+    /// Resolves the exact source-backed chunk named by one nomination handle.
+    /// This is an inspection/read operation and does not add the text to a
+    /// worker's Context Stack or handoff.
+    func expandMindGraphNomination(
+        _ nomination: MindGraphNomination
+    ) async -> Result<MindGraphExpansion, MindGraphQueryError> {
+        guard let binary = MindGraphQuerySupport.resolveBinary(
+            mainframeRoot: settings.mainframeRoot
+        ) else {
+            return .failure(.binaryNotFound)
+        }
+        let db = MindGraphQuerySupport.databaseURL(for: nomination.scope)
+        guard FileManager.default.fileExists(atPath: db.path) else {
+            return .failure(.databaseMissing(db.path))
+        }
+
+        let result = await BlockingWork.run(qos: .userInitiated) {
+            SubprocessRunner.run(
+                binary.path,
+                [
+                    "expand-nomination",
+                    nomination.expansionHandle,
+                    "--db", db.path,
+                    "--json",
+                ],
+                timeout: 45
+            )
+        }
+        if result.timedOut {
+            return .failure(.timedOut)
+        }
+        guard result.status == 0 else {
+            return .failure(
+                .processFailed(status: result.status, message: result.output)
+            )
+        }
+
+        do {
+            let expansion = try MindGraphQuerySupport.decodeExpansion(
+                from: Data(result.output.utf8)
+            )
+            guard MindGraphQuerySupport.expansionMatchesNomination(
+                expansion,
+                nomination: nomination
+            ) else {
+                return .failure(
+                    .invalidJSON("expanded source identity did not match the original nomination")
+                )
+            }
+            return .success(expansion)
+        } catch let error as MindGraphQueryError {
+            return .failure(error)
+        } catch {
+            return .failure(.invalidJSON(error.localizedDescription))
+        }
+    }
+
+    /// Produces the rich operator inspection projection from one compact
+    /// retrieval event. Every detail view is resolved through the original
+    /// nomination handle; failed expansions remain visible as failures.
+    func inspectMindGraph(
+        question: String,
+        scope: MindGraphScope,
+        topK: Int = 8
+    ) async -> Result<[MindGraphInspectionItem], MindGraphQueryError> {
+        let nominationResult = await queryMindGraphNominations(
+            question: question,
+            scope: scope,
+            topK: topK
+        )
+        switch nominationResult {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let nominations):
+            var inspection: [MindGraphInspectionItem] = []
+            inspection.reserveCapacity(nominations.count)
+            for nomination in nominations {
+                switch await expandMindGraphNomination(nomination) {
+                case .success(let expansion):
+                    inspection.append(
+                        MindGraphInspectionItem(
+                            nomination: nomination,
+                            expansion: expansion
+                        )
+                    )
+                case .failure(let error):
+                    inspection.append(
+                        MindGraphInspectionItem(
+                            nomination: nomination,
+                            expansionError: error.displayMessage
+                        )
+                    )
+                }
+            }
+            return .success(inspection)
+        }
+    }
+
     /// Agents eligible as staging forward targets (enabled, non-shell).
     var forwardableAgents: [AgentProfile] {
         enabledAgents.filter { $0.kind != .shell }
@@ -4083,34 +4245,36 @@ final class AppModel: ObservableObject {
                 binary.path,
                 [
                     "query", askedQuestion, "--db", db.path,
-                    "--top-k", "8", "--json", "--no-intent",
+                    "--top-k", "8", "--json", "--envelope",
+                    "--nominations", "--no-intent",
                 ],
                 timeout: 45
             )
-            // `status` used to carry the process exit code under a name that
-            // reads like a result status. Separate the two, and hand back
-            // parsed results instead of a log preamble glued to JSON.
             var payload: [String: Any] = [
                 "scope": scope,
                 "exit_code": result.status,
                 "trust": "nomination only",
                 "authority": "retrieval nominations; not evidence that a claim holds",
+                "projection": "agent_minimum_sufficient_v1",
             ]
-            if let json = MindGraphOutput.jsonPayload(in: result.output),
-               let data = json.data(using: .utf8),
-               let parsed = try? JSONSerialization.jsonObject(with: data),
-               let rows = parsed as? [[String: Any]] {
-                let split = MindGraphOutput.partitionByCitation(rows)
-                payload["results"] = split.citable.map { MindGraphOutput.projectResult($0) }
-                payload["result_count"] = split.citable.count
-                payload["not_citable"] = split.notCitable.map {
-                    MindGraphOutput.projectResult($0)
+            do {
+                let nominations = try MindGraphQuerySupport.decodeNominations(
+                    from: Data(result.output.utf8),
+                    scope: parsedScope
+                )
+                payload["nominations"] = nominations.map {
+                    MindGraphOutput.projectNomination($0)
                 }
-                payload["citation_counts"] = MindGraphOutput.citationCounts(rows)
-            } else {
-                payload["output"] = String(result.output.prefix(8_000))
-                payload["parse_error"] =
-                    "MindGraph output was not a JSON array; raw output retained"
+                payload["result_count"] = nominations.count
+                payload["citation_counts"] = MindGraphOutput.citationCounts(nominations)
+            } catch {
+                // Agent-facing retrieval fails closed. Do not forward raw
+                // output because a malformed/legacy response could contain
+                // source chunks that compact mode is specifically meant to
+                // withhold until explicit expansion.
+                payload["parse_error"] = String(
+                    describing: error
+                ).prefix(500).description
             }
             return payload
         case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
