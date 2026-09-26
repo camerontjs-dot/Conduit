@@ -1400,16 +1400,16 @@ final class AppModel: ObservableObject {
         if result.timedOut {
             return .failure(.timedOut)
         }
+        guard result.status == 0 else {
+            return .failure(
+                .processFailed(status: result.status, message: result.output)
+            )
+        }
         do {
             let nominations = try MindGraphQuerySupport.decodeNominations(
                 from: Data(result.output.utf8),
                 scope: scope
             )
-            if result.status != 0 && nominations.isEmpty {
-                return .failure(
-                    .processFailed(status: result.status, message: result.output)
-                )
-            }
             return .success(nominations)
         } catch let error as MindGraphQueryError {
             if result.status != 0 {
@@ -4257,6 +4257,10 @@ final class AppModel: ObservableObject {
                 "authority": "retrieval nominations; not evidence that a claim holds",
                 "projection": "agent_minimum_sufficient_v1",
             ]
+            guard result.status == 0 else {
+                payload["error"] = "MindGraph compact nomination query failed closed"
+                return payload
+            }
             do {
                 let nominations = try MindGraphQuerySupport.decodeNominations(
                     from: Data(result.output.utf8),
@@ -4272,6 +4276,7 @@ final class AppModel: ObservableObject {
                 // output because a malformed/legacy response could contain
                 // source chunks that compact mode is specifically meant to
                 // withhold until explicit expansion.
+                payload["error"] = "MindGraph compact nomination response was invalid"
                 payload["parse_error"] = String(
                     describing: error
                 ).prefix(500).description
