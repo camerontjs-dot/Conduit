@@ -85,6 +85,7 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     case processTree(taskSessionID: String)
     case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
     case queryMindGraph(question: String, scope: String)
+    case expandMindGraphNomination(expansionHandle: String, scope: String)
     case createTask(
         agent: String,
         projectSlug: String,
@@ -128,6 +129,7 @@ public enum ConduitSessionAPI {
         switch command {
         case .listProjects, .listSessions, .listAdapters, .listProviderSessions,
              .fleetSnapshot, .observeWorker, .sessionStatus, .processTree, .sessionEvents, .queryMindGraph,
+             .expandMindGraphNomination,
              .lifecyclePreflight:
             return false
         case .adoptProviderSession, .createTask, .reconcileTask, .sendPrompt,
