@@ -19,7 +19,7 @@ struct MindGraphQueryView: View {
     @State private var scope: MindGraphScope = .knowledge
     @State private var topK = 8
     @State private var isRunning = false
-    @State private var hits: [MindGraphHit] = []
+    @State private var inspectionItems: [MindGraphInspectionItem] = []
     @State private var errorText: String?
     @State private var lastQueryLabel: String?
 
@@ -155,7 +155,7 @@ struct MindGraphQueryView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        } else if hits.isEmpty {
+        } else if inspectionItems.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .font(.system(size: 28))
@@ -180,8 +180,11 @@ struct MindGraphQueryView: View {
                             .font(.caption2)
                             .foregroundStyle(palette.faint)
                     }
-                    ForEach(hits) { hit in
-                        hitCard(hit)
+                    Text("Operator inspection view. Expanded source is visible here without being admitted to an agent context.")
+                        .font(.caption2)
+                        .foregroundStyle(palette.faint)
+                    ForEach(inspectionItems) { item in
+                        inspectionCard(item)
                     }
                 }
                 .padding(12)
@@ -189,15 +192,16 @@ struct MindGraphQueryView: View {
         }
     }
 
-    private func hitCard(_ hit: MindGraphHit) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+    private func inspectionCard(_ item: MindGraphInspectionItem) -> some View {
+        let nomination = item.nomination
+        return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(hit.title)
+                Text(nomination.title)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(palette.text)
                     .lineLimit(2)
                 Spacer(minLength: 4)
-                Text(hit.scope.displayName)
+                Text(nomination.scope.displayName)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.accent)
                     .padding(.horizontal, 6)
@@ -205,29 +209,106 @@ struct MindGraphQueryView: View {
                     .background(palette.accentSoft)
                     .clipShape(Capsule())
             }
-            Text(hit.displayPath)
+
+            Text(nomination.displayPath)
                 .font(.caption2.monospaced())
                 .foregroundStyle(palette.dim)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
-            Text(hit.chunkText.trimmingCharacters(in: .whitespacesAndNewlines))
-                .font(.caption)
-                .foregroundStyle(palette.text)
-                .lineLimit(8)
-                .textSelection(.enabled)
+
             HStack(spacing: 8) {
-                Text("trust: \(hit.trustProfile)")
-                if let score = hit.rrfScore {
-                    Text(String(format: "rrf %.3f", score))
+                Text("trust: \(nomination.trustProfile)")
+                Text("freshness: \(nomination.freshness.lowercased())")
+                Text(nomination.citationClass.replacingOccurrences(of: "_", with: " "))
+                if nomination.weakFit {
+                    Text("weak fit")
                 }
-                if let signal = hit.signal {
+            }
+            .font(.caption2)
+            .foregroundStyle(palette.faint)
+
+            if !nomination.retrievalReasons.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("WHY NOMINATED")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(palette.faint)
+                    Text(
+                        nomination.retrievalReasons
+                            .map { $0.replacingOccurrences(of: "_", with: " ") }
+                            .joined(separator: " · ")
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+                    .textSelection(.enabled)
+                }
+            }
+
+            if !nomination.preview.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("COMPACT AGENT PREVIEW")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(palette.faint)
+                    Text(nomination.preview)
+                        .font(.caption)
+                        .foregroundStyle(palette.dim)
+                        .textSelection(.enabled)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.rail.opacity(0.55))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+
+            if let expansion = item.expansion {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("FULL RETRIEVED CHUNK")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(palette.faint)
+                        Spacer()
+                        Text("operator inspection only")
+                            .font(.caption2)
+                            .foregroundStyle(palette.accent)
+                    }
+                    Text(expansion.chunkText.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .font(.caption)
+                        .foregroundStyle(palette.text)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Visible in Conduit; not admitted to an agent context by inspection alone.")
+                        .font(.caption2)
+                        .foregroundStyle(palette.faint)
+                }
+                .padding(9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.canvas)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .strokeBorder(palette.line, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            } else if let expansionError = item.expansionError {
+                Label(
+                    "Expansion unavailable: \(expansionError)",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(palette.dim)
+                .textSelection(.enabled)
+            }
+
+            HStack(spacing: 8) {
+                if let signal = nomination.signal {
                     Text(signal)
+                }
+                if let score = nomination.rrfScore {
+                    Text(String(format: "rrf %.3f", score))
                 }
                 Spacer()
                 if let onOpenPath {
                     Button {
-                        onOpenPath(hit.displayPath)
+                        onOpenPath(nomination.displayPath)
                         dismiss()
                     } label: {
                         Label("Open in Explorer", systemImage: "arrow.forward.square")
@@ -238,9 +319,9 @@ struct MindGraphQueryView: View {
                             title: "Open nominated source",
                             summary: "Attempts to reveal this nominated path in the current MainFrame Explorer.",
                             effect: "Opens only when the path resolves inside the current bounded MainFrame index.",
-                            nonEffect: "Does not make the MindGraph nomination an authored link or verified fact.",
-                            target: hit.displayPath,
-                            authority: "Semantic nomination routed to filesystem lookup"
+                            nonEffect: "Does not admit the source to agent context or make the nomination a verified fact.",
+                            target: nomination.displayPath,
+                            authority: "MindGraph nomination routed to filesystem lookup"
                         )
                     )
                 }
@@ -260,7 +341,7 @@ struct MindGraphQueryView: View {
 
     private var footer: some View {
         HStack {
-            Text("Uses ~/.mindgraph indexes via bin/mindgraph. Knowledge and Projects stay separate. Results are nominations, not verified claims.")
+            Text("One MindGraph retrieval, two projections: compact nominations for agents; expanded source here for operator inspection. Inspection does not attach source to a worker.")
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
             Spacer()
@@ -279,10 +360,10 @@ struct MindGraphQueryView: View {
         guard !q.isEmpty else { return }
         isRunning = true
         errorText = nil
-        hits = []
+        inspectionItems = []
         lastQueryLabel = "\(scope.displayName) · top \(topK) · \(q)"
         Task {
-            let result = await model.queryMindGraph(
+            let result = await model.inspectMindGraph(
                 question: q,
                 scope: scope,
                 topK: topK
@@ -291,8 +372,8 @@ struct MindGraphQueryView: View {
                 isRunning = false
                 switch result {
                 case .success(let rows):
-                    hits = rows
-                    onResults?(rows)
+                    inspectionItems = rows
+                    onResults?(rows.compactMap(\.expandedHit))
                     if rows.isEmpty {
                         errorText = nil
                     }
