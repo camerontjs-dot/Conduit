@@ -4277,6 +4277,77 @@ final class AppModel: ObservableObject {
                 ).prefix(500).description
             }
             return payload
+        case .expandMindGraphNomination(let expansionHandle, let scope):
+            let trimmedHandle = expansionHandle.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            guard !trimmedHandle.isEmpty else {
+                return ["error": "expansion_handle is empty"]
+            }
+            guard ConduitSessionAPI.allowsMindGraphScope(scope) else {
+                return ["error": "scope must be knowledge or projects"]
+            }
+            guard let binary = MindGraphQuerySupport.resolveBinary(
+                mainframeRoot: settings.mainframeRoot
+            ) else {
+                return ["error": "mindgraph binary not found"]
+            }
+            let parsedScope = scope == "projects"
+                ? MindGraphScope.projects
+                : MindGraphScope.knowledge
+            let db = MindGraphQuerySupport.databaseURL(for: parsedScope)
+            let result = SubprocessRunner.run(
+                binary.path,
+                [
+                    "expand-nomination", trimmedHandle,
+                    "--db", db.path,
+                    "--json",
+                ],
+                timeout: 45
+            )
+            guard result.status == 0 else {
+                return [
+                    "scope": scope,
+                    "exit_code": result.status,
+                    "error": "MindGraph expansion failed closed",
+                ]
+            }
+            do {
+                let expansion = try MindGraphQuerySupport.decodeExpansion(
+                    from: Data(result.output.utf8)
+                )
+                guard expansion.trustProfile == nil
+                    || expansion.trustProfile == parsedScope.trustProfile else {
+                    return [
+                        "scope": scope,
+                        "exit_code": result.status,
+                        "error": "MindGraph expansion trust scope did not match requested scope",
+                    ]
+                }
+                return [
+                    "scope": scope,
+                    "exit_code": result.status,
+                    "authority": "source-backed expansion; context only, not verification",
+                    "expansion_handle": expansion.expansionHandle,
+                    "doc_id": expansion.docID,
+                    "chunk_index": expansion.chunkIndex,
+                    "display_path": expansion.displayPath,
+                    "title": expansion.title,
+                    "chunk_text": expansion.chunkText,
+                    "content_hash": expansion.contentHash as Any,
+                    "content_hash_match": expansion.contentHashMatch as Any,
+                    "freshness": expansion.freshness,
+                    "raw_status": expansion.rawStatus as Any,
+                    "citation_class": expansion.citationClass,
+                    "trust_profile": expansion.trustProfile as Any,
+                ]
+            } catch {
+                return [
+                    "scope": scope,
+                    "exit_code": result.status,
+                    "error": "MindGraph expansion response was invalid",
+                ]
+            }
         case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
             return sessionAPICreateTask(
                 agentName: agentName,
