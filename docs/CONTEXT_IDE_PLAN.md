@@ -74,6 +74,30 @@ Every context item should identify its source class. Initial authority vocabular
 
 MindGraph output remains a retrieval nomination. Agent output remains an output. Neither silently becomes authored source truth.
 
+### MindGraph projection boundary
+
+MindGraph retrieval should enter Conduit as one canonical nomination set with two deliberately different projections.
+
+**Agent projection:** compact structured nominations only. The default worker-facing aperture should contain only enough information to decide whether a result is worth expanding: stable nomination identity, title, source identity, authority/provenance, freshness when evidenced, retrieval reason, compact exact preview, and expansion handle. Full retrieved chunks do not belong in the default agent nomination response.
+
+**Human inspection projection:** Conduit may resolve those same expansion handles and show the complete retrieved chunk, surrounding section, retrieval diagnostics, graph relationships, and source navigation in a readable inspection view.
+
+Product invariant:
+
+> **Human visibility must not imply agent-context admission.**
+
+An operator may inspect every MindGraph result without giving those chunks to the active worker. A nomination becomes agent context only through an explicit context-admission action or Context Compiler decision that is visible in the resulting manifest.
+
+The rich human view must derive from the same nomination IDs and expansion handles as the original retrieval, not from a second hidden retrieval run. A stale, missing, malformed, or scope-mismatched expansion stays a visible failure. Conduit must not substitute a nearby source to make the inspector look complete.
+
+This keeps three states separate:
+
+1. retrieved/nominated by MindGraph;
+2. expanded for human inspection in Conduit;
+3. admitted to an agent Context Set / manifest.
+
+Eager expansion for the operator is allowed because it changes presentation only. It must not silently alter Context Stack membership, token budget, worker handoff, or source authority.
+
 ### 3. Context Preview
 
 Before delegation, the user should be able to inspect exactly what will be sent:
