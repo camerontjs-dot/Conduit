@@ -51,7 +51,28 @@ public enum ProcessTreePostcondition: String, Codable, Equatable, Sendable {
 
 public enum ProcessTreeCleanupDisposition: String, Codable, Equatable, Sendable {
     case notAttempted = "not_attempted"
+    case notRequired = "not_required"
     case refusedUnknownOwnership = "refused_unknown_ownership"
+    case refusedUnsafeTarget = "refused_unsafe_target"
+    case signalFailed = "signal_failed"
+    case completed
+    case incompleteResidual = "incomplete_residual"
+}
+
+public struct ProcessTreeCleanupTarget: Codable, Equatable, Sendable {
+    public var pid: Int32
+    public var startIdentity: ProcessStartIdentity
+    public var ownershipBasis: ProcessOwnershipBasis
+
+    public init(
+        pid: Int32,
+        startIdentity: ProcessStartIdentity,
+        ownershipBasis: ProcessOwnershipBasis
+    ) {
+        self.pid = pid
+        self.startIdentity = startIdentity
+        self.ownershipBasis = ownershipBasis
+    }
 }
 
 /// The strongest practical process identity available to the macOS observer
@@ -203,7 +224,7 @@ public struct ProcessTreeCleanupReceipt: Codable, Equatable, Sendable {
 /// process observation. A parent exit is only one input; it is never enough by
 /// itself to produce the `complete` postcondition.
 public struct ProcessTreeReconciliation: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var taskSessionID: String

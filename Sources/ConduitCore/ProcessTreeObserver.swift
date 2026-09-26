@@ -545,6 +545,74 @@ public enum MacOSProcessTreeObserver {
         )
     }
 
+    public static func signalCleanupTarget(
+        _ target: ProcessTreeCleanupTarget,
+        signal: Int32 = SIGTERM
+    ) -> ProcessTreeCleanupSignalResult {
+        guard target.pid > 1,
+              ProcessTreeCleanupPlanner.isStrongDescendantBasis(
+                target.ownershipBasis
+              ),
+              target.startIdentity.startTime.value != nil
+        else {
+            return ProcessTreeCleanupSignalResult(
+                target: target,
+                disposition: .unsafeTarget
+            )
+        }
+
+        guard let current = readProcess(pid_t(target.pid)) else {
+            switch probe(pid_t(target.pid)) {
+            case .exited:
+                return ProcessTreeCleanupSignalResult(
+                    target: target,
+                    disposition: .alreadyExited
+                )
+            case .live, .unknown:
+                return ProcessTreeCleanupSignalResult(
+                    target: target,
+                    disposition: .identityUnverifiable
+                )
+            }
+        }
+        guard current.startTime == target.startIdentity.startTime.value else {
+            return ProcessTreeCleanupSignalResult(
+                target: target,
+                disposition: .identityMismatch
+            )
+        }
+
+        errno = 0
+        guard kill(pid_t(target.pid), signal) == 0 else {
+            let code = Int32(errno)
+            if code == ESRCH {
+                return ProcessTreeCleanupSignalResult(
+                    target: target,
+                    disposition: .alreadyExited
+                )
+            }
+            return ProcessTreeCleanupSignalResult(
+                target: target,
+                disposition: .signalFailed,
+                errorCode: .known(code)
+            )
+        }
+
+        for _ in 0..<20 {
+            usleep(10_000)
+            guard let observed = readProcess(pid_t(target.pid)) else {
+                break
+            }
+            if observed.startTime != target.startIdentity.startTime.value {
+                break
+            }
+        }
+        return ProcessTreeCleanupSignalResult(
+            target: target,
+            disposition: .signalRequested
+        )
+    }
+
     private static func sameProcessIdentity(
         _ info: RawProcessInfo,
         _ node: ProcessNodeObservation

@@ -556,7 +556,7 @@ public enum LifecycleProcessScope: String, Codable, Equatable, Sendable {
 /// snapshots supply the facts; unknown and unsupported consequences stay
 /// explicit instead of being mapped to a more convenient lifecycle verb.
 public struct LifecyclePreflight: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var operation: LifecycleOperation
@@ -571,6 +571,7 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
     public var exactResumeHandle: OrchestrationValue<String>
     public var expectedProcessScope: OrchestrationValue<LifecycleProcessScope>
     public var knownDescendantPIDs: OrchestrationValue<[Int32]>
+    public var cleanupEligibleDescendants: OrchestrationValue<[ProcessTreeCleanupTarget]>
     public var sideEffects: OrchestrationValue<[String]>
     public var unsupportedConsequences: OrchestrationValue<[String]>
     /// Consequences Conduit can name but cannot currently resolve.
@@ -591,6 +592,7 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
         exactResumeHandle: OrchestrationValue<String>,
         expectedProcessScope: OrchestrationValue<LifecycleProcessScope>,
         knownDescendantPIDs: OrchestrationValue<[Int32]>,
+        cleanupEligibleDescendants: OrchestrationValue<[ProcessTreeCleanupTarget]> = .unknown,
         sideEffects: OrchestrationValue<[String]>,
         unsupportedConsequences: OrchestrationValue<[String]>,
         unknownConsequences: OrchestrationValue<[String]> = .unknown,
@@ -606,6 +608,7 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
         self.exactResumeHandle = exactResumeHandle
         self.expectedProcessScope = expectedProcessScope
         self.knownDescendantPIDs = knownDescendantPIDs
+        self.cleanupEligibleDescendants = cleanupEligibleDescendants
         self.sideEffects = sideEffects
         self.unsupportedConsequences = unsupportedConsequences
         self.unknownConsequences = unknownConsequences
@@ -623,6 +626,7 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
         case exactResumeHandle
         case expectedProcessScope
         case knownDescendantPIDs
+        case cleanupEligibleDescendants
         case sideEffects
         case unsupportedConsequences
         case unknownConsequences
@@ -659,6 +663,10 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
             OrchestrationValue<[Int32]>.self,
             forKey: .knownDescendantPIDs
         )
+        cleanupEligibleDescendants = try container.decodeIfPresent(
+            OrchestrationValue<[ProcessTreeCleanupTarget]>.self,
+            forKey: .cleanupEligibleDescendants
+        ) ?? .unknown
         sideEffects = try container.decode(
             OrchestrationValue<[String]>.self,
             forKey: .sideEffects
@@ -689,6 +697,7 @@ public struct LifecyclePreflight: Codable, Equatable, Sendable {
         try container.encode(exactResumeHandle, forKey: .exactResumeHandle)
         try container.encode(expectedProcessScope, forKey: .expectedProcessScope)
         try container.encode(knownDescendantPIDs, forKey: .knownDescendantPIDs)
+        try container.encode(cleanupEligibleDescendants, forKey: .cleanupEligibleDescendants)
         try container.encode(sideEffects, forKey: .sideEffects)
         try container.encode(
             unsupportedConsequences,

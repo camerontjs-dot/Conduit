@@ -27,6 +27,16 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- `stop_provider_host` now has a bounded Slice 6B residual-cleanup phase for
+  direct task-owned process trees. Preflight declares only exact task-created
+  descendant PID/start identities with strong ownership evidence; execution
+  revalidates each identity before a per-PID SIGTERM, never signals UNKNOWN or
+  pre-existing processes, never signals a process group, and re-observes the
+  tree before reporting cleanup. Identity mismatch, partial coverage, signal
+  failure, UNKNOWN ownership, and surviving owned descendants remain explicit
+  non-success states. Process cleanup does not establish provider completion or
+  objective acceptance (#78, #53).
+
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker

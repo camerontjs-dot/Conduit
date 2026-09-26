@@ -6455,6 +6455,133 @@ final class AppModel: ObservableObject {
         return reconciliation
     }
 
+    private func sessionAPICleanupOwnedResidualDescendants(
+        taskID: TaskSessionID,
+        runtime: TerminalRuntime,
+        preflight: LifecyclePreflight,
+        reconciliation: ProcessTreeReconciliation
+    ) -> ProcessTreeReconciliation {
+        let plan = ProcessTreeCleanupPlanner.plan(
+            declaredTargets: preflight.cleanupEligibleDescendants,
+            reconciliation: reconciliation
+        )
+        var current = reconciliation
+
+        func cleanupReceipt(
+            disposition: ProcessTreeCleanupDisposition,
+            targets: [ProcessTreeCleanupTarget] = [],
+            evidence: [String],
+            reobserved: Bool
+        ) -> ProcessTreeCleanupReceipt {
+            ProcessTreeCleanupReceipt(
+                disposition: disposition,
+                targetedPIDs: targets.map(\.pid),
+                targetingBasis: .known(evidence),
+                reobservedAfterCleanup: .known(reobserved)
+            )
+        }
+
+        switch plan.disposition {
+        case .notRequired:
+            current.cleanup = cleanupReceipt(
+                disposition: .notRequired,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .refusedUnknownOwnership:
+            current.cleanup = cleanupReceipt(
+                disposition: .refusedUnknownOwnership,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .refusedUnsafeTarget:
+            current.cleanup = cleanupReceipt(
+                disposition: .refusedUnsafeTarget,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .eligible:
+            break
+        }
+
+        var evidence = [plan.reason]
+        var signalFailed = false
+        var unsafeTarget = false
+        for target in plan.targets {
+            let started = target.startIdentity.startTime.value
+                .map { String($0.timeIntervalSince1970) } ?? "unknown"
+            let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+            var row =
+                "pid=\(target.pid);start_time=\(started);"
+                + "basis=\(target.ownershipBasis.rawValue);"
+                + "signal=\(result.signalName);"
+                + "result=\(result.disposition.rawValue)"
+            if let code = result.errorCode.value {
+                row += ";errno=\(code)"
+            }
+            evidence.append(row)
+            switch result.disposition {
+            case .signalFailed:
+                signalFailed = true
+            case .identityMismatch, .identityUnverifiable, .unsafeTarget:
+                unsafeTarget = true
+            case .signalRequested, .alreadyExited:
+                break
+            }
+        }
+
+        let afterCleanup = sessionAPIObserveProcessTree(
+            taskID: taskID,
+            runtime: runtime,
+            prior: reconciliation.after
+        )
+        var final = ProcessTreeReconciler.reconcile(
+            before: reconciliation.before,
+            after: afterCleanup,
+            requestedOperation: .known(.stopProviderHost)
+        )
+        evidence.append(
+            "reobserved_owned_residual_pids="
+                + final.ownedResidualDescendants.map {
+                    String($0.pid)
+                }.joined(separator: ",")
+        )
+        evidence.append(
+            "reobserved_unknown_residual_pids="
+                + final.unknownOwnershipResidualDescendants.map {
+                    String($0.pid)
+                }.joined(separator: ",")
+        )
+
+        let disposition: ProcessTreeCleanupDisposition
+        if signalFailed {
+            disposition = .signalFailed
+        } else if unsafeTarget {
+            disposition = .refusedUnsafeTarget
+        } else if !final.unknownOwnershipResidualDescendants.isEmpty {
+            disposition = .refusedUnknownOwnership
+        } else if final.ownedResidualDescendants.isEmpty {
+            disposition = .completed
+        } else {
+            disposition = .incompleteResidual
+        }
+
+        final.cleanup = cleanupReceipt(
+            disposition: disposition,
+            targets: plan.targets,
+            evidence: evidence,
+            reobserved: true
+        )
+        sessionAPIProcessTreeReconciliations[taskID] = final
+        return final
+    }
+
     private func sessionAPILifecyclePlan(
         taskID: TaskSessionID,
         operation: LifecycleOperation
@@ -6607,11 +6734,17 @@ final class AppModel: ObservableObject {
                 mcpAdmission?.markTaskEnded(taskID)
             }
             let runtimeEnded = endSession(runtime)
-            let processTreeReconciliation = sessionAPIReconcileProcessTree(
+            var processTreeReconciliation = sessionAPIReconcileProcessTree(
                 taskID: taskID,
                 runtime: runtime,
                 before: preActionProcessTree,
                 operation: operation
+            )
+            processTreeReconciliation = sessionAPICleanupOwnedResidualDescendants(
+                taskID: taskID,
+                runtime: runtime,
+                preflight: preflight,
+                reconciliation: processTreeReconciliation
             )
             var payload: [String: Any] = [
                 "taskSessionID": rawID,
