@@ -109,6 +109,48 @@ public enum MindGraphOutput {
         return projected
     }
 
+    /// Minimum-sufficient machine projection for one canonical nomination.
+    ///
+    /// This is intentionally narrower than the operator inspection model. Full
+    /// chunk text and low-level ranking diagnostics stay out of the default
+    /// agent aperture. Expansion is explicit through expansion_handle.
+    public static func projectNomination(
+        _ nomination: MindGraphNomination
+    ) -> [String: Any] {
+        var projected: [String: Any] = [
+            "nomination_id": nomination.nominationID,
+            "expansion_handle": nomination.expansionHandle,
+            "title": nomination.title,
+            "preview": nomination.preview,
+            "preview_truncated": nomination.previewTruncated,
+            "display_path": nomination.displayPath,
+            "doc_id": nomination.docID,
+            "chunk_index": nomination.chunkIndex,
+            "citation_class": nomination.citationClass,
+            "trust_profile": nomination.trustProfile,
+            "freshness": nomination.freshness,
+            "retrieval_reasons": nomination.retrievalReasons,
+            "weak_fit": nomination.weakFit,
+        ]
+        if let contentHash = nomination.contentHash {
+            projected["content_hash"] = contentHash
+        }
+        if let rawStatus = nomination.rawStatus {
+            projected["raw_status"] = rawStatus
+        }
+        return projected
+    }
+
+    public static func citationCounts(
+        _ nominations: [MindGraphNomination]
+    ) -> [String: Int] {
+        var counts = ["citable": 0, "unverified": 0, "not_citable": 0]
+        for nomination in nominations {
+            counts[nomination.citationClass, default: 0] += 1
+        }
+        return counts
+    }
+
     /// Whatever MindGraph logged before the payload. Kept so a diagnostic is
     /// still available without gluing it onto the results.
     public static func logPreamble(in output: String) -> String {
