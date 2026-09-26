@@ -27,6 +27,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- MindGraph query now uses a compact nomination-first agent projection: stable
+  identity, source/trust metadata, retrieval reasons, exact preview, and an
+  expansion handle without full chunk text. A separate read-only expansion
+  tool resolves only selected nominations. The in-app MindGraph station uses
+  those same handles to show full source-backed chunks for operator inspection;
+  viewing them does not add them to agent context or a handoff.
+
+
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker
