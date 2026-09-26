@@ -553,7 +553,7 @@ public enum MacOSProcessTreeObserver {
               ProcessTreeCleanupPlanner.isStrongDescendantBasis(
                 target.ownershipBasis
               ),
-              target.startIdentity.startTime.value != nil
+              let expectedStart = target.startIdentity.startTime.value
         else {
             return ProcessTreeCleanupSignalResult(
                 target: target,
@@ -575,7 +575,7 @@ public enum MacOSProcessTreeObserver {
                 )
             }
         }
-        guard current.startTime == target.startIdentity.startTime.value else {
+        guard current.startTime == expectedStart else {
             return ProcessTreeCleanupSignalResult(
                 target: target,
                 disposition: .identityMismatch
@@ -603,7 +603,7 @@ public enum MacOSProcessTreeObserver {
             guard let observed = readProcess(pid_t(target.pid)) else {
                 break
             }
-            if observed.startTime != target.startIdentity.startTime.value {
+            if observed.startTime != expectedStart {
                 break
             }
         }

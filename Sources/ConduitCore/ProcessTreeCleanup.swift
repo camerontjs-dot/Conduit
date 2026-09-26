@@ -119,7 +119,7 @@ public enum ProcessTreeCleanupPlanner {
             guard let target = declared.first(where: {
                 $0.pid == residual.pid
                     && $0.startIdentity == startIdentity
-                    && $0.ownershipBasis == residual.ownershipBasis
+                    && isStrongDescendantBasis($0.ownershipBasis)
             }) else {
                 return ProcessTreeCleanupPlan(
                     disposition: .refusedUnsafeTarget,

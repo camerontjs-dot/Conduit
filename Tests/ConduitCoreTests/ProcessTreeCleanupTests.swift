@@ -98,12 +98,13 @@ final class ProcessTreeCleanupTests: XCTestCase {
         let target = ProcessTreeCleanupTarget(
             pid: owned.pid,
             startIdentity: try XCTUnwrap(owned.startIdentity.value),
-            ownershipBasis: owned.ownershipBasis
+            ownershipBasis: .descendantObservedAfterLauncher
         )
         let plan = ProcessTreeCleanupPlanner.plan(
             declaredTargets: .known([target]),
             reconciliation: reconciliation(descendants: [owned])
         )
+        XCTAssertEqual(owned.ownershipBasis, .preservedFromPriorIdentity)
         XCTAssertEqual(plan.disposition, .eligible)
         XCTAssertEqual(plan.targets, [target])
     }
