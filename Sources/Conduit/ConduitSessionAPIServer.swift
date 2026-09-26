@@ -507,6 +507,15 @@ final class ConduitSessionAPIServer {
             let question = arguments["question"]?.stringValue ?? ""
             let scope = arguments["scope"]?.stringValue ?? ""
             command = .queryMindGraph(question: question, scope: scope)
+        case "conduit_expand_mindgraph_nomination":
+            let expansionHandle = arguments["expansion_handle"]?.stringValue ?? ""
+            let scope = arguments["scope"]?.stringValue ?? ""
+            command = expansionHandle.isEmpty
+                ? nil
+                : .expandMindGraphNomination(
+                    expansionHandle: expansionHandle,
+                    scope: scope
+                )
         case "conduit_create_task":
             let agent = arguments["agent"]?.stringValue ?? ""
             let projectSlug = arguments["project_slug"]?.stringValue
@@ -871,7 +880,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_query_mindgraph",
-            "description": "Semantic search over the operator's local MindGraph index. scope selects which index: knowledge searches the 10_knowledge notes, projects searches 30_projects working files. Returns ranked passage nominations, each with the repo-relative path, title, matched text, an rrf_score, and a citation_class. Documents that must not be cited — quarantined, retracted, superseded, or flagged as a fabricated citation — are returned separately under not_citable and never mixed into results, because ranking is trust-blind and such a document can outscore a real one. citation_counts reports the split. These are retrieval candidates for orienting yourself, not evidence that a claim is true, and never a substitute for reading the file.",
+            "description": "Search the operator's local MindGraph index and return compact ranked nominations only. Each nomination carries stable identity, exact source identity when available, typed trust/citation metadata, retrieval reasons, a small exact preview, and an expansion_handle. Full source chunks and low-level ranking diagnostics are intentionally withheld from this first response. These are retrieval candidates, not evidence that a claim is true. Call conduit_expand_mindgraph_nomination only for nominations whose full source context is worth spending.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -892,6 +901,26 @@ final class ConduitSessionAPIServer {
     ]
 
     private static let writeTools: [[String: Any]] = [
+        [
+            "name": "conduit_expand_mindgraph_nomination",
+            "description": "Expand one MindGraph expansion_handle returned by conduit_query_mindgraph into its exact source-backed chunk. The call is read-only and fail-closed: malformed, missing, stale, scope-mismatched, or wrong-index handles return an error rather than a nearby source. Expansion provides more context but does not strengthen the nomination's authority or verify any claim.",
+            "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "expansion_handle": [
+                        "type": "string",
+                        "description": "Exact expansion_handle from a compact MindGraph nomination.",
+                    ],
+                    "scope": [
+                        "type": "string",
+                        "enum": ["knowledge", "projects"],
+                        "description": "The same scope used for the query that produced the handle.",
+                    ],
+                ],
+                "required": ["expansion_handle", "scope"],
+            ],
+        ],
         [
             "name": "conduit_create_task",
             "description": "Start a Conduit agent session and return its taskSessionID. Delivery of objective is attempted once, immediately, and the response reports objective_delivery_state: delivered (it reached the runtime), queued (Conduit accepted it and will finish delivering it without another call - do not resend, or the objective runs twice), or failed (the runtime refused it; objective_resend_required is true, so wait for conduit_session_status to report ready and send it with conduit_send_prompt). Approvals stay on the Mac.",
