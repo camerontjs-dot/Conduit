@@ -25,6 +25,10 @@ final class SessionAPIReadinessTests: XCTestCase {
             providerCursor: nil,
             limit: 40
         )
+        let expandMindGraph = ConduitSessionCommand.expandMindGraphNomination(
+            expansionHandle: "exp1:fixture",
+            scope: "knowledge"
+        )
         let write = ConduitSessionCommand.createTask(
             agent: "Shell",
             projectSlug: "synthetic",
@@ -47,6 +51,10 @@ final class SessionAPIReadinessTests: XCTestCase {
             XCTAssertFalse(ConduitSessionAPI.isWrite(fleetSnapshot))
             XCTAssertTrue(
                 ConduitSessionAPI.allowsCommand(fleetSnapshot, readiness: state)
+            )
+            XCTAssertFalse(ConduitSessionAPI.isWrite(expandMindGraph))
+            XCTAssertTrue(
+                ConduitSessionAPI.allowsCommand(expandMindGraph, readiness: state)
             )
             XCTAssertFalse(
                 ConduitSessionAPI.allowsCommand(write, readiness: state)
