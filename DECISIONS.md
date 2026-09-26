@@ -2007,3 +2007,52 @@ outside this disposition.
 **Reconsideration trigger:** Revisit only when a separate authorized source
 proves process-to-command or provider-host/turn identity, or when a later slice
 defines the authority needed for stronger lifecycle claims.
+
+## D-058: MindGraph retrieval has separate agent and operator projections
+
+**Status:** Proposed (2026-09-26)
+
+**Context:** MindGraph retrieval output is a nomination, not verification or
+automatic context authority. Agents benefit from scanning several candidates at
+low context cost, while the operator needs enough source detail to inspect why a
+candidate matters. Sending full chunks in every initial agent response wastes
+context and collapses retrieval into admission. Hiding full chunks from the
+operator makes retrieval difficult to inspect.
+
+**Decision:**
+
+1. Treat one MindGraph query as one canonical nomination event. The normal
+   agent-facing projection is minimum-sufficient structured metadata: stable
+   nomination identity, source identity, trust/citation metadata, retrieval
+   reasons, a compact exact preview, and an explicit expansion handle. Full
+   source chunks and low-level ranking diagnostics do not travel in that
+   default aperture.
+2. Provide an explicit read-only expansion operation. An agent chooses which
+   nominations justify the additional context. Expansion is fail-closed and
+   does not strengthen the nomination's epistemic authority.
+3. Conduit's human MindGraph surface may resolve the same expansion handles and
+   show complete retrieved chunks plus useful diagnostics. It must not rerun
+   retrieval silently to manufacture a richer result set.
+4. Human visibility does not imply agent-context admission. Inspecting an
+   expanded result changes presentation only; it does not add that chunk to a
+   Context Stack, handoff, token budget, or worker prompt.
+5. Keep retrieval, human inspection, and agent-context admission as three
+   distinct states. Context Compiler remains the downstream authority for an
+   actual manifest-backed handoff.
+
+**Consequences:** The operator can inspect the full evidence surface without
+paying the same context cost in every agent turn. Agents can progressively
+expand only consequential nominations. A stale, malformed, missing, or
+scope-inconsistent handle remains an explicit failure rather than being
+replaced by a nearby source.
+
+**Non-claims:** A compact nomination is not verified truth. Expansion is not
+verification. Human inspection is not agent admission. This decision does not
+change MindGraph ranking, choose a new retrieval model, or establish that the
+current preview is the smallest safe selector surface.
+
+**Reconsideration trigger:** Change the default agent aperture only after a
+frozen selector evaluation demonstrates that a smaller or different projection
+preserves required-context selection. Revisit the projection boundary if a
+future consumer requires a separately justified combined full-text contract.
+
