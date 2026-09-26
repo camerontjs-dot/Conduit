@@ -2,6 +2,7 @@ import Foundation
 
 public enum ProcessTreeCleanupPlanningDisposition: String, Codable, Equatable, Sendable {
     case eligible
+    case notAuthorizedYet = "not_authorized_yet"
     case notRequired = "not_required"
     case refusedUnknownOwnership = "refused_unknown_ownership"
     case refusedUnsafeTarget = "refused_unsafe_target"
@@ -72,7 +73,7 @@ public enum ProcessTreeCleanupPlanner {
         }
         guard reconciliation.after.launcher.value?.liveness == .exited else {
             return ProcessTreeCleanupPlan(
-                disposition: .notRequired,
+                disposition: .notAuthorizedYet,
                 targets: [],
                 reason: "provider/runtime parent exit has not been observed; descendant cleanup is not authorized yet"
             )

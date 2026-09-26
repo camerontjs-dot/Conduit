@@ -545,7 +545,7 @@ public enum MacOSProcessTreeObserver {
         )
     }
 
-    public static func signalCleanupTarget(
+    package static func signalCleanupTarget(
         _ target: ProcessTreeCleanupTarget,
         signal: Int32 = SIGTERM
     ) -> ProcessTreeCleanupSignalResult {

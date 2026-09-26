@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if os(macOS)
+import Darwin
+#endif
 @testable import ConduitCore
 
 final class ProcessTreeCleanupTests: XCTestCase {
@@ -43,14 +46,15 @@ final class ProcessTreeCleanupTests: XCTestCase {
 
     private func reconciliation(
         descendants: [ProcessNodeObservation],
-        coverage: ProcessTreeObservationCoverage = .complete
+        coverage: ProcessTreeObservationCoverage = .complete,
+        launcherLiveness: ProcessLiveness = .exited
     ) -> ProcessTreeReconciliation {
         let launcher = node(
             pid: 900,
             start: launcherStart,
             ownership: .taskCreated,
             basis: .preservedFromPriorIdentity,
-            liveness: .exited,
+            liveness: launcherLiveness,
             parentPID: 1
         )
         let after = ProcessTreeObservation(
@@ -187,6 +191,57 @@ final class ProcessTreeCleanupTests: XCTestCase {
         XCTAssertEqual(plan.disposition, .refusedUnsafeTarget)
         XCTAssertTrue(plan.targets.isEmpty)
     }
+
+    func testLiveParentDoesNotAuthorizeCleanupYet() throws {
+        let owned = node(
+            pid: 901,
+            start: childStart,
+            ownership: .taskCreated,
+            basis: .preservedFromPriorIdentity,
+            liveness: .live,
+            parentPID: 900
+        )
+        let target = ProcessTreeCleanupTarget(
+            pid: owned.pid,
+            startIdentity: try XCTUnwrap(owned.startIdentity.value),
+            ownershipBasis: .descendantObservedAfterLauncher
+        )
+        let plan = ProcessTreeCleanupPlanner.plan(
+            declaredTargets: .known([target]),
+            reconciliation: reconciliation(
+                descendants: [owned],
+                launcherLiveness: .live
+            )
+        )
+        XCTAssertEqual(plan.disposition, .notAuthorizedYet)
+        XCTAssertTrue(plan.targets.isEmpty)
+    }
+
+#if os(macOS)
+    func testSignalBoundaryRefusesMismatchedCurrentPIDWithoutSignaling() {
+        let target = ProcessTreeCleanupTarget(
+            pid: Int32(getpid()),
+            startIdentity: ProcessStartIdentity(
+                startTime: .known(Date(timeIntervalSince1970: 1))
+            ),
+            ownershipBasis: .preservedFromPriorIdentity
+        )
+        let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+        XCTAssertEqual(result.disposition, .identityMismatch)
+    }
+
+    func testSignalBoundaryRejectsPIDOneWithoutSignaling() {
+        let target = ProcessTreeCleanupTarget(
+            pid: 1,
+            startIdentity: ProcessStartIdentity(
+                startTime: .known(observedAt)
+            ),
+            ownershipBasis: .descendantObservedAfterLauncher
+        )
+        let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+        XCTAssertEqual(result.disposition, .unsafeTarget)
+    }
+#endif
 
     func testNoOwnedResidualNeedsNoCleanup() {
         let preExisting = node(

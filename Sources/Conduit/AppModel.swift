@@ -6485,6 +6485,14 @@ final class AppModel: ObservableObject {
         }
 
         switch plan.disposition {
+        case .notAuthorizedYet:
+            current.cleanup = cleanupReceipt(
+                disposition: .notAttempted,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
         case .notRequired:
             current.cleanup = cleanupReceipt(
                 disposition: .notRequired,
