@@ -435,6 +435,10 @@ public enum MindGraphQuerySupport {
            expected != observed {
             return false
         }
+        if let expansionTrust = expansion.trustProfile,
+           expansionTrust != nomination.trustProfile {
+            return false
+        }
         if expansion.contentHashMatch == false {
             return false
         }
