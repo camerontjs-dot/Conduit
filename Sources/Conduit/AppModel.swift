@@ -4324,7 +4324,7 @@ final class AppModel: ObservableObject {
                         "error": "MindGraph expansion trust scope did not match requested scope",
                     ]
                 }
-                return [
+                var expansionPayload: [String: Any] = [
                     "scope": scope,
                     "exit_code": result.status,
                     "authority": "source-backed expansion; context only, not verification",
@@ -4334,13 +4334,22 @@ final class AppModel: ObservableObject {
                     "display_path": expansion.displayPath,
                     "title": expansion.title,
                     "chunk_text": expansion.chunkText,
-                    "content_hash": expansion.contentHash as Any,
-                    "content_hash_match": expansion.contentHashMatch as Any,
                     "freshness": expansion.freshness,
-                    "raw_status": expansion.rawStatus as Any,
                     "citation_class": expansion.citationClass,
-                    "trust_profile": expansion.trustProfile as Any,
                 ]
+                if let contentHash = expansion.contentHash {
+                    expansionPayload["content_hash"] = contentHash
+                }
+                if let contentHashMatch = expansion.contentHashMatch {
+                    expansionPayload["content_hash_match"] = contentHashMatch
+                }
+                if let rawStatus = expansion.rawStatus {
+                    expansionPayload["raw_status"] = rawStatus
+                }
+                if let trustProfile = expansion.trustProfile {
+                    expansionPayload["trust_profile"] = trustProfile
+                }
+                return expansionPayload
             } catch {
                 return [
                     "scope": scope,
