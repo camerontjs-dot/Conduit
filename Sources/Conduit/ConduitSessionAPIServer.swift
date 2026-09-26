@@ -898,9 +898,6 @@ final class ConduitSessionAPIServer {
                 "required": ["question", "scope"],
             ],
         ],
-    ]
-
-    private static let writeTools: [[String: Any]] = [
         [
             "name": "conduit_expand_mindgraph_nomination",
             "description": "Expand one MindGraph expansion_handle returned by conduit_query_mindgraph into its exact source-backed chunk. The call is read-only and fail-closed: malformed, missing, stale, scope-mismatched, or wrong-index handles return an error rather than a nearby source. Expansion provides more context but does not strengthen the nomination's authority or verify any claim.",
@@ -921,6 +918,9 @@ final class ConduitSessionAPIServer {
                 "required": ["expansion_handle", "scope"],
             ],
         ],
+    ]
+
+    private static let writeTools: [[String: Any]] = [
         [
             "name": "conduit_create_task",
             "description": "Start a Conduit agent session and return its taskSessionID. Delivery of objective is attempted once, immediately, and the response reports objective_delivery_state: delivered (it reached the runtime), queued (Conduit accepted it and will finish delivering it without another call - do not resend, or the objective runs twice), or failed (the runtime refused it; objective_resend_required is true, so wait for conduit_session_status to report ready and send it with conduit_send_prompt). Approvals stay on the Mac.",
