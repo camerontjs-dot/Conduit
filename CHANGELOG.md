@@ -99,6 +99,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Fleet keeps every provider inventory row visible but reads expensive
+  turn/runtime detail only for sessions with a current exact Conduit task
+  association or current Conduit writer authority. Skipped historical/external
+  detail stays UNKNOWN with an inspectable reason; inventory alone does not
+  grant authority (#75, discovered during #74).
+
 - Process-tree observation no longer treats a shared/pre-existing provider host
   as task-created merely because its PID is selected as an observation root.
   Descendants inherit no task ownership from topology/start ordering unless

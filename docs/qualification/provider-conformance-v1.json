@@ -205,7 +205,7 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "c8d040204416824dbd56d27c9e701f97fee6687fde05919c76987bf77e7d75ef"
+        "sha256": "461014a17d5cd519cea1b211728cb0bae8fd930d10138a83bae0dd7218cc5a9c"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
