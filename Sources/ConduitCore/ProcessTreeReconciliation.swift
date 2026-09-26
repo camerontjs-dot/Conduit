@@ -196,17 +196,27 @@ public struct ProcessTreeCleanupReceipt: Codable, Equatable, Sendable {
     public var disposition: ProcessTreeCleanupDisposition
     public var targetedPIDs: [Int32]
     public var targetingBasis: OrchestrationValue<[String]>
+    /// Exact predeclared PID/start identities considered for mutation.
+    /// Optional to preserve decoding compatibility with Slice 6A receipts.
+    public var targets: [ProcessTreeCleanupTarget]?
+    /// Per-target signal-boundary result, including identity refusal or errno.
+    /// Optional to preserve decoding compatibility with Slice 6A receipts.
+    public var signalResults: [ProcessTreeCleanupSignalResult]?
     public var reobservedAfterCleanup: OrchestrationValue<Bool>
 
     public init(
         disposition: ProcessTreeCleanupDisposition,
         targetedPIDs: [Int32],
         targetingBasis: OrchestrationValue<[String]>,
+        targets: [ProcessTreeCleanupTarget]? = nil,
+        signalResults: [ProcessTreeCleanupSignalResult]? = nil,
         reobservedAfterCleanup: OrchestrationValue<Bool>
     ) {
         self.disposition = disposition
         self.targetedPIDs = targetedPIDs
         self.targetingBasis = targetingBasis
+        self.targets = targets
+        self.signalResults = signalResults
         self.reobservedAfterCleanup = reobservedAfterCleanup
     }
 

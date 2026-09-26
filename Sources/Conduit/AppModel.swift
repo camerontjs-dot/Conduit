@@ -6470,6 +6470,7 @@ final class AppModel: ObservableObject {
         func cleanupReceipt(
             disposition: ProcessTreeCleanupDisposition,
             targets: [ProcessTreeCleanupTarget] = [],
+            signalResults: [ProcessTreeCleanupSignalResult] = [],
             evidence: [String],
             reobserved: Bool
         ) -> ProcessTreeCleanupReceipt {
@@ -6477,6 +6478,8 @@ final class AppModel: ObservableObject {
                 disposition: disposition,
                 targetedPIDs: targets.map(\.pid),
                 targetingBasis: .known(evidence),
+                targets: targets.isEmpty ? nil : targets,
+                signalResults: signalResults.isEmpty ? nil : signalResults,
                 reobservedAfterCleanup: .known(reobserved)
             )
         }
@@ -6511,12 +6514,14 @@ final class AppModel: ObservableObject {
         }
 
         var evidence = [plan.reason]
+        var signalResults: [ProcessTreeCleanupSignalResult] = []
         var signalFailed = false
         var unsafeTarget = false
         for target in plan.targets {
             let started = target.startIdentity.startTime.value
                 .map { String($0.timeIntervalSince1970) } ?? "unknown"
             let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+            signalResults.append(result)
             var row =
                 "pid=\(target.pid);start_time=\(started);"
                 + "basis=\(target.ownershipBasis.rawValue);"
@@ -6575,6 +6580,7 @@ final class AppModel: ObservableObject {
         final.cleanup = cleanupReceipt(
             disposition: disposition,
             targets: plan.targets,
+            signalResults: signalResults,
             evidence: evidence,
             reobserved: true
         )

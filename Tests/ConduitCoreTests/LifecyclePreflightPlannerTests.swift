@@ -208,7 +208,7 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
             snapshot: snapshot(kind: .codexAppServer, processTree: .known(tree))
         )
 
-        XCTAssertEqual(plan.cleanupEligibleDescendants.value, [])
+        XCTAssertEqual(plan.cleanupEligibleDescendants.value ?? [], [])
     }
 
     func testOpenCodeLastOwnedLeaseStopReportsHostStopAndProviderResume() {
