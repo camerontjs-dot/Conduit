@@ -6784,24 +6784,24 @@ final class AppModel: ObservableObject {
                     payload["stop_signal"] = "SIGTERM"
                     payload["escalation"] = "SIGKILL after 1s only if the same exact PTY child remains unobserved"
                     payload["authority"] =
-                        "Conduit signaled only the exact SwiftTerm-owned direct PTY child and has not yet observed process exit. The task remains live and execution capacity remains occupied until the existing waitpid-backed callback reports termination; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit requested stop for the exact SwiftTerm-owned direct PTY child and has not yet received waitpid-backed exit confirmation. The task remains live and execution capacity remains occupied until that callback reports termination. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .awaitingExistingExit:
                     payload["stop"] = "awaiting_existing_exit"
                     payload["authority"] =
-                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into an exit fact; capacity remains occupied until the waitpid-backed callback reports termination."
+                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into a waitpid-backed exit fact; capacity remains occupied until the callback reports termination. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .signalFailed(_, let code):
                     payload["executed"] = false
                     payload["stop"] = "signal_failed"
                     payload["errno"] = Int(code)
                     payload["error"] = "direct PTY signal request failed; runtime remains live"
                     payload["authority"] =
-                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .unavailable, .notRequested:
                     payload["executed"] = false
                     payload["stop"] = "unavailable"
                     payload["error"] = "no live direct PTY process identity was available to signal"
                     payload["authority"] =
-                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 }
                 payload["completion"] = "pending_process_observation"
             } else if !runtimeEnded {
