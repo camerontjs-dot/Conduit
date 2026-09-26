@@ -315,7 +315,7 @@
     "LIFECYCLE-PLANNER": {
       "artifact": {
         "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift",
-        "sha256": "4113d7c4c1ae9f2dbe6c52d3449841507918de6a4e539c1d62d5cc721caca4fb"
+        "sha256": "5037115b4439e1e772b7911054610dadc7acbab94b2624ad4bf6d39acd362845"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
@@ -330,7 +330,7 @@
     "LIFECYCLE-TESTS": {
       "artifact": {
         "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift",
-        "sha256": "41501c2466e809b2ff06792a4c0b4ddc3b2b8ae21e1f370f314a8ad6b8070307"
+        "sha256": "4b3edd1f9712eab8c1026ad647888d268d4725f335b98ea27e72f6132fc5ef32"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
