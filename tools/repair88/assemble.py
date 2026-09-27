@@ -153,6 +153,18 @@ def once(text: str, old: str, new: str) -> str:
     return text.replace(old, new, 1)
 
 
+def unreleased_fixed(text: str, replacement: str) -> str:
+    """Edit only the unique Fixed section in Unreleased, never prior releases."""
+    heading = "## [Unreleased]\n"
+    if text.count(heading) != 1:
+        raise ValueError("expected one Unreleased changelog section")
+    start = text.index(heading)
+    following = re.search(r"^## \[", text[start + len(heading):], re.M)
+    end = len(text) if following is None else start + len(heading) + following.start()
+    section = once(text[start:end], "### Fixed\n", replacement)
+    return text[:start] + section + text[end:]
+
+
 def region(text: str, start: str, end: str, change) -> str:
     if text.count(start) != 1 or text.count(end) != 1:
         raise ValueError("ambiguous method boundary")
@@ -265,7 +277,7 @@ def main() -> None:
         return None
     if entry(manifest)["artifact"]["path"] != app or entry(updated)["artifact"]["sha256"] != new:
         raise ValueError("unexpected conformance evidence schema")
-    outputs["CHANGELOG.md"] = once(inputs["CHANGELOG.md"], "### Fixed\n", '''### Fixed
+    outputs["CHANGELOG.md"] = unreleased_fixed(inputs["CHANGELOG.md"], '''### Fixed
 
 - Progressive MindGraph expansion now checks the original scope and independent
   stored index identity. The published Core tool catalog exposes expansion.
