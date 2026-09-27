@@ -155,7 +155,7 @@ struct SettingsView: View {
                 "Listen for Session API on loopback",
                 isOn: $model.settings.enableSessionAPI
             )
-            .help("D-039. 127.0.0.1:8750/mcp with a local bearer token. Save settings to apply.")
+            .help("Uses 127.0.0.1:8750/mcp by default. A qualification launch can select a reserved loopback port. Save settings to apply.")
             Toggle(
                 "Allow ChatGPT to create, send, interrupt, and close sessions",
                 isOn: $model.settings.enableSessionAPIWrites

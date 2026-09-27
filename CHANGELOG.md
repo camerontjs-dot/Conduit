@@ -27,6 +27,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- A Conduit qualification build may bind its Session API to a reserved
+  loopback port with `CONDUIT_SESSION_API_PORT` (18750–18849). With no override,
+  the operator endpoint remains 8750. Invalid overrides stop Session API
+  startup instead of falling back to the operator port (#87).
+
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker
