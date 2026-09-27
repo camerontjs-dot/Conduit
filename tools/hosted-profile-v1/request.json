@@ -1,0 +1,58 @@
+{
+  "schema_version": "hosted-luna-profile-request-v1",
+  "apparatus_commit": "89733c67556bbf1fde7e31edffc229e527321815",
+  "protocol_sha256": "f5ceec61c77e541be507a9d4131e475437d80d6833164c78856dfd71b4c0f1cf",
+  "runtime_subject": {
+    "commit": "60fb71939509ca70dfa67441fdfa50ef11c9e499",
+    "tree": "e5c2360c902183e965d57b65b0060ec1c1a6d4a8",
+    "binary_sha256": "84bc16f681d340fa6d634f97f47a82f1ecd8e92a8807f613bd21d8bac3c42d07"
+  },
+  "requested_model": "gpt-6-luna",
+  "requested_reasoning_effort": "max",
+  "usage_route": "existing_codex_chatgpt_subscription",
+  "controls": {
+    "pilot_order": [
+      "L",
+      "F",
+      "F",
+      "L"
+    ],
+    "smoke_tasks": 1,
+    "pilot_tasks": 4,
+    "max_turns_per_task": 3,
+    "max_active_turns": 1,
+    "turn_observation_seconds": 180,
+    "teardown_observation_seconds": 60,
+    "delegation_allowed": false,
+    "fallback_allowed": false,
+    "queued_means_no_resend": true,
+    "service_tier_change_allowed": false
+  },
+  "phases": [
+    {
+      "fixture": "hs-smoke",
+      "model": "gpt-6-luna",
+      "effort": "max"
+    },
+    {
+      "fixture": "hs-pilot-l1",
+      "model": "gpt-6-luna",
+      "effort": "max"
+    },
+    {
+      "fixture": "hs-pilot-f1",
+      "model": "gpt-6-luna",
+      "effort": "max"
+    },
+    {
+      "fixture": "hs-pilot-f2",
+      "model": "gpt-6-luna",
+      "effort": "max"
+    },
+    {
+      "fixture": "hs-pilot-l2",
+      "model": "gpt-6-luna",
+      "effort": "max"
+    }
+  ]
+}
