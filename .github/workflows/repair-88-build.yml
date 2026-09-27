@@ -1,0 +1,30 @@
+name: Repair 88 build support
+on:
+  push:
+    branches: [work/repair-88-build-20260927]
+    paths: [.github/workflows/repair-88-build.yml, tools/repair-88/**]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive exact blocked predecessor for developer inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse ece4a68cfc41cc89a81341991e8a58dc3bd12c83^{tree})" = f603ece8409520b75b408bdeac01a217b799eb4f
+          git archive --format=zip ece4a68cfc41cc89a81341991e8a58dc3bd12c83 > predecessor-source.zip
+          sha256sum predecessor-source.zip
+          sha256sum Sources/Conduit/AppModel.swift
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repair-88-predecessor-source
+          path: predecessor-source.zip
+          retention-days: 3
+          if-no-files-found: error
