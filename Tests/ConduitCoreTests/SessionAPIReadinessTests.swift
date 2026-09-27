@@ -2,6 +2,37 @@ import XCTest
 @testable import ConduitCore
 
 final class SessionAPIReadinessTests: XCTestCase {
+    func testQualificationPortOverridePreservesDefaultAndAcceptsReservedRange() throws {
+        XCTAssertEqual(
+            try SessionAPIListenPort.resolved(environment: [:]),
+            8750
+        )
+        for port in [18750, 18800, 18849] {
+            XCTAssertEqual(
+                try SessionAPIListenPort.resolved(
+                    environment: ["CONDUIT_SESSION_API_PORT": String(port)]
+                ),
+                port
+            )
+        }
+    }
+
+    func testQualificationPortOverrideFailsClosedForInvalidValues() {
+        for raw in ["", "8750", "18749", "18850", "0", "+18750", " 18750", "18750 ", "١٨٧٥٠"] {
+            XCTAssertThrowsError(
+                try SessionAPIListenPort.resolved(
+                    environment: ["CONDUIT_SESSION_API_PORT": raw]
+                ),
+                "invalid override: \(raw)"
+            ) { error in
+                XCTAssertEqual(
+                    error as? SessionAPIListenPortError,
+                    .invalidOverride
+                )
+            }
+        }
+    }
+
     func testHealthReadinessStatesUseFailClosedHTTPStatus() {
         for state in ConduitSessionAPIReadiness.allCases where state != .ready {
             XCTAssertFalse(state.isReady)

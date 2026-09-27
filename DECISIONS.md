@@ -2007,3 +2007,32 @@ outside this disposition.
 **Reconsideration trigger:** Revisit only when a separate authorized source
 proves process-to-command or provider-host/turn identity, or when a later slice
 defines the authority needed for stronger lifecycle claims.
+
+---
+
+## D-058: Qualification listeners use an explicit reserved loopback port
+
+**Status:** Proposed (2026-09-27)
+
+**Context:** Issue #87 pins the normal operator Conduit and its Session API to
+port 8750 while separate candidates need a concurrent local listener. A second
+listener on the operator port would either fail to start or require displacing
+operator work. A separate port is only one part of isolation.
+
+**Decision:** The default Session API port remains 8750. A candidate launched
+with `CONDUIT_SESSION_API_PORT` may bind only 18750–18849 on 127.0.0.1. An
+invalid override fails Session API startup without a fallback to 8750. The
+actual bound port is shown in the local endpoint. Qualification must separately
+establish app, Conduit state, MainFrame project, provider credential/session,
+token, tunnel, and process ownership before any write; it must not reuse or
+adopt operator work. The existing local write gate and Mac-side approvals stay
+in force.
+
+**Consequences:** A port-override unit test or listener bind alone cannot
+qualify a hosted worker journey. An isolated candidate needs exact build and
+live listener evidence plus separate state and provider receipts. The operator
+installation and its connection remain on their existing endpoint.
+
+**Reconsideration trigger:** Revisit when a supported multi-instance settings
+surface can replace the environment override without weakening the operator
+boundary.

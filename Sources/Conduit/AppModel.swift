@@ -3921,21 +3921,23 @@ final class AppModel: ObservableObject {
         sessionAPIServer = nil
         sessionAPIAddress = nil
         guard settings.enableSessionAPI else { return }
-        let token = ConduitSessionAPIServer.loadOrCreateToken()
-        rebuildMCPAdmission()
-        let server = ConduitSessionAPIServer(
-            token: token,
-            allowWrites: settings.enableSessionAPIWrites
-        ) { [weak self] command, caller in
-            self?.sessionAPIPayload(command, caller: caller)
-                ?? ["error": "Conduit is not ready."]
-        }
         do {
+            let port = try SessionAPIListenPort.resolved()
+            let token = ConduitSessionAPIServer.loadOrCreateToken()
+            rebuildMCPAdmission()
+            let server = ConduitSessionAPIServer(
+                port: port,
+                token: token,
+                allowWrites: settings.enableSessionAPIWrites
+            ) { [weak self] command, caller in
+                self?.sessionAPIPayload(command, caller: caller)
+                    ?? ["error": "Conduit is not ready."]
+            }
             try server.start()
             server.setReadiness(sessionAPIReadiness)
             sessionAPIServer = server
             sessionAPIAddress =
-                "http://127.0.0.1:\(ConduitSessionAPI.loopbackPort)\(ConduitSessionAPI.loopbackPath)"
+                "http://127.0.0.1:\(port)\(ConduitSessionAPI.loopbackPath)"
             statusMessage = "Session API listening on \(sessionAPIAddress ?? "")."
         } catch {
             errorMessage = "Session API failed to start: \(error.localizedDescription)"
