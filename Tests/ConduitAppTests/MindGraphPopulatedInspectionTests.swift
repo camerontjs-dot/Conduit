@@ -1,4 +1,4 @@
-#if os(macOS)
+#if os(macOS) && DEBUG
 import Foundation
 import XCTest
 import ConduitCore
