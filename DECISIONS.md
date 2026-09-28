@@ -2007,3 +2007,50 @@ outside this disposition.
 **Reconsideration trigger:** Revisit only when a separate authorized source
 proves process-to-command or provider-host/turn identity, or when a later slice
 defines the authority needed for stronger lifecycle claims.
+---
+
+## D-058: Execution workspace authority is explicit and separate from provider-session control
+
+**Status:** Proposed (2026-09-28; Draft #57 implementation candidate)
+
+**Context:** Provider-session writer authority from D-052 prevents two Conduit
+controllers from steering one provider conversation. It does not prevent two
+workers from writing the same Git checkout, a resumed worker from pointing at
+the wrong worktree, or an agent from leaving the operator's normal checkout on
+an unexpected branch. #57 requires a separate filesystem/repository ownership
+boundary.
+
+**Decision:**
+
+1. `ExecutionWorkspace` is the typed local execution boundary. Writable Git work
+   defaults to an isolated registered worktree pinned to an exact prepared base
+   SHA and an explicit task branch. Read-only inspection may use the ordinary
+   checkout without allocating another worktree.
+2. `WorkspaceLease` is a separate one-writer authority. Provider-session writer
+   control does not grant workspace write authority, and a workspace lease does
+   not grant provider-session control.
+3. Allocation captures the human checkout immediately before `git worktree add`
+   and verifies that checkout's branch, HEAD, and dirty state are unchanged
+   afterward. If the named base ref moves after preparation, allocation remains
+   pinned to the prepared SHA and reports the movement rather than silently
+   retargeting.
+4. Reconciliation treats missing/deregistered worktrees, repository mismatch,
+   branch/HEAD/cwd drift, dirty state, and lease mismatch as explicit states.
+   Dirty or ambiguous state fails closed for cleanup/integration.
+5. Lease release preserves the worktree and branch. Provider completion does not
+   authorize merge, rebase, cherry-pick, reset, clean, discard, or worktree
+   removal.
+6. Git worktrees are checkout/workspace isolation, not a security sandbox.
+   Stronger filesystem, process, network, or container isolation remains a
+   separate capability.
+
+**Boundary:** This candidate does not create or resume a provider worker, does
+not implement the disabled Orchestrate launch handoff, and does not claim that
+a local provider actually honored the intended cwd until machine-bound
+qualification observes it. The Orchestrate manual path exists so the exact
+workspace mechanics can be exercised before runtime integration.
+
+**Reconsideration trigger:** Revisit the representation if local qualification
+shows Git worktree identity cannot be reconciled reliably, or if runtime
+binding needs an additional authority object that cannot be expressed without
+collapsing workspace and provider ownership.
