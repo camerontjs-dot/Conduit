@@ -302,19 +302,21 @@ public final class WorkspaceLeaseStore: @unchecked Sendable {
             )
         }
         defer {
+            #if canImport(Darwin) || canImport(Glibc)
+            _ = lockf(descriptor, F_ULOCK, 0)
+            #endif
             #if canImport(Darwin)
-            _ = Darwin.flock(descriptor, LOCK_UN)
             _ = Darwin.close(descriptor)
             #elseif canImport(Glibc)
-            _ = Glibc.flock(descriptor, LOCK_UN)
             _ = Glibc.close(descriptor)
             #endif
         }
 
-        #if canImport(Darwin)
-        let lockStatus = Darwin.flock(descriptor, LOCK_EX)
-        #elseif canImport(Glibc)
-        let lockStatus = Glibc.flock(descriptor, LOCK_EX)
+        #if canImport(Darwin) || canImport(Glibc)
+        // flock collides with Darwin's imported struct flock in Swift.
+        // lockf provides the needed blocking cross-process advisory lock on
+        // this stable, dedicated lock file without changing ledger semantics.
+        let lockStatus = lockf(descriptor, F_LOCK, 0)
         #else
         let lockStatus: Int32 = -1
         #endif
