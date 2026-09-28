@@ -182,6 +182,36 @@ private struct WorkspaceLeaseLedger: Codable {
     var history: [WorkspaceLease] = []
 }
 
+private final class WorkspaceLeaseProcessLockRegistry: @unchecked Sendable {
+    static let shared = WorkspaceLeaseProcessLockRegistry()
+
+    private let registryLock = NSLock()
+    private var locksByPath: [String: NSLock] = [:]
+
+    private init() {}
+
+    func lock(for lockURL: URL) -> NSLock {
+        let parent = lockURL.deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let key = parent
+            .appendingPathComponent(lockURL.lastPathComponent)
+            .standardizedFileURL
+            .path
+
+        registryLock.lock()
+        defer { registryLock.unlock() }
+
+        if let existing = locksByPath[key] {
+            return existing
+        }
+
+        let created = NSLock()
+        locksByPath[key] = created
+        return created
+    }
+}
+
 public final class WorkspaceLeaseStore: @unchecked Sendable {
     public let directory: URL
     public let ledgerURL: URL
@@ -286,6 +316,13 @@ public final class WorkspaceLeaseStore: @unchecked Sendable {
             at: directory,
             withIntermediateDirectories: true
         )
+
+        // POSIX record locks are process-scoped. Serialize all stores in this
+        // process on the stable lock-file identity before taking the
+        // inter-process advisory lock below.
+        let processLock = WorkspaceLeaseProcessLockRegistry.shared.lock(for: lockURL)
+        processLock.lock()
+        defer { processLock.unlock() }
 
         let descriptor = lockURL.path.withCString { path -> Int32 in
             #if canImport(Darwin)
