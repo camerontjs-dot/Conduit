@@ -3710,6 +3710,53 @@ check(
         && shellTelemetryProjection?.processObservation?.descendants.first?.liveness == .live
 )
 
+
+// MARK: - Deterministic Profile Routing
+
+let routingFixtureProfile = ModelCapabilityProfileReference(
+    profileID: "selftest-profile",
+    version: "fixture-v1"
+)
+let routingFixtureConfig = ModelExecutionConfiguration(
+    id: "chat-config",
+    profile: routingFixtureProfile,
+    providerID: "fixture-provider",
+    modelID: "fixture-model",
+    applicableRoles: [.implementer],
+    applicableTaskClasses: [.implementation],
+    capabilities: [.sourceInspection, .gitHubMutation]
+)
+let routingFixtureRuntime = RuntimeCapabilityProfile(
+    id: "regular-chat",
+    surface: .regularChatGitHub,
+    locality: .externalChat,
+    capabilities: [],
+    exactThreadID: .unknown,
+    canContinueExisting: false,
+    canCreateWorker: false,
+    configurations: [routingFixtureConfig]
+)
+let routingFixtureRequirements = RoutingWorkRequirements(
+    id: "selftest-requirements",
+    packageID: "selftest-package",
+    role: .implementer,
+    taskClass: .implementation,
+    requiredCapabilities: [.sourceInspection, .gitHubMutation],
+    prohibitedSurfaces: [.chatGPTWork]
+)
+let routingFixtureDecision = DeterministicRouteResolver.route(
+    requirements: routingFixtureRequirements,
+    runtimes: [routingFixtureRuntime],
+    allowances: [],
+    policy: DeterministicRoutingPolicy(version: "selftest-policy")
+)
+check(
+    "routing keeps regular Chat plus GitHub as a distinct eligible surface",
+    routingFixtureDecision.disposition == .selected
+        && routingFixtureDecision.selectedCandidateID == "regular-chat::chat-config"
+        && routingFixtureDecision.candidates.first?.action == .externalRegularChat
+)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
