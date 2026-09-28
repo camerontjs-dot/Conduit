@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Explorer now routes the exact selected source through an explicit preview
+  classifier: UTF-8 text stays on the existing text/Markdown reader, common
+  image formats use the native macOS image reader, PDFs use PDFKit, and
+  unsupported binaries remain explicit instead of being misreported as text.
+  Native previews retain the exact MainFrame-relative source path and preserve
+  existing filesystem containment and symlink non-traversal (#50, #54).
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker
