@@ -4,6 +4,7 @@ import ConduitCore
 import Darwin
 import Dispatch
 import Foundation
+import PDFKit
 import SwiftUI
 
 private final class MainframeExplorerDirectoryWatcher {
@@ -58,6 +59,8 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     @Published private(set) var selectedNode: MainframeExplorerNode?
     @Published private(set) var documentText: String?
     @Published private(set) var documentMessage: String?
+    @Published private(set) var previewRoute: MainframeExplorerPreviewRoute = .none
+    @Published private(set) var previewRevision = 0
     @Published private(set) var symlinkInspection: MainframeSymlinkInspection?
     @Published private(set) var rootError: String?
     @Published private(set) var lifecycleMessage: String?
@@ -153,6 +156,8 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         selectedNode = nil
         documentText = nil
         documentMessage = nil
+        previewRoute = .none
+        previewRevision = 0
         symlinkInspection = nil
         rootError = nil
         lifecycleMessage = nil
@@ -237,21 +242,34 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
             }
         case .file:
             watchSelectedFile(node)
-            do {
-                let text = try scanner.readUTF8Text(root: root, file: node.url)
-                documentText = text
-                if Self.isMarkdown(node) {
-                    editor.load(
-                        relativePath: node.relativePath,
-                        absolutePath: node.url.standardizedFileURL.path,
-                        source: text
-                    )
-                } else {
+            previewRoute = MainframeExplorerPreviewRouter.route(for: node)
+            switch previewRoute {
+            case .text:
+                do {
+                    let text = try scanner.readUTF8Text(root: root, file: node.url)
+                    documentText = text
+                    if Self.isMarkdown(node) {
+                        editor.load(
+                            relativePath: node.relativePath,
+                            absolutePath: node.url.standardizedFileURL.path,
+                            source: text
+                        )
+                    } else {
+                        editor.clear()
+                    }
+                } catch {
                     editor.clear()
+                    documentMessage = error.localizedDescription
                 }
-            } catch {
+            case .image, .pdf:
                 editor.clear()
-                documentMessage = error.localizedDescription
+                documentMessage = nil
+                previewRevision += 1
+            case .unsupportedBinary:
+                editor.clear()
+                documentMessage = "Unsupported binary format · Explorer will not reinterpret this file as UTF-8 text."
+            case .none:
+                editor.clear()
             }
         }
     }
@@ -585,32 +603,47 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         // filesystem object after each parent reconciliation.
         watchSelectedFile(refreshedNode)
 
-        do {
-            let source = try scanner.readUTF8Text(root: root, file: refreshedNode.url)
-            if Self.isMarkdown(refreshedNode),
-               editor.relativePath == refreshedNode.relativePath,
-               let baseline = editor.baseline,
-               source != baseline {
-                if editor.hasUnsavedChanges {
-                    editor.noteExternalChange()
-                } else {
-                    editor.refreshCleanBufferFromDisk(source)
+        previewRoute = MainframeExplorerPreviewRouter.route(for: refreshedNode)
+        switch previewRoute {
+        case .text:
+            do {
+                let source = try scanner.readUTF8Text(root: root, file: refreshedNode.url)
+                if Self.isMarkdown(refreshedNode),
+                   editor.relativePath == refreshedNode.relativePath,
+                   let baseline = editor.baseline,
+                   source != baseline {
+                    if editor.hasUnsavedChanges {
+                        editor.noteExternalChange()
+                    } else {
+                        editor.refreshCleanBufferFromDisk(source)
+                        documentText = source
+                        documentMessage = nil
+                    }
+                } else if !Self.isMarkdown(refreshedNode), source != documentText {
                     documentText = source
-                    documentMessage = nil
+                    documentMessage = "Reloaded after an external file change."
                 }
-            } else if !Self.isMarkdown(refreshedNode), source != documentText {
-                documentText = source
-                documentMessage = "Reloaded after an external file change."
+            } catch {
+                if Self.isMarkdown(refreshedNode), editor.hasUnsavedChanges {
+                    editor.noteExternalChange(
+                        "The selected file changed on disk and can no longer be read as the original UTF-8 document. Your buffer is preserved."
+                    )
+                } else {
+                    documentText = nil
+                    documentMessage = "The selected file changed on disk: \(error.localizedDescription)"
+                }
             }
-        } catch {
-            if Self.isMarkdown(refreshedNode), editor.hasUnsavedChanges {
-                editor.noteExternalChange(
-                    "The selected file changed on disk and can no longer be read as the original UTF-8 document. Your buffer is preserved."
-                )
-            } else {
-                documentText = nil
-                documentMessage = "The selected file changed on disk: \(error.localizedDescription)"
-            }
+        case .image, .pdf:
+            editor.clear()
+            documentText = nil
+            documentMessage = nil
+            previewRevision += 1
+        case .unsupportedBinary:
+            editor.clear()
+            documentText = nil
+            documentMessage = "Unsupported binary format · Explorer will not reinterpret this file as UTF-8 text."
+        case .none:
+            editor.clear()
         }
     }
 
@@ -1584,20 +1617,35 @@ struct MainframeExplorerWorkspaceView: View {
 
     @ViewBuilder
     private var readerContent: some View {
-        if let text = explorer.documentText, let selected = explorer.selectedNode {
-            if isMarkdown(selected) {
-                if currentReaderMode == .edit {
-                    markdownEditor(selected)
+        if let selected = explorer.selectedNode, selected.kind == .file {
+            switch explorer.previewRoute {
+            case .image:
+                nativeImagePreview(selected)
+                    .id(explorer.previewRevision)
+            case .pdf:
+                nativePDFPreview(selected)
+                    .id(explorer.previewRevision)
+            case .text:
+                if let text = explorer.documentText {
+                    if isMarkdown(selected) {
+                        if currentReaderMode == .edit {
+                            markdownEditor(selected)
+                        } else {
+                            MainframeMarkdownReaderView(
+                                source: editor.hasUnsavedChanges ? editor.buffer : text,
+                                mode: currentReaderMode,
+                                palette: palette
+                            )
+                            .accessibilityLabel("\(currentReaderMode.displayName) view for \(selected.name)")
+                        }
+                    } else {
+                        plainTextReader(text, selected: selected)
+                    }
                 } else {
-                    MainframeMarkdownReaderView(
-                        source: editor.hasUnsavedChanges ? editor.buffer : text,
-                        mode: currentReaderMode,
-                        palette: palette
-                    )
-                    .accessibilityLabel("\(currentReaderMode.displayName) view for \(selected.name)")
+                    selectedNodeDetail(selected)
                 }
-            } else {
-                plainTextReader(text, selected: selected)
+            case .unsupportedBinary, .none:
+                selectedNodeDetail(selected)
             }
         } else if let selected = explorer.selectedNode {
             if selected.kind == .symbolicLink,
@@ -1621,6 +1669,60 @@ struct MainframeExplorerWorkspaceView: View {
             }
             .padding(36)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func nativeImagePreview(_ selected: MainframeExplorerNode) -> some View {
+        if let image = NSImage(contentsOf: selected.url) {
+            ScrollView([.horizontal, .vertical]) {
+                VStack(alignment: .leading, spacing: 10) {
+                    previewPathHeader(selected)
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .frame(maxWidth: 1400, maxHeight: 1200)
+                        .accessibilityLabel("Image preview for \(selected.name)")
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                previewPathHeader(selected)
+                Text("The selected image could not be decoded by the native macOS image reader.")
+                    .foregroundStyle(palette.dim)
+                Spacer()
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func nativePDFPreview(_ selected: MainframeExplorerNode) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            previewPathHeader(selected)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(palette.surface.opacity(0.7))
+            MainframePDFPreview(url: selected.url)
+                .accessibilityLabel("PDF preview for \(selected.name)")
+        }
+    }
+
+    private func previewPathHeader(_ selected: MainframeExplorerNode) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: explorer.previewRoute == .pdf ? "doc.richtext" : "photo")
+                .foregroundStyle(palette.faint)
+            Text(selected.relativePath)
+                .font(.caption.monospaced())
+                .foregroundStyle(palette.dim)
+                .textSelection(.enabled)
+            Spacer()
+            Text(explorer.previewRoute.rawValue.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(palette.faint)
         }
     }
 
@@ -1951,4 +2053,25 @@ private func copyToPasteboard(_ value: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(value, forType: .string)
 }
+
+private struct MainframePDFPreview: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayMode = .singlePageContinuous
+        view.displayDirection = .vertical
+        view.backgroundColor = .textBackgroundColor
+        view.document = PDFDocument(url: url)
+        return view
+    }
+
+    func updateNSView(_ view: PDFView, context: Context) {
+        if view.document?.documentURL?.standardizedFileURL != url.standardizedFileURL {
+            view.document = PDFDocument(url: url)
+        }
+    }
+}
+
 #endif
