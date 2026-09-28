@@ -153,16 +153,51 @@ def once(text: str, old: str, new: str) -> str:
     return text.replace(old, new, 1)
 
 
+# Reviewed target in CHANGELOG.md blob 60a0bc6a22f4c8aed312388ba0b80a401a78d65e.
+# Later Fixed blocks are retained; their shared heading is not an identity.
+UNRELEASED_FIXED_ANCHOR = """### Fixed
+
+- Fleet keeps every provider inventory row visible but reads expensive
+  turn/runtime detail only for sessions with a current exact Conduit task
+  association or current Conduit writer authority. Skipped historical/external
+  detail stays UNKNOWN with an inspectable reason; inventory alone does not
+  grant authority (#75, discovered during #74).
+"""
+
+
 def unreleased_fixed(text: str, replacement: str) -> str:
-    """Edit only the unique Fixed section in Unreleased, never prior releases."""
+    """Prepend the repair to the reviewed first Fixed block in Unreleased.
+
+    This is an exact-input kit transform, not a generic changelog rewriter.
+    Require both the unique content anchor and its first-Fixed placement.
+    Missing, duplicated, or relocated anchors require a reviewed successor.
+    The caller's whole-file blob guard remains unchanged.
+    """
     heading = "## [Unreleased]\n"
-    if text.count(heading) != 1:
+    sections = list(re.finditer(r"^## \[Unreleased\]\n", text, re.M))
+    if len(sections) != 1:
         raise ValueError("expected one Unreleased changelog section")
-    start = text.index(heading)
-    following = re.search(r"^## \[", text[start + len(heading):], re.M)
+    start = sections[0].start()
+    # Any peer or higher-level heading ends this section, not just a release.
+    following = re.search(r"^#{1,2} ", text[start + len(heading):], re.M)
     end = len(text) if following is None else start + len(heading) + following.start()
-    section = once(text[start:end], "### Fixed\n", replacement)
-    return text[:start] + section + text[end:]
+    anchors = list(re.finditer(r"^" + re.escape(UNRELEASED_FIXED_ANCHOR), text, re.M))
+    if len(anchors) != 1:
+        raise ValueError("expected one reviewed Unreleased Fixed content anchor")
+    target = anchors[0].start()
+    if not start + len(heading) <= target < end:
+        raise ValueError("reviewed Fixed anchor moved outside Unreleased")
+    first_fixed = re.search(r"^### Fixed[ \t]*$", text[start:end], re.M)
+    if first_fixed is None or start + first_fixed.start() != target:
+        raise ValueError("reviewed anchor is not the first Fixed block in Unreleased")
+    # The pinned section has no fences before the target. Do not accept a
+    # relocated anchor inside an example as a real heading.
+    if re.search(r"^[ \t]*(?:`{3,}|~{3,})", text[start:target], re.M):
+        raise ValueError("unexpected fenced content before reviewed Fixed anchor")
+    fixed_heading = "### Fixed\n"
+    if not replacement.startswith(fixed_heading):
+        raise ValueError("replacement must preserve the Fixed heading")
+    return text[:target] + replacement + text[target + len(fixed_heading):]
 
 
 def region(text: str, start: str, end: str, change) -> str:
