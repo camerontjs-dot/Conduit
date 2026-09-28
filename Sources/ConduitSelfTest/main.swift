@@ -3732,12 +3732,13 @@ withTempDir { directory in
         workspaceID: workspace.id,
         ownerID: "selftest-writer"
     )
+    let repeatedLease = try store.acquire(
+        workspaceID: workspace.id,
+        ownerID: "selftest-writer"
+    )
     check(
         "execution workspace lease is one-writer and idempotent",
-        try store.acquire(
-            workspaceID: workspace.id,
-            ownerID: "selftest-writer"
-        ) == lease
+        repeatedLease == lease
     )
 
     var collisionObserved = false
@@ -3765,9 +3766,10 @@ withTempDir { directory in
         ownerID: "selftest-writer",
         expectedLeaseID: lease.id
     )
+    let releasedLeaseState = try store.activeLease(workspaceID: workspace.id)
     check(
         "workspace lease release clears writer authority without cleanup",
-        try store.activeLease(workspaceID: workspace.id) == nil
+        releasedLeaseState == nil
     )
 }
 
