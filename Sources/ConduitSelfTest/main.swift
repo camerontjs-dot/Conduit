@@ -3710,6 +3710,67 @@ check(
         && shellTelemetryProjection?.processObservation?.descendants.first?.liveness == .live
 )
 
+
+// MARK: - Execution Workspace
+
+withTempDir { directory in
+    let store = WorkspaceLeaseStore(directory: directory)
+    let workspace = ExecutionWorkspace(
+        id: "selftest-workspace",
+        mode: .isolatedGitWorktree,
+        authority: .readWrite,
+        repository: nil,
+        path: "/tmp/conduit-selftest-workspace",
+        baseRevision: "main",
+        baseSHA: String(repeating: "a", count: 40),
+        branchRef: "refs/heads/conduit/selftest",
+        expectedHeadSHA: String(repeating: "a", count: 40),
+        lifecycle: .allocated,
+        provenance: .conduitAllocated
+    )
+    let lease = try store.acquire(
+        workspaceID: workspace.id,
+        ownerID: "selftest-writer"
+    )
+    check(
+        "execution workspace lease is one-writer and idempotent",
+        try store.acquire(
+            workspaceID: workspace.id,
+            ownerID: "selftest-writer"
+        ) == lease
+    )
+
+    var collisionObserved = false
+    do {
+        _ = try store.acquire(
+            workspaceID: workspace.id,
+            ownerID: "other-writer"
+        )
+    } catch WorkspaceLeaseStoreError.writerCollision {
+        collisionObserved = true
+    }
+    check(
+        "execution workspace rejects a second writer",
+        collisionObserved
+    )
+    check(
+        "leased execution workspace produces a human-entry warning",
+        ExecutionWorkspacePresentation.humanEntryWarning(
+            workspace: workspace.binding(lease),
+            lease: lease
+        ) != nil
+    )
+    _ = try store.release(
+        workspaceID: workspace.id,
+        ownerID: "selftest-writer",
+        expectedLeaseID: lease.id
+    )
+    check(
+        "workspace lease release clears writer authority without cleanup",
+        try store.activeLease(workspaceID: workspace.id) == nil
+    )
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
