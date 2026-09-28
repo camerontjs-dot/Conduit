@@ -3710,6 +3710,51 @@ check(
         && shellTelemetryProjection?.processObservation?.descendants.first?.liveness == .live
 )
 
+
+// MARK: - Work Groups
+
+withTempDir { directory in
+    let store = WorkGroupStore(directory: directory)
+    let group = try store.create(name: "Supervisor Desk")
+    let member = WorkGroupMemberReference.conduitTask("selftest-task")
+    let outside = WorkGroupMemberReference.conduitTask("outside-task")
+    let updated = try store.addMember(
+        groupID: group.id,
+        reference: member,
+        role: .supervisor
+    )
+    check(
+        "work group persists canonical member reference",
+        updated.members.count == 1
+            && updated.members.first?.id == "task:selftest-task"
+    )
+    check(
+        "work group target guard warns for non-member destination",
+        WorkGroupTargetValidator.warnings(
+            group: updated,
+            target: outside,
+            observation: nil
+        ) == [.nonMemberTarget]
+    )
+    let rail = WorkGroupThreadRailProjection.items(
+        group: updated,
+        observations: [
+            WorkGroupThreadObservation(
+                reference: member,
+                displayTitle: "Supervisor",
+                providerLabel: .known("Conduit"),
+                unseenCount: .known(1)
+            )
+        ]
+    )
+    check(
+        "work group rail projects existing observation without duplicating runtime state",
+        rail.count == 1
+            && rail.first?.observation?.providerLabel.value == "Conduit"
+            && rail.first?.observation?.unseenCount.value == 1
+    )
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
