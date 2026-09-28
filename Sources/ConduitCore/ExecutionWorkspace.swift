@@ -1,4 +1,10 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
 
 public enum ExecutionWorkspaceMode: String, Codable, CaseIterable, Sendable {
     case sharedReadOnly = "shared_read_only"
@@ -182,10 +188,13 @@ public final class WorkspaceLeaseStore: @unchecked Sendable {
 
     private let fileManager: FileManager
     private let lock = NSLock()
+    private let lockURL: URL
 
     public init(directory: URL, fileManager: FileManager = .default) {
-        self.directory = directory.standardizedFileURL
-        self.ledgerURL = directory.appendingPathComponent("workspace-leases-v1.json")
+        let normalized = directory.standardizedFileURL
+        self.directory = normalized
+        self.ledgerURL = normalized.appendingPathComponent("workspace-leases-v1.json")
+        self.lockURL = normalized.appendingPathComponent("workspace-leases-v1.lock")
         self.fileManager = fileManager
     }
 
@@ -269,9 +278,52 @@ public final class WorkspaceLeaseStore: @unchecked Sendable {
         try withLock { try load().history }
     }
 
-    private func withLock<T>(_ body: () throws -> T) rethrows -> T {
+    private func withLock<T>(_ body: () throws -> T) throws -> T {
         lock.lock()
         defer { lock.unlock() }
+
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+
+        let descriptor = lockURL.path.withCString { path -> Int32 in
+            #if canImport(Darwin)
+            return Darwin.open(path, O_RDWR | O_CREAT, mode_t(0o600))
+            #elseif canImport(Glibc)
+            return Glibc.open(path, O_RDWR | O_CREAT, mode_t(0o600))
+            #else
+            return -1
+            #endif
+        }
+        guard descriptor >= 0 else {
+            throw WorkspaceLeaseStoreError.malformedLedger(
+                "could not open cross-process lease lock at \(lockURL.path)"
+            )
+        }
+        defer {
+            #if canImport(Darwin)
+            _ = Darwin.flock(descriptor, LOCK_UN)
+            _ = Darwin.close(descriptor)
+            #elseif canImport(Glibc)
+            _ = Glibc.flock(descriptor, LOCK_UN)
+            _ = Glibc.close(descriptor)
+            #endif
+        }
+
+        #if canImport(Darwin)
+        let lockStatus = Darwin.flock(descriptor, LOCK_EX)
+        #elseif canImport(Glibc)
+        let lockStatus = Glibc.flock(descriptor, LOCK_EX)
+        #else
+        let lockStatus: Int32 = -1
+        #endif
+        guard lockStatus == 0 else {
+            throw WorkspaceLeaseStoreError.malformedLedger(
+                "could not acquire cross-process lease lock at \(lockURL.path)"
+            )
+        }
+
         return try body()
     }
 
@@ -304,6 +356,42 @@ public final class WorkspaceLeaseStore: @unchecked Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(ledger)
         try data.write(to: ledgerURL, options: .atomic)
+    }
+}
+
+enum ExecutionWorkspacePathIdentity {
+    static func canonicalPath(
+        _ url: URL,
+        fileManager: FileManager = .default
+    ) -> String {
+        let standardized = url.standardizedFileURL
+        if fileManager.fileExists(atPath: standardized.path) {
+            return standardized
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+                .path
+        }
+
+        let parent = standardized.deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        return parent
+            .appendingPathComponent(
+                standardized.lastPathComponent,
+                isDirectory: url.hasDirectoryPath
+            )
+            .standardizedFileURL
+            .path
+    }
+
+    static func canonicalPath(
+        _ path: String,
+        fileManager: FileManager = .default
+    ) -> String {
+        canonicalPath(
+            URL(fileURLWithPath: path),
+            fileManager: fileManager
+        )
     }
 }
 
@@ -378,7 +466,10 @@ public struct GitWorktreeRecord: Codable, Equatable, Sendable {
 
             guard let path, !head.isEmpty else { return nil }
             return GitWorktreeRecord(
-                path: URL(fileURLWithPath: path).standardizedFileURL.path,
+                path: URL(fileURLWithPath: path)
+                    .standardizedFileURL
+                    .resolvingSymlinksInPath()
+                    .path,
                 headSHA: head,
                 branchRef: branch,
                 isDetached: detached,
@@ -577,8 +668,14 @@ public struct GitExecutionWorkspaceController: @unchecked Sendable {
             ? URL(fileURLWithPath: raw, isDirectory: true)
             : root.appendingPathComponent(raw, isDirectory: true)
         return GitRepositoryIdentity(
-            repositoryRoot: root.standardizedFileURL.path,
-            commonGitDirectory: commonURL.standardizedFileURL.resolvingSymlinksInPath().path
+            repositoryRoot: ExecutionWorkspacePathIdentity.canonicalPath(
+                root,
+                fileManager: fileManager
+            ),
+            commonGitDirectory: commonURL
+                .standardizedFileURL
+                .resolvingSymlinksInPath()
+                .path
         )
     }
 
@@ -639,7 +736,14 @@ public struct GitExecutionWorkspaceController: @unchecked Sendable {
         let workspaceID = UUID().uuidString.lowercased()
         let repoName = root.lastPathComponent.isEmpty ? "repo" : root.lastPathComponent
         let suffix = String(workspaceID.prefix(8))
-        let path = workspaceRoot.standardizedFileURL
+        let canonicalWorkspaceRoot = URL(
+            fileURLWithPath: ExecutionWorkspacePathIdentity.canonicalPath(
+                workspaceRoot,
+                fileManager: fileManager
+            ),
+            isDirectory: true
+        )
+        let path = canonicalWorkspaceRoot
             .appendingPathComponent("\(repoName)-\(suffix)", isDirectory: true)
             .path
 
@@ -664,13 +768,21 @@ public struct GitExecutionWorkspaceController: @unchecked Sendable {
             throw GitExecutionWorkspaceControllerError.repositoryIdentityChanged
         }
 
-        let workspaceURL = URL(fileURLWithPath: plan.workspacePath, isDirectory: true)
-            .standardizedFileURL
+        let workspaceURL = URL(
+            fileURLWithPath: ExecutionWorkspacePathIdentity.canonicalPath(
+                plan.workspacePath,
+                fileManager: fileManager
+            ),
+            isDirectory: true
+        )
         if fileManager.fileExists(atPath: workspaceURL.path) {
             throw GitExecutionWorkspaceControllerError.workspacePathExists(workspaceURL.path)
         }
         if try discoverWorktrees(repositoryRoot: root).contains(where: {
-            URL(fileURLWithPath: $0.path).standardizedFileURL.path == workspaceURL.path
+            ExecutionWorkspacePathIdentity.canonicalPath(
+                $0.path,
+                fileManager: fileManager
+            ) == workspaceURL.path
         }) {
             throw GitExecutionWorkspaceControllerError.workspaceAlreadyRegistered(workspaceURL.path)
         }
@@ -743,7 +855,10 @@ public struct GitExecutionWorkspaceController: @unchecked Sendable {
 
         let records = try discoverWorktrees(repositoryRoot: root)
         guard let record = records.first(where: {
-            URL(fileURLWithPath: $0.path).standardizedFileURL.path == workspaceURL.path
+            ExecutionWorkspacePathIdentity.canonicalPath(
+                $0.path,
+                fileManager: fileManager
+            ) == workspaceURL.path
         }) else {
             throw GitExecutionWorkspaceControllerError.allocationNotRegistered(workspaceURL.path)
         }
@@ -787,7 +902,10 @@ public struct GitExecutionWorkspaceController: @unchecked Sendable {
             )
         }
 
-        let workspacePath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let workspacePath = ExecutionWorkspacePathIdentity.canonicalPath(
+            path,
+            fileManager: fileManager
+        )
         guard fileManager.fileExists(atPath: workspacePath) else {
             return ExecutionWorkspaceReconciliation(
                 disposition: .missing,
@@ -801,7 +919,10 @@ public struct GitExecutionWorkspaceController: @unchecked Sendable {
             let root = URL(fileURLWithPath: repository.repositoryRoot, isDirectory: true)
             let records = try discoverWorktrees(repositoryRoot: root)
             guard let worktree = records.first(where: {
-                URL(fileURLWithPath: $0.path).standardizedFileURL.path == workspacePath
+                ExecutionWorkspacePathIdentity.canonicalPath(
+                    $0.path,
+                    fileManager: fileManager
+                ) == workspacePath
             }) else {
                 return ExecutionWorkspaceReconciliation(
                     disposition: .missing,
@@ -861,7 +982,10 @@ public struct GitExecutionWorkspaceController: @unchecked Sendable {
                 }
             }
             if let observedWorkerCWD {
-                let actual = URL(fileURLWithPath: observedWorkerCWD).standardizedFileURL.path
+                let actual = ExecutionWorkspacePathIdentity.canonicalPath(
+                    observedWorkerCWD,
+                    fileManager: fileManager
+                )
                 if actual != workspacePath {
                     issues.append(.cwdMismatch(expected: workspacePath, actual: actual))
                 }
@@ -1055,9 +1179,9 @@ public enum ExecutionWorkspacePresentation {
         humanCheckoutPath: String,
         managedWorkspaceRoot: String
     ) -> String {
-        let path = URL(fileURLWithPath: worktree.path).standardizedFileURL.path
-        let human = URL(fileURLWithPath: humanCheckoutPath).standardizedFileURL.path
-        let managed = URL(fileURLWithPath: managedWorkspaceRoot).standardizedFileURL.path
+        let path = ExecutionWorkspacePathIdentity.canonicalPath(worktree.path)
+        let human = ExecutionWorkspacePathIdentity.canonicalPath(humanCheckoutPath)
+        let managed = ExecutionWorkspacePathIdentity.canonicalPath(managedWorkspaceRoot)
         if path == human { return "human checkout" }
         if path == managed || path.hasPrefix(managed + "/") { return "agent workspace" }
         return "existing worktree"
@@ -1071,5 +1195,21 @@ public enum ExecutionWorkspacePresentation {
               let lease,
               lease.status == .active else { return nil }
         return "Active writer lease belongs to \(lease.ownerID). Human edits should release or explicitly transfer writer authority first."
+    }
+
+    public static func applyingReconciliation(
+        _ reconciliation: ExecutionWorkspaceReconciliation,
+        workspacePath: String?,
+        to current: [GitWorktreeRecord]
+    ) -> [GitWorktreeRecord] {
+        guard let workspacePath else { return current }
+        let target = ExecutionWorkspacePathIdentity.canonicalPath(workspacePath)
+        var rows = current.filter {
+            ExecutionWorkspacePathIdentity.canonicalPath($0.path) != target
+        }
+        if let observed = reconciliation.worktree {
+            rows.append(observed)
+        }
+        return rows.sorted { $0.path < $1.path }
     }
 }
