@@ -3710,6 +3710,22 @@ check(
         && shellTelemetryProjection?.processObservation?.descendants.first?.liveness == .live
 )
 
+
+// MARK: - Explorer Native Preview Routing
+
+let previewFixture = MainframeExplorerNode(
+    name: "report.pdf",
+    relativePath: "artifacts/report.pdf",
+    url: URL(fileURLWithPath: "/tmp/report.pdf"),
+    kind: .file,
+    zone: .system,
+    recordScope: nil
+)
+check(
+    "explorer preview router keeps PDF on native binary route",
+    MainframeExplorerPreviewRouter.route(for: previewFixture) == .pdf
+)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
