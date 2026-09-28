@@ -428,6 +428,11 @@ struct OrchestrateWorkspaceView: View {
         )
         workspaceReconciliation = result
         workspaceLease = result.activeLease
+        workspaceWorktrees = ExecutionWorkspacePresentation.applyingReconciliation(
+            result,
+            workspacePath: candidate.path,
+            to: workspaceWorktrees
+        )
         workspaceMessage = result.issues.isEmpty
             ? "Workspace reconciliation: \(result.disposition.rawValue)."
             : result.issues.map(\.message).joined(separator: "\n")
@@ -448,9 +453,15 @@ struct OrchestrateWorkspaceView: View {
             let preserved = candidate.preservingAfterLeaseRelease()
             workspaceCandidate = preserved
             workspaceLease = nil
-            workspaceReconciliation = GitExecutionWorkspaceController().reconcile(
+            let reconciliation = GitExecutionWorkspaceController().reconcile(
                 preserved,
                 leaseStore: WorkspaceLeaseStore(directory: workspaceLeaseRoot)
+            )
+            workspaceReconciliation = reconciliation
+            workspaceWorktrees = ExecutionWorkspacePresentation.applyingReconciliation(
+                reconciliation,
+                workspacePath: preserved.path,
+                to: workspaceWorktrees
             )
             workspaceMessage =
                 "Writer lease released. The worktree and task branch were preserved; no cleanup or integration was performed."
