@@ -27,6 +27,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Execution Workspaces can now inspect registered Git worktrees, freeze an exact
+  base SHA, allocate an isolated task worktree without switching the ordinary
+  checkout, acquire one explicit workspace writer lease, reconcile branch/HEAD/
+  cwd/dirty/missing-worktree drift, and release writer authority while preserving
+  the worktree. Orchestrate exposes the manual prepare, create, inspect, reveal,
+  reconcile, and preserve/release journey. Workspace leasing remains separate
+  from provider-session writer authority; no launch, merge, rebase, cherry-pick,
+  reset, clean, or automatic deletion is performed (#57, #60).
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker
