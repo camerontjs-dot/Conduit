@@ -475,7 +475,7 @@ final class ContextCompilerTests: XCTestCase {
 
         XCTAssertEqual(summary.state, .unknownSelectedCost)
         XCTAssertEqual(summary.expandedUnknownItemCount, 1)
-        XCTAssertEqual(summary.deliveredKnownTokenSubtotal, 100)
+        XCTAssertEqual(summary.deliveredKnownEstimatedTokenSubtotal, 100)
     }
 
     func testManifestEncodingIsDeterministicForSameInput() throws {
