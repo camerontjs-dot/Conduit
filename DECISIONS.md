@@ -2007,3 +2007,51 @@ outside this disposition.
 **Reconsideration trigger:** Revisit only when a separate authorized source
 proves process-to-command or provider-host/turn identity, or when a later slice
 defines the authority needed for stronger lifecycle claims.
+---
+
+## D-059: ChatGPT tunnel process ownership is explicit and separate from API authority
+
+**Status:** Accepted (2026-09-29; daily-driver RC candidate)
+
+**Context:** Conduit already exposes separate settings for the loopback Session
+API and Session API writes, while the hosted ChatGPT tunnel is launched by the
+external `scripts/chatgpt-tunnel` helper. Daily use needs a visible in-app
+on/off control without turning transport liveness into write authority or
+silently killing a tunnel owned by another process.
+
+**Decision:**
+
+1. The in-app tunnel control owns only a `tunnel-client` process that Conduit
+   itself launches. Turning the switch off never kills a healthy tunnel started
+   outside Conduit.
+2. Tunnel connectivity, Session API listening, and Session API write authority
+   remain three separate states. Enabling the tunnel does not enable writes.
+3. Before launch, Conduit requires the loopback Session API to be listening,
+   `tunnel-client` to resolve, and the existing tunnel profile, tunnel id,
+   control-plane key, and Session API token to be present. Missing prerequisites
+   fail closed with an inspectable status.
+4. Conduit refreshes the local bearer authorization file from its current
+   Session API token using owner-only permissions before launching the tunnel.
+   It does not display, log, or publish either credential value.
+5. Readiness is observed from the tunnel client's local `/readyz` endpoint.
+   A healthy pre-existing tunnel is reported as external rather than adopted.
+6. The desired "run with Conduit" preference is local UI/runtime state. When
+   Conduit terminates, it requests termination only of its owned tunnel child;
+   the preference may start a new owned tunnel on the next app launch once the
+   Session API is listening and prerequisites are satisfied.
+7. One-time profile/key provisioning remains outside this switch. This slice
+   reuses the existing `scripts/chatgpt-tunnel` setup contract rather than adding
+   credential-entry UI.
+
+**Consequences:** The daily-driver app can bring its ordinary hosted ChatGPT
+transport up and down without a terminal, while preserving the existing
+security boundary around write authorization and external process ownership.
+The switch is operational convenience, not proof that the hosted ChatGPT
+connector is fresh, entitled, or semantically compatible.
+
+**Qualification boundary:** Source tests can establish the ownership/fail-closed
+policy. Stable release still requires an installed-app rehearsal proving the
+exact candidate can start the configured tunnel, reach `readyz`, serve a benign
+ChatGPT read through the hosted path, stop its owned child, and leave an
+externally started tunnel untouched.
+
