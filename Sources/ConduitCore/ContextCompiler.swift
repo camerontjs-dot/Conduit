@@ -294,7 +294,7 @@ public struct ContextSet: Equatable, Codable, Sendable {
     /// The input order remains the ranking order. Deduplication does not invent
     /// a new relevance score or authority class.
     public func deduplicated() -> ContextSet {
-        let supersessionApplied = applyingExplicitSupersession()
+        let supersessionApplied = protectingHardContext().applyingExplicitSupersession()
         var result: [ContextSetEntry] = []
         var indexByKey: [String: Int] = [:]
 
@@ -319,18 +319,35 @@ public struct ContextSet: Equatable, Codable, Sendable {
         )
     }
 
+    private func protectingHardContext() -> ContextSet {
+        var updated = entries
+        for index in updated.indices
+        where updated[index].item.isPinned
+            || updated[index].item.authority == .operatorPinned {
+            updated[index].disposition = .mandatory
+            updated[index].inclusionReasons = ContextSetEntry.normalizedReasons(
+                updated[index].inclusionReasons + [ContextInclusionReason(.operatorPin)]
+            )
+        }
+        return ContextSet(
+            id: id,
+            objective: objective,
+            taskIdentity: taskIdentity,
+            repositoryIdentity: repositoryIdentity,
+            entries: updated,
+            unresolvedPrerequisites: unresolvedPrerequisites,
+            retrieverVersions: retrieverVersions
+        )
+    }
+
     private static func merge(
         _ left: ContextSetEntry,
         _ right: ContextSetEntry
     ) -> ContextSetEntry {
         let stronger = strongerDisposition(left.disposition, right.disposition)
-        let preferred = stronger == right.disposition && stronger != left.disposition
-            ? right
-            : left
-        let other = preferred.item.id == left.item.id
-            && preferred.item.sourceReference == left.item.sourceReference
-            ? right
-            : left
+        let prefersRight = stronger == right.disposition && stronger != left.disposition
+        let preferred = prefersRight ? right : left
+        let other = prefersRight ? left : right
 
         var merged = preferred
         merged.disposition = stronger
@@ -495,17 +512,17 @@ public struct ContextBudgetSummary: Equatable, Codable, Sendable {
     public let reservedToolTokens: Int?
     public let availableInputTokens: Int?
 
-    public let mandatoryKnownTokens: Int
+    public let mandatoryKnownEstimatedTokens: Int
     public let mandatoryUnknownItemCount: Int
-    public let expandedKnownTokens: Int
+    public let expandedKnownEstimatedTokens: Int
     public let expandedUnknownItemCount: Int
-    public let optionalNominationKnownTokens: Int
+    public let optionalNominationKnownEstimatedTokens: Int
     public let optionalNominationUnknownItemCount: Int
 
     public let state: ContextBudgetAssessmentState
 
-    public var deliveredKnownTokenSubtotal: Int {
-        mandatoryKnownTokens + expandedKnownTokens
+    public var deliveredKnownEstimatedTokenSubtotal: Int {
+        mandatoryKnownEstimatedTokens + expandedKnownEstimatedTokens
     }
 }
 
@@ -551,11 +568,11 @@ public enum ContextBudgetEvaluator {
             reservedOutputTokens: reservedOutput,
             reservedToolTokens: reservedTool,
             availableInputTokens: available,
-            mandatoryKnownTokens: mandatory.knownTokens,
+            mandatoryKnownEstimatedTokens: mandatory.knownTokens,
             mandatoryUnknownItemCount: mandatory.unknownCount,
-            expandedKnownTokens: expanded.knownTokens,
+            expandedKnownEstimatedTokens: expanded.knownTokens,
             expandedUnknownItemCount: expanded.unknownCount,
-            optionalNominationKnownTokens: nominations.knownTokens,
+            optionalNominationKnownEstimatedTokens: nominations.knownTokens,
             optionalNominationUnknownItemCount: nominations.unknownCount,
             state: state
         )
