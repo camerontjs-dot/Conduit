@@ -369,6 +369,37 @@ final class ContextCompilerTests: XCTestCase {
         XCTAssertEqual(manifest.compilerVersion, ContextManifestCompiler.version)
     }
 
+    func testCompilerPromotesMisclassifiedPinnedEntryToHardDelivery() {
+        let pinned = ContextSetEntry(
+            item: item(
+                id: "pin",
+                source: "PIN.md",
+                authority: .filesystemSource,
+                tokens: 50,
+                pinned: true
+            ),
+            disposition: .nominated,
+            representation: .compactNomination
+        )
+
+        let manifest = ContextManifestCompiler.compile(
+            contextSet: contextSet(entries: [pinned]),
+            destination: ContextDestination(capacityTokens: 500),
+            budget: ContextBudget(
+                reservedOutputTokens: 50,
+                reservedToolTokens: 50
+            )
+        )
+
+        XCTAssertEqual(manifest.entries[0].deliveryState, .delivered)
+        XCTAssertEqual(manifest.budget.mandatoryKnownEstimatedTokens, 50)
+        XCTAssertTrue(
+            manifest.entries[0].inclusionReasons.contains(
+                ContextInclusionReason(.operatorPin)
+            )
+        )
+    }
+
     func testUnknownDestinationCapacityDoesNotEvictHardContext() {
         let hard = ContextSetEntry(
             item: item(
