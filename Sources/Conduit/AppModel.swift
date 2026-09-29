@@ -6046,6 +6046,24 @@ final class AppModel: ObservableObject {
         ).jsonObject()
     }
 
+    private enum SessionAPIWorkspacePreparationError: LocalizedError {
+        case leaseFailed(workspace: ExecutionWorkspace, detail: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .leaseFailed(let workspace, let detail):
+                return "Allocated workspace \(workspace.path ?? workspace.id) but writer lease failed: \(detail)"
+            }
+        }
+
+        var preservedWorkspace: ExecutionWorkspace {
+            switch self {
+            case .leaseFailed(let workspace, _):
+                return workspace
+            }
+        }
+    }
+
     private func sessionAPIPrepareExecutionWorkspace(
         request: ConduitExecutionWorkspaceRequest,
         project: MainframeProject,
@@ -6077,15 +6095,22 @@ final class AppModel: ObservableObject {
                 baseRevision: trimmedBase
             )
             let allocation = try controller.allocate(plan)
-            let lease = try executionWorkspaceLeaseStore().acquire(
-                workspaceID: allocation.workspace.id,
-                ownerID: "task:\(taskKey)",
-                runID: taskKey
-            )
-            return (
-                allocation.workspace.binding(lease),
-                allocation.warnings.map(\.message)
-            )
+            do {
+                let lease = try executionWorkspaceLeaseStore().acquire(
+                    workspaceID: allocation.workspace.id,
+                    ownerID: "task:\(taskKey)",
+                    runID: taskKey
+                )
+                return (
+                    allocation.workspace.binding(lease),
+                    allocation.warnings.map(\.message)
+                )
+            } catch {
+                throw SessionAPIWorkspacePreparationError.leaseFailed(
+                    workspace: allocation.workspace,
+                    detail: error.localizedDescription
+                )
+            }
         }
     }
 
@@ -6185,6 +6210,19 @@ final class AppModel: ObservableObject {
                 )
                 preparedWorkspace = prepared.workspace
                 workspaceWarnings = prepared.warnings
+            } catch let error as SessionAPIWorkspacePreparationError {
+                let workspace = error.preservedWorkspace
+                return [
+                    "error": error.localizedDescription,
+                    "agent": agent.name,
+                    "project": project.slug,
+                    "execution_workspace_requested": true,
+                    "execution_workspace_path": workspace.path ?? "",
+                    "execution_workspace_id": workspace.id,
+                    "workspace_preservation_required": true,
+                    "provider_mutation": "none",
+                    "authority": "workspace allocation succeeded but writer authority was not established; worktree/branch were preserved",
+                ]
             } catch {
                 return [
                     "error": error.localizedDescription,
@@ -6206,14 +6244,44 @@ final class AppModel: ObservableObject {
             taskSessionID: taskID,
             executionWorkspace: preparedWorkspace
         ) else {
-            guard let task = taskSessions.first(where: { $0.id == taskID }) else {
-                return [
+            let task = taskSessions.first(where: { $0.id == taskID })
+            var unclaimedWorkspacePayload: [String: Any] = [:]
+            if let workspace = preparedWorkspace,
+               task?.executionWorkspace != workspace {
+                if let leaseID = workspace.leaseID {
+                    do {
+                        _ = try executionWorkspaceLeaseStore().release(
+                            workspaceID: workspace.id,
+                            ownerID: "task:\(taskID.rawValue.uuidString.lowercased())",
+                            expectedLeaseID: leaseID
+                        )
+                        unclaimedWorkspacePayload["workspace_lease_released"] = true
+                    } catch {
+                        unclaimedWorkspacePayload["workspace_lease_released"] = false
+                        unclaimedWorkspacePayload["workspace_lease_release_error"] =
+                            error.localizedDescription
+                    }
+                }
+                unclaimedWorkspacePayload["execution_workspace_path"] =
+                    workspace.path ?? ""
+                unclaimedWorkspacePayload["execution_workspace_id"] =
+                    workspace.id
+                unclaimedWorkspacePayload["workspace_preservation_required"] = true
+                unclaimedWorkspacePayload["workspace_cleanup_performed"] = false
+            }
+            guard let task else {
+                var payload: [String: Any] = [
                     "error": errorMessage ?? "create_task failed",
                     "agent": agent.name,
                     "project": project.slug,
+                    "provider_mutation": "none",
+                    "authority": "runtime was not started; any allocated worktree/branch is preserved",
                 ]
+                payload.merge(unclaimedWorkspacePayload) { _, new in new }
+                return payload
             }
             var failedPayload = sessionAPITaskPayload(for: task)
+            failedPayload.merge(unclaimedWorkspacePayload) { _, new in new }
             failedPayload["error"] = task.metadata.agentName == agent.name
                 ? (failedPayload["failure"] as? String ?? errorMessage ?? "create_task failed")
                 : (errorMessage ?? "create_task failed")
