@@ -1805,6 +1805,21 @@ check("session descriptor task identity defaults to absent",
 check("session descriptor reconnect safeguards default off",
       defaultTaskDescriptor.adoptsLegacyTaskSession == false
         && defaultTaskDescriptor.requiresExistingTmuxSession == false)
+check("session descriptor defaults process cwd to logical project",
+      defaultTaskDescriptor.runtimeDirectory.standardizedFileURL == instProject.standardizedFileURL)
+let isolatedRuntimeDirectory = URL(
+    fileURLWithPath: "/tmp/conduit-selftest-runtime-directory",
+    isDirectory: true
+)
+let isolatedTaskDescriptor = SessionDescriptor(
+    projectPath: instProject,
+    executionDirectory: isolatedRuntimeDirectory,
+    agent: AgentProfile(name: "OpenCode", command: "opencode")
+)
+check("session descriptor separates logical project from process cwd",
+      isolatedTaskDescriptor.projectPath.standardizedFileURL == instProject.standardizedFileURL
+        && isolatedTaskDescriptor.runtimeDirectory.standardizedFileURL
+            == isolatedRuntimeDirectory.standardizedFileURL)
 
 let boundTaskDescriptor = SessionDescriptor(
     projectPath: instProject,
@@ -3739,6 +3754,31 @@ withTempDir { directory in
     check(
         "execution workspace lease is one-writer and idempotent",
         repeatedLease == lease
+    )
+    let mountedWorkspace = workspace.binding(lease)
+    let mounted = ExecutionWorkspaceRuntimeMountPlanner.plan(
+        action: .launch,
+        requiredWorkspace: mountedWorkspace,
+        reconciliation: ExecutionWorkspaceReconciliation(
+            disposition: .ready,
+            worktree: GitWorktreeRecord(
+                path: mountedWorkspace.path!,
+                headSHA: mountedWorkspace.expectedHeadSHA!,
+                branchRef: mountedWorkspace.branchRef,
+                isDetached: false,
+                isBare: false,
+                isLocked: false,
+                isPrunable: false
+            ),
+            activeLease: lease,
+            issues: []
+        )
+    )
+    check(
+        "eligible execution workspace produces exact runtime mount",
+        mounted.isEligible
+            && mounted.executionDirectory?.standardizedFileURL.path
+                == mountedWorkspace.path
     )
 
     var collisionObserved = false
