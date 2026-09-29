@@ -267,6 +267,52 @@ final class ExecutionWorkspaceRuntimeBindingTests: XCTestCase {
         })
     }
 
+    func testEligibleMountCarriesOnlyCanonicalWorkspaceDirectory() {
+        let workspace = writableWorkspace(
+            path: "/tmp/conduit-runtime-workspace/../conduit-runtime-workspace"
+        )
+        let lease = activeLease(for: workspace)
+
+        let mount = ExecutionWorkspaceRuntimeMountPlanner.plan(
+            action: .launch,
+            requiredWorkspace: workspace,
+            reconciliation: readyReconciliation(workspace, lease: lease)
+        )
+
+        XCTAssertTrue(mount.isEligible)
+        XCTAssertEqual(mount.preflight.disposition, .eligible)
+        XCTAssertEqual(
+            mount.executionDirectory?.standardizedFileURL.path,
+            "/tmp/conduit-runtime-workspace"
+        )
+    }
+
+    func testBlockedMountNeverReturnsExecutionDirectory() {
+        let workspace = writableWorkspace()
+        let lease = activeLease(for: workspace)
+        let reconciliation = ExecutionWorkspaceReconciliation(
+            disposition: .drifted,
+            worktree: worktree(for: workspace),
+            activeLease: lease,
+            issues: [
+                .headDrift(
+                    expected: workspace.expectedHeadSHA!,
+                    actual: String(repeating: "b", count: 40)
+                ),
+            ]
+        )
+
+        let mount = ExecutionWorkspaceRuntimeMountPlanner.plan(
+            action: .launch,
+            requiredWorkspace: workspace,
+            reconciliation: reconciliation
+        )
+
+        XCTAssertFalse(mount.isEligible)
+        XCTAssertEqual(mount.preflight.disposition, .blocked)
+        XCTAssertNil(mount.executionDirectory)
+    }
+
     private func writableWorkspace(
         id: String = "workspace-fixture",
         path: String = "/tmp/conduit-runtime-workspace",
