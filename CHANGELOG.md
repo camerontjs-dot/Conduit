@@ -27,6 +27,16 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The query station shows the stored index identity and retrieval warnings for
+  nominated sources, and refuses operations results from a different index.
+
+- MindGraph `operations` scope for standing operational coordination. Query
+  nominations retain stored index/source identity and warnings; a missing or
+  misidentified operations index fails without substituting projects.
+
+
+### Added
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps

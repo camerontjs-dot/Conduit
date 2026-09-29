@@ -2074,6 +2074,22 @@ check(
     MindGraphScope.projects.trustProfile == "project_status"
 )
 
+check("mindgraph operations scope admitted", ConduitSessionAPI.allowsMindGraphScope("operations"))
+check("mindgraph operations trust", MindGraphScope.operations.trustProfile == "operations_status")
+check("mindgraph operations database", MindGraphScope.operations.defaultDatabaseFileName == "mainframe-operations.sqlite")
+let mgIdentity = MindGraphOutput.projectResult([
+    "index_id": "mainframe-operations", "namespace": "example-ops",
+    "doc_id": "ops-id", "source_path": "README.md", "source_root": "/private/example"
+])
+check("mindgraph nomination retains stored index identity", mgIdentity["index_id"] as? String == "mainframe-operations")
+check("mindgraph nomination omits absolute source root", mgIdentity["source_root"] == nil)
+let mgOpsJSON = """
+[{"doc_id":"ops","index_id":"mainframe-operations","trust_profile":"operations_status","path":"40_operations/example/README.md","weak_fit":true,"provenance_warning":"UNKNOWN"}]
+""".data(using: .utf8)!
+let mgOpsHits = (try? MindGraphQuerySupport.decodeHits(from: mgOpsJSON, scope: .operations)) ?? []
+check("mindgraph station retains operations identity and warnings", mgOpsHits.first?.indexID == "mainframe-operations" && mgOpsHits.first?.warnings.count == 2)
+check("mindgraph station refuses another stored index", (try? MindGraphQuerySupport.decodeHits(from: mgJSON, scope: .operations)) == nil)
+
 // MARK: - Focus Board (workstation port, pure)
 
 check("focus weekly stale days", FocusBoardConstants.weeklyStaleDays == 8)
@@ -3199,9 +3215,11 @@ do {
         projected["source_root"] == nil
     )
     check(
-        "retrieval mechanics are dropped",
-        projected["content_hash"] == nil && projected["doc_id"] == nil
-            && projected["semantic_distance"] == nil && projected["index_id"] == nil
+        "stored source identity survives projection",
+        projected["content_hash"] as? String == "40e9aa82"
+            && projected["doc_id"] as? String == "829fd037c29e0ecd"
+            && projected["semantic_distance"] == nil
+            && projected["index_id"] as? String == "mainframe-projects"
     )
     check(
         "a caller still gets what it can act on",
