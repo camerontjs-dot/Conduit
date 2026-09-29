@@ -2011,7 +2011,7 @@ defines the authority needed for stronger lifecycle claims.
 
 ## D-058: Execution workspace authority is explicit and separate from provider-session control
 
-**Status:** Proposed (2026-09-28; Draft #57 implementation candidate)
+**Status:** Proposed (2026-09-28; stacked #57 implementation candidates)
 
 **Context:** Provider-session writer authority from D-052 prevents two Conduit
 controllers from steering one provider conversation. It does not prevent two
@@ -2043,14 +2043,31 @@ boundary.
 6. Git worktrees are checkout/workspace isolation, not a security sandbox.
    Stronger filesystem, process, network, or container isolation remains a
    separate capability.
+7. Logical MainFrame project identity and provider process cwd are separate.
+   `SessionDescriptor.projectPath` continues to identify the project; an
+   eligible workspace supplies the explicit runtime directory without changing
+   project/tmux ownership metadata.
+8. A task may persist one exact Conduit-recorded `ExecutionWorkspace` in its
+   append-only task stream. Provider thread persistence remains provider identity
+   only and is not promoted into workspace authority.
+9. Workspace-bound launch/reuse must pass the exact runtime preflight before a
+   provider process, host, or turn is started. Reuse additionally requires
+   re-observed provider cwd/worktree facts where the provider exposes them.
+   Missing reuse evidence remains UNKNOWN and blocks rather than degrading to a
+   fresh project-directory launch.
 
-**Boundary:** This candidate does not create or resume a provider worker, does
-not implement the disabled Orchestrate launch handoff, and does not claim that
-a local provider actually honored the intended cwd until machine-bound
-qualification observes it. The Orchestrate manual path exists so the exact
-workspace mechanics can be exercised before runtime integration.
+**Boundary:** The mounted successor adds an explicit Session API path for
+isolated writable workspaces and wires the qualified preflight into runtime
+startup. Omitted workspace arguments preserve existing launch behavior.
+OpenCode persistence is the first positive reuse observation path; other
+provider reuse remains fail-closed until equivalent cwd/worktree evidence
+exists. Source implementation does not establish that an installed provider
+actually honored the intended cwd. That remains a machine-bound qualification
+claim. Cleanup, discard, integration, merge/rebase/cherry-pick, and security
+sandbox behavior remain separate later boundaries.
 
 **Reconsideration trigger:** Revisit the representation if local qualification
-shows Git worktree identity cannot be reconciled reliably, or if runtime
-binding needs an additional authority object that cannot be expressed without
-collapsing workspace and provider ownership.
+shows Git worktree identity or provider cwd cannot be reconciled reliably, if
+the task event stream cannot preserve workspace authority across restart, or if
+another provider exposes a stronger native workspace/cwd identity that changes
+the reuse evidence boundary.
