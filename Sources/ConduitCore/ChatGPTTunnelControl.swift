@@ -69,7 +69,7 @@ public enum ChatGPTTunnelControlPolicy {
         }
 
         if ownsRunningProcess {
-            return .noChange
+            return prerequisites.sessionAPIListening ? .noChange : .stopOwned
         }
 
         if healthReachable {
