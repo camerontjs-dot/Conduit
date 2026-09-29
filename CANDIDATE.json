@@ -1,0 +1,53 @@
+{
+  "schema": "conduit-candidate/v1",
+  "candidate_id": "hosted-filesystem-read-20260929",
+  "product": "Conduit",
+  "versions": {
+    "filesystem_schema": "conduit-filesystem-read/v1",
+    "authority_decision": "D-060"
+  },
+  "source_commit": "d62b3bfd792d5d922644bc72e7583270a6896b0b",
+  "source_tree": "70c1b966f897de136725906c0bc673bc83905ca9",
+  "base_commit": "aeb224a8735f20fd3f457d380236ba931da3ed59",
+  "freeze_binding": "The Git commit introducing this manifest; record its full commit/tree in the qualification receipt.",
+  "lifecycle_state": "frozen",
+  "advancement_readiness": "awaiting_exact_head_installed_hosted_qualification",
+  "included_scope": [
+    "one read-only MCP tool: bounded list, ordinary UTF-8 read, exact-path stat",
+    "shared Explorer descriptor containment, symlink leaves, bounded reads",
+    "authoritative HTTP catalog/dispatch tests and unchanged write gate"
+  ],
+  "excluded_scope": [
+    "filesystem writes, arbitrary roots, recursive search, previews",
+    "runtime/task/provider mutations, Session API write authority changes",
+    "MindGraph retrieval and Context Compiler implementation",
+    "Execution Workspace candidates, merge, release, installed app replacement"
+  ],
+  "evidence": {
+    "component": {
+      "status": "developer_pass",
+      "source_commit": "d62b3bfd792d5d922644bc72e7583270a6896b0b",
+      "selftest_passed": 469,
+      "python_contract_tests_passed": 10,
+      "swift_tests_executed": 599,
+      "swift_tests_skipped": 3,
+      "failures": 0,
+      "test_log_sha256": "92c9e4d103e6bb09868b20ca8862b3ead192fea84681f28795da9b71b7aa4110",
+      "release_build": "passed_with_strict_codesign_verification",
+      "executable_sha256": "4bd23a9b0fa95fa6d4633db316f61793811236bd7836971889da44523353529d"
+    },
+    "independent_replay": { "status": "not_run" },
+    "fresh_acceptance": { "status": "not_run", "boundary": "installed listener and hosted connector" }
+  },
+  "blockers": ["exact-head installed/tunnel catalog and benign read qualification"],
+  "external_concurrent_inputs": [
+    "live GitHub main and owner issues",
+    "operator-authorized configured filesystem root",
+    "operator-owned installed listener, tunnel and hosted connector catalog"
+  ],
+  "non_claims": [
+    "developer tests are not independent or installed/hosted acceptance",
+    "filesystem observations do not verify file claims",
+    "a clean build does not replace or qualify the operator's app"
+  ]
+}
