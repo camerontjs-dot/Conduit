@@ -17,7 +17,7 @@ public enum ContextSetDisposition: String, Codable, CaseIterable, Sendable {
     case deferred
 }
 
-public enum ContextInclusionReasonKind: String, Codable, CaseIterable, Sendable {
+public enum ContextInclusionReasonKind: String, Hashable, Codable, CaseIterable, Sendable {
     case objective
     case operatorPin
     case requiredContract
@@ -268,7 +268,8 @@ public struct ContextSet: Equatable, Codable, Sendable {
                 }) else {
                     continue
                 }
-                guard !updated[targetIndex].isProtectedHardContext else {
+                guard updated[targetIndex].item.id != superseder.item.id,
+                      !updated[targetIndex].isProtectedHardContext else {
                     continue
                 }
                 updated[targetIndex].disposition = .omitted
