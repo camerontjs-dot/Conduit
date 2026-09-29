@@ -81,6 +81,20 @@ final class ChatGPTTunnelControlTests: XCTestCase {
         )
     }
 
+    func testOwnedTunnelStopsWhenSessionAPIDisappears() {
+        var unavailable = ready
+        unavailable.sessionAPIListening = false
+        XCTAssertEqual(
+            ChatGPTTunnelControlPolicy.action(
+                desiredRunning: true,
+                ownsRunningProcess: true,
+                healthReachable: true,
+                prerequisites: unavailable
+            ),
+            .stopOwned
+        )
+    }
+
     func testOwnedRunningTunnelNeedsNoSecondLaunch() {
         XCTAssertEqual(
             ChatGPTTunnelControlPolicy.action(
