@@ -2054,4 +2054,3 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
-
