@@ -199,7 +199,9 @@ final class ExecutionWorkspaceRuntimeBindingTests: XCTestCase {
             workspace,
             activeLease: lease
         )
-        lineage.executionWorkspace?.leaseID = .known("lease-other")
+        var binding = lineage.executionWorkspace!
+        binding.leaseID = .known("lease-other")
+        lineage.executionWorkspace = binding
 
         let result = ExecutionWorkspaceRuntimePreflightPlanner.preflight(
             action: .reuse,
