@@ -575,7 +575,8 @@ final class AppModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            // The owned child must be stopped before app termination returns.
+            MainActor.assumeIsolated {
                 self?.stopOwnedChatGPTTunnelProcess(updateState: false)
             }
         }
