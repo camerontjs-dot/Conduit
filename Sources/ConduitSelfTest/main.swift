@@ -3710,6 +3710,44 @@ check(
         && shellTelemetryProjection?.processObservation?.descendants.first?.liveness == .live
 )
 
+// MARK: - ChatGPT tunnel ownership
+
+let tunnelReady = ChatGPTTunnelPrerequisites(
+    sessionAPIListening: true,
+    tunnelClientAvailable: true,
+    profilePresent: true,
+    tunnelIDPresent: true,
+    controlPlaneKeyPresent: true,
+    sessionTokenPresent: true
+)
+check(
+    "ChatGPT tunnel starts only when owned launch is requested and prerequisites are ready",
+    ChatGPTTunnelControlPolicy.action(
+        desiredRunning: true,
+        ownsRunningProcess: false,
+        healthReachable: false,
+        prerequisites: tunnelReady
+    ) == .startOwned
+)
+check(
+    "ChatGPT tunnel never adopts a healthy external process",
+    ChatGPTTunnelControlPolicy.action(
+        desiredRunning: true,
+        ownsRunningProcess: false,
+        healthReachable: true,
+        prerequisites: tunnelReady
+    ) == .observeExternal
+)
+check(
+    "ChatGPT tunnel off switch stops only an owned process",
+    ChatGPTTunnelControlPolicy.action(
+        desiredRunning: false,
+        ownsRunningProcess: true,
+        healthReachable: true,
+        prerequisites: tunnelReady
+    ) == .stopOwned
+)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
