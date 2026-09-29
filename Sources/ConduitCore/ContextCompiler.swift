@@ -87,10 +87,10 @@ public struct ContextSupersession: Equatable, Codable, Sendable {
     }
 }
 
-/// A typed reference inside a Context Set.
+/// Structural deduplication identity.
 ///
-/// This stores provenance and representation metadata around an existing
-/// `AgentContextItem`. It does not copy source bytes into the Context Set.
+/// Associated values are hashed as separate fields so caller-controlled strings
+/// cannot become ambiguous merely because they contain a serialization delimiter.
 fileprivate enum ContextDuplicateIdentity: Hashable {
     case contentDigest(
         digest: String,
@@ -115,6 +115,10 @@ fileprivate enum ContextDuplicateIdentity: Hashable {
     )
 }
 
+/// A typed reference inside a Context Set.
+///
+/// This stores provenance and representation metadata around an existing
+/// `AgentContextItem`. It does not copy source bytes into the Context Set.
 public struct ContextSetEntry: Equatable, Codable, Sendable {
     public var item: AgentContextItem
     public var disposition: ContextSetDisposition
