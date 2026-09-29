@@ -2326,7 +2326,8 @@ check(
             agent: "Shell",
             projectSlug: "synthetic",
             objective: "",
-            idempotencyKey: nil
+            idempotencyKey: nil,
+            executionWorkspace: nil
         ),
         readiness: .mainframeAuthorizationRequired
     )
@@ -2338,7 +2339,8 @@ check(
             agent: "Shell",
             projectSlug: "synthetic",
             objective: "",
-            idempotencyKey: nil
+            idempotencyKey: nil,
+            executionWorkspace: nil
         ),
         readiness: .ready
     )
