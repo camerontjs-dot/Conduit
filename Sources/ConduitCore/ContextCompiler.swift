@@ -91,6 +91,30 @@ public struct ContextSupersession: Equatable, Codable, Sendable {
 ///
 /// This stores provenance and representation metadata around an existing
 /// `AgentContextItem`. It does not copy source bytes into the Context Set.
+fileprivate enum ContextDuplicateIdentity: Hashable {
+    case contentDigest(
+        digest: String,
+        authorityClass: String,
+        representation: String
+    )
+    case sourceRevision(
+        sourceReference: String,
+        revisionIdentity: String,
+        lineLowerBound: Int?,
+        lineUpperBound: Int?,
+        authorityClass: String,
+        representation: String
+    )
+    case fallbackItem(
+        itemID: String,
+        sourceReference: String,
+        lineLowerBound: Int?,
+        lineUpperBound: Int?,
+        authorityClass: String,
+        representation: String
+    )
+}
+
 public struct ContextSetEntry: Equatable, Codable, Sendable {
     public var item: AgentContextItem
     public var disposition: ContextSetDisposition
@@ -135,38 +159,40 @@ public struct ContextSetEntry: Equatable, Codable, Sendable {
         disposition == .mandatory || item.isPinned || item.authority == .operatorPinned
     }
 
-    fileprivate var duplicateKey: String {
+    fileprivate var duplicateIdentity: ContextDuplicateIdentity {
         let authorityClass = item.authority.authorityClass.rawValue
+        let representation = representation.rawValue
+        let lineLowerBound = item.lineRange?.lowerBound
+        let lineUpperBound = item.lineRange?.upperBound
+
         if let digest = contentDigest?.trimmingCharacters(in: .whitespacesAndNewlines),
            !digest.isEmpty {
-            return [
-                "digest",
-                digest,
-                authorityClass,
-                representation.rawValue
-            ].joined(separator: "|")
+            return .contentDigest(
+                digest: digest,
+                authorityClass: authorityClass,
+                representation: representation
+            )
         }
 
-        let range = item.lineRange.map { "\($0.lowerBound)-\($0.upperBound)" } ?? ""
         if let revision = item.revisionIdentity, !revision.isEmpty {
-            return [
-                "source",
-                item.sourceReference,
-                revision,
-                range,
-                authorityClass,
-                representation.rawValue
-            ].joined(separator: "|")
+            return .sourceRevision(
+                sourceReference: item.sourceReference,
+                revisionIdentity: revision,
+                lineLowerBound: lineLowerBound,
+                lineUpperBound: lineUpperBound,
+                authorityClass: authorityClass,
+                representation: representation
+            )
         }
 
-        return [
-            "item",
-            item.id,
-            item.sourceReference,
-            range,
-            authorityClass,
-            representation.rawValue
-        ].joined(separator: "|")
+        return .fallbackItem(
+            itemID: item.id,
+            sourceReference: item.sourceReference,
+            lineLowerBound: lineLowerBound,
+            lineUpperBound: lineUpperBound,
+            authorityClass: authorityClass,
+            representation: representation
+        )
     }
 
     fileprivate static func normalizedReasons(
@@ -297,14 +323,14 @@ public struct ContextSet: Equatable, Codable, Sendable {
     public func deduplicated() -> ContextSet {
         let supersessionApplied = protectingHardContext().applyingExplicitSupersession()
         var result: [ContextSetEntry] = []
-        var indexByKey: [String: Int] = [:]
+        var indexByIdentity: [ContextDuplicateIdentity: Int] = [:]
 
         for entry in supersessionApplied.entries {
-            let key = entry.duplicateKey
-            if let existingIndex = indexByKey[key] {
+            let identity = entry.duplicateIdentity
+            if let existingIndex = indexByIdentity[identity] {
                 result[existingIndex] = Self.merge(result[existingIndex], entry)
             } else {
-                indexByKey[key] = result.count
+                indexByIdentity[identity] = result.count
                 result.append(entry)
             }
         }
