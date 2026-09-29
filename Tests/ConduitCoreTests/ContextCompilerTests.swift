@@ -189,6 +189,96 @@ final class ContextCompilerTests: XCTestCase {
         XCTAssertEqual(normalized.entries[0].inclusionReasons.count, 2)
     }
 
+    func testDelimiterBearingFallbackIdentitiesDoNotCollide() {
+        let first = ContextSetEntry(
+            item: item(
+                id: "pin|nested",
+                source: "A.md",
+                authority: .filesystemSource,
+                tokens: 10,
+                pinned: true
+            ),
+            disposition: .nominated,
+            representation: .full,
+            inclusionReasons: [ContextInclusionReason(.operatorPin)]
+        )
+        let second = ContextSetEntry(
+            item: item(
+                id: "pin",
+                source: "nested|A.md",
+                authority: .filesystemSource,
+                tokens: 20,
+                pinned: true
+            ),
+            disposition: .nominated,
+            representation: .full,
+            inclusionReasons: [ContextInclusionReason(.operatorPin)]
+        )
+
+        let manifest = ContextManifestCompiler.compile(
+            contextSet: contextSet(entries: [first, second]),
+            destination: ContextDestination(capacityTokens: 1_000),
+            budget: ContextBudget(
+                reservedOutputTokens: 50,
+                reservedToolTokens: 50
+            )
+        )
+
+        XCTAssertEqual(manifest.deliveredEntries.count, 2)
+        XCTAssertEqual(
+            Set(manifest.deliveredEntries.map(\.sourceReference)),
+            Set(["A.md", "nested|A.md"])
+        )
+        XCTAssertEqual(manifest.budget.mandatoryKnownEstimatedTokens, 30)
+        XCTAssertTrue(manifest.entries.allSatisfy { $0.duplicateItemIDs.isEmpty })
+        XCTAssertTrue(manifest.entries.allSatisfy { $0.duplicateSourceReferences.isEmpty })
+    }
+
+    func testExactFallbackDuplicateWithDelimiterStillCoalesces() {
+        let shared = item(
+            id: "pin|nested",
+            source: "nested|A.md",
+            authority: .filesystemSource,
+            tokens: 10,
+            pinned: true
+        )
+        let first = ContextSetEntry(
+            item: shared,
+            disposition: .nominated,
+            representation: .full,
+            inclusionReasons: [ContextInclusionReason(.operatorPin)]
+        )
+        let second = ContextSetEntry(
+            item: shared,
+            disposition: .nominated,
+            representation: .full,
+            inclusionReasons: [ContextInclusionReason(.lexicalMatch, detail: "same exact pin")]
+        )
+
+        let manifest = ContextManifestCompiler.compile(
+            contextSet: contextSet(entries: [first, second]),
+            destination: ContextDestination(capacityTokens: 1_000),
+            budget: ContextBudget(
+                reservedOutputTokens: 50,
+                reservedToolTokens: 50
+            )
+        )
+
+        XCTAssertEqual(manifest.deliveredEntries.count, 1)
+        XCTAssertEqual(manifest.budget.mandatoryKnownEstimatedTokens, 10)
+        XCTAssertEqual(manifest.entries[0].inclusionReasons.count, 2)
+        XCTAssertTrue(
+            manifest.entries[0].inclusionReasons.contains(
+                ContextInclusionReason(.operatorPin)
+            )
+        )
+        XCTAssertTrue(
+            manifest.entries[0].inclusionReasons.contains(
+                ContextInclusionReason(.lexicalMatch, detail: "same exact pin")
+            )
+        )
+    }
+
     func testSameDigestDoesNotCollapseDifferentAuthorityClasses() {
         let source = ContextSetEntry(
             item: item(
