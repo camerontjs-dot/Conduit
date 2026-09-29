@@ -214,7 +214,12 @@ public struct AgentProfile: Identifiable, Codable, Hashable, Sendable {
 
 public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
+    /// Logical MainFrame project identity. This remains stable even when the
+    /// process is mounted into a separate ExecutionWorkspace worktree.
     public var projectPath: URL
+    /// Exact process cwd selected by the workspace authority boundary.
+    /// Nil preserves the legacy behavior where the logical project is also cwd.
+    public var executionDirectory: URL?
     public var agent: AgentProfile
     public var title: String
     public var createdAt: Date
@@ -248,9 +253,16 @@ public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
     /// into a permanent record.
     public var recordsIdentity: Bool
 
+    /// Directory a PTY/tmux/structured provider must actually execute in.
+    /// Project identity and execution location are deliberately separate.
+    public var runtimeDirectory: URL {
+        (executionDirectory ?? projectPath).standardizedFileURL
+    }
+
     public init(
         id: UUID = UUID(),
         projectPath: URL,
+        executionDirectory: URL? = nil,
         agent: AgentProfile,
         title: String? = nil,
         createdAt: Date = Date(),
@@ -263,6 +275,7 @@ public struct SessionDescriptor: Identifiable, Codable, Hashable, Sendable {
     ) {
         self.id = id
         self.projectPath = projectPath
+        self.executionDirectory = executionDirectory
         self.agent = agent
         self.title = title ?? (instance > 1 ? "\(agent.name) \(instance)" : agent.name)
         self.createdAt = createdAt

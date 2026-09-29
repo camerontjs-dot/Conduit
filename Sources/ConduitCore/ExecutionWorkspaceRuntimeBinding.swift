@@ -188,6 +188,53 @@ public struct ExecutionWorkspaceRuntimePreflight: Codable, Equatable, Sendable {
     }
 }
 
+public struct ExecutionWorkspaceRuntimeMount: Equatable, Sendable {
+    public var preflight: ExecutionWorkspaceRuntimePreflight
+    public var executionDirectory: URL?
+
+    public init(
+        preflight: ExecutionWorkspaceRuntimePreflight,
+        executionDirectory: URL?
+    ) {
+        self.preflight = preflight
+        self.executionDirectory = executionDirectory
+    }
+
+    public var isEligible: Bool {
+        preflight.disposition == .eligible && executionDirectory != nil
+    }
+}
+
+public enum ExecutionWorkspaceRuntimeMountPlanner {
+    public static func plan(
+        action: ExecutionWorkspaceRuntimeAction,
+        requiredWorkspace: ExecutionWorkspace,
+        reconciliation: ExecutionWorkspaceReconciliation,
+        existingWorker: WorkerLineage? = nil
+    ) -> ExecutionWorkspaceRuntimeMount {
+        let preflight = ExecutionWorkspaceRuntimePreflightPlanner.preflight(
+            action: action,
+            requiredWorkspace: requiredWorkspace,
+            reconciliation: reconciliation,
+            existingWorker: existingWorker
+        )
+        guard preflight.disposition == .eligible,
+              let path = preflight.expectedPath.value else {
+            return ExecutionWorkspaceRuntimeMount(
+                preflight: preflight,
+                executionDirectory: nil
+            )
+        }
+        return ExecutionWorkspaceRuntimeMount(
+            preflight: preflight,
+            executionDirectory: URL(
+                fileURLWithPath: ExecutionWorkspacePathIdentity.canonicalPath(path),
+                isDirectory: true
+            )
+        )
+    }
+}
+
 public enum ExecutionWorkspaceRuntimePreflightPlanner {
     public static func preflight(
         action: ExecutionWorkspaceRuntimeAction,

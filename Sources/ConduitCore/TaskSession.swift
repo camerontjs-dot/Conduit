@@ -280,6 +280,9 @@ public enum TaskSessionEventKind: Codable, Equatable, Sendable {
     /// Keeping it in the existing task stream makes a later Fleet reader able
     /// to revalidate the same launcher identity without retaining PTY history.
     case shellProcessObservationRecorded(ProcessTreeObservation)
+    /// Exact task-owned execution workspace authority. This is not provider
+    /// identity and does not itself prove that a runtime honored the cwd.
+    case executionWorkspaceBound(ExecutionWorkspace)
     case operationalStateChanged(TaskSessionOperationalState)
 }
 
@@ -359,6 +362,8 @@ public struct TaskSessionEvent: Identifiable, Codable, Equatable, Sendable {
             return authority == .processObserved
                 && observation.taskSessionID == taskSessionID.rawValue.uuidString
                 && observation.observation.authority == .processObserved
+        case .executionWorkspaceBound:
+            return authority == .conduitRecorded
         case .operationalStateChanged(let state):
             switch state {
             case .runtimeProvisioning, .runtimeOpened, .runtimeProvisioningFailed:
@@ -388,6 +393,8 @@ public struct TaskSessionSnapshot: Identifiable, Codable, Equatable, Sendable {
     public let titleOverride: String?
     public let isPinned: Bool
     public let isArchived: Bool
+    /// Latest exact workspace authority retained in the task event stream.
+    public let executionWorkspace: ExecutionWorkspace?
     public let operationalState: TaskSessionOperationalState?
     public let operationalStateAt: Date?
     /// True only after a valid Conduit-recorded retention marker appears in the
@@ -399,6 +406,34 @@ public struct TaskSessionSnapshot: Identifiable, Codable, Equatable, Sendable {
     /// semantics.
     public let lastConversationActivityAt: Date?
     public let lastActivityAt: Date
+
+    public init(
+        id: TaskSessionID,
+        metadata: TaskSessionMetadata,
+        createdAt: Date,
+        titleOverride: String?,
+        isPinned: Bool,
+        isArchived: Bool,
+        executionWorkspace: ExecutionWorkspace? = nil,
+        operationalState: TaskSessionOperationalState?,
+        operationalStateAt: Date?,
+        conversationRetentionEnabled: Bool,
+        lastConversationActivityAt: Date?,
+        lastActivityAt: Date
+    ) {
+        self.id = id
+        self.metadata = metadata
+        self.createdAt = createdAt
+        self.titleOverride = titleOverride
+        self.isPinned = isPinned
+        self.isArchived = isArchived
+        self.executionWorkspace = executionWorkspace
+        self.operationalState = operationalState
+        self.operationalStateAt = operationalStateAt
+        self.conversationRetentionEnabled = conversationRetentionEnabled
+        self.lastConversationActivityAt = lastConversationActivityAt
+        self.lastActivityAt = lastActivityAt
+    }
 
     public var displayTitle: String {
         if let override = Self.nonempty(titleOverride) {
@@ -437,6 +472,7 @@ public enum TaskSessionProjection {
         var titleOverride: String?
         var isPinned = false
         var isArchived = false
+        var executionWorkspace: ExecutionWorkspace?
         var operationalState: TaskSessionOperationalState?
         var operationalStateAt: Date?
         var conversationRetentionEnabled = false
@@ -492,6 +528,8 @@ public enum TaskSessionProjection {
                 advancesLastActivity = false
             case .shellTelemetryRecorded, .shellProcessObservationRecorded:
                 break
+            case .executionWorkspaceBound(let workspace):
+                executionWorkspace = workspace
             case .operationalStateChanged(let state):
                 operationalState = state
                 operationalStateAt = event.occurredAt
@@ -513,6 +551,7 @@ public enum TaskSessionProjection {
             titleOverride: titleOverride,
             isPinned: isPinned,
             isArchived: isArchived,
+            executionWorkspace: executionWorkspace,
             operationalState: operationalState,
             operationalStateAt: operationalStateAt,
             conversationRetentionEnabled: conversationRetentionEnabled,
