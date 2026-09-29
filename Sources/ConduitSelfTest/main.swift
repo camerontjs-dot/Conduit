@@ -2605,6 +2605,31 @@ check(
 )
 
 
+// MARK: - Hosted filesystem observation
+
+withTempDir { root in
+    let file = root.appendingPathComponent("source.swift")
+    try "let answer = 42\n".write(to: file, atomically: true, encoding: .utf8)
+    func observe(_ operation: String, _ path: String, _ extra: [String: CodexJSON] = [:]) -> [String: Any] {
+        var fields = extra
+        fields["operation"] = .string(operation)
+        fields["path"] = .string(path)
+        return ConduitFilesystemReadTool.observe(arguments: .object(fields), root: root)
+    }
+    check("filesystem tool published read-only", (ConduitSessionToolCatalog.tool(named: ConduitFilesystemReadTool.name)?["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool == true)
+    check("filesystem bounded directory read", observe("list", "")["returned"] as? Int == 1)
+    check("filesystem exact UTF-8 source read", observe("read", "source.swift")["text"] as? String == "let answer = 42\n")
+    check("filesystem exact missing path", observe("stat", "new.txt")["status"] as? String == "missing")
+    try "new".write(to: root.appendingPathComponent("new.txt"), atomically: true, encoding: .utf8)
+    check("filesystem recovers newly nominated path", observe("read", "new.txt")["text"] as? String == "new")
+    check("filesystem outside root rejected", observe("read", "../outside")["status"] as? String == "outside_root")
+    try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("alias").path, withDestinationPath: "source.swift")
+    check("filesystem link leaf stays unread", observe("read", "alias")["status"] as? String == "symlink_traversal")
+    check("filesystem oversize read refused", observe("read", "source.swift", ["max_bytes": .number(1)])["status"] as? String == "oversized")
+    try Data([0, 255]).write(to: root.appendingPathComponent("binary.txt"))
+    check("filesystem binary data unsupported", observe("read", "binary.txt")["status"] as? String == "unsupported")
+}
+
 // MARK: - MCP admission boundary
 //
 // This boundary had no call sites and no tests before 2026-08-20; it is what
