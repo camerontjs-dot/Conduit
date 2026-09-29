@@ -31,10 +31,17 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   base SHA, allocate an isolated task worktree without switching the ordinary
   checkout, acquire one explicit workspace writer lease, reconcile branch/HEAD/
   cwd/dirty/missing-worktree drift, and release writer authority while preserving
-  the worktree. Orchestrate exposes the manual prepare, create, inspect, reveal,
-  reconcile, and preserve/release journey. Workspace leasing remains separate
-  from provider-session writer authority; no launch, merge, rebase, cherry-pick,
-  reset, clean, or automatic deletion is performed (#57, #60).
+  the worktree. Session API task creation may now opt into an isolated Git
+  worktree with an explicit base revision: Conduit preserves logical project
+  identity separately from process cwd, records the exact workspace on the
+  durable task, and blocks launch/reuse before provider mutation unless the
+  workspace, lease, and reuse observations satisfy the runtime preflight. Omitted
+  workspace arguments preserve the existing project-directory launch behavior.
+  OpenCode is the first provider whose persisted directory can satisfy positive
+  workspace-bound reuse; unsupported provider reuse remains UNKNOWN/fail-closed.
+  Workspace leasing remains separate from provider-session writer authority;
+  merge, rebase, cherry-pick, reset, clean, discard, and automatic deletion stay
+  outside this slice (#57, #60).
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker
