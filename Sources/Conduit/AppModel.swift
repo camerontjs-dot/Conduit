@@ -93,6 +93,7 @@ final class AppModel: ObservableObject {
     static let juicyFeedbackEnabledKey = "conduit.juicyFeedback.enabled"
     static let outputActivePulseEnabledKey = "conduit.outputActivePulse.enabled"
     static let companionChromeEnabledKey = "conduit.companionChrome.enabled"
+    static let chatGPTTunnelEnabledKey = "conduit.chatgptTunnel.runWithApp"
 
     @Published var settings = ConduitSettings() {
         didSet { refreshTaskSidebarProjection() }
@@ -397,6 +398,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var sessionAPIAddress: String?
     private var sessionAPIServer: ConduitSessionAPIServer?
     private var sessionAPIReadiness: ConduitSessionAPIReadiness = .bootstrapping
+
+    /// Runtime ownership is separate from Session API and write authority.
+    /// A healthy tunnel started outside Conduit is observed but never killed.
+    @Published private(set) var chatGPTTunnelState: ChatGPTTunnelRuntimeState = .stopped
+    @Published private(set) var chatGPTTunnelDesiredRunning =
+        UserDefaults.standard.bool(forKey: AppModel.chatGPTTunnelEnabledKey)
+    private var chatGPTTunnelProcess: Process?
+    private var chatGPTTunnelLogHandle: FileHandle?
+    private var applicationTerminationObserver: NSObjectProtocol?
     /// Identity-bound, in-memory process observations for lifecycle
     /// reconciliation. These are not provider history and are never used to
     /// infer writer authority, task completion, or objective acceptance.
@@ -560,6 +570,16 @@ final class AppModel: ObservableObject {
 
     init() {
         refreshTaskSidebarProjection()
+        applicationTerminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // The owned child must be stopped before app termination returns.
+            MainActor.assumeIsolated {
+                self?.stopOwnedChatGPTTunnelProcess(updateState: false)
+            }
+        }
     }
 
     /// Load density from UserDefaults; rewrite Focused when missing or invalid.
@@ -1389,6 +1409,7 @@ final class AppModel: ObservableObject {
         // bootstrap state reaches READY.
         setSessionAPIReadiness(.bootstrapping)
         syncSessionAPI()
+        await syncChatGPTTunnel()
 
         guard activateSavedRootAccess() else {
             projects = []
@@ -3939,6 +3960,262 @@ final class AppModel: ObservableObject {
             statusMessage = "Session API listening on \(sessionAPIAddress ?? "")."
         } catch {
             errorMessage = "Session API failed to start: \(error.localizedDescription)"
+        }
+    }
+
+    private var chatGPTTunnelProfileName: String {
+        let raw = ProcessInfo.processInfo.environment["CONDUIT_TUNNEL_PROFILE"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (raw?.isEmpty == false) ? raw! : "conduit"
+    }
+
+    private var chatGPTTunnelProfileURL: URL {
+        let environment = ProcessInfo.processInfo.environment
+        let root: URL
+        if let configured = environment["TUNNEL_CLIENT_PROFILE_DIR"],
+           !configured.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            root = URL(fileURLWithPath: configured, isDirectory: true)
+        } else {
+            root = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config/tunnel-client", isDirectory: true)
+        }
+        return root.appendingPathComponent(
+            "\(chatGPTTunnelProfileName).yaml",
+            isDirectory: false
+        )
+    }
+
+    private var chatGPTTunnelReadyURL: URL {
+        let raw = ProcessInfo.processInfo.environment[
+            "CONDUIT_TUNNEL_HEALTH_ADDR"
+        ]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = (raw?.isEmpty == false) ? raw! : "127.0.0.1:8760"
+        return URL(string: "http://\(address)/readyz")!
+    }
+
+    private var chatGPTTunnelControlPlaneKeyURL: URL {
+        let environment = ProcessInfo.processInfo.environment
+        if let configured = environment["CONTROL_PLANE_API_KEY_FILE"],
+           !configured.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return URL(fileURLWithPath: configured)
+        }
+        return AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("control-plane-api-key")
+    }
+
+    private var chatGPTTunnelTokenURL: URL {
+        AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("session-api-token")
+    }
+
+    private var chatGPTTunnelAuthorizationURL: URL {
+        AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("session-api-authorization")
+    }
+
+    private var chatGPTTunnelLogURL: URL {
+        AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("chatgpt-tunnel.log")
+    }
+
+    private func nonemptyFile(at url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else {
+            return false
+        }
+        return !String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    private func chatGPTTunnelPrerequisites() -> ChatGPTTunnelPrerequisites {
+        ChatGPTTunnelPrerequisites(
+            sessionAPIListening: sessionAPIAddress != nil,
+            tunnelClientAvailable:
+                EnvironmentResolver.shared.resolve("tunnel-client") != nil,
+            profilePresent: FileManager.default.fileExists(
+                atPath: chatGPTTunnelProfileURL.path
+            ),
+            tunnelIDPresent: chatgptTunnelID != nil,
+            controlPlaneKeyPresent: nonemptyFile(
+                at: chatGPTTunnelControlPlaneKeyURL
+            ),
+            sessionTokenPresent: nonemptyFile(at: chatGPTTunnelTokenURL)
+        )
+    }
+
+    private func chatGPTTunnelReady() async -> Bool {
+        var request = URLRequest(url: chatGPTTunnelReadyURL)
+        request.timeoutInterval = 1
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return false }
+            return (200..<300).contains(http.statusCode)
+        } catch {
+            return false
+        }
+    }
+
+    private func prepareChatGPTTunnelAuthorization() throws {
+        let raw = try String(
+            contentsOf: chatGPTTunnelTokenURL,
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        try FileManager.default.createDirectory(
+            at: chatGPTTunnelAuthorizationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "Bearer \(raw)\n".write(
+            to: chatGPTTunnelAuthorizationURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: Int16(0o600))],
+            ofItemAtPath: chatGPTTunnelAuthorizationURL.path
+        )
+    }
+
+    private func startOwnedChatGPTTunnel() async {
+        guard let executable = EnvironmentResolver.shared.resolve(
+            "tunnel-client"
+        ) else {
+            chatGPTTunnelState = .blocked(["tunnel-client is unavailable"])
+            return
+        }
+
+        do {
+            try prepareChatGPTTunnelAuthorization()
+            try FileManager.default.createDirectory(
+                at: chatGPTTunnelLogURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            if !FileManager.default.fileExists(atPath: chatGPTTunnelLogURL.path) {
+                FileManager.default.createFile(
+                    atPath: chatGPTTunnelLogURL.path,
+                    contents: nil
+                )
+            }
+            let log = try FileHandle(forWritingTo: chatGPTTunnelLogURL)
+            try log.seekToEnd()
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: executable)
+            process.arguments = [
+                "run",
+                "--profile",
+                chatGPTTunnelProfileName,
+            ]
+            process.standardOutput = log
+            process.standardError = log
+            process.terminationHandler = { [weak self, weak process] ended in
+                Task { @MainActor [weak self, weak process] in
+                    guard let self,
+                          let process,
+                          self.chatGPTTunnelProcess === process else {
+                        return
+                    }
+                    self.chatGPTTunnelProcess = nil
+                    try? self.chatGPTTunnelLogHandle?.close()
+                    self.chatGPTTunnelLogHandle = nil
+                    self.chatGPTTunnelState = self.chatGPTTunnelDesiredRunning
+                        ? .failed(
+                            "tunnel-client exited with status "
+                                + "\(ended.terminationStatus). "
+                                + "See ~/.conduit/chatgpt-tunnel.log."
+                        )
+                        : .stopped
+                }
+            }
+
+            chatGPTTunnelLogHandle = log
+            chatGPTTunnelState = .starting
+            try process.run()
+            chatGPTTunnelProcess = process
+
+            for _ in 0..<32 {
+                if await chatGPTTunnelReady() {
+                    guard chatGPTTunnelProcess === process else { return }
+                    chatGPTTunnelState = .runningOwned
+                    statusMessage = "ChatGPT tunnel is ready."
+                    return
+                }
+                if !process.isRunning {
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+
+            stopOwnedChatGPTTunnelProcess(updateState: false)
+            chatGPTTunnelState = .failed(
+                "tunnel-client started but did not become ready within 8 seconds. "
+                    + "See ~/.conduit/chatgpt-tunnel.log."
+            )
+        } catch {
+            stopOwnedChatGPTTunnelProcess(updateState: false)
+            chatGPTTunnelState = .failed(error.localizedDescription)
+        }
+    }
+
+    private func stopOwnedChatGPTTunnelProcess(updateState: Bool = true) {
+        guard let process = chatGPTTunnelProcess else {
+            if updateState { chatGPTTunnelState = .stopped }
+            return
+        }
+        chatGPTTunnelProcess = nil
+        process.terminationHandler = nil
+        if process.isRunning {
+            process.terminate()
+        }
+        try? chatGPTTunnelLogHandle?.close()
+        chatGPTTunnelLogHandle = nil
+        if updateState {
+            chatGPTTunnelState = .stopped
+            statusMessage = "ChatGPT tunnel stopped."
+        }
+    }
+
+    func setChatGPTTunnelEnabled(_ enabled: Bool) {
+        chatGPTTunnelDesiredRunning = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.chatGPTTunnelEnabledKey)
+        Task { await syncChatGPTTunnel() }
+    }
+
+    func refreshChatGPTTunnelStatus() {
+        Task { await syncChatGPTTunnel() }
+    }
+
+    private func syncChatGPTTunnel() async {
+        let ownsRunningProcess = chatGPTTunnelProcess?.isRunning == true
+        let ready = await chatGPTTunnelReady()
+        let action = ChatGPTTunnelControlPolicy.action(
+            desiredRunning: chatGPTTunnelDesiredRunning,
+            ownsRunningProcess: ownsRunningProcess,
+            healthReachable: ready,
+            prerequisites: chatGPTTunnelPrerequisites()
+        )
+
+        switch action {
+        case .noChange:
+            if ownsRunningProcess {
+                chatGPTTunnelState = ready ? .runningOwned : .starting
+            } else {
+                chatGPTTunnelState = ready ? .runningExternal : .stopped
+            }
+        case .startOwned:
+            await startOwnedChatGPTTunnel()
+        case .stopOwned:
+            stopOwnedChatGPTTunnelProcess()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            chatGPTTunnelState = await chatGPTTunnelReady()
+                ? .runningExternal
+                : .stopped
+        case .observeExternal:
+            chatGPTTunnelState = .runningExternal
+        case .blocked(let missing):
+            chatGPTTunnelState = .blocked(missing)
         }
     }
 
@@ -6794,6 +7071,7 @@ final class AppModel: ObservableObject {
                 refreshProjects()
                 await refreshHealth()
                 self.syncSessionAPI()
+                await self.syncChatGPTTunnel()
             } catch {
                 errorMessage = error.localizedDescription
             }

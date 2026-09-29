@@ -13,6 +13,23 @@ struct SettingsView: View {
         themeStore.palette(for: colorScheme)
     }
 
+    private var chatGPTTunnelStatusText: String {
+        switch model.chatGPTTunnelState {
+        case .stopped:
+            return "Tunnel stopped."
+        case .starting:
+            return "Starting tunnel…"
+        case .runningOwned:
+            return "Tunnel ready · managed by Conduit."
+        case .runningExternal:
+            return "Tunnel ready · running outside Conduit."
+        case .blocked(let missing):
+            return "Tunnel blocked: " + missing.joined(separator: "; ") + "."
+        case .failed(let detail):
+            return "Tunnel failed: " + detail
+        }
+    }
+
     private enum SettingsTab: String, CaseIterable, Identifiable {
         case general
         case appearance
@@ -162,6 +179,36 @@ struct SettingsView: View {
             )
             .disabled(!model.settings.enableSessionAPI)
             .help("Phase 3 write tools. Approvals still pop in Conduit. Save settings to apply.")
+
+            Toggle(
+                "Run ChatGPT tunnel with Conduit",
+                isOn: Binding(
+                    get: { model.chatGPTTunnelDesiredRunning },
+                    set: { model.setChatGPTTunnelEnabled($0) }
+                )
+            )
+            .help(
+                "Starts or stops only the tunnel-client process owned by this Conduit app. "
+                    + "Session API listening and write authority remain separate controls."
+            )
+            HStack(spacing: 8) {
+                Text(chatGPTTunnelStatusText)
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+                    .textSelection(.enabled)
+                Spacer()
+                Button("Refresh") {
+                    model.refreshChatGPTTunnelStatus()
+                }
+                .controlSize(.small)
+            }
+            Text(
+                "One-time tunnel profile/key setup still uses scripts/chatgpt-tunnel. "
+                    + "An externally started tunnel is observed but never stopped by this switch."
+            )
+                .font(.caption2)
+                .foregroundStyle(palette.faint)
+
             if let address = model.sessionAPIAddress {
                 Text("Listening at \(address)")
                     .font(.caption2)
@@ -183,8 +230,8 @@ struct SettingsView: View {
                 }
                 Text(
                     model.settings.enableSessionAPIWrites
-                        ? "ChatGPT reaches this API through `scripts/chatgpt-tunnel`. Writes are on; approvals stay on this Mac."
-                        : "ChatGPT reaches this API through `scripts/chatgpt-tunnel`. Writes are off."
+                        ? "ChatGPT tunnel connectivity is separate from writes. Writes are on; approvals stay on this Mac."
+                        : "ChatGPT tunnel connectivity is separate from writes. Writes are off."
                 )
                     .font(.caption2)
                     .foregroundStyle(palette.dim)

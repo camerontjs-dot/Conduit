@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
+  Conduit starts and stops only the `tunnel-client` process it owns, reports a
+  healthy externally started tunnel without claiming control over it, and keeps
+  tunnel connectivity separate from Session API listening and write authority.
+  Existing one-time profile/key provisioning through `scripts/chatgpt-tunnel`
+  remains supported.
+
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker
@@ -176,6 +183,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   the next save.
 
 ### Changed
+
+- The macOS bundle identity advances from 0.2.0 (2) to **0.3.0 (3)** for the
+  daily-driver release-candidate line. This reconciles the bundle metadata with
+  the existing Conduit 0.3 product baseline; stable promotion remains a separate
+  release decision after exact-candidate installed-app qualification.
 
 - Sessions now open into a conversation-root shell: Conversation + composer own
   the ordinary window, while Tasks and Inspector appear as temporary drawers
