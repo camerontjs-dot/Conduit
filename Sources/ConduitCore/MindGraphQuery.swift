@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 /// MindGraph query scope. Selects one lifecycle index: never invent `both`.
 public enum MindGraphScope: String, CaseIterable, Codable, Sendable, Identifiable {
@@ -187,7 +188,8 @@ public enum MindGraphQuerySupport {
         }
         let result = run(
             binary.path,
-            ["query", question, "--db", database.path, "--top-k", "8", "--json", "--no-intent"],
+            ["query", question, "--db", database.path, "--top-k", "8", "--json", "--no-intent"]
+                + (scope == .operations ? ["--identity-envelope"] : []),
             timeout
         )
         payload["exit_code"] = result.status
@@ -197,16 +199,22 @@ public enum MindGraphQuerySupport {
             return payload
         }
         guard let json = MindGraphOutput.jsonPayload(in: result.output),
-              let data = json.data(using: .utf8),
-              let rows = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
-            payload["error"] = "MindGraph output was not a JSON array"
+              let data = json.data(using: .utf8) else {
+            payload["error"] = "MindGraph output was not JSON"
             return payload
         }
-        if scope == .operations {
-            guard operationsRowsMatchIndex(rows) else {
-                payload["error"] = "operations index identity mismatch; no nominations admitted"
-                return payload
-            }
+        let decoded: (rows: [[String: Any]], identity: [String: Any]?)
+        do {
+            decoded = try decodeQueryRows(from: data, scope: scope)
+        } catch {
+            payload["error"] = scope == .operations
+                ? "operations database authority missing or incompatible; no nominations admitted"
+                : "MindGraph output was not a JSON array"
+            return payload
+        }
+        let rows = decoded.rows
+        if let identity = decoded.identity {
+            payload["database_identity"] = identity
         }
         let split = MindGraphOutput.partitionByCitation(rows)
         payload["results"] = split.citable.map { MindGraphOutput.projectResult($0) }
@@ -216,29 +224,13 @@ public enum MindGraphQuerySupport {
         return payload
     }
 
-    /// Decode the legacy `--json` array contract from mindgraph query.
+    /// Operations requires producer-bound DB authority. Other scopes retain
+    /// the legacy array contract until their separate migration is authorized.
     public static func decodeHits(
         from data: Data,
         scope: MindGraphScope
     ) throws -> [MindGraphHit] {
-        // mindgraph logs may precede JSON; take the first array payload.
-        let payload = extractJSONArray(from: data) ?? data
-        let objects: [[String: Any]]
-        do {
-            let json = try JSONSerialization.jsonObject(with: payload)
-            guard let array = json as? [[String: Any]] else {
-                throw MindGraphQueryError.invalidJSON("expected a JSON array")
-            }
-            objects = array
-        } catch let error as MindGraphQueryError {
-            throw error
-        } catch {
-            throw MindGraphQueryError.invalidJSON(error.localizedDescription)
-        }
-
-        if scope == .operations && !operationsRowsMatchIndex(objects) {
-            throw MindGraphQueryError.indexIdentityMismatch
-        }
+        let objects = try decodeQueryRows(from: data, scope: scope).rows
         return objects.compactMap { obj in
             let docID = stringValue(obj["doc_id"]) ?? UUID().uuidString
             let chunkIndex = intValue(obj["chunk_index"]) ?? 0
@@ -282,6 +274,55 @@ public enum MindGraphQuerySupport {
             row["index_id"] as? String == "mainframe-operations"
                 && row["trust_profile"] as? String == "operations_status"
                 && ((row["display_path"] as? String) ?? (row["path"] as? String) ?? "").hasPrefix("40_operations/")
+        }
+    }
+
+    private static func decodeQueryRows(
+        from data: Data, scope: MindGraphScope
+    ) throws -> (rows: [[String: Any]], identity: [String: Any]?) {
+        if scope == .operations {
+            let output = String(decoding: data, as: UTF8.self)
+            guard let text = MindGraphOutput.jsonPayload(in: output),
+                  let json = text.data(using: .utf8),
+                  let envelope = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any],
+                  envelope["schema_version"] as? String == "mindgraph-query-identity/v1",
+                  let identity = envelope["database_identity"] as? [String: Any],
+                  operationsDatabaseIdentityMatches(identity),
+                  let rows = envelope["results"] as? [[String: Any]],
+                  operationsRowsMatchIndex(rows) else {
+                throw MindGraphQueryError.indexIdentityMismatch
+            }
+            return (rows, identity)
+        }
+        do {
+            let json = try JSONSerialization.jsonObject(with: extractJSONArray(from: data) ?? data)
+            guard let rows = json as? [[String: Any]] else {
+                throw MindGraphQueryError.invalidJSON("expected a JSON array")
+            }
+            return (rows, nil)
+        } catch let error as MindGraphQueryError {
+            throw error
+        } catch {
+            throw MindGraphQueryError.invalidJSON(error.localizedDescription)
+        }
+    }
+
+    private static func operationsDatabaseIdentityMatches(_ identity: [String: Any]) -> Bool {
+        let expected = [
+            "schema_version": "mindgraph-index-identity/v1", "index_id": "mainframe-operations",
+            "trust_profile": "operations_status", "retrieval_scope": "operations",
+            "lifecycle_root": "40_operations", "producer": "mainframe-live",
+        ]
+        let hashFields = ["manifest_sha256", "source_document_map_sha256", "database_document_map_sha256"]
+        let fields = Set(expected.keys).union(hashFields).union(["document_count"])
+        guard Set(identity.keys) == fields,
+              expected.allSatisfy({ identity[$0.key] as? String == $0.value }),
+              let count = identity["document_count"] as? NSNumber,
+              CFGetTypeID(count) != CFBooleanGetTypeID(), count.doubleValue >= 0,
+              count.doubleValue.rounded(.down) == count.doubleValue else { return false }
+        return hashFields.allSatisfy { field in
+            guard let hash = identity[field] as? String else { return false }
+            return hash.count == 64 && hash.allSatisfy { "0123456789abcdef".contains($0) }
         }
     }
 

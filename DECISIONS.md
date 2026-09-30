@@ -2056,6 +2056,32 @@ ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
 
 
+## D-061: Operations consumption requires database authority even without rows
+
+**Status:** Successor design; independent qualification pending (2026-09-30).
+
+**Evidence:** #110 BLOCK receipt 5913161920 returned successful empty operations
+nominations from a projects DB and an unidentified empty DB. The returned-row
+guard remained useful but could not establish database-wide authority.
+
+**Decision:** Operations requests require the explicit versioned MindGraph
+identity envelope in the Core boundary shared by AppModel and its tests, and in
+Query Station decoding. Validate stored `mainframe-operations`,
+`operations_status`, `operations`, `40_operations` and producer/map binding before
+projecting any text. Keep all returned-row identity guards. Empty arrays alone
+are rejected. A correctly identified no-hit index returns a valid empty set.
+
+**Owners and alternatives:** MainFrame validates and binds its corpus; MindGraph
+stores and exposes the binding from the queried DB; Conduit consumes it. Caller
+scope, filenames and external config do not establish identity. Rejecting all
+empty sets would obscure valid no-hit retrieval.
+
+**Limits:** Identity remains nomination authority. No implicit ContextSet,
+source verification, expansion/delivery or task/runtime/provider mutation is
+added. Knowledge/projects legacy consumption remains compatible. Independent
+qualification must use exact cross-repository pins and real selected sources.
+The predecessor D-060 numbering collision is retained for later reconciliation.
+
 ## D-060: MindGraph operations is a distinct nomination scope
 
 **Status:** Accepted implementation boundary.

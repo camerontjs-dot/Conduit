@@ -1345,7 +1345,7 @@ final class AppModel: ObservableObject {
                     "--top-k", "\(cappedTopK)",
                     "--json",
                     "--no-intent",
-                ],
+                ] + (scope == .operations ? ["--identity-envelope"] : []),
                 timeout: 90
             )
         }

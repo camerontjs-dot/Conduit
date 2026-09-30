@@ -2083,12 +2083,35 @@ let mgIdentity = MindGraphOutput.projectResult([
 ])
 check("mindgraph nomination retains stored index identity", mgIdentity["index_id"] as? String == "mainframe-operations")
 check("mindgraph nomination omits absolute source root", mgIdentity["source_root"] == nil)
-let mgOpsJSON = """
-[{"doc_id":"ops","index_id":"mainframe-operations","trust_profile":"operations_status","path":"40_operations/example/README.md","weak_fit":true,"provenance_warning":"UNKNOWN"}]
-""".data(using: .utf8)!
+let mgDatabaseIdentity: [String: Any] = [
+    "schema_version": "mindgraph-index-identity/v1", "index_id": "mainframe-operations",
+    "trust_profile": "operations_status", "retrieval_scope": "operations",
+    "lifecycle_root": "40_operations", "producer": "mainframe-live", "document_count": 1,
+    "manifest_sha256": String(repeating: "a", count: 64),
+    "source_document_map_sha256": String(repeating: "b", count: 64),
+    "database_document_map_sha256": String(repeating: "c", count: 64),
+]
+let mgOpsRows: [[String: Any]] = [[
+    "doc_id": "ops", "index_id": "mainframe-operations", "trust_profile": "operations_status",
+    "path": "40_operations/example/README.md", "weak_fit": true, "provenance_warning": "UNKNOWN",
+]]
+let mgOpsJSON = try! JSONSerialization.data(withJSONObject: [
+    "schema_version": "mindgraph-query-identity/v1", "database_identity": mgDatabaseIdentity, "results": mgOpsRows,
+])
 let mgOpsHits = (try? MindGraphQuerySupport.decodeHits(from: mgOpsJSON, scope: .operations)) ?? []
 check("mindgraph station retains operations identity and warnings", mgOpsHits.first?.indexID == "mainframe-operations" && mgOpsHits.first?.warnings.count == 2)
 check("mindgraph station refuses another stored index", (try? MindGraphQuerySupport.decodeHits(from: mgJSON, scope: .operations)) == nil)
+let mgNoHitJSON = try! JSONSerialization.data(withJSONObject: [
+    "schema_version": "mindgraph-query-identity/v1", "database_identity": mgDatabaseIdentity, "results": [[String: Any]](),
+])
+check("mindgraph identified operations no-hit is valid", (try? MindGraphQuerySupport.decodeHits(from: mgNoHitJSON, scope: .operations))?.isEmpty == true)
+check("mindgraph unidentified operations no-hit rejected", (try? MindGraphQuerySupport.decodeHits(from: Data("[]".utf8), scope: .operations)) == nil)
+var mgProjectsIdentity = mgDatabaseIdentity
+mgProjectsIdentity["index_id"] = "mainframe-projects"
+let mgWrongNoHitJSON = try! JSONSerialization.data(withJSONObject: [
+    "schema_version": "mindgraph-query-identity/v1", "database_identity": mgProjectsIdentity, "results": [[String: Any]](),
+])
+check("mindgraph projects-as-operations no-hit rejected", (try? MindGraphQuerySupport.decodeHits(from: mgWrongNoHitJSON, scope: .operations)) == nil)
 
 // MARK: - Focus Board (workstation port, pure)
 

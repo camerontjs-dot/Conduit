@@ -25,6 +25,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- Operations nominations require an explicit producer-bound database identity,
+  including when a query returns no rows. A projects or unidentified empty
+  database fails before text projection. The Query Station and Session API use
+  MindGraph's versioned identity envelope; knowledge/projects retain their
+  existing query contract. This successor requires the matching MainFrame
+  producer and MindGraph contract candidates before independent qualification.
+
 ### Added
 
 - The query station shows the stored index identity and retrieval warnings for
