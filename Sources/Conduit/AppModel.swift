@@ -3946,7 +3946,12 @@ final class AppModel: ObservableObject {
         rebuildMCPAdmission()
         let server = ConduitSessionAPIServer(
             token: token,
-            allowWrites: settings.enableSessionAPIWrites
+            allowWrites: settings.enableSessionAPIWrites,
+            filesystemRoot: { [weak self] in
+                guard let self, self.sessionAPIReadiness.isReady,
+                      !self.rootAccessNeedsAuthorization else { return nil }
+                return self.settings.mainframeRoot
+            }
         ) { [weak self] command, caller in
             self?.sessionAPIPayload(command, caller: caller)
                 ?? ["error": "Conduit is not ready."]

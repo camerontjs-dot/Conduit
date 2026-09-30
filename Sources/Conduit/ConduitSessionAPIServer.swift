@@ -56,6 +56,7 @@ final class ConduitSessionAPIServer {
     private nonisolated let connectionSlots = DispatchSemaphore(value: 8)
     private let token: String
     private let allowWrites: Bool
+    private let filesystemRoot: () -> URL?
     private var readiness: ConduitSessionAPIReadiness = .bootstrapping
     private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     private nonisolated static let maximumHeaderBytes = 16_384
@@ -74,10 +75,12 @@ final class ConduitSessionAPIServer {
     init(
         token: String,
         allowWrites: Bool = false,
+        filesystemRoot: @escaping () -> URL? = { nil },
         handle: @escaping (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     ) {
         self.token = token
         self.allowWrites = allowWrites
+        self.filesystemRoot = filesystemRoot
         self.handle = handle
     }
 
@@ -314,7 +317,9 @@ final class ConduitSessionAPIServer {
             ?? UUID().uuidString.lowercased()
     }
 
-    private func response(for request: Data) -> Data {
+    // Internal so deterministic transport tests exercise the actual bearer,
+    // catalog and dispatch path without taking the operator's listener port.
+    func response(for request: Data) -> Data {
         let text = String(decoding: request, as: UTF8.self)
         let headerEnd = text.range(of: "\r\n\r\n")?.upperBound
             ?? text.range(of: "\n\n")?.upperBound
@@ -427,6 +432,10 @@ final class ConduitSessionAPIServer {
     }
 
     private func callTool(name: String, arguments: CodexJSON) -> [String: Any] {
+        if name == ConduitFilesystemReadTool.name {
+            // Observation bypasses the session command handler entirely.
+            return ConduitFilesystemReadTool.call(arguments: arguments, root: filesystemRoot())
+        }
         let command: ConduitSessionCommand?
         switch name {
         case "conduit_list_projects":
