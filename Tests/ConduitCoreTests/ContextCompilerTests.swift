@@ -599,6 +599,102 @@ final class ContextCompilerTests: XCTestCase {
         XCTAssertEqual(summary.deliveredKnownEstimatedTokenSubtotal, 100)
     }
 
+    func testReasonOrderingDistinguishesNilFromEmptyDetail() throws {
+        let pin = item(
+            id: "reason-order-pin",
+            source: "PIN.md",
+            authority: .filesystemSource,
+            revision: "fixed-revision",
+            tokens: 10,
+            pinned: true
+        )
+        let set = contextSet(
+            entries: [
+                ContextSetEntry(
+                    item: pin,
+                    disposition: .nominated,
+                    representation: .full,
+                    inclusionReasons: [
+                        ContextInclusionReason(.lexicalMatch, detail: nil)
+                    ]
+                ),
+                ContextSetEntry(
+                    item: pin,
+                    disposition: .nominated,
+                    representation: .full,
+                    inclusionReasons: [
+                        ContextInclusionReason(.lexicalMatch, detail: "")
+                    ]
+                )
+            ]
+        )
+
+        let manifest = ContextManifestCompiler.compile(
+            contextSet: set,
+            destination: ContextDestination(capacityTokens: 1_000),
+            budget: ContextBudget(
+                reservedOutputTokens: 50,
+                reservedToolTokens: 50
+            )
+        )
+
+        XCTAssertEqual(manifest.deliveredEntries.count, 1)
+        XCTAssertEqual(manifest.budget.mandatoryKnownEstimatedTokens, 10)
+        XCTAssertEqual(manifest.entries[0].inclusionReasons.count, 3)
+        XCTAssertEqual(manifest.entries[0].inclusionReasons[0].kind, .lexicalMatch)
+        XCTAssertNil(manifest.entries[0].inclusionReasons[0].detail)
+        XCTAssertEqual(manifest.entries[0].inclusionReasons[1].kind, .lexicalMatch)
+        XCTAssertEqual(manifest.entries[0].inclusionReasons[1].detail, "")
+        XCTAssertEqual(manifest.entries[0].inclusionReasons[2].kind, .operatorPin)
+    }
+
+    func testReasonOrderingIsStableAcrossRepeatedCompilationAndInputOrder() throws {
+        let pin = item(
+            id: "reason-order-pin",
+            source: "PIN.md",
+            authority: .filesystemSource,
+            revision: "fixed-revision",
+            tokens: 10,
+            pinned: true
+        )
+        let nilReason = ContextSetEntry(
+            item: pin,
+            disposition: .nominated,
+            representation: .full,
+            inclusionReasons: [
+                ContextInclusionReason(.lexicalMatch, detail: nil)
+            ]
+        )
+        let emptyReason = ContextSetEntry(
+            item: pin,
+            disposition: .nominated,
+            representation: .full,
+            inclusionReasons: [
+                ContextInclusionReason(.lexicalMatch, detail: "")
+            ]
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        func encoded(_ entries: [ContextSetEntry]) throws -> Data {
+            let manifest = ContextManifestCompiler.compile(
+                contextSet: contextSet(entries: entries),
+                destination: ContextDestination(capacityTokens: 1_000),
+                budget: ContextBudget(
+                    reservedOutputTokens: 50,
+                    reservedToolTokens: 50
+                )
+            )
+            return try encoder.encode(manifest)
+        }
+
+        let baseline = try encoded([nilReason, emptyReason])
+        XCTAssertEqual(try encoded([emptyReason, nilReason]), baseline)
+        for _ in 0..<32 {
+            XCTAssertEqual(try encoded([nilReason, emptyReason]), baseline)
+        }
+    }
+
     func testManifestEncodingIsDeterministicForSameInput() throws {
         let entry = ContextSetEntry(
             item: item(
