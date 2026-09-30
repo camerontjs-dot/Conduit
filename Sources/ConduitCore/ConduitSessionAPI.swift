@@ -144,7 +144,7 @@ public enum ConduitSessionAPI {
     }
 
     public static func allowsMindGraphScope(_ scope: String) -> Bool {
-        scope == "knowledge" || scope == "projects"
+        MindGraphScope(rawValue: scope) != nil
     }
 
     public static func matchesAgent(_ profile: AgentProfile, name: String) -> Bool {

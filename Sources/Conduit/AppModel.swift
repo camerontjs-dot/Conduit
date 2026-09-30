@@ -4345,51 +4345,26 @@ final class AppModel: ObservableObject {
                 return ["error": "question is empty"]
             }
             guard ConduitSessionAPI.allowsMindGraphScope(scope) else {
-                return ["error": "scope must be knowledge or projects"]
+                return ["error": "scope must be knowledge, projects or operations"]
             }
             guard let binary = MindGraphQuerySupport.resolveBinary(
                 mainframeRoot: settings.mainframeRoot
             ) else {
                 return ["error": "mindgraph binary not found"]
             }
-            let parsedScope = scope == "projects"
-                ? MindGraphScope.projects
-                : MindGraphScope.knowledge
-            let db = MindGraphQuerySupport.databaseURL(for: parsedScope)
-            let result = SubprocessRunner.run(
-                binary.path,
-                [
-                    "query", askedQuestion, "--db", db.path,
-                    "--top-k", "8", "--json", "--no-intent",
-                ],
-                timeout: 45
-            )
-            // `status` used to carry the process exit code under a name that
-            // reads like a result status. Separate the two, and hand back
-            // parsed results instead of a log preamble glued to JSON.
-            var payload: [String: Any] = [
-                "scope": scope,
-                "exit_code": result.status,
-                "trust": "nomination only",
-                "authority": "retrieval nominations; not evidence that a claim holds",
-            ]
-            if let json = MindGraphOutput.jsonPayload(in: result.output),
-               let data = json.data(using: .utf8),
-               let parsed = try? JSONSerialization.jsonObject(with: data),
-               let rows = parsed as? [[String: Any]] {
-                let split = MindGraphOutput.partitionByCitation(rows)
-                payload["results"] = split.citable.map { MindGraphOutput.projectResult($0) }
-                payload["result_count"] = split.citable.count
-                payload["not_citable"] = split.notCitable.map {
-                    MindGraphOutput.projectResult($0)
-                }
-                payload["citation_counts"] = MindGraphOutput.citationCounts(rows)
-            } else {
-                payload["output"] = String(result.output.prefix(8_000))
-                payload["parse_error"] =
-                    "MindGraph output was not a JSON array; raw output retained"
+            guard let parsedScope = MindGraphScope(rawValue: scope) else {
+                return ["error": "unknown MindGraph scope"]
             }
-            return payload
+            return MindGraphQuerySupport.sessionQuery(
+                question: askedQuestion,
+                scope: parsedScope,
+                binary: binary,
+                database: MindGraphQuerySupport.databaseURL(for: parsedScope),
+                run: { binary, arguments, timeout in
+                    let result = SubprocessRunner.run(binary, arguments, timeout: timeout)
+                    return (result.status, result.output)
+                }
+            )
         case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
             return sessionAPICreateTask(
                 agentName: agentName,

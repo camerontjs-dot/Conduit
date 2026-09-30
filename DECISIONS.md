@@ -2054,3 +2054,24 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+
+## D-060: MindGraph operations is a distinct nomination scope
+
+**Status:** Accepted implementation boundary.
+
+MindGraph operations queries select `mainframe-operations.sqlite` with the
+`operations_status` trust label. The scope enum, Session API validation and MCP
+catalog expose `operations`; knowledge/projects keep their existing selections.
+The same CLI consumer function serves the app and integration qualification.
+
+A nomination retains `index_id`, namespace, document/source path and content
+hash separately from the selected scope alias. Absolute source roots remain
+local. Operations rows must carry the operations index/trust identity and a
+`40_operations` display path; mismatches and missing databases fail explicitly.
+Warnings and citation partitions remain visible. This adds no context admission,
+expansion redemption, ranking policy, or source-authority transfer.
+
+MainFrame owns manifest selection, index staging/promotion and shared-daemon
+configuration. Installing Conduit and refreshing an external client's catalog
+remain separate machine qualification. `20_live` stays directly inspected state.

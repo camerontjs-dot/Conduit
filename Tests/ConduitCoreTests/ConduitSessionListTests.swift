@@ -105,7 +105,7 @@ final class MindGraphOutputTests: XCTestCase {
         ]
         let projected = MindGraphOutput.projectResult(row)
         XCTAssertNil(projected["source_root"], "absolute host path must not reach a caller")
-        XCTAssertNil(projected["content_hash"])
+        XCTAssertEqual(projected["content_hash"] as? String, "40e9aa82")
         XCTAssertNil(projected["semantic_distance"])
         XCTAssertNil(projected["provenance_warning"], "nulls are omitted, not forwarded")
         XCTAssertNotNil(projected["path"])
