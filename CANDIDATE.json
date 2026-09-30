@@ -1,0 +1,74 @@
+{
+  "advancement_readiness": "awaiting_independent_current_main_qualification",
+  "base_commit": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "blockers": [
+    "Independent exact-head qualification not yet performed"
+  ],
+  "candidate_id": "filesystem-observation-current-main-20260929",
+  "evidence": {
+    "component": {
+      "boundary": "Fresh current-main gates belong to independent qualification; predecessor counts are not this candidate evidence.",
+      "status": "not_run"
+    },
+    "fresh_acceptance": {
+      "boundary": "Installed/catalog/hosted behavior remains separate",
+      "status": "not_run"
+    },
+    "independent_replay": {
+      "status": "not_run"
+    },
+    "source_preparation": {
+      "changed_source_paths": 16,
+      "compiler_blobs_preserved": true,
+      "status": "exact_patch_carried_without_conflict"
+    }
+  },
+  "excluded_scope": [
+    "Other composition lane implementation",
+    "Automatic Context Compiler expansion/admission or source verification",
+    "Blocked MindGraph #86/#90/#95 work",
+    "Retrieval/ranking/model/chunking/expansion tuning",
+    "Provider/session/task/runtime write authority changes",
+    "Release, installed app replacement, final Supervisor composition experiment"
+  ],
+  "external_concurrent_inputs": [
+    "Live GitHub main and exact predecessor identities",
+    "Operator-owned app/listener/provider/daemon state remains untouched"
+  ],
+  "freeze_binding": "The commit adding this manifest; bind its full head/tree in the GitHub qualification handoff.",
+  "included_scope": [
+    "One authenticated read-only list/read/stat tool owned by Explorer",
+    "Descriptor containment, exact-path recovery, symlink leaves and explicit bounded/error results",
+    "Original source tests, transport tests, docs and source-evidence binding"
+  ],
+  "lifecycle_state": "frozen",
+  "maintained_context_compiler": {
+    "merge_commit": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+    "promotion_pr": 108,
+    "qualification_comment": 5902743842,
+    "qualified_head": "cd74b84fa4d1eee0a6186e178800c94c6b6d9f80",
+    "source_blob": "843bc359108c2f5b792bfa76bb10ae2e062813d1",
+    "test_blob": "14aebc36150a304b8e72578a646bea35852f728b"
+  },
+  "non_claims": [
+    "Preparation and unchanged source bytes are not a current-main qualification PASS",
+    "Maintained Context Compiler coexistence is not multi-lane composition",
+    "No installed or hosted behavior established"
+  ],
+  "predecessor": {
+    "head": "6810feb8264b67f970a1c5044bc5ceafd38ddf1a",
+    "head_preserved": true,
+    "original_base": "aeb224a8735f20fd3f457d380236ba931da3ed59",
+    "pr": 105,
+    "source_commit": "d62b3bfd792d5d922644bc72e7583270a6896b0b"
+  },
+  "product": "Conduit",
+  "schema": "conduit-candidate/v1",
+  "source_commit": "1229b61ceef4b2de9a929e9fac81d162c8f3c801",
+  "source_tree": "6ebdd5e38eb133857fb7df8c9b5d81647b5c8db2",
+  "versions": {
+    "authority_decision": "D-060",
+    "filesystem_schema": "conduit-filesystem-read/v1"
+  }
+}
