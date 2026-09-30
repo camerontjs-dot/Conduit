@@ -1,0 +1,148 @@
+{
+  "schema": "conduit-candidate/v1",
+  "candidate_id": "filesystem-contained-deletion-repair-20260930",
+  "product": "Conduit",
+  "versions": {
+    "filesystem_schema": "conduit-filesystem-read/v1",
+    "authority_decision": "D-060"
+  },
+  "lifecycle_state": "frozen",
+  "advancement_readiness": "awaiting_independent_filesystem_deletion_repair_qualification",
+  "base_commit": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "source_commit": "f1339c28c841a889a5868e8f025a2a2651982357",
+  "source_tree": "a5f6306dc261064865b59bf09899ed4bb33a4203",
+  "freeze_binding": "The commit adding this manifest; bind its full head/tree in the new Draft PR qualification handoff. Freeze adds only CANDIDATE.json.",
+  "predecessors": [
+    {
+      "pr": 105,
+      "head": "6810feb8264b67f970a1c5044bc5ceafd38ddf1a",
+      "tree": "582bed558451a7a4c18a34ab2dca060be42da342",
+      "role": "preserved bounded capability history",
+      "head_preserved": true
+    },
+    {
+      "pr": 109,
+      "head": "fcffe1e74d51ec73cab2c984a920ca2ea28c857b",
+      "tree": "e8c6f3c6240cfbcfa937fec954482cb597d6731a",
+      "source_commit": "1229b61ceef4b2de9a929e9fac81d162c8f3c801",
+      "terminal_receipt_comment": 5912783941,
+      "disposition": "BLOCK",
+      "head_preserved": true
+    }
+  ],
+  "source_relationship": {
+    "carried_pr109_patch_sha256": "33786fcf0a747cdf5314c249f4abc0dd89f3d68f466b99f0442d2fc1593e4038",
+    "unchanged_carried_paths": 12,
+    "repair_paths_relative_to_pr109": [
+      "CHANGELOG.md",
+      "Sources/ConduitCore/MainframeExplorer.swift",
+      "Sources/ConduitSelfTest/main.swift",
+      "Tests/ConduitCoreTests/ConduitFilesystemReadTests.swift",
+      "Tests/ConduitCoreTests/MainframeExplorerPathAliasTests.swift"
+    ],
+    "changed_source_paths": 17,
+    "source_changed_paths": [
+      "CHANGELOG.md",
+      "DECISIONS.md",
+      "Package.swift",
+      "README.md",
+      "Sources/Conduit/AppModel.swift",
+      "Sources/Conduit/ConduitSessionAPIServer.swift",
+      "Sources/ConduitCore/ConduitFilesystemReadTool.swift",
+      "Sources/ConduitCore/ConduitSessionToolCatalog.swift",
+      "Sources/ConduitCore/MainframeExplorer.swift",
+      "Sources/ConduitCore/MainframeExplorerPresentation.swift",
+      "Sources/ConduitSelfTest/main.swift",
+      "Tests/ConduitCoreTests/ConduitFilesystemReadTests.swift",
+      "Tests/ConduitCoreTests/ConduitSessionToolCatalogTests.swift",
+      "Tests/ConduitCoreTests/MainframeExplorerPathAliasTests.swift",
+      "Tests/ConduitSessionAPITests/ConduitFilesystemTransportTests.swift",
+      "docs/FILESYSTEM_READ_API.md",
+      "docs/qualification/provider-conformance-v1.json"
+    ],
+    "repair": "Keep raw realpath root spelling, accept only its configured/canonical/standardized root alternatives, and derive relative descriptor paths from stable checked strings. Presentation canonicalization and no-follow traversal stay unchanged."
+  },
+  "maintained_context_compiler": {
+    "source_path": "Sources/ConduitCore/ContextCompiler.swift",
+    "source_blob": "843bc359108c2f5b792bfa76bb10ae2e062813d1",
+    "test_path": "Tests/ConduitCoreTests/ContextCompilerTests.swift",
+    "test_blob": "14aebc36150a304b8e72578a646bea35852f728b"
+  },
+  "included_scope": [
+    "Bounded PR109 Explorer-owned authenticated read-only list/read/stat capability",
+    "Contained deletion classification repair and adjacent-boundary development regressions"
+  ],
+  "excluded_scope": [
+    "Filesystem writes or relaxed containment/symlink/ambiguous-path policy",
+    "Context Compiler admission/delivery/verification semantics",
+    "Operations implementation",
+    "Task/provider/runtime/lease or write-switch changes",
+    "Installed app/tunnel replacement",
+    "Final Supervisor composition",
+    "Merge or release"
+  ],
+  "evidence": {
+    "component": {
+      "status": "development_pass",
+      "independent": false,
+      "focused": {
+        "total_cases": 37,
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0,
+        "skips": [],
+        "log_sha256": "001fa9f02b462844f43b1b831cdd857d024b2223d69b3a53d985e9f0d51a08fe"
+      },
+      "selftest": {
+        "total_checks": 477,
+        "passed": 477,
+        "failed": 0,
+        "skipped": 0
+      },
+      "native_contract": {
+        "total_tests": 10,
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      },
+      "full_swift": {
+        "total_cases": 619,
+        "passed": 616,
+        "failed": 0,
+        "skipped": 3,
+        "skips": [
+          "ConduitCoreTests.ProviderSessionAuthorityTests testInstalledOpenCodeAuthorityJourneyWhenExplicitlyRequested",
+          "ConduitCoreTests.ProviderSessionObservationTests testInstalledOpenCodePersistenceWhenExplicitlyRequested",
+          "ConduitCoreTests.ShellTelemetrySocketServerTests testLiveShellOpenCodeSessionCorrelationWhenIsolatedFixtureConfigured"
+        ],
+        "log_sha256": "59d8612a4287bce294e487d78d5347420f3f682148e7cd29e1e7ea5a71fb7500"
+      },
+      "release_build": "passed",
+      "strict_deep_signature": "passed",
+      "receipt_path": "30_projects/conduit/raw-materials/2026-09-30-filesystem-deletion-repair-development-01a0f26e/development-receipt.json",
+      "receipt_sha256": "ab02cd4bd4860af0175e49e1d1b79873c83c7c99747127765902033926841864"
+    },
+    "independent_replay": {
+      "status": "not_run",
+      "original_pr109_probe_sha256": "ddab2b412d48b806b87a4fc5d8404755c111887511a71757e5d0bd5729cb03f5"
+    },
+    "fresh_acceptance": {
+      "status": "not_run",
+      "boundary": "Independent exact frozen head qualification required; installed/hosted/final composition remain separate"
+    }
+  },
+  "blockers": [
+    "Independent unchanged original external filesystem probe and remaining qualification gates not yet run"
+  ],
+  "external_concurrent_inputs": [
+    "Live GitHub main verified before creation/freeze",
+    "Protected operator sources/app/listener/tunnel and unrelated dirty work preserved",
+    "Separate operations qualification checkout observed; no operations patch carried"
+  ],
+  "non_claims": [
+    "Implementer-authored development checks are not independent qualification",
+    "No verified content, ContextSet admission, automatic compiler delivery or semantic validation",
+    "No operations, producer readiness, installed/hosted discovery, provider capacity, retrieval quality, tokenizer accuracy, merge/release or Supervisor composition"
+  ]
+}
