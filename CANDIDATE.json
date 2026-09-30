@@ -1,0 +1,122 @@
+{
+  "advancement_readiness": "awaiting_independent_operations_authority_repair_qualification",
+  "blockers": [
+    "Independent exact-head cross-repository qualification remains required"
+  ],
+  "candidate_id": "conduit-operations-index-authority-20260930",
+  "dependencies": {
+    "mainframe_producer": {
+      "head": "9397658930d98e7d7d833447367e3e205114e89a",
+      "repository": "camerontjs-dot/mainframe-live",
+      "source_commit": "55725331e97db11b59ed0d6ed2df8dda9fa490aa",
+      "source_tree": "e6372b17643816b724ce822ee5a98ae4f730513b",
+      "tree": "57629bdb93a8c214b9a09f1e5c97950dce211db8"
+    },
+    "mindgraph_engine": {
+      "head": "2ddf3ea1cb1471d95448670f02edd15b325d7c3a",
+      "repository": "camerontjs-dot/MindGraph",
+      "source_commit": "3af092d575aa2315eb6dd5bffd47b5d60d5d0c24",
+      "source_tree": "e858ee6d604016355553f5a044b5486befe1d953",
+      "tree": "e65399327f0d675a9306f7d5e77a443033f35328"
+    }
+  },
+  "evidence": {
+    "component": {
+      "checks": {
+        "compiler_tests": {
+          "failed": 0,
+          "passed": 17,
+          "skipped": 0
+        },
+        "operations": {
+          "failed": 0,
+          "passed": 9,
+          "skipped": 0
+        },
+        "provider_checks": {
+          "failed": 0,
+          "passed": 10
+        },
+        "release_build": {
+          "status": "passed"
+        },
+        "self_test": {
+          "failed": 0,
+          "passed": 470
+        },
+        "signature_deep_strict": {
+          "status": "passed"
+        },
+        "swift_suite": {
+          "executed": 612,
+          "failed": 0,
+          "passed": 609,
+          "skipped": 3
+        },
+        "unchanged_compiler_probes": {
+          "status": "passed"
+        }
+      },
+      "classification": "implementer_development",
+      "status": "completed_with_explicit_limitations"
+    },
+    "fresh_acceptance": {
+      "status": "not_run"
+    },
+    "independent_replay": {
+      "status": "not_run"
+    }
+  },
+  "excluded_scope": [
+    "Whole-workspace README prerequisite repair",
+    "Operator install/daemon/corpus promotion",
+    "Source verification or filesystem composition",
+    "Final Context Compiler/Supervisor composition",
+    "Retrieval quality/routing changes",
+    "Merge or release"
+  ],
+  "external_concurrent_inputs": [
+    "Historical #110 BLOCK and #43 remain unchanged",
+    "Maintained Context Compiler and concurrent qualification worktrees remain separately owned"
+  ],
+  "freeze_binding": "The commit adding this manifest; its exact full head/tree is recorded in the cross-repository GitHub handoff.",
+  "included_scope": [
+    "Explicit operations envelope validation in Core/AppModel and Query Station",
+    "Retain row guards; legitimate no-hit operations nominations",
+    "Unchanged original #110 no-row discriminator and independent replay protocol"
+  ],
+  "lifecycle_state": "frozen",
+  "maintained_context_compiler": {
+    "source_blob": "843bc359108c2f5b792bfa76bb10ae2e062813d1",
+    "test_blob": "14aebc36150a304b8e72578a646bea35852f728b"
+  },
+  "non_claims": [
+    "Development evidence is not independent qualification",
+    "Live whole-workspace corpus readiness UNKNOWN",
+    "Operator-installed engine equivalence UNKNOWN",
+    "Local binding is not authentication against a malicious database writer",
+    "No source admission, expansion, delivery, merge or release authority"
+  ],
+  "predecessor": {
+    "head": "c4a017a93cd3336d51091e550ea5e90c5ccbef60",
+    "pr": 110,
+    "repository": "camerontjs-dot/Conduit",
+    "terminal_block_comment": 5913161920,
+    "tree": "347c8b60e6f144346178ae3038f3f744689b8003"
+  },
+  "preserved_predecessor": {
+    "head": "d7eff6fe2bea84f24b0b327bdb769e58781f9ec1",
+    "pr": 106,
+    "tree": "853e5c81bf7279c8b0a26b18db192256f65f3433"
+  },
+  "product": "Conduit",
+  "schema": "conduit-candidate/v1",
+  "source_commit": "a2f51a3597b7eadb75860f8c77f2433517ce5a31",
+  "source_tree": "c1c46736d3dea63027ee7d2548680554d6e196df",
+  "versions": {
+    "operations_index": "mainframe-operations",
+    "operations_trust": "operations_status",
+    "query_envelope": "mindgraph-query-identity/v1",
+    "stored_identity": "mindgraph-index-identity/v1"
+  }
+}
