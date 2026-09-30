@@ -2054,3 +2054,44 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-060: Hosted filesystem reads share Explorer authority
+
+**Status:** Accepted (2026-09-29; implementation candidate)
+
+**Context:** The hosted MCP catalog exposes runtime/session observation and
+MindGraph nominations but no general source-file inspection. MainFrame files
+remain authoritative as files; retrieval cannot substitute for that authority.
+
+**Decision:** Publish one read-only `conduit_read_filesystem` tool with `list`,
+`read` and `stat` operations over the authorized configured MainFrame root.
+Reuse and strengthen Explorer Core's scanner/reader with root-anchored
+`openat`/`O_NOFOLLOW` traversal and bounded descriptor reads. Link leaves are
+describable but never traversed. Known binary/media and non-ordinary text are
+explicitly unsupported; exact paths recover without a recursive index.
+
+The authenticated filesystem route bypasses the session-command handler. Its
+only AppModel dependency is the existing configured-root/readiness/authorization
+observation. It creates no document store, task, input, provider action, writer
+lease or execution slot and does not expand Session API write authority.
+
+**Binds:** hosted filesystem observation and shared Explorer path/read code.
+**Tier:** T1 (deterministic policy/transport regressions detect violations;
+installed hosted publication requires qualification).
+**Check:** `conduit-selftest` filesystem assertions, `ConduitFilesystemReadTests`, `ConduitFilesystemTransportTests`,
+existing Explorer regressions, `scripts/test.sh`, and exact-head hosted canary.
+**Escape:** explicit unsupported/unavailable/error results; retain Draft until
+installed/tunnel acceptance is established.
+
+**Consequences:** Supervisors can inspect live coordination and operational
+files directly while MindGraph remains a nominator. Relative paths are required;
+there is no arbitrary-root request, recursive Find, paging or filesystem write.
+Metadata and contents remain observations, not verified claims. Concurrent
+filesystem changes can invalidate an observation; no immutable snapshot is
+claimed. Shared Core hardening also protects UI reads from link ancestors.
+
+**Qualification boundary:** The exact candidate still needs installed/tunnel
+`tools/list` and benign filesystem calls with task/runtime and write authority
+preserved. Source tests cannot establish ChatGPT's cached catalog freshness.

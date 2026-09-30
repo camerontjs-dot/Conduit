@@ -38,6 +38,10 @@ let package = Package(
         .testTarget(
             name: "ConduitCoreTests",
             dependencies: ["ConduitCore"]
+        ),
+        .testTarget(
+            name: "ConduitSessionAPITests",
+            dependencies: ["Conduit", "ConduitCore"]
         )
     ]
 )

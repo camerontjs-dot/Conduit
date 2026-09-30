@@ -113,6 +113,26 @@ public struct MainframeExplorerIndex: Sendable {
     }
 }
 
+/// Facts from the filesystem object observed through an authorized directory
+/// descriptor. Modification time is an observation, not authorship or proof.
+public struct MainframeExplorerFileFacts: Equatable, Sendable {
+    public let relativePath: String
+    public let kind: MainframeExplorerNodeKind
+    public let byteCount: Int
+    public let modifiedAt: Date
+    public let isRegularFile: Bool
+}
+
+public struct MainframeExplorerDirectorySnapshot: Sendable {
+    public let entries: [(node: MainframeExplorerNode, facts: MainframeExplorerFileFacts)]
+    public let truncated: Bool
+}
+
+public struct MainframeExplorerTextSnapshot: Sendable {
+    public let text: String
+    public let facts: MainframeExplorerFileFacts
+}
+
 public enum MainframeExplorerFilesystemFreshness {
     /// The smallest containing directory that must be re-read before an exact
     /// relative-path miss can be treated as authoritative.
@@ -187,6 +207,10 @@ public enum MainframeExplorerError: LocalizedError, Equatable {
     case symbolicLinkTraversal(String)
     case fileTooLarge(path: String, bytes: Int, limit: Int)
     case nonUTF8(String)
+    case missingPath(String)
+    case inaccessiblePath(String)
+    case unsupportedFile(String)
+    case changedDuringRead(String)
 
     public var errorDescription: String? {
         switch self {
@@ -199,6 +223,10 @@ public enum MainframeExplorerError: LocalizedError, Equatable {
         case .fileTooLarge(let path, let bytes, let limit):
             return "File is too large for the Explorer reader (\(bytes) bytes; limit \(limit)): \(path)"
         case .nonUTF8(let path): return "File is not valid UTF-8 text: \(path)"
+        case .missingPath(let path): return "Explorer path does not exist: \(path)"
+        case .inaccessiblePath(let path): return "Explorer path is inaccessible: \(path)"
+        case .unsupportedFile(let path): return "File is not supported as ordinary text: \(path)"
+        case .changedDuringRead(let path): return "File changed during the bounded read: \(path)"
         }
     }
 }
@@ -228,31 +256,69 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
     }
 
     public func children(root: URL, directory: URL) throws -> [MainframeExplorerNode] {
-        let validatedRoot = try validateRoot(root)
-        let canonicalRoot = try canonicalExistingURL(validatedRoot)
-        let lexicalDirectory = directory.standardizedFileURL
+        try directorySnapshot(root: root, directory: directory).entries.map(\.node)
+    }
 
-        if symbolicLinkDestination(at: lexicalDirectory) != nil {
-            throw MainframeExplorerError.symbolicLinkTraversal(directory.path)
+    /// Lists one directory, stopping after the requested number of visible
+    /// entries plus one lookahead. A bounded subset is sorted for presentation;
+    /// it is not a complete index or an alphabetically complete prefix.
+    public func directorySnapshot(
+        root: URL,
+        directory: URL,
+        maxEntries: Int? = nil
+    ) throws -> MainframeExplorerDirectorySnapshot {
+        try withDescriptor(root: root, item: directory, directory: true) { fd, path in
+            let duplicate = dup(fd)
+            guard duplicate >= 0 else { throw posixError(path) }
+            guard let stream = fdopendir(duplicate) else {
+                let error = posixError(path)
+                close(duplicate)
+                throw error
+            }
+            defer { closedir(stream) }
+            var entries: [(node: MainframeExplorerNode, facts: MainframeExplorerFileFacts)] = []
+            let limit = maxEntries.map { max(1, $0) }
+            var truncated = false
+            while true {
+                errno = 0
+                guard let entry = readdir(stream) else {
+                    if errno != 0 { throw posixError(path) }
+                    break
+                }
+                let name = withUnsafePointer(to: &entry.pointee.d_name) {
+                    $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: entry.pointee.d_name)) {
+                        String(cString: $0)
+                    }
+                }
+                if name == "." || name == ".." || ignoredNames.contains(name) { continue }
+                if let limit, entries.count >= limit {
+                    truncated = true
+                    break
+                }
+                let childPath = path.isEmpty ? name : path + "/" + name
+                let info = try attributes(parent: fd, name: name, path: childPath)
+                let facts = facts(path: childPath, info: info)
+                let node = MainframeExplorerNode(
+                    name: name,
+                    relativePath: childPath,
+                    url: directory.appendingPathComponent(name),
+                    kind: facts.kind,
+                    zone: .classify(relativePath: childPath),
+                    recordScope: .derive(relativePath: childPath)
+                )
+                entries.append((node, facts))
+            }
+            entries.sort { nodeSort($0.node, $1.node) }
+            return MainframeExplorerDirectorySnapshot(entries: entries, truncated: truncated)
         }
-        let directoryValues = try lexicalDirectory.resourceValues(forKeys: [.isDirectoryKey])
-        guard directoryValues.isDirectory == true else {
-            throw MainframeExplorerError.notDirectory(directory.path)
-        }
-        let canonicalDirectory = try canonicalExistingURL(lexicalDirectory)
-        guard isPath(canonicalDirectory.path, containedIn: canonicalRoot.path) else {
-            throw MainframeExplorerError.unsafePath(directory.path)
-        }
+    }
 
-        let urls = try fileManager.contentsOfDirectory(
-            at: lexicalDirectory,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
-            options: []
-        )
-        return try urls
-            .filter { !ignoredNames.contains($0.lastPathComponent) }
-            .map { try node(root: canonicalRoot, canonicalParent: canonicalDirectory, url: $0) }
-            .sorted(by: nodeSort)
+    /// Resolves an exact path afresh, without a recursive index or cache. A
+    /// symbolic-link leaf can be described; no ancestor link is traversed.
+    public func fileFacts(root: URL, item: URL) throws -> MainframeExplorerFileFacts {
+        try withParentDescriptor(root: root, item: item) { fd, name, path in
+            facts(path: path, info: try attributes(parent: fd, name: name, path: path))
+        }
     }
 
     /// Bounded recursive index used by Quick Open. It never follows symbolic
@@ -289,33 +355,155 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
         file: URL,
         maxBytes: Int = 2_000_000
     ) throws -> String {
-        let validatedRoot = try validateRoot(root)
-        let canonicalRoot = try canonicalExistingURL(validatedRoot)
-        let lexicalFile = file.standardizedFileURL
-        if symbolicLinkDestination(at: lexicalFile) != nil {
-            throw MainframeExplorerError.symbolicLinkTraversal(file.path)
+        try readUTF8Snapshot(root: root, file: file, maxBytes: maxBytes).text
+    }
+
+    /// Shares Explorer's reader with external observation. Never maps or reads
+    /// an unbounded file, and never opens a FIFO/device/socket as text.
+    public func readUTF8Snapshot(
+        root: URL,
+        file: URL,
+        maxBytes: Int = 2_000_000,
+        ordinaryTextOnly: Bool = false
+    ) throws -> MainframeExplorerTextSnapshot {
+        return try withDescriptor(root: root, item: file, directory: false) { fd, path in
+            if ordinaryTextOnly, MainframeExplorerVisualClassifier.isKnownNonText(fileName: file.lastPathComponent) {
+                throw MainframeExplorerError.unsupportedFile(path)
+            }
+            let before = try descriptorAttributes(fd, path: path)
+            let limit = min(max(1, maxBytes), Int.max - 1)
+            guard before.st_size <= limit else {
+                throw MainframeExplorerError.fileTooLarge(path: path, bytes: Int(before.st_size), limit: limit)
+            }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 8192)
+            while data.count <= limit {
+                let capacity = min(buffer.count, limit + 1 - data.count)
+                let count = buffer.withUnsafeMutableBytes { bytes in
+                    read(fd, bytes.baseAddress, capacity)
+                }
+                if count < 0 {
+                    if errno == EINTR { continue }
+                    throw posixError(path)
+                }
+                if count == 0 { break }
+                data.append(contentsOf: buffer.prefix(count))
+            }
+            guard data.count <= limit else {
+                throw MainframeExplorerError.fileTooLarge(path: path, bytes: data.count, limit: limit)
+            }
+            let after = try descriptorAttributes(fd, path: path)
+            guard before.st_size == after.st_size,
+                  modificationTime(before) == modificationTime(after),
+                  data.count == after.st_size else {
+                throw MainframeExplorerError.changedDuringRead(path)
+            }
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw MainframeExplorerError.nonUTF8(path)
+            }
+            if ordinaryTextOnly, text.unicodeScalars.contains(where: {
+                ($0.value < 32 && ![9, 10, 13].contains($0.value)) || $0.value == 127
+            }) {
+                throw MainframeExplorerError.unsupportedFile(path)
+            }
+            return MainframeExplorerTextSnapshot(text: text, facts: facts(path: path, info: after))
         }
-        let values = try lexicalFile.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        guard values.isRegularFile == true else {
-            throw MainframeExplorerError.notFile(file.path)
+    }
+
+    /// Anchors every component under the configured root with openat and
+    /// O_NOFOLLOW. Canonical aliases of the configured root are accepted;
+    /// links within that root are never an alternate authority path.
+    private func withParentDescriptor<T>(
+        root: URL, item: URL, body: (Int32, String, String) throws -> T
+    ) throws -> T {
+        let lexicalRoot = try validateRoot(root)
+        let canonicalRoot = try canonicalExistingURL(lexicalRoot)
+        let lexicalItem = item.standardizedFileURL
+        let base: URL
+        if isPath(lexicalItem.path, containedIn: lexicalRoot.path) { base = lexicalRoot }
+        else if isPath(lexicalItem.path, containedIn: canonicalRoot.path) { base = canonicalRoot }
+        else { throw MainframeExplorerError.unsafePath(item.path) }
+        let path = try relativePath(root: base, canonicalURL: lexicalItem, original: item)
+        let parts = path.split(separator: "/").map(String.init)
+        var parent = open(canonicalRoot.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parent >= 0 else { throw posixError(path) }
+        defer { close(parent) }
+        for component in parts.dropLast() {
+            let info = try attributes(parent: parent, name: component, path: path)
+            if info.st_mode & S_IFMT == S_IFLNK {
+                throw MainframeExplorerError.symbolicLinkTraversal(path)
+            }
+            let next = openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard next >= 0 else { throw posixError(path) }
+            close(parent)
+            parent = next
         }
-        let canonicalFile = try canonicalExistingURL(lexicalFile)
-        guard isPath(canonicalFile.path, containedIn: canonicalRoot.path) else {
-            throw MainframeExplorerError.unsafePath(file.path)
+        return try body(parent, parts.last ?? ".", path)
+    }
+
+    private func withDescriptor<T>(
+        root: URL, item: URL, directory: Bool, body: (Int32, String) throws -> T
+    ) throws -> T {
+        try withParentDescriptor(root: root, item: item) { parent, name, path in
+            let info = try attributes(parent: parent, name: name, path: path)
+            if info.st_mode & S_IFMT == S_IFLNK {
+                throw MainframeExplorerError.symbolicLinkTraversal(path)
+            }
+            let expected = directory ? S_IFDIR : S_IFREG
+            guard info.st_mode & S_IFMT == expected else {
+                throw directory ? MainframeExplorerError.notDirectory(path) : MainframeExplorerError.notFile(path)
+            }
+            let fd = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC | (directory ? O_DIRECTORY : 0))
+            guard fd >= 0 else { throw posixError(path) }
+            defer { close(fd) }
+            let opened = try descriptorAttributes(fd, path: path)
+            guard opened.st_mode & S_IFMT == expected else {
+                throw directory ? MainframeExplorerError.notDirectory(path) : MainframeExplorerError.notFile(path)
+            }
+            return try body(fd, path)
         }
-        let limit = max(1, maxBytes)
-        let size = values.fileSize ?? 0
-        guard size <= limit else {
-            throw MainframeExplorerError.fileTooLarge(path: file.path, bytes: size, limit: limit)
+    }
+
+    private func attributes(parent: Int32, name: String, path: String) throws -> stat {
+        var info = stat()
+        guard fstatat(parent, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw posixError(path) }
+        return info
+    }
+
+    private func descriptorAttributes(_ fd: Int32, path: String) throws -> stat {
+        var info = stat()
+        guard fstat(fd, &info) == 0 else { throw posixError(path) }
+        return info
+    }
+
+    private func facts(path: String, info: stat) -> MainframeExplorerFileFacts {
+        let type = info.st_mode & S_IFMT
+        return MainframeExplorerFileFacts(
+            relativePath: path,
+            kind: type == S_IFLNK ? .symbolicLink : (type == S_IFDIR ? .directory : .file),
+            byteCount: Int(info.st_size),
+            modifiedAt: modificationTime(info),
+            isRegularFile: type == S_IFREG
+        )
+    }
+
+    private func modificationTime(_ info: stat) -> Date {
+        #if canImport(Darwin)
+        let time = info.st_mtimespec
+        #else
+        let time = info.st_mtim
+        #endif
+        return Date(timeIntervalSince1970: Double(time.tv_sec) + Double(time.tv_nsec) / 1_000_000_000)
+    }
+
+    private func posixError(_ path: String) -> Error {
+        switch errno {
+        case ENOENT: return MainframeExplorerError.missingPath(path)
+        case EACCES, EPERM: return MainframeExplorerError.inaccessiblePath(path)
+        case ELOOP: return MainframeExplorerError.symbolicLinkTraversal(path)
+        case ENOTDIR: return MainframeExplorerError.notDirectory(path)
+        default: return NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }
-        let data = try Data(contentsOf: lexicalFile, options: [.mappedIfSafe])
-        guard data.count <= limit else {
-            throw MainframeExplorerError.fileTooLarge(path: file.path, bytes: data.count, limit: limit)
-        }
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw MainframeExplorerError.nonUTF8(file.path)
-        }
-        return text
     }
 
     /// Inspect a selected symbolic link without traversing it during ordinary
@@ -383,45 +571,6 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
             throw MainframeExplorerError.symbolicLinkTraversal(root.path)
         }
         return lexicalRoot
-    }
-
-    private func node(
-        root canonicalRoot: URL,
-        canonicalParent: URL,
-        url: URL
-    ) throws -> MainframeExplorerNode {
-        let lexicalURL = url.standardizedFileURL
-        let isSymbolicLink = symbolicLinkDestination(at: lexicalURL) != nil
-        let values = try lexicalURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-        let kind: MainframeExplorerNodeKind
-        if isSymbolicLink {
-            kind = .symbolicLink
-        } else if values.isDirectory == true {
-            kind = .directory
-        } else {
-            kind = .file
-        }
-
-        // `contentsOfDirectory` may rewrite an ancestor spelling on macOS
-        // (`/tmp` -> `/private/tmp`). The parent directory has already been
-        // canonicalized and containment-checked, so derive the child identity
-        // from that authorized parent plus the literal leaf name. This also
-        // preserves a dangling symlink as a leaf instead of resolving it.
-        let canonicalURL = canonicalParent
-            .appendingPathComponent(lexicalURL.lastPathComponent, isDirectory: false)
-            .standardizedFileURL
-        guard isPath(canonicalURL.path, containedIn: canonicalRoot.path) else {
-            throw MainframeExplorerError.unsafePath(url.path)
-        }
-        let relativePath = try relativePath(root: canonicalRoot, canonicalURL: canonicalURL, original: url)
-        return MainframeExplorerNode(
-            name: lexicalURL.lastPathComponent,
-            relativePath: relativePath,
-            url: lexicalURL,
-            kind: kind,
-            zone: MainframeExplorerZone.classify(relativePath: relativePath),
-            recordScope: MainframeExplorerRecordScope.derive(relativePath: relativePath)
-        )
     }
 
     /// Canonicalize an existing filesystem object using POSIX `realpath`, which
