@@ -202,11 +202,32 @@ public struct ContextSetEntry: Equatable, Codable, Sendable {
     fileprivate static func normalizedReasons(
         _ reasons: [ContextInclusionReason]
     ) -> [ContextInclusionReason] {
-        Array(Set(reasons)).sorted {
-            if $0.kind.rawValue != $1.kind.rawValue {
-                return $0.kind.rawValue < $1.kind.rawValue
-            }
-            return ($0.detail ?? "") < ($1.detail ?? "")
+        Array(Set(reasons)).sorted(by: reasonSortsBefore)
+    }
+
+    /// Total ordering for distinct public reason values.
+    ///
+    /// `nil` and `""` are intentionally different `ContextInclusionReason`
+    /// values, so they must not share the same sort key. Otherwise Set iteration
+    /// order can leak into the manifest and make identical compilation inputs
+    /// serialize differently.
+    private static func reasonSortsBefore(
+        _ left: ContextInclusionReason,
+        _ right: ContextInclusionReason
+    ) -> Bool {
+        if left.kind.rawValue != right.kind.rawValue {
+            return left.kind.rawValue < right.kind.rawValue
+        }
+
+        switch (left.detail, right.detail) {
+        case (nil, nil):
+            return false
+        case (nil, .some):
+            return true
+        case (.some, nil):
+            return false
+        case let (.some(leftDetail), .some(rightDetail)):
+            return leftDetail < rightDetail
         }
     }
 
