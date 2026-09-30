@@ -2605,6 +2605,61 @@ check(
 )
 
 
+// MARK: - Hosted filesystem observation
+
+withTempDir { root in
+    let file = root.appendingPathComponent("source.swift")
+    try "let answer = 42\n".write(to: file, atomically: true, encoding: .utf8)
+    func observe(_ operation: String, _ path: String, _ extra: [String: CodexJSON] = [:]) -> [String: Any] {
+        var fields = extra
+        fields["operation"] = .string(operation)
+        fields["path"] = .string(path)
+        return ConduitFilesystemReadTool.observe(arguments: .object(fields), root: root)
+    }
+    check("filesystem tool published read-only", (ConduitSessionToolCatalog.tool(named: ConduitFilesystemReadTool.name)?["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool == true)
+    check("filesystem bounded directory read", observe("list", "")["returned"] as? Int == 1)
+    check("filesystem exact UTF-8 source read", observe("read", "source.swift")["text"] as? String == "let answer = 42\n")
+    check("filesystem exact missing path", observe("stat", "new.txt")["status"] as? String == "missing")
+    try "new".write(to: root.appendingPathComponent("new.txt"), atomically: true, encoding: .utf8)
+    check("filesystem recovers newly nominated path", observe("read", "new.txt")["text"] as? String == "new")
+    check("filesystem outside root rejected", observe("read", "../outside")["status"] as? String == "outside_root")
+    try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("alias").path, withDestinationPath: "source.swift")
+    check("filesystem link leaf stays unread", observe("read", "alias")["status"] as? String == "symlink_traversal")
+    check("filesystem oversize read refused", observe("read", "source.swift", ["max_bytes": .number(1)])["status"] as? String == "oversized")
+    try Data([0, 255]).write(to: root.appendingPathComponent("binary.txt"))
+    check("filesystem binary data unsupported", observe("read", "binary.txt")["status"] as? String == "unsupported")
+}
+
+#if canImport(Darwin)
+do {
+    let fm = FileManager.default
+    let base = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+        .appendingPathComponent("conduit-deletion-selftest-\(UUID().uuidString)", isDirectory: true)
+    let root = base.appendingPathComponent("root", isDirectory: true)
+    let path = "20_live/new/nested/recovery.json"
+    let file = root.appendingPathComponent(path)
+    try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    func observe(_ operation: String, _ path: String) -> [String: Any] {
+        ConduitFilesystemReadTool.observe(arguments: .object([
+            "operation": .string(operation), "path": .string(path)
+        ]), root: root)
+    }
+    try Data("{\"revision\":1}".utf8).write(to: file)
+    check("aliased root exact stat before deletion", observe("stat", path)["status"] as? String == "ok")
+    check("aliased root exact read before deletion", observe("read", path)["text"] as? String == "{\"revision\":1}")
+    try "changed\r\n".write(to: file, atomically: true, encoding: .utf8)
+    check("aliased root exact read after update", observe("read", path)["text"] as? String == "changed\r\n")
+    try fm.removeItem(at: file)
+    check("aliased root and parent remain after deletion", fm.fileExists(atPath: root.path) && fm.fileExists(atPath: file.deletingLastPathComponent().path))
+    check("aliased root deleted leaf is missing", observe("stat", path)["status"] as? String == "missing")
+    check("aliased root parent escape stays outside", observe("stat", "../outside")["status"] as? String == "outside_root")
+    try fm.createSymbolicLink(atPath: root.appendingPathComponent("dangling").path, withDestinationPath: path)
+    check("aliased root dangling link remains a link", observe("stat", "dangling")["status"] as? String == "symbolic_link")
+    check("aliased root dangling link is not read", observe("read", "dangling")["status"] as? String == "symlink_traversal")
+}
+#endif
+
 // MARK: - MCP admission boundary
 //
 // This boundary had no call sites and no tests before 2026-08-20; it is what

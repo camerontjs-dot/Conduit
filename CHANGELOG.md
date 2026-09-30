@@ -25,7 +25,26 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- Exact filesystem observation reports a contained deleted file as `missing`
+  across configured-root aliases, including macOS `/private/tmp` and `/tmp`.
+  Containment keeps the already checked path spellings stable; outside-root
+  paths and symlink traversal retain their existing refusals.
+
 ### Added
+
+- `conduit_read_filesystem` exposes bounded directory listing, exact ordinary
+  UTF-8 reads, and live path metadata through Explorer Core. Exact paths recover
+  newly created files without a cached index. Missing, inaccessible, symlink,
+  outside-root, binary/unsupported, oversized and concurrent-change states are
+  explicit. Observation remains separate from session/runtime commands and the
+  Session API write switch.
+
+- Explorer directory and text reads now use root-anchored, no-follow file
+  descriptors for every path component. Text reads consume at most the byte
+  limit plus one lookahead byte; links remain leaves and special files are
+  never opened as text.
 
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
