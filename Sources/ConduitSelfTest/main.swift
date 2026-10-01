@@ -3748,6 +3748,40 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Durable Codex terminal failure (#114)
+
+withTempDir { directory in
+    let log = ConversationEventLog(directory: directory, taskSessionID: TaskSessionID())
+    let queued = SessionPresentation.promptEvent(text: "fixture", attachmentPaths: [], renderedPayload: "fixture")
+    let prompt = SessionPresentation.updatingPromptDelivery(in: [queued], eventID: queued.id, to: .delivered)[0]
+    var receipt = ProviderTurnFailureReceipt.codex(
+        threadID: "fixture-thread", turnID: "fixture-turn", source: "error.willRetry=false",
+        error: .object(["codexErrorInfo": .string("unauthorized"),
+                        "message": .string("untrusted private message")])
+    )
+    receipt.promptEventID = prompt.id
+    do {
+        try log.append(prompt)
+        try log.append(SessionPresentation.providerFailureEvent(receipt))
+        let replay = log.read()
+        let source = ConduitSessionEventSource(taskSessionID: "fixture-task", backend: .appServer,
+            sessionLifecycle: "closed", runtimeState: "closed", live: false, ready: false,
+            events: replay.events, persistedThreadID: "fixture-thread")
+        let turn = ConduitSessionEventExport.turnSnapshot(source: source)
+        let page = ConduitSessionEventExport.page(source: source)
+        check("Codex terminal failure survives durable replay without a live adapter", turn.state == "failed" && turn.failure == receipt)
+        check("session status and events agree about the failed provider turn", page.turn == turn && page.observation.checkpoint == .structuredFailed)
+        check("provider failure preserves observed runtime close separately", page.session.lifecycle == "closed" && !page.session.live)
+        check("provider failure produces no assistant output", replay.events.allSatisfy { if case .agentOutput = $0.kind { return false }; return true })
+        check("provider failure withholds arbitrary error text", receipt.messageWithheld && !receipt.reason.contains("private message"))
+        let control = ConduitSessionEventSource(taskSessionID: "control", backend: .appServer,
+            sessionLifecycle: "closed", runtimeState: "closed", live: false, ready: false, events: [prompt])
+        check("runtime close without a terminal protocol result is not provider failure", ConduitSessionEventExport.turnSnapshot(source: control).state != "failed")
+    } catch {
+        check("durable provider failure selftest writes real history", false)
+    }
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

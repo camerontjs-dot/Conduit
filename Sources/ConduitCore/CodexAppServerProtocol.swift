@@ -105,7 +105,7 @@ public enum CodexJSONRPCMessage: Equatable, Sendable {
     case notification(method: String, params: CodexJSON)
     case request(id: CodexJSONRPCID, method: String, params: CodexJSON)
     case response(id: CodexJSONRPCID, result: CodexJSON)
-    case error(id: CodexJSONRPCID?, message: String)
+    case error(id: CodexJSONRPCID?, message: String, code: Int? = nil)
 
     public static func parseLine(_ line: String) -> CodexJSONRPCMessage? {
         guard let json = CodexJSON.parseLine(line) else { return nil }
@@ -117,7 +117,12 @@ public enum CodexJSONRPCMessage: Equatable, Sendable {
         let method = json["method"]?.stringValue
         if let error = json["error"] {
             let message = error["message"]?.stringValue ?? "app-server error"
-            return .error(id: id, message: message)
+            let code: Int?
+            if case .number(let value) = error["code"], value.isFinite,
+               value.rounded() == value, (Double(Int32.min)...Double(Int32.max)).contains(value) {
+                code = Int(value)
+            } else { code = nil }
+            return .error(id: id, message: message, code: code)
         }
         if let method {
             let params = json["params"] ?? .object([:])
@@ -189,6 +194,7 @@ public enum CodexAppServerEffect: Equatable, Sendable {
     case upsertOutput(text: String, state: AgentOutputState)
     case requestApproval(CodexAppServerApproval)
     case turnCompleted(status: String)
+    case turnFailed(ProviderTurnFailureReceipt)
     case failed(String)
 }
 
@@ -200,6 +206,8 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     public var turnActive = false
     public var lastTurnStatus: String?
     public var lastAppendWasNote = false
+    private var lastFailedTurnID: String?
+    private var lastTerminalTurnID: String?
 
     public init() {}
 
@@ -207,7 +215,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
         _ message: CodexJSONRPCMessage
     ) -> [CodexAppServerEffect] {
         switch message {
-        case .error(_, let message):
+        case .error(_, let message, _):
             return [.failed(message)]
         case .response(_, let result):
             if let threadID = Self.threadID(in: result) {
@@ -241,6 +249,8 @@ public struct CodexAppServerMapper: Equatable, Sendable {
         turnActive = false
         lastTurnStatus = nil
         lastAppendWasNote = false
+        lastFailedTurnID = nil
+        lastTerminalTurnID = nil
     }
 
     private mutating func applyNotification(
@@ -255,12 +265,20 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             }
             return []
         case "turn/started":
+            if let incoming = params["threadId"]?.stringValue {
+                guard threadID == nil || threadID == incoming else { return [] }
+                threadID = incoming
+            }
             turnActive = true
+            lastTurnStatus = nil
+            lastFailedTurnID = nil
+            lastTerminalTurnID = nil
             activeTurnID = params["turn"]?["id"]?.stringValue
                 ?? params["turnId"]?.stringValue
             guard let activeTurnID else { return [] }
             return [.turnStarted(id: activeTurnID)]
         case "item/agentMessage/delta":
+            guard lastTurnStatus != "failed" else { return [] }
             let delta = Self.deltaText(in: params)
             guard !delta.isEmpty else { return [] }
             if lastAppendWasNote, !accumulatedText.hasSuffix("\n"), !delta.hasPrefix("\n") {
@@ -271,6 +289,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             turnActive = true
             return [.upsertOutput(text: accumulatedText, state: .live)]
         case "item/started", "item/completed":
+            guard lastTurnStatus != "failed" else { return [] }
             // Skip chat-chrome items (userMessage, agentMessage, …). Those
             // already have Conversation events; dumping `[userMessage]` into
             // the assistant card makes the turn look like a protocol dump.
@@ -282,12 +301,36 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             }
             return []
         case "turn/completed":
+            let incomingThread = params["threadId"]?.stringValue
+            let incomingTurn = params["turn"]?["id"]?.stringValue ?? params["turnId"]?.stringValue
+            guard incomingThread == nil || threadID == nil || incomingThread == threadID,
+                  incomingTurn == nil || activeTurnID == nil || incomingTurn == activeTurnID
+            else { return [] }
+            if !turnActive, let lastFailedTurnID, incomingTurn != lastFailedTurnID { return [] }
+            if !turnActive, let lastTerminalTurnID, incomingTurn != lastTerminalTurnID { return [] }
+            let status = params["turn"]?["status"]?.stringValue
+                ?? params["status"]?.stringValue ?? "completed"
+            if status == "failed" {
+                guard let thread = incomingThread, thread == threadID,
+                      let turn = incomingTurn,
+                      turn == activeTurnID || (!turnActive && turn == lastFailedTurnID)
+                else { return [] }
+                let receipt = ProviderTurnFailureReceipt.codex(
+                    threadID: thread, turnID: turn,
+                    source: "turn/completed.failed", error: params["turn"]?["error"] ?? .null
+                )
+                turnActive = false
+                activeTurnID = nil
+                lastTurnStatus = "failed"
+                lastFailedTurnID = receipt.turnID
+                lastTerminalTurnID = receipt.turnID
+                return [.turnFailed(receipt)]
+            }
+            if lastTurnStatus == "failed", incomingTurn == lastFailedTurnID { return [] }
             turnActive = false
             activeTurnID = nil
-            let status = params["turn"]?["status"]?.stringValue
-                ?? params["status"]?.stringValue
-                ?? "completed"
             lastTurnStatus = status
+            lastTerminalTurnID = incomingTurn
             var effects: [CodexAppServerEffect] = []
             if !accumulatedText.isEmpty {
                 effects.append(.upsertOutput(text: accumulatedText, state: .closed))
@@ -295,7 +338,22 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             effects.append(.turnCompleted(status: status))
             return effects
         case "error":
-            return [.failed(params["message"]?.stringValue ?? "app-server error")]
+            // Retryable and uncorrelated errors are diagnostics, not turn results.
+            guard params["willRetry"]?.boolValue == false,
+                  let thread = params["threadId"]?.stringValue, thread == threadID,
+                  let turn = params["turnId"]?.stringValue, turn == activeTurnID,
+                  turnActive, case .object = params["error"],
+                  params["error"]?["message"]?.stringValue != nil else { return [] }
+            let receipt = ProviderTurnFailureReceipt.codex(
+                threadID: thread, turnID: turn,
+                source: "error.willRetry=false", error: params["error"] ?? .null
+            )
+            turnActive = false
+            activeTurnID = nil
+            lastTurnStatus = "failed"
+            lastFailedTurnID = turn
+            lastTerminalTurnID = turn
+            return [.turnFailed(receipt)]
         default:
             return []
         }

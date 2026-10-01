@@ -609,6 +609,8 @@ public struct ConversationEventLog: Equatable, Sendable {
         switch event.kind {
         case .sessionOpened, .userPrompt, .interruptRequested:
             return event.authority == .conduitRecorded
+        case .providerTurnFailed:
+            return event.authority == .toolReported
         case .agentOutput(let output):
             switch output.extraction {
             case .renderedBuffer, .tmuxPane:
@@ -662,6 +664,12 @@ public struct ConversationEventLog: Equatable, Sendable {
 
         case (.interruptRequested, .interruptRequested):
             return true
+
+        case let (.providerTurnFailed(previous), .providerTurnFailed(candidate)):
+            return previous == candidate
+
+        case (.providerTurnFailed, _), (_, .providerTurnFailed):
+            return false
 
         case (.sessionOpened, .userPrompt),
              (.sessionOpened, .agentOutput),

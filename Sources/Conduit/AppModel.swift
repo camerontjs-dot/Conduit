@@ -1760,6 +1760,8 @@ final class AppModel: ObservableObject {
             phase = "prompt"
         case .interruptRequested:
             phase = "interrupt-requested"
+        case .providerTurnFailed:
+            phase = "provider-turn-failed"
         case .agentOutput(let output):
             switch output.state {
             case .live: phase = "output-first"
@@ -6043,11 +6045,15 @@ final class AppModel: ObservableObject {
                     return "opened[\(event.authority.displayName)]"
                 case .interruptRequested:
                     return "interrupt requested[\(event.authority.displayName)]"
+                case .providerTurnFailed(let receipt):
+                    return "provider turn failed[\(receipt.providerID)]: \(receipt.reason)"
                 }
             }
             payload["events"] = Array(events)
             payload["authority"] = "observed summaries; not verification"
         }
+        let source = sessionAPIEventSource(for: task, live: live, status: payload)
+        payload["turn"] = ConduitSessionEventExport.turnSnapshot(source: source).jsonObject()
         return payload
     }
 
@@ -6063,6 +6069,19 @@ final class AppModel: ObservableObject {
         }
         let live = sessionAPILiveRuntime(for: task.id)
         let status = sessionAPITaskPayload(for: task)
+        let source = sessionAPIEventSource(for: task, live: live, status: status)
+        return ConduitSessionEventExport.page(
+            source: source,
+            cursor: cursor,
+            limit: limit
+        ).jsonObject()
+    }
+
+    /// Status and events consume one source and one turn reducer, including
+    /// durable provider failure after the adapter and process are gone.
+    private func sessionAPIEventSource(
+        for task: TaskSessionSnapshot, live: TerminalRuntime?, status: [String: Any]
+    ) -> ConduitSessionEventSource {
         let backend: AgentSessionBackend = {
             if live?.usesStructuredHost == true {
                 return agentProfile(named: task.metadata.agentName)?.preferredSessionBackend
@@ -6099,8 +6118,8 @@ final class AppModel: ObservableObject {
                 taskSessionID: task.id
             ).read().events
         }
-        let source = ConduitSessionEventSource(
-            taskSessionID: rawID,
+        return ConduitSessionEventSource(
+            taskSessionID: task.id.rawValue.uuidString,
             backend: backend,
             sessionLifecycle: status["lifecycle"] as? String ?? "unknown",
             runtimeState: status["runtime_state"] as? String ?? "unknown",
@@ -6112,11 +6131,6 @@ final class AppModel: ObservableObject {
             persistedThreadID: persistedThreadID,
             observedAt: Date()
         )
-        return ConduitSessionEventExport.page(
-            source: source,
-            cursor: cursor,
-            limit: limit
-        ).jsonObject()
     }
 
     private func sessionAPICreateTask(
@@ -7988,6 +8002,22 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             pendingAppServerApproval = approval
         case .turnCompleted:
             closeAgentOutputCapture()
+        case .turnFailed(var receipt):
+            receipt.promptEventID = presentationEvents.last(where: {
+                if case .userPrompt(let prompt) = $0.kind { return prompt.delivery == .delivered }
+                return false
+            })?.id
+            let duplicate = presentationEvents.contains {
+                if case .providerTurnFailed(let previous) = $0.kind { return previous == receipt }
+                return false
+            }
+            if !duplicate {
+                let event = SessionPresentation.providerFailureEvent(receipt)
+                presentationEvents.append(event)
+                recordEventRevision?(event)
+            }
+            closeAgentOutputCapture()
+            conversationCaptureNotice = receipt.reason
         case .failed(let message):
             conversationCaptureNotice = message
         }

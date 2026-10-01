@@ -106,6 +106,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Codex app-server terminal rejection now ends the provider turn and retains a
+  safe, durable failure receipt even when no assistant output was produced.
+  Session status and events use the same turn projection after runtime close.
+  Retry notifications, unrelated RPC errors, and quiet process/PTY closure
+  do not establish provider failure. Task lifecycle, verification, and
+  objective acceptance remain separate (#114).
+
 - Fleet keeps every provider inventory row visible but reads expensive
   turn/runtime detail only for sessions with a current exact Conduit task
   association or current Conduit writer authority. Skipped historical/external

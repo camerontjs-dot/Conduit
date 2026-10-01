@@ -189,6 +189,8 @@ public enum SessionPresentationEventKind: Codable, Equatable, Sendable {
     /// Conduit issued an interrupt request to a live runtime. This is not an
     /// assertion that the provider received it or that its turn stopped.
     case interruptRequested
+    /// A terminal provider result, independent of output and task acceptance.
+    case providerTurnFailed(ProviderTurnFailureReceipt)
 }
 
 /// One append-first item in Conduit's derived session view.
@@ -295,6 +297,14 @@ public enum SessionPresentation {
         )
     }
 
+    public static func providerFailureEvent(
+        _ receipt: ProviderTurnFailureReceipt,
+        id: UUID = UUID(), occurredAt: Date = Date()
+    ) -> SessionPresentationEvent {
+        SessionPresentationEvent(id: id, occurredAt: occurredAt, authority: .toolReported,
+                                 kind: .providerTurnFailed(receipt))
+    }
+
     /// Updates only the matching prompt event. Opening and unrelated prompt
     /// events retain their identity and contents.
     public static func updatingPromptDelivery(
@@ -362,7 +372,7 @@ public enum SessionPresentation {
 
         for event in events {
             switch event.kind {
-            case .sessionOpened, .interruptRequested:
+            case .sessionOpened, .interruptRequested, .providerTurnFailed:
                 flushOpen()
                 turns.append(ConversationTurn(id: event.id, kind: .boundary(event)))
             case .userPrompt:

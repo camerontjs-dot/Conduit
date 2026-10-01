@@ -35,14 +35,12 @@ final class CodexAppServerClient: ObservableObject {
     @Published private(set) var lastTurnStatus: String?
     @Published var pendingApproval: CodexAppServerApproval?
     @Published private(set) var lastError: String?
-    /// Set only when a failure ends a turn that was still running.
-    ///
-    /// A `.failed` effect that arrives after the turn already completed does
-    /// not un-complete it: interrupting a finished turn makes the provider
-    /// report an error, and treating that as a turn failure erases a real
-    /// observed completion. `lastError` keeps every error for display; this
-    /// field carries only the ones that are the turn's outcome.
+    /// Set only by a correlated terminal provider result. Diagnostics and
+    /// transport loss remain independent of the turn's outcome.
     @Published private(set) var turnFailure: String?
+    @Published private(set) var terminalFailureReceipt: ProviderTurnFailureReceipt?
+    private var pendingTurnStartID: Int?
+    private var effectiveModel: String?
 
     /// Where the session this client is driving came from.
     ///
@@ -287,6 +285,7 @@ final class CodexAppServerClient: ObservableObject {
         guard let liveThreadID = self.threadID else {
             throw ClientError.protocolError("thread start/resume did not return a thread id.")
         }
+        effectiveModel = started["model"]?.stringValue ?? model
         resumeProvenance = SessionResumeSemantics.classify(
             requested: resumeThreadID,
             started: liveThreadID,
@@ -309,7 +308,7 @@ final class CodexAppServerClient: ObservableObject {
         } else {
             streamPump?.resetTurn()
             activeTurnID = nil
-            send(
+            pendingTurnStartID = send(
                 CodexAppServerRequests.turnStart(
                     id: 0,
                     threadID: threadID,
@@ -318,12 +317,11 @@ final class CodexAppServerClient: ObservableObject {
             )
         }
         isTurnActive = true
-        // A new turn must not inherit the previous turn's failure. lastError
-        // is what marks a turn failed rather than completed, so leaving it set
-        // would report every later successful turn on this task as failed.
+        // A new turn must not inherit the previous turn's failure.
         lastTurnStatus = nil
         lastError = nil
         turnFailure = nil
+        terminalFailureReceipt = nil
     }
 
     func interrupt() {
@@ -413,11 +411,23 @@ final class CodexAppServerClient: ObservableObject {
         for delivery in deliveries {
             switch delivery {
             case .response(let id, let result):
+                if case .number(let number) = id, number == pendingTurnStartID {
+                    pendingTurnStartID = nil
+                }
                 if case .number(let number) = id,
                    let continuation = pendingResponses.removeValue(forKey: number) {
                     continuation.resume(returning: result)
                 }
-            case .error(let id, let message):
+            case .error(let id, let message, let code):
+                if case .number(let number)? = id, number == pendingTurnStartID,
+                   let threadID, isTurnActive {
+                    pendingTurnStartID = nil
+                    apply(.turnFailed(.codex(
+                        threadID: threadID, turnID: activeTurnID, requestID: number,
+                        source: "turn/start.jsonrpc_error",
+                        error: .object(["message": .string(message)]), rpcErrorCode: code
+                    )))
+                }
                 if case .number(let number)? = id,
                    let continuation = pendingResponses.removeValue(forKey: number) {
                     continuation.resume(throwing: ClientError.protocolError(message))
@@ -458,12 +468,25 @@ final class CodexAppServerClient: ObservableObject {
             isTurnActive = false
             activeTurnID = nil
             lastTurnStatus = status
+        case .turnFailed(var receipt):
+            guard receipt.threadID == threadID,
+                  receipt.turnID == nil || activeTurnID == nil || receipt.turnID == activeTurnID
+            else { return }
+            receipt.modelID = effectiveModel
+            isTurnActive = false
+            activeTurnID = nil
+            pendingTurnStartID = nil
+            pendingApproval = nil
+            lastTurnStatus = "failed"
+            turnFailure = receipt.reason
+            terminalFailureReceipt = receipt
+            lastError = receipt.reason
+            onEffect?(.turnFailed(receipt))
+            return
         case .failed(let message):
             lastError = message
-            if isTurnActive {
-                isTurnActive = false
-                turnFailure = message
-            }
+            // RPC diagnostics and transport trouble do not establish that a
+            // provider turn failed. Only correlated terminal protocol facts do.
         }
         onEffect?(effect)
     }
@@ -497,7 +520,8 @@ final class CodexAppServerClient: ObservableObject {
         }
     }
 
-    private func send(_ payload: [String: Any]) {
+    @discardableResult
+    private func send(_ payload: [String: Any]) -> Int? {
         var payload = payload
         if payload["id"] as? Int == 0 {
             payload["id"] = nextID
@@ -506,9 +530,10 @@ final class CodexAppServerClient: ObservableObject {
         guard let stdinHandle,
               let data = try? JSONSerialization.data(withJSONObject: payload),
               var line = String(data: data, encoding: .utf8)
-        else { return }
+        else { return nil }
         line += "\n"
         stdinHandle.write(Data(line.utf8))
+        return payload["id"] as? Int
     }
 
     private func failPending(_ message: String) {

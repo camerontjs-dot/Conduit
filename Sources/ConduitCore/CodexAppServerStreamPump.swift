@@ -79,7 +79,7 @@ extension CodexAppServerStreamError: LocalizedError {
 /// potentially expensive cumulative-output assembly.
 public enum CodexAppServerDelivery: Equatable, Sendable {
     case response(id: CodexJSONRPCID, result: CodexJSON)
-    case error(id: CodexJSONRPCID?, message: String)
+    case error(id: CodexJSONRPCID?, message: String, code: Int? = nil)
     case effect(CodexAppServerEffect)
 }
 
@@ -312,8 +312,8 @@ public final class CodexAppServerStreamPump: @unchecked Sendable {
         switch message {
         case .response(let id, let result):
             guard enqueue(.response(id: id, result: result)) else { return }
-        case .error(let id, let message):
-            guard enqueue(.error(id: id, message: message)) else { return }
+        case .error(let id, let message, let code):
+            guard enqueue(.error(id: id, message: message, code: code)) else { return }
         case .notification, .request:
             break
         }

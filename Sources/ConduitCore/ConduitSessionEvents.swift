@@ -11,7 +11,8 @@ public struct ConduitSessionAdapterSnapshot: Equatable, Sendable {
     public var pendingApproval: Bool
     public var pendingApprovalSummary: String?
     /// The provider's failure for THIS turn, from the adapter's
-    /// `.failed(message)` effect while the turn was still running.
+    /// terminal effect while the turn was still running (`turnFailed` for
+    /// Codex; other adapters keep their existing provider-specific signals).
     ///
     /// Deliberately a separate field rather than something inferred from
     /// `lastTurnStatus` text, and deliberately scoped to the turn: an error
@@ -178,6 +179,7 @@ public struct ConduitSessionTurnSnapshot: Codable, Equatable, Sendable {
     public var threadID: String?
     public var threadIDSource: ConduitSessionProviderThreadSource
     public var pendingApproval: Bool
+    public var failure: ProviderTurnFailureReceipt?
 
     public init(
         state: String,
@@ -186,7 +188,8 @@ public struct ConduitSessionTurnSnapshot: Codable, Equatable, Sendable {
         ambiguity: String? = nil,
         threadID: String? = nil,
         threadIDSource: ConduitSessionProviderThreadSource = .unavailable,
-        pendingApproval: Bool = false
+        pendingApproval: Bool = false,
+        failure: ProviderTurnFailureReceipt? = nil
     ) {
         self.state = state
         self.status = status
@@ -195,6 +198,7 @@ public struct ConduitSessionTurnSnapshot: Codable, Equatable, Sendable {
         self.threadID = threadID
         self.threadIDSource = threadIDSource
         self.pendingApproval = pendingApproval
+        self.failure = failure
     }
 
     public func jsonObject() -> [String: Any] {
@@ -207,6 +211,7 @@ public struct ConduitSessionTurnSnapshot: Codable, Equatable, Sendable {
         if let status { payload["status"] = status }
         if let ambiguity { payload["ambiguity"] = ambiguity }
         if let threadID { payload["thread_id"] = threadID }
+        if let failure { payload["failure"] = failure.jsonObject() }
         return payload
     }
 }
@@ -239,6 +244,7 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
     public var promptEventID: String?
     public var artifactRefs: [ConduitSessionArtifactRef]
     public var turnStatus: String?
+    public var providerFailure: ProviderTurnFailureReceipt?
     public var contentDigest: String
 
     public init(
@@ -255,6 +261,7 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
         promptEventID: String? = nil,
         artifactRefs: [ConduitSessionArtifactRef] = [],
         turnStatus: String? = nil,
+        providerFailure: ProviderTurnFailureReceipt? = nil,
         contentDigest: String
     ) {
         self.cursor = cursor
@@ -270,6 +277,7 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
         self.promptEventID = promptEventID
         self.artifactRefs = artifactRefs
         self.turnStatus = turnStatus
+        self.providerFailure = providerFailure
         self.contentDigest = contentDigest
     }
 
@@ -290,6 +298,7 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
         if let state { payload["state"] = state }
         if let promptEventID { payload["prompt_event_id"] = promptEventID }
         if let turnStatus { payload["turn_status"] = turnStatus }
+        if let providerFailure { payload["provider_failure"] = providerFailure.jsonObject() }
         return payload
     }
 }
@@ -483,6 +492,16 @@ public enum ConduitSessionEventExport {
         let adapter = source.adapter
         let thread = providerThreadSnapshot(source: source)
         if source.backend.isStructured {
+            if adapter?.turnActive != true, adapter?.pendingApproval != true,
+               let failure = durableFailure(source: source) {
+                return ConduitSessionTurnSnapshot(
+                    state: "failed", status: "failed",
+                    honesty: "Provider reported a terminal turn failure. Not completion, verification, or objective acceptance.",
+                    threadID: failure.threadID,
+                    threadIDSource: adapter == nil ? .persisted : .live,
+                    failure: failure
+                )
+            }
             if adapter?.pendingApproval == true {
                 return ConduitSessionTurnSnapshot(
                     state: "awaiting_input",
@@ -493,7 +512,7 @@ public enum ConduitSessionEventExport {
                     pendingApproval: true
                 )
             }
-            if adapter?.turnActive == true || lastStructuredOutput(in: source.events)?.state == .live {
+            if adapter?.turnActive == true {
                 return ConduitSessionTurnSnapshot(
                     state: "active",
                     status: adapter?.lastTurnStatus,
@@ -506,13 +525,20 @@ public enum ConduitSessionEventExport {
             // Checked before the completion branch because an adapter can
             // report a terminal status alongside the error, and any non-nil
             // status used to be mapped straight to "completed".
-            if let failure = adapter?.turnFailure, !failure.isEmpty {
+            if adapter?.lastTurnStatus == "failed"
+                || (adapter?.turnFailure.map { !$0.isEmpty } ?? false) {
                 return ConduitSessionTurnSnapshot(
                     state: "failed",
                     status: adapter?.lastTurnStatus ?? "failed",
-                    honesty: "structured adapter reported a provider failure for this turn; no result was produced. Not completion.",
+                    honesty: "structured adapter reported a provider failure for this turn. Not completion or verification.",
                     threadID: thread.id,
                     threadIDSource: thread.source
+                )
+            }
+            if lastStructuredOutput(in: source.events)?.state == .live {
+                return ConduitSessionTurnSnapshot(
+                    state: "active", honesty: "Structured output was observed live; no terminal result is recorded. Not verification.",
+                    threadID: thread.id, threadIDSource: thread.source
                 )
             }
             if adapter?.lastTurnStatus != nil
@@ -747,6 +773,15 @@ public enum ConduitSessionEventExport {
                 textLimit: textLimit
             )
 
+        case .providerTurnFailed(let receipt):
+            return makeRecord(
+                event: event, index: index, kind: "provider_turn_failure", source: receipt.providerID,
+                text: receipt.reason, state: "failed", sourceTruncated: false,
+                alreadyRedacted: receipt.messageWithheld,
+                promptEventID: receipt.promptEventID?.uuidString,
+                turnStatus: "failed", providerFailure: receipt, textLimit: textLimit
+            )
+
         case .interruptRequested:
             return makeRecord(
                 event: event,
@@ -773,6 +808,7 @@ public enum ConduitSessionEventExport {
         promptEventID: String? = nil,
         artifactRefs: [ConduitSessionArtifactRef] = [],
         turnStatus: String? = nil,
+        providerFailure: ProviderTurnFailureReceipt? = nil,
         textLimit: Int
     ) -> ConduitSessionEventRecord {
         let sanitized: (text: String, truncated: Bool, redacted: Bool)
@@ -805,6 +841,7 @@ public enum ConduitSessionEventExport {
             promptEventID: promptEventID,
             artifactRefs: artifactRefs,
             turnStatus: turnStatus,
+            providerFailure: providerFailure,
             contentDigest: digest
         )
     }
@@ -858,6 +895,7 @@ public enum ConduitSessionEventExport {
         in events: [SessionPresentationEvent]
     ) -> AgentVisibleOutput? {
         for event in events.reversed() {
+            if case .userPrompt(let prompt) = event.kind, prompt.delivery == .delivered { return nil }
             if case .agentOutput(let output) = event.kind,
                output.extraction == .structuredAdapter {
                 return output
@@ -923,7 +961,29 @@ public enum ConduitSessionEventExport {
         if source.backend.isStructured, source.adapter != nil {
             return "toolReported"
         }
+        if source.backend.isStructured, durableFailure(source: source) != nil { return "toolReported" }
         return "conduitRecorded"
+    }
+
+    private static func durableFailure(source: ConduitSessionEventSource) -> ProviderTurnFailureReceipt? {
+        // Only Codex has this durable terminal protocol path today. A receipt
+        // must not give another provider an invented error interpretation.
+        guard source.backend == .appServer else { return nil }
+        let promptID = source.events.last(where: {
+            if case .userPrompt(let prompt) = $0.kind { return prompt.delivery == .delivered }
+            return false
+        })?.id
+        guard let promptID else { return nil }
+        let thread = source.adapter?.threadID ?? source.persistedThreadID
+        for event in source.events.reversed() {
+            if case .providerTurnFailed(let receipt) = event.kind,
+               event.authority == .toolReported, receipt.promptEventID == promptID,
+               receipt.providerID == "codex", receipt.runtime == "codex-app-server",
+               thread == nil || thread == receipt.threadID {
+                return receipt
+            }
+        }
+        return nil
     }
 
     private static func lastPrompt(
