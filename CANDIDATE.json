@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "candidate_id": "conduit-issue114-terminal-rejection-20261001-rc0",
+  "product_line": "Conduit",
+  "issue": 114,
+  "base_commit": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "source_commit": "0aa100254d5c261d7c7c1db29cd21b6d537f6b85",
+  "source_tree": "e445474c76ebcdf6d2a8c45711d0565654856102",
+  "freeze_commit_resolution": "git log -1 --format=%H -- CANDIDATE.json; exact freeze head/tree are also recorded in the issue #114 receipt",
+  "versions": {
+    "swift_tools": "5.9",
+    "minimum_macos": "13",
+    "inspected_codex_cli": "0.154.0",
+    "SwiftTerm_revision": "58915b1010d7dbc86d0e79dc2c40f0c183ccaf5b"
+  },
+  "lifecycle_state": "FROZEN",
+  "advancement_readiness_at_freeze": "PENDING_EXACT_FREEZE_LOCAL_QUALIFICATION; INDEPENDENT_NOT_RUN",
+  "created_at_utc": "2026-10-01T14:02:07Z",
+  "included_scope": [
+    "Correlated Codex terminal notifications and turn/start JSON-RPC rejection",
+    "Safe typed provider-turn receipts in append-only Conversation history",
+    "Shared status/events failed-turn projection and Conversation failure boundary",
+    "Conditional incident and negative-control regressions"
+  ],
+  "excluded_scope": [
+    "Issue #113 preflight eligibility or any second model-profile authority",
+    "PR #97 composition/rebase or operator model defaults",
+    "PR #82 composition or queue/steer policy changes",
+    "Installed app replacement, HTTP/MCP/tunnel qualification, login or subscription/quota changes",
+    "Merge, release, objective acceptance, or research/verification disposition"
+  ],
+  "predecessors": {
+    "PR97": "independent; unchanged static routing foundation",
+    "PR82": "independent; unchanged queue/steer predecessor, live qualification debt remains"
+  },
+  "evidence_at_freeze": {
+    "component": {
+      "focused": "57 XCTest cases, 0 failures on source bytes before commit",
+      "focused_test_file_sha256": "84ec2c7efc635a91bd2adea146c8a5b80720bc6a757b8cf4c69bc1e12dd4ea4b",
+      "full_suite": "PENDING_POST_FREEZE; earlier mutable-source 619 cases/3 skips/0 failures is not reused as final qualification"
+    },
+    "replay": {
+      "status": "preserved sanitized 2026-09-30 shape; initial base regression red: 4 assertions failed",
+      "limitation": "not a model entitlement assertion"
+    },
+    "fresh_provider_boundary": {
+      "status": "PENDING_POST_FREEZE",
+      "earlier_observation": "owned native runtime produced terminal type other; durable failure replay and no-failure close control passed on earlier mutable source"
+    },
+    "fresh_independent_acceptance": {
+      "status": "NOT_RUN",
+      "limitation": "implementer-authored local checks cannot establish independence"
+    }
+  },
+  "blockers": [
+    "Installed app/API stores and port have no qualification relocation seam; do not displace operator work"
+  ],
+  "external_concurrent_inputs": [
+    "Operator checkout and unrelated worktrees are excluded",
+    "Provider account identity and remote entitlement may change; no persistent model incompatibility catalogue"
+  ],
+  "non_claims": [
+    "Provider failure is not runtime/task failure or objective falsity",
+    "No merge/release/readiness/independent qualification claim",
+    "PTY/EOF/quiet output alone is not provider failure"
+  ],
+  "profile": {
+    "structural_type": "manifest",
+    "lifecycle_scope": "workbench",
+    "owner_surface": "CANDIDATE.json",
+    "authority": "generated-state",
+    "privacy": "public-safe",
+    "volatility": "generated",
+    "source_of_truth": true,
+    "update_rule": "immutable after freeze; a changed implementation gets a successor candidate",
+    "verification": [
+      "git diff --exit-code",
+      "scripts/test.sh",
+      "scripts/build-app.sh",
+      "git log -1 --format=%H -- CANDIDATE.json"
+    ],
+    "related_surfaces": [
+      "AGENTS.md",
+      "CHANGELOG.md",
+      "Sources/ConduitCore/ProviderTurnFailureReceipt.swift"
+    ],
+    "do_not_use_for": [
+      "credentials",
+      "operator status",
+      "merge or release authority"
+    ]
+  },
+  "freeze_rule": {
+    "binds": "development in this candidate",
+    "tier": "T0",
+    "check": "manual clean-tree and source identity check; no automated candidate validator",
+    "escape": "create a successor branch/worktree rather than editing frozen source"
+  }
+}
