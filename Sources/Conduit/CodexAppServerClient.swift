@@ -420,7 +420,10 @@ final class CodexAppServerClient: ObservableObject {
                 }
             case .error(let id, let message, let code):
                 if case .number(let number)? = id, number == pendingTurnStartID,
-                   let threadID, isTurnActive {
+                   let code, let threadID, isTurnActive {
+                    // Request correlation is necessary but not sufficient.
+                    // Only a parser-validated JSON-RPC Error object carries
+                    // rejection authority for terminalizing this provider turn.
                     pendingTurnStartID = nil
                     apply(.turnFailed(.codex(
                         threadID: threadID, turnID: activeTurnID, requestID: number,
