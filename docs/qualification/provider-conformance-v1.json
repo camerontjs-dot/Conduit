@@ -92,7 +92,7 @@
     "CODEX-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/CodexAppServerClient.swift",
-        "sha256": "b9764dca5b5ae91eb969fda95c87aa5e368c8fba088863cebef1a515b8e5ff4a"
+        "sha256": "ff5f10271d3fa6d917d9e523f49851594828387d03affb9572933d1f720bbff4"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current issue114 candidate source snapshot; prior provider runtime receipts are not new qualification",
@@ -107,7 +107,7 @@
     "CODEX-FIX-TEST": {
       "artifact": {
         "path": "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift",
-        "sha256": "c16be21db8e6059662cd8cf337a5d80d63d03f6db7b6d272c85bc5eb8d154e15"
+        "sha256": "a46530ee98caffa6b30522f6556925fd33e286620c11c94ccb1eb5f2a5a3554c"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
@@ -175,7 +175,7 @@
     "CODEX-PROTOCOL": {
       "artifact": {
         "path": "Sources/ConduitCore/CodexAppServerProtocol.swift",
-        "sha256": "7d6fea6bde6700d2f5205fdde7a893660ae56c0a8d4dbcb4701ccce41555bac3"
+        "sha256": "6ea68e503c6c3fed10c54b6c094eb1f238a82ebc88424670b7e8d31b31103784"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current issue114 candidate source snapshot; prior provider runtime receipts are not new qualification",
@@ -190,7 +190,7 @@
     "CODEX-STREAM-TESTS": {
       "artifact": {
         "path": "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift",
-        "sha256": "74ca21e897ec80f984d79af12649e5dd611a3b2058afb87b2947bf7a398cef81"
+        "sha256": "ea6f3a14d5dce6cd3da521874dc47a8bd0cc66bdc4f9bb25c9a078406a5dd05b"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
