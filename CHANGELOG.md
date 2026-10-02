@@ -110,6 +110,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   outstanding thread start/resume request was registered by the client.
   Unsolicited, duplicate and canceled responses cannot retarget the mapper or
   hide a matching owned turn's terminal failure (#114 response successor).
+  The correlated handshake records its thread identity before held input is
+  delivered, so a later malformed stream cannot discard that receipt.
 
 - Codex app-server terminal rejection now ends the provider turn and retains a
   safe, durable failure receipt even when no assistant output was produced.

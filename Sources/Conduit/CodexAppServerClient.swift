@@ -292,6 +292,10 @@ final class CodexAppServerClient: ObservableObject {
             attempt: attempt
         )
         isReady = true
+        // This receipt belongs to the correlated handshake, before a queued
+        // input may arrive. A later malformed stream can discard queued mapper
+        // deliveries, so persistence must not depend on that incidental queue.
+        onEffect?(.threadStarted(id: liveThreadID))
         onReady?()
     }
 
@@ -469,9 +473,10 @@ final class CodexAppServerClient: ObservableObject {
             }
         }
         switch effect {
-        case .threadStarted(let id):
-            guard threadID == nil || threadID == id else { return }
-            threadID = id
+        case .threadStarted:
+            // Handshake owns this client's thread identity and its one receipt.
+            // Mapper notifications/responses cannot publish another identity.
+            return
         case .turnStarted(let id):
             activeTurnID = id
             isTurnActive = true

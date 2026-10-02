@@ -2096,10 +2096,20 @@ hiding the matching owned terminal failure. That candidate also remains FAIL.
    client before sending. Matching consumes the expectation once; request
    refusal, cancellation or timeout clears it. Other responses still reach
    their request continuations without changing mapper thread identity.
+7. The native handshake emits its thread identity receipt exactly once before
+   `onReady` can deliver held input. It does not rely on a separately queued
+   mapper effect that a later malformed stream may discard. Native mapper
+   thread effects cannot publish a second or conflicting client identity.
 
 **Lineage:** #115, #116 and #118 remain immutable failed predecessors. This decision
 describes a new current-main successor; their original negative receipts are
 not revised or converted into acceptance.
+An owner response-correlation phase also failed its expanded native gate:
+`49c1ca09e2babb29262edd057737183e7f85ac86`, tree
+`1c3ed36f7a0e1a6da795b6c5928b5783d080f481`. Its correct in-memory identity
+did not reliably produce the persistence callback under malformed ingress.
+That frozen phase remains in ancestry; the native receipt successor repairs
+this separate defect.
 
 **Non-claims:** In-memory retired ids do not prove provider-side exactly-once
 delivery or a persistent provider tombstone service. Owner fixtures do not
