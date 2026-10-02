@@ -200,7 +200,7 @@ struct MainframeExplorerSidebarView: View {
                 }
 
                 if explorer.quickOpenTruncated {
-                    Text("Bounded index: matches may be incomplete after 20,000 entries.")
+                    Text(explorer.quickOpenStatus)
                         .font(.caption2)
                         .foregroundStyle(palette.faint)
                         .padding(.horizontal, 10)
@@ -208,7 +208,7 @@ struct MainframeExplorerSidebarView: View {
                 }
 
                 if !explorer.isIndexing && filterMatches.isEmpty {
-                    Text("No path or filename matches this lexical filter.")
+                    Text("No observed path or filename match in the current search snapshot.")
                         .font(.caption)
                         .foregroundStyle(palette.dim)
                         .padding(12)
@@ -239,14 +239,9 @@ struct MainframeExplorerSidebarView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 10)
 
-            if explorer.quickOpenTruncated {
-                Text("Bounded index: results may be incomplete because the 20,000-entry limit was reached.")
-                    .font(.caption)
-                    .foregroundStyle(palette.dim)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 8)
-            }
+            searchIndexControls
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
 
             Divider().overlay(palette.line)
 
@@ -277,6 +272,56 @@ struct MainframeExplorerSidebarView: View {
         }
         .background(palette.app)
         .frame(width: 680, height: 520)
+    }
+
+    private var searchIndexControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button("Refresh Search Index", action: explorer.refreshQuickOpenIndex)
+                    .accessibilityIdentifier("explorer.search.refresh")
+                if explorer.isIndexing {
+                    Button("Stop", action: explorer.cancelQuickOpenIndex)
+                        .accessibilityIdentifier("explorer.search.stop")
+                }
+                Spacer()
+                Toggle("Include generated/cache descendants", isOn: Binding(
+                    get: { explorer.includesGeneratedSearchDescendants },
+                    set: { explorer.setIncludesGeneratedSearchDescendants($0) }
+                ))
+                .toggleStyle(.checkbox)
+                .help("Applies to recursive search only: node_modules, .build, .venv, venv, __pycache__, .cache, DerivedData, build and dist. Ordinary tree browsing retains these files.")
+                .accessibilityIdentifier("explorer.search.include-generated")
+            }
+            .font(.caption)
+            Text(explorer.quickOpenStatus)
+                .font(.caption)
+                .foregroundStyle(palette.dim)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("explorer.search.status")
+            if let receipt = explorer.quickOpenReceipt {
+                DisclosureGroup("Index details") {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Observed \(receipt.observedAt.formatted()) · \(receipt.scannedDirectories) directories · \(receipt.examinedEntries) examined entries")
+                            ForEach(receipt.excludedDirectorySample, id: \.self) { path in
+                                Text("Skipped descendants: \(path)")
+                            }
+                            ForEach(Array(receipt.issueSample.enumerated()), id: \.offset) { _, issue in
+                                Text("\(issue.relativePath.isEmpty ? "Selected root" : issue.relativePath): \(issue.reason)")
+                            }
+                            if receipt.excludedDirectoryCount > receipt.excludedDirectorySample.count || receipt.issueCount > receipt.issueSample.count {
+                                Text("Diagnostic samples are bounded to 40 paths per category; the counts above include every observed omission.")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 110)
+                }
+                .font(.caption)
+                .foregroundStyle(palette.dim)
+            }
+        }
     }
 
     private func filterRow(_ node: MainframeExplorerNode) -> some View {

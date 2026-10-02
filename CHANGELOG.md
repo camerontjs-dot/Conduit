@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Quick Open now provides refreshable progressive search snapshots with the
+  existing 20,000-entry cap, bounded work/time/depth, and explicit partial
+  receipts for skipped generated/cache descendants and filesystem failures.
+  One unreadable subtree retains healthy results. An explicit control includes
+  skipped descendants in recursive search; ordinary tree browsing and
+  deterministic Find/Related indexing retain their existing policy (#54).
+
 - Explorer can explicitly edit eligible Markdown, source, configuration, and
   ordinary UTF-8 text with bounded undo/redo, literal find and replace, and
   Save/Discard/Cancel navigation, tab-close, and window-close decisions. Save

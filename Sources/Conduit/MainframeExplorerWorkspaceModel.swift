@@ -68,6 +68,10 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     @Published private(set) var filesystemMessage: String?
     @Published private(set) var quickOpenEntries: [MainframeExplorerNode] = []
     @Published private(set) var quickOpenTruncated = false
+    @Published private(set) var quickOpenReceipt: MainframeExplorerSearchReceipt?
+    @Published private(set) var quickOpenIndexIsStale = false
+    @Published private(set) var quickOpenFailureMessage: String?
+    @Published private(set) var includesGeneratedSearchDescendants = false
     @Published private(set) var isIndexing = false
     @Published var quickOpenQuery = ""
     @Published var isQuickOpenPresented = false
@@ -90,9 +94,20 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
     private var selectedFileWatcher: MainframeExplorerDirectoryWatcher?
     private var pendingDirectoryRefreshes: [String: Task<Void, Never>] = [:]
     private var pendingIndexRefresh: Task<Void, Never>?
+    private var indexBuildTask: Task<Void, Never>?
 
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
+
+    var quickOpenStatus: String {
+        if let quickOpenFailureMessage { return quickOpenFailureMessage }
+        if isIndexing { return "Indexing \(quickOpenEntries.count) entries · results are partial" }
+        if let quickOpenReceipt {
+            let stale = quickOpenIndexIsStale ? " · last observation may be stale" : ""
+            return "\(quickOpenEntries.count) entries · \(quickOpenReceipt.summary)\(stale)"
+        }
+        return "Search index is not available yet"
+    }
 
     /// Canonical Explorer tree. Lifecycle roots are ordered first for spatial
     /// familiarity, but no non-lifecycle root is hidden behind another mode.
@@ -152,6 +167,8 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         indexGeneration = UUID()
         pendingIndexRefresh?.cancel()
         pendingIndexRefresh = nil
+        indexBuildTask?.cancel()
+        indexBuildTask = nil
         for task in pendingDirectoryRefreshes.values { task.cancel() }
         pendingDirectoryRefreshes = [:]
         directoryWatchers = [:]
@@ -173,6 +190,9 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         filesystemMessage = nil
         quickOpenEntries = []
         quickOpenTruncated = false
+        quickOpenReceipt = nil
+        quickOpenIndexIsStale = false
+        quickOpenFailureMessage = nil
         isIndexing = false
         quickOpenQuery = ""
         history = MainframeNavigationHistory()
@@ -732,27 +752,63 @@ final class MainframeExplorerWorkspaceModel: ObservableObject {
         watchDirectoryIfNeeded(path: path)
     }
 
+    func refreshQuickOpenIndex() {
+        guard let root else { return }
+        pendingIndexRefresh?.cancel()
+        pendingIndexRefresh = nil
+        buildQuickOpenIndex(root: root)
+    }
+
+    func setIncludesGeneratedSearchDescendants(_ value: Bool) {
+        guard value != includesGeneratedSearchDescendants else { return }
+        includesGeneratedSearchDescendants = value
+        refreshQuickOpenIndex()
+    }
+
+    func cancelQuickOpenIndex() {
+        indexBuildTask?.cancel()
+        indexBuildTask = nil
+        indexGeneration = UUID()
+        isIndexing = false
+        quickOpenIndexIsStale = true
+        quickOpenFailureMessage = "Indexing cancelled · retained \(quickOpenEntries.count) observed entries; search is incomplete"
+    }
+
     private func buildQuickOpenIndex(root: URL) {
+        indexBuildTask?.cancel()
         let generation = UUID()
         indexGeneration = generation
         isIndexing = true
+        quickOpenIndexIsStale = true
+        quickOpenFailureMessage = nil
+        let policy = MainframeExplorerSearchPolicy(excludedDirectoryNames: includesGeneratedSearchDescendants ? [] : MainframeExplorerSearchPolicy.defaultExcludedDirectoryNames)
 
-        Task { [weak self] in
+        indexBuildTask = Task { [weak self] in
+            guard let self else { return }
+            let worker = Task.detached(priority: .utility) { [self] in
+                try MainframeExplorerSearchIndexer().build(root: root, policy: policy, onProgress: { progress in
+                    Task { @MainActor in
+                        guard self.indexGeneration == generation, self.isIndexing else { return }
+                        self.quickOpenEntries = progress.entries
+                        self.quickOpenReceipt = progress.receipt
+                        self.quickOpenTruncated = !progress.receipt.isComplete
+                    }
+                })
+            }
             do {
-                let result = try await Task.detached(priority: .utility) {
-                    try MainframeExplorerScanner().buildIndex(root: root, maxEntries: 20_000)
-                }.value
-                guard let self, self.indexGeneration == generation else { return }
+                let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                guard !Task.isCancelled, self.indexGeneration == generation else { return }
                 self.quickOpenEntries = result.entries
-                self.quickOpenTruncated = result.truncated
+                self.quickOpenReceipt = result.receipt
+                self.quickOpenTruncated = !result.receipt.isComplete
+                self.quickOpenIndexIsStale = false
                 self.isIndexing = false
+                self.indexBuildTask = nil
             } catch {
-                guard let self, self.indexGeneration == generation else { return }
+                guard !Task.isCancelled, self.indexGeneration == generation else { return }
                 self.isIndexing = false
-                self.lifecycleMessage = [
-                    self.lifecycleMessage,
-                    "Quick Open index unavailable: \(error.localizedDescription)"
-                ].compactMap { $0 }.joined(separator: " ")
+                self.indexBuildTask = nil
+                self.quickOpenFailureMessage = "Search unavailable: \(error.localizedDescription) Retained entries may be stale."
             }
         }
     }
