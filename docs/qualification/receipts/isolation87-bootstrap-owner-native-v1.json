@@ -132,6 +132,14 @@
     "missing_configuration": "503 mainframe_not_configured; no autodetection",
     "owned_configured_fixture": "200 ready; project slugs exactly mainframe/disposable"
   },
+  "receipt_correction": {
+    "authority": "isolation87-bootstrap-full.log exact skipped test messages, already pinned in private_receipt_sha256",
+    "predecessor_head": "f744e0598460c762f3e916cfd98c17084967403a",
+    "predecessor_record_sha256": "529d1f97adf98cd8545175e41612ad79c931a8f23eb6cf6b5d428e1c5252fa31",
+    "predecessor_tree": "6d8e65ede097a9db7d8d9f4ebeb3328ae08deb14",
+    "reason": "A summary skip label incorrectly said live Gemini ACP; raw XCTest traces identify the skipped OpenCode authority journey. Counts/results/source/native artifacts unchanged.",
+    "source_code_changed": false
+  },
   "release_binary_sha256": "a6de22adb5341d1e55053092fd6cf29cd44222ac70d5d1f03080afbbd2a89234",
   "repository_native_checks": {
     "python": {
@@ -152,9 +160,9 @@
   },
   "schema_version": 1,
   "skipped_boundaries": [
-    "live Gemini ACP installed runtime",
-    "installed OpenCode persistence",
-    "live Shell/OpenCode correlation"
+    "installed OpenCode authority journey (CONDUIT_OPENCODE_AUTHORITY_QUALIFICATION not enabled)",
+    "installed OpenCode persistence (CONDUIT_OPENCODE_QUALIFICATION not enabled)",
+    "live Shell/OpenCode correlation (no qualification-owned fixture)"
   ],
   "source_files_sha256": {
     "Sources/Conduit/AppModel.swift": "e2547ecbcb99c4538d08fd23fc285975bda2c3f03615b3fde1706e292ed6c81a",
@@ -162,7 +170,7 @@
     "Sources/ConduitCore/ConduitInstanceConfiguration.swift": "a3db78cad0e043be2f9dbf9af768f725f98084d0ab9072defc651bc3ba9bb717",
     "Sources/ConduitCore/QualificationPreferences.swift": "138fa3902a951708082fbfef59636c20449f2754b8e518e5e95cba8b27579f2a"
   },
-  "successor_branch": "fix/issue87-owned-state-bootstrap-successor-20261002",
+  "successor_branch": "fix/issue87-owned-state-receipt-successor-20261002",
   "unknown": [
     "Fresh independent qualification",
     "Current-main composition with other unmerged repairs",
