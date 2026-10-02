@@ -108,12 +108,14 @@ struct RootView: View {
         .sheet(isPresented: $model.showSettingsSheet) {
             NavigationStack {
                 SettingsView()
+                    .accessibilityIdentifier(OperatorControlIdentifier.settingsSurface)
                     .environmentObject(model)
                     .environmentObject(themeStore)
                     .frame(minWidth: 640, minHeight: 520)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Done") { model.showSettingsSheet = false }
+                                .accessibilityIdentifier(OperatorControlIdentifier.settingsDone)
                         }
                     }
             }
@@ -549,11 +551,13 @@ struct RootView: View {
             }
 
             Button("Settings…") { model.showSettingsSheet = true }
+                .accessibilityIdentifier(OperatorControlIdentifier.settings)
         } label: {
             Image(systemName: "ellipsis.circle")
         }
         .help("Tools")
         .accessibilityLabel("Tools")
+        .accessibilityIdentifier(OperatorControlIdentifier.tools)
     }
 
     private func withPanelAnimation(_ changes: () -> Void) {

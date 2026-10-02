@@ -25,6 +25,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- Conversation menu input now refuses stale, removed, stopped or ambiguous task
+  and runtime targets. Composer actions capture their rendered destination and
+  keep drafts when that destination changes. Menu keyboard shortcuts belong to
+  their mounted window and leave sheets and auxiliary windows alone. Stable
+  full-identity accessibility identifiers distinguish Settings, task selection,
+  composer controls and conversation menu controls (#65).
+
 ### Added
 
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.

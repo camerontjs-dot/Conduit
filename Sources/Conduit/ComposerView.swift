@@ -329,7 +329,8 @@ struct ComposerView: View {
     }
 
     private var ordinaryComposer: some View {
-        VStack(spacing: 6) {
+        let expectedTarget = model.composerInputSelection
+        return VStack(spacing: 6) {
             if !model.attachments.isEmpty {
                 attachmentChipRow
             }
@@ -398,7 +399,7 @@ struct ComposerView: View {
                         text: $model.composerText,
                         onSubmit: {
                             guard !isStaging else { return }
-                            model.sendComposer()
+                            model.sendComposer(expectedTarget: expectedTarget)
                         },
                         onTabComplete: {
                             guard let first = slashMatches.first else { return false }
@@ -408,7 +409,10 @@ struct ComposerView: View {
                         placeholder: "",
                         textColor: .labelColor,
                         backgroundColor: .textBackgroundColor,
-                        insertionPointColor: .controlAccentColor
+                        insertionPointColor: .controlAccentColor,
+                        controlIdentifier: OperatorControlIdentifier.composer(
+                            "editor", selection: expectedTarget
+                        )
                     )
                     .frame(minHeight: 64, maxHeight: 120)
                     .clipShape(RoundedRectangle(cornerRadius: 9))
@@ -438,7 +442,12 @@ struct ComposerView: View {
                 .accessibilityLabel("Prompt composer")
                 .accessibilityHint("Return sends. Type / for agent skills and slash commands. Shift Return inserts a newline.")
 
-                Button("Send", action: model.sendComposer)
+                Button("Send") {
+                    model.sendComposer(expectedTarget: expectedTarget)
+                }
+                    .accessibilityIdentifier(OperatorControlIdentifier.composer(
+                        "send", selection: expectedTarget
+                    ))
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: [.command])
                     .accessibilityHint(sendTargetLabel)

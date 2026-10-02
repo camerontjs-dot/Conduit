@@ -16,6 +16,7 @@ struct ConversationView: View {
     @ObservedObject private var runtime: TerminalRuntime
     @ObservedObject private var controller: TerminalSessionController
     @StateObject private var presentationCache = ConversationPresentationCache()
+    @StateObject private var inputWindowScope = OperatorInputWindowScope()
     /// When true, the whole stream pins to the latest content.
     @State private var followLatest = true
     @State private var didApplyFollowDefault = false
@@ -31,6 +32,24 @@ struct ConversationView: View {
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)
+    }
+
+    private var inputTarget: OperatorInputTarget {
+        OperatorInputTarget(
+            taskSessionID: runtime.descriptor.taskSessionID,
+            runtimeID: runtime.id, runtimeAttemptID: runtime.runtimeAttemptID,
+            projectPath: runtime.descriptor.projectPath.path
+        )
+    }
+
+    private func controlIdentifier(_ name: String) -> String {
+        OperatorControlIdentifier.control(name, target: inputTarget)
+    }
+
+    private func menuControlIdentifier(
+        _ name: String, revision: OperatorConversationInputRevision
+    ) -> String {
+        controlIdentifier("revision.\(revision.identifierComponent)." + name)
     }
 
     private var turns: [ConversationTurn] {
@@ -154,8 +173,10 @@ struct ConversationView: View {
             }
         }
         .background(palette.canvas)
+        .background(OperatorInputWindowReader(scope: inputWindowScope))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(runtime.descriptor.agent.name) conversation")
+        .accessibilityIdentifier(controlIdentifier("conversation"))
         .onAppear {
             if !didApplyFollowDefault {
                 followLatest = model.settings.followConversationByDefault
@@ -172,7 +193,8 @@ struct ConversationView: View {
     // MARK: - Header / controls
 
     private var conversationControlStrip: some View {
-        HStack(spacing: 8) {
+        let revision = runtime.operatorInputRevision
+        return HStack(spacing: 8) {
             permissionModeMenu
 
             Divider()
@@ -187,40 +209,45 @@ struct ConversationView: View {
                     model.injectConversationControl(
                         text: choice,
                         submit: true,
-                        into: runtime
+                        into: runtime, expectedRevision: revision
                     )
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("Send \(choice)+Enter to the agent menu without opening Raw")
                 .accessibilityLabel("Send menu choice \(choice)")
+                .accessibilityIdentifier(menuControlIdentifier("strip.choice.\(choice)", revision: revision))
             }
 
             Button("Enter") {
-                model.injectConversationControl(key: .enter, into: runtime)
+                model.injectConversationControl(key: .enter, into: runtime, expectedRevision: revision)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .accessibilityIdentifier(menuControlIdentifier("strip.enter", revision: revision))
 
             Button("Esc") {
-                model.injectConversationControl(key: .escape, into: runtime)
+                model.injectConversationControl(key: .escape, into: runtime, expectedRevision: revision)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .accessibilityIdentifier(menuControlIdentifier("strip.escape", revision: revision))
 
             Button("↑") {
-                model.injectConversationControl(key: .up, into: runtime)
+                model.injectConversationControl(key: .up, into: runtime, expectedRevision: revision)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .accessibilityLabel("Send up arrow")
+            .accessibilityIdentifier(menuControlIdentifier("strip.up", revision: revision))
 
             Button("↓") {
-                model.injectConversationControl(key: .down, into: runtime)
+                model.injectConversationControl(key: .down, into: runtime, expectedRevision: revision)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .accessibilityLabel("Send down arrow")
+            .accessibilityIdentifier(menuControlIdentifier("strip.down", revision: revision))
 
             Spacer(minLength: 4)
 
@@ -234,6 +261,7 @@ struct ConversationView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(palette.rail)
+        .disabled(!model.canInjectConversationControl(into: runtime))
     }
 
     private var permissionModeMenu: some View {
@@ -709,7 +737,7 @@ struct ConversationView: View {
                     )
                 }
                 if interactiveMenu {
-                    interactiveMenuPanel(options: menuOptions)
+                    interactiveMenuPanel(options: menuOptions, event: event)
                 }
             }
 
@@ -802,8 +830,12 @@ struct ConversationView: View {
             .accessibilityLabel(bits.joined(separator: ", "))
     }
 
-    private func interactiveMenuPanel(options: [TerminalMenuOption]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func interactiveMenuPanel(
+        options: [TerminalMenuOption], event: SessionPresentationEvent
+    ) -> some View {
+        let eventID = event.id
+        let revision = OperatorConversationInputRevision.capture(event)
+        return VStack(alignment: .leading, spacing: 6) {
             Text("Choose an option")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(palette.dim)
@@ -812,7 +844,7 @@ struct ConversationView: View {
                     model.injectConversationControl(
                         text: option.key,
                         submit: true,
-                        into: runtime
+                        into: runtime, expectedRevision: revision
                     )
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -851,29 +883,36 @@ struct ConversationView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Choose \(option.key): \(option.label)")
+                .accessibilityIdentifier(menuControlIdentifier(
+                    "output.\(eventID.uuidString).choice.\(option.key)", revision: revision
+                ))
                 .help("Sends \(option.key)+Enter without opening Raw")
             }
             HStack(spacing: 8) {
                 Button("Enter") {
-                    model.injectConversationControl(key: .enter, into: runtime)
+                    model.injectConversationControl(key: .enter, into: runtime, expectedRevision: revision)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityIdentifier(menuControlIdentifier("output.\(eventID.uuidString).enter", revision: revision))
                 Button("Esc") {
-                    model.injectConversationControl(key: .escape, into: runtime)
+                    model.injectConversationControl(key: .escape, into: runtime, expectedRevision: revision)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityIdentifier(menuControlIdentifier("output.\(eventID.uuidString).escape", revision: revision))
                 Button("↑") {
-                    model.injectConversationControl(key: .up, into: runtime)
+                    model.injectConversationControl(key: .up, into: runtime, expectedRevision: revision)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityIdentifier(menuControlIdentifier("output.\(eventID.uuidString).up", revision: revision))
                 Button("↓") {
-                    model.injectConversationControl(key: .down, into: runtime)
+                    model.injectConversationControl(key: .down, into: runtime, expectedRevision: revision)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityIdentifier(menuControlIdentifier("output.\(eventID.uuidString).down", revision: revision))
                 Spacer(minLength: 0)
             }
         }
@@ -884,6 +923,8 @@ struct ConversationView: View {
                 .strokeBorder(palette.accent.opacity(0.35), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .disabled(!model.canInjectConversationControl(into: runtime)
+                  || !revision.matches(runtime.operatorInputRevision))
     }
 
     // MARK: - Key routing
@@ -906,7 +947,9 @@ struct ConversationView: View {
     /// responder, route menu keys into the live agent PTY. Avoids a focusable
     /// stream container (which drew a large system focus ring on click).
     private func handleConversationKeyEvent(_ event: NSEvent) -> NSEvent? {
-        guard !controller.lifecycle.isTerminal,
+        guard inputWindowScope.accepts(event),
+              model.canInjectConversationControl(into: runtime),
+              !controller.lifecycle.isTerminal,
               runtime.selectedSurface == .conversation
         else { return event }
 
@@ -920,46 +963,40 @@ struct ConversationView: View {
             }
         }
 
+        let revision = runtime.operatorInputRevision
         let flags = event.modifierFlags.intersection([
             .command, .control, .option
         ])
         guard flags.isEmpty else { return event }
 
         if event.keyCode == 36 || event.keyCode == 76 {
-            model.injectConversationControl(key: .enter, into: runtime)
-            return nil
+            return model.injectConversationControl(key: .enter, into: runtime, expectedRevision: revision) ? nil : event
         }
         if event.keyCode == 53 {
-            model.injectConversationControl(key: .escape, into: runtime)
-            return nil
+            return model.injectConversationControl(key: .escape, into: runtime, expectedRevision: revision) ? nil : event
         }
         if event.keyCode == 126 {
-            model.injectConversationControl(key: .up, into: runtime)
-            return nil
+            return model.injectConversationControl(key: .up, into: runtime, expectedRevision: revision) ? nil : event
         }
         if event.keyCode == 125 {
-            model.injectConversationControl(key: .down, into: runtime)
-            return nil
+            return model.injectConversationControl(key: .down, into: runtime, expectedRevision: revision) ? nil : event
         }
         if event.keyCode == 123 {
-            model.injectConversationControl(key: .left, into: runtime)
-            return nil
+            return model.injectConversationControl(key: .left, into: runtime, expectedRevision: revision) ? nil : event
         }
         if event.keyCode == 124 {
-            model.injectConversationControl(key: .right, into: runtime)
-            return nil
+            return model.injectConversationControl(key: .right, into: runtime, expectedRevision: revision) ? nil : event
         }
 
         if let chars = event.charactersIgnoringModifiers,
            chars.count == 1,
            let ch = chars.first,
            ch >= "1", ch <= "9" {
-            model.injectConversationControl(
+            return model.injectConversationControl(
                 text: String(ch),
                 submit: true,
-                into: runtime
-            )
-            return nil
+                into: runtime, expectedRevision: revision
+            ) ? nil : event
         }
 
         return event

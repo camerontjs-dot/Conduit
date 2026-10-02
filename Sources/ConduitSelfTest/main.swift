@@ -35,6 +35,65 @@ func withTempDir(_ body: (URL) throws -> Void) {
 
 // MARK: - FrontmatterParser
 
+let operatorTask = TaskSessionID()
+let operatorTarget = OperatorInputTarget(
+    taskSessionID: operatorTask, runtimeID: UUID(), runtimeAttemptID: RuntimeAttemptID(),
+    projectPath: "/fixture/operator"
+)
+let operatorSelection = OperatorInputSelection(
+    projectPath: operatorTarget.projectPath, taskSessionID: operatorTask, activeRuntime: operatorTarget
+)
+check("operator input accepts exact live target",
+      OperatorInputGate.permits(operatorTarget, selection: operatorSelection, liveTargets: [operatorTarget]))
+check("operator input rejects removed runtime",
+      !OperatorInputGate.permits(operatorTarget, selection: operatorSelection, liveTargets: []))
+check("operator input rejects duplicate ownership",
+      !OperatorInputGate.permits(operatorTarget, selection: operatorSelection,
+                                liveTargets: [operatorTarget, operatorTarget]))
+check("operator input rejects wrong task",
+      !OperatorInputGate.permits(operatorTarget, selection: OperatorInputSelection(
+          projectPath: operatorTarget.projectPath, taskSessionID: TaskSessionID(), activeRuntime: operatorTarget
+      ), liveTargets: [operatorTarget]))
+check("operator input rejects wrong project",
+      !OperatorInputGate.permits(operatorTarget, selection: OperatorInputSelection(
+          projectPath: "/fixture/other", taskSessionID: operatorTask, activeRuntime: operatorTarget
+      ), liveTargets: [operatorTarget]))
+let operatorReplacement = OperatorInputTarget(
+    taskSessionID: operatorTask, runtimeID: operatorTarget.runtimeID,
+    runtimeAttemptID: RuntimeAttemptID(), projectPath: operatorTarget.projectPath
+)
+check("operator input rejects replacement attempt",
+      !OperatorInputGate.permits(operatorTarget, selection: operatorSelection, liveTargets: [operatorReplacement]))
+check("operator input rejects ambiguous task runtime",
+      !OperatorInputGate.permits(operatorTarget, selection: operatorSelection, liveTargets: [operatorTarget,
+          OperatorInputTarget(taskSessionID: operatorTask, runtimeID: UUID(),
+                             runtimeAttemptID: RuntimeAttemptID(), projectPath: operatorTarget.projectPath)]))
+let operatorControlID = OperatorControlIdentifier.control("strip.choice.1", target: operatorTarget)
+check("operator semantic target includes full task",
+      operatorControlID.contains(operatorTask.rawValue.uuidString.lowercased()))
+check("operator semantic target includes exact attempt",
+      operatorControlID.contains(operatorTarget.runtimeAttemptID.rawValue.uuidString.lowercased()))
+check("operator Settings cannot alias menu send",
+      operatorControlID != OperatorControlIdentifier.settings)
+check("operator semantic component preserves delimiter distinction",
+      OperatorControlIdentifier.control("a.b", target: operatorTarget)
+        != OperatorControlIdentifier.control("a/b", target: operatorTarget))
+let operatorMenuA = SessionPresentation.agentOutputEvent(
+    promptEventID: nil, text: "1. First", extraction: .renderedBuffer, truncated: false
+)
+let operatorMenuB = SessionPresentation.agentOutputEvent(
+    promptEventID: nil, text: "1. Second", extraction: .renderedBuffer, truncated: false
+)
+let operatorMenuSnapshot = OperatorConversationInputRevision.capture(operatorMenuA)
+check("operator current menu revision accepts",
+      operatorMenuSnapshot.matches(.latest(in: [operatorMenuA])))
+check("operator superseded menu revision refuses",
+      !operatorMenuSnapshot.matches(.latest(in: [operatorMenuA, operatorMenuB])))
+check("operator duplicate event identity refuses",
+      !operatorMenuSnapshot.matches(.latest(in: [operatorMenuA, operatorMenuA])))
+check("operator interrupt invalidates old menu",
+      !operatorMenuSnapshot.matches(.latest(in: [operatorMenuA, SessionPresentation.interruptRequestEvent()])))
+
 let frontmatter = FrontmatterParser.parse("""
 ---
 title: "Image Lab"

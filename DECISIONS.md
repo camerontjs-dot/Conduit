@@ -2054,3 +2054,36 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+## D-065: UI input targets are captured and revalidated separately from presentation
+
+**Status:** Proposed maintained-product successor for #65; native/independent gates remain separate.
+
+**Context:** Positional UI automation can press a different task control after a
+surface changes. A retained menu/key callback can also outlive its selected task
+or mounted window. Labels and agent names do not identify a runtime attempt.
+
+**Decision:** Composer controls capture the current project/task/runtime target
+when rendered. Before dispatch, compare that snapshot with current selection.
+Conversation input requires the exact owned running runtime object, full runtime
+attempt and unambiguous live task binding. Refusal preserves drafts and produces
+no input. An explicitly unbound legacy runtime retains its exact runtime/attempt
+identity; it is not upgraded to a durable task identity. A new-shell composer
+retains the existing explicit behavior only when its selection has not changed.
+
+Stable accessibility identifiers include full task, runtime and attempt IDs and
+an encoded control component. Output-menu controls also identify the output
+event and its encoded revision; capture comes from the exact displayed event, while current runtime state is the comparison oracle. Conversation key monitors require the incoming event to belong to their actual mounted key window with
+no sheet/modal window. These identifiers describe a target; they do not grant
+input authority or attest the intent of an external positional click.
+
+**Consequences:** Automation must re-resolve one semantic target immediately
+before activation and fail closed if it cannot verify the target. Prefer the
+equivalent typed full-ID Session API. Native compilation/Core/component receipts
+are not mounted AppModel, external accessibility or provider acceptance. The
+original ambiguous Antigravity effect remains UNKNOWN; #63 is unchanged.
+
+**Evidence boundary:** Preserve stale/wrong/removed/stopped/duplicate target
+negative controls and exact source identity. Consequential merge still requires
+the governing independent and #87 isolated mounted gates. No new exposure,
+account, model-default, provider, installation or release authority follows.
