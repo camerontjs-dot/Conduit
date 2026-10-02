@@ -19,10 +19,10 @@ struct RootView: View {
     @State private var isTaskDrawerPresented = false
     @State private var inspectorFocusRequest = 0
 
-    @AppStorage("conduit.taskDrawerPinned") private var taskDrawerPinned = false
-    @AppStorage("conduit.inspectorPinned") private var inspectorPinned = false
-    @AppStorage("conduit.taskDrawerWidth") private var storedTaskDrawerWidth = 304.0
-    @AppStorage("conduit.inspectorWidth") private var storedInspectorWidth = 360.0
+    @AppStorage("conduit.taskDrawerPinned", store: ConduitPreferences.current) private var taskDrawerPinned = false
+    @AppStorage("conduit.inspectorPinned", store: ConduitPreferences.current) private var inspectorPinned = false
+    @AppStorage("conduit.taskDrawerWidth", store: ConduitPreferences.current) private var storedTaskDrawerWidth = 304.0
+    @AppStorage("conduit.inspectorWidth", store: ConduitPreferences.current) private var storedInspectorWidth = 360.0
 
     private var palette: ConduitPalette {
         themeStore.palette(for: colorScheme)

@@ -3748,6 +3748,17 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Owned qualification configuration
+
+let ordinaryInstance = try? ConduitInstanceConfiguration.resolve(environment: [:], home: URL(fileURLWithPath: "/fixture-home"))
+check("ordinary instance keeps operator defaults", ordinaryInstance?.sessionAPIPort == 8750 && ordinaryInstance?.stateDirectory.path == "/fixture-home/.conduit" && ordinaryInstance?.isQualification == false)
+let ownedInstance = try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "/owned-qualification-fixture", "CONDUIT_SESSION_API_PORT": "18849"], home: URL(fileURLWithPath: "/fixture-home"))
+check("qualification requires an explicit paired owned root and reserved port", ownedInstance?.sessionAPIPort == 18849 && ownedInstance?.isQualification == true)
+check("port-only qualification is refused", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_SESSION_API_PORT": "18750"])) == nil)
+check("qualification cannot fall back to operator port", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "/owned-qualification-fixture", "CONDUIT_SESSION_API_PORT": "8750"])) == nil)
+check("relative qualification state is refused", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "relative", "CONDUIT_SESSION_API_PORT": "18750"])) == nil)
+check("operator state cannot become qualification state", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "/fixture-home/.conduit", "CONDUIT_SESSION_API_PORT": "18750"], home: URL(fileURLWithPath: "/fixture-home"))) == nil)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

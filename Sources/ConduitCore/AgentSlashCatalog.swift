@@ -82,7 +82,7 @@ public enum AgentSlashCatalog {
     public static func matches(
         query: String,
         projectPath: URL?,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = ConduitInstanceConfiguration.current.isQualification ? ConduitInstanceConfiguration.current.stateDirectory : FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default
     ) -> [AgentSlashCommand] {
         guard let prefix = filterPrefix(in: query) else { return [] }
@@ -120,7 +120,7 @@ public enum AgentSlashCatalog {
     /// Discovers skill / command markdown under common agent config layouts.
     public static func discoverSkills(
         projectPath: URL?,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = ConduitInstanceConfiguration.current.isQualification ? ConduitInstanceConfiguration.current.stateDirectory : FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default
     ) -> [AgentSlashCommand] {
         var roots: [(URL, AgentSlashCommand.Source)] = []

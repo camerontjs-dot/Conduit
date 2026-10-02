@@ -241,6 +241,19 @@ public struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTra
     }
 
     private func resolveDatabaseURL() throws -> URL {
+        let instance = ConduitInstanceConfiguration.current
+        if instance.isQualification {
+            guard let path = environment["OPENCODE_DB"], path.hasPrefix("/"),
+                  path.hasPrefix(instance.stateDirectory.path + "/") else {
+                throw TransportError.persistenceUnavailable("Qualification discovery requires an explicit owned OPENCODE_DB; default provider inventory is disabled.")
+            }
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard url.path == path, url.resolvingSymlinksInPath().path == path,
+                  fileManager.fileExists(atPath: path) else {
+                throw TransportError.persistenceUnavailable("Qualification OpenCode persistence is not an exact owned file.")
+            }
+            return url
+        }
         let dataDirectory = opencodeDataDirectory()
 
         if let configured = environment["OPENCODE_DB"],

@@ -62,16 +62,16 @@
     "ACP-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/GrokACPClient.swift",
-        "sha256": "be5a39358df68c6311637ad2dae09bfac083c37044ffcb18982c3d2914f8994f"
+        "sha256": "e62d55af6114f1a4db21f65955446273776cc85b16fcbf3bd5cb7240817b07ca"
       },
-      "authority": "read-only source and test inspection in the candidate checkout",
+      "authority": "reviewed source-only #87 qualification-mode successor; ordinary provider protocol/delivery functions preserved; see receipts/isolation87-source-review-v1.json",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
       "identity": {
         "path": "Sources/Conduit/GrokACPClient.swift"
       },
       "kind": "source_test",
-      "limitation": "The generic ACP client is configured with provider-specific launch/auth behavior; the direct Grok run is the runtime authority.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "limitation": "The generic ACP client is configured with provider-specific launch/auth behavior; the direct Grok run is the runtime authority. Qualification mode refuses implicit operator inventory/credential access; this source review supplies no new native provider, hosted, continuity or objective-acceptance evidence.",
+      "observed_at_utc": "2026-10-02T16:09:09Z",
       "procedure_id": "acp-adapter-source-v1"
     },
     "ACP-PROTOCOL": {
@@ -205,16 +205,16 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "984b152671d566f81c5812d2fb43da4de997de886d2ce8401a6bec02604e8162"
+        "sha256": "cd9892938647909780f03b96c946853a79c30a77a25f1bb7da50cda94b1f868f"
       },
-      "authority": "read-only source and test inspection in the candidate checkout",
+      "authority": "reviewed source-only #87 qualification-mode successor; ordinary provider protocol/delivery functions preserved; see receipts/isolation87-source-review-v1.json",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
       "identity": {
         "path": "Sources/Conduit/AppModel.swift"
       },
       "kind": "source_test",
-      "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior.",
-      "observed_at_utc": "2026-09-29T17:13:22Z",
+      "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior. Qualification mode refuses implicit operator inventory/credential access; this source review supplies no new native provider, hosted, continuity or objective-acceptance evidence.",
+      "observed_at_utc": "2026-10-02T16:09:09Z",
       "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
     },
     "CONFORMANCE-HARNESS": {

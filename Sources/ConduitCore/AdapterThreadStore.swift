@@ -108,8 +108,7 @@ public struct AdapterThreadStore: Sendable {
     }
 
     public static func defaultDirectory() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".conduit", isDirectory: true)
+        ConduitInstanceConfiguration.current.stateDirectory
     }
 
     public func threadID(for taskSessionID: TaskSessionID) -> String? {

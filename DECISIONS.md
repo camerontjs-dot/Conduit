@@ -2054,3 +2054,43 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+
+## D-062: Qualification launches own an explicit state root and listener
+
+**Status:** Proposed — source successor to frozen #91/#92 under #87.
+
+**Decision:** Qualification is an explicit process mode selected by the paired
+`CONDUIT_QUALIFICATION_ROOT` and `CONDUIT_SESSION_API_PORT` variables. A port-only
+launch is refused. The root must be canonical and separate from operator state;
+only new/empty roots or roots with the exact qualification marker are opened.
+Linked, foreign or nonregular state is refused, and a process-lifetime lease
+prevents two app processes from writing the same root. The port is limited to
+18750–18849. Invalid configuration and occupied ports never fall back to 8750.
+
+Conduit settings, UI preferences, task/conversation logs, adapter thread records,
+worklog, attachments, context bundles/snapshots and API token are rooted there.
+Qualification preferences use a file-backed UserDefaults interface, so SwiftUI
+AppStorage and AppModel share one private store. HOME and CODEX_HOME remain
+unchanged. This is Conduit state ownership, not provider authentication isolation.
+
+Qualification startup does not autodetect MainFrame, restore copied security
+bookmarks, list shared tmux sessions, invoke provider health/account probes or
+observe/start/adopt the operator tunnel. An explicitly configured fixture
+MainFrame root must be inside the qualification root. Later worker execution
+still needs its own exact provider/session/cost authority; setting these two
+variables does not authorize a real provider turn.
+
+**Context:** Frozen #91 provided a distinct-port seam at its own older source.
+#92 preserved its stale current-source evidence failure and assembled an
+unpublished mechanical child. Current maintained main still used 8750 and
+operator-default preferences/state paths. A new maintained candidate is required
+for actual AppModel/status/events acceptance without operator contamination.
+The historical D-058 port decision on #91 remains evidence lineage, not a current
+main acceptance claim.
+
+**Acceptance:** Portable configuration/path/ownership/preferences controls,
+actual isolated app/listener negative controls and repository-native tests/build
+are implementation-owner evidence. Fresh independent qualification is separate.
+No operator installation, release, account/credential change or hosted connection
+is part of this decision. Ordinary app defaults remain compatible.

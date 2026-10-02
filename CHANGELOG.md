@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Explicit qualification launches pair `CONDUIT_QUALIFICATION_ROOT` with a
+  reserved loopback `CONDUIT_SESSION_API_PORT` (18750–18849). They keep Conduit
+  state and preferences under one marked, process-owned root, reject foreign or
+  linked state, and skip automatic MainFrame, tmux, provider-health, account and
+  tunnel discovery. Ordinary launches retain the existing paths and port.
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps

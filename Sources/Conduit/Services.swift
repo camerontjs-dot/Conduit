@@ -1593,8 +1593,7 @@ enum AttachmentService {
     }
 
     private static func newAttachmentURL(extension ext: String) throws -> URL {
-        let directory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".conduit/attachments", isDirectory: true)
+        let directory = ConduitInstanceConfiguration.current.stateURL("attachments", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
