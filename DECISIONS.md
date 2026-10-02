@@ -2054,3 +2054,77 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+
+## D-064: Work Groups persist coordination references and derive presentation
+
+**Status:** Proposed (2026-10-02; maintained WG1–WG3 foundation)
+
+**Context:** Issue #71 adopts Work Groups as durable coordination and
+presentation over canonical tasks, provider threads and other owner objects.
+Frozen PR #98 is the source-model predecessor at
+`f86e6a0782169ecaf5e3ecddef6e53f63c32f544` (tree
+`f19b5aa510d9ed08f26cbb4e545dc0c03489be5c`). Its native import exposed a
+compiler defect, and the syntax-corrected predecessor failed malformed-state,
+identity, observation-join, replay and store-collision controls. Its duplicate
+observation control trapped. Those receipts remain separate from this
+maintained successor's development checks and any later qualification.
+
+**Decision:**
+
+1. Keep the inherited Work Group model as coordination state containing exact
+   canonical task, namespaced provider-thread and typed external-chat
+   references. Owner references nominate workspace, context, routing, run,
+   GitHub or artifact identities without copying their content, lifecycle,
+   entitlement, delivery, verification or acceptance truth. Missing owner
+   identities remain absent; unknown revision/source facts remain UNKNOWN.
+2. Admit only supported outer and group schemas, valid exact identities,
+   well-formed references and unique group/member/nomination identities.
+   Invalid state fails before a mutation and preserves the original ledger.
+   Existing valid v1 records decode missing additive coordination revisions as
+   zero and owner references as empty, without rewriting on read. Explicit
+   nulls in either field are rejected as partial state. Provider
+   identifiers retain exact bytes; component escaping prevents delimiter
+   collisions. The canonical TaskSessionID owns UUID case equivalence.
+3. Serialize cooperating stores using a stable record-lock file and a shared
+   in-process lock for the same canonical directory. Publish private regular
+   ledger files by an atomic replacement after flushing their bytes. Reject
+   symlink and multiple-link ledger/lock files. Identical creation/member/edit
+   replay preserves the group revision and activity time; conflicting ID
+   creation and stale expected revisions fail closed. This lock protects
+   coordination writes only and grants no workspace or provider writer lease.
+4. Derive the scoped member rail from existing observations. Preserve missing,
+   malformed and duplicate/ambiguous observations explicitly instead of
+   selecting an authority or creating another task/provider catalogue. The
+   canonical task adapter projects title, aggregate activity, pin state and
+   configured agent label only. Navigation scope does not prove Git cwd or
+   worktree identity; configured agent does not prove the current provider;
+   unseen, manual priority and operator/agent activity remain UNKNOWN unless
+   separately supplied by their authority.
+5. Name the exact group and member reference in a composer breadcrumb. Warn
+   deterministically for malformed/archived groups, wrong group, unknown or
+   stale coordination revision, non-member/invalid target, wrong observation
+   identity and known repository/worktree mismatch. These are presentation
+   warnings. The existing canonical send path must still establish its own
+   target and provider writer authority; prose cannot authorize an automatic
+   route, hard block, broadcast or provider transition.
+
+**Consequences:** WG1 durable APIs and independently testable WG2/WG3
+projection/guard seams can be maintained without mutating AppModel or the task,
+provider, workspace, routing or context owners. This successor preserves
+#98's coordination/reference authority and replaces its implementation only
+within the stated source boundary. Frozen #98 remains historical evidence;
+no predecessor acceptance transfers to this candidate. Main's unrelated
+D-059 governs ChatGPT tunnel ownership and is unchanged.
+
+**Non-claims:** Native owner checks are development evidence, not independent
+qualification. This source does not mount a group rail/composer in the app,
+restore a working set, attach a live orchestration run, read/message an
+external chat, launch/adopt/control a provider, or qualify the whole #71 plan.
+Atomic file publication and restart tests do not prove power-loss recovery
+under a hostile storage namespace replacement.
+
+**Reconsideration trigger:** Compose app presentation serially on a new exact
+candidate only after the owning state/listener isolation boundary is qualified,
+then independently qualify exact target and zero runtime effects. WG4+ and
+stronger owner/provider integration remain under their separate adopted gates.

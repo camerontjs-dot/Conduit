@@ -3748,6 +3748,87 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Work Groups
+
+withTempDir { directory in
+    let store = WorkGroupStore(directory: directory)
+    let group = try store.create(name: "Supervisor Desk")
+    let member = WorkGroupMemberReference.conduitTask("selftest-task")
+    let outside = WorkGroupMemberReference.conduitTask("outside-task")
+    let updated = try store.addMember(
+        groupID: group.id,
+        reference: member,
+        role: .supervisor
+    )
+    check(
+        "work group persists canonical member reference",
+        updated.members.count == 1
+            && updated.members.first?.id == "task:selftest-task"
+    )
+    check(
+        "work group target guard warns for non-member destination",
+        WorkGroupTargetValidator.warnings(
+            group: updated,
+            target: outside,
+            observation: nil
+        ) == [.nonMemberTarget]
+    )
+    let rail = WorkGroupThreadRailProjection.items(
+        group: updated,
+        observations: [
+            WorkGroupThreadObservation(
+                reference: member,
+                displayTitle: "Supervisor",
+                providerLabel: .known("Conduit"),
+                unseenCount: .known(1)
+            )
+        ]
+    )
+    check(
+        "work group rail projects existing observation without duplicating runtime state",
+        rail.count == 1
+            && rail.first?.observation?.providerLabel.value == "Conduit"
+            && rail.first?.observation?.unseenCount.value == 1
+    )
+    let replay = try store.addMember(groupID: group.id, reference: member, role: .supervisor)
+    check("work group identical member replay preserves coordination revision and activity", replay == updated)
+    check(
+        "work group reference admission preserves exact component identity",
+        WorkGroupMemberReference.conduitTask(" selftest-task ").canonicalID == nil
+            && WorkGroupMemberReference.providerThread(providerID: "a:b", threadID: "c").canonicalID
+                != WorkGroupMemberReference.providerThread(providerID: "a", threadID: "b:c").canonicalID
+    )
+    let observation = WorkGroupThreadObservation(reference: member, displayTitle: "Supervisor")
+    let ambiguous = WorkGroupThreadRailProjection.snapshot(group: updated, observations: [observation, observation])
+    check(
+        "work group duplicate observation remains ambiguous without an authority choice",
+        ambiguous.items.first?.observation == nil
+            && ambiguous.items.first?.availability == .ambiguous
+            && ambiguous.diagnostics == [.ambiguousObservation("task:selftest-task")]
+    )
+    let destination = WorkGroupComposerDestination(group: updated, target: member, targetTitle: "Supervisor")
+    check(
+        "work group composer names exact coordination and target identities",
+        destination.breadcrumb.contains(updated.id.rawValue)
+            && destination.breadcrumb.contains("task:selftest-task")
+            && destination.breadcrumb.contains("role: supervisor")
+    )
+    let renamed = try store.rename(id: group.id, name: "Revised group", expectedRevision: updated.revision)
+    check(
+        "work group stale composer descriptor remains visible as a warning",
+        WorkGroupTargetValidator.warnings(group: renamed, destination: destination, observation: observation)
+            == [.staleDestination(expected: updated.revision, actual: renamed.revision), .staleGroupName]
+    )
+    var unsupported = renamed
+    unsupported.schemaVersion = 999
+    check(
+        "work group unsupported state cannot produce a rail or a valid target claim",
+        WorkGroupThreadRailProjection.items(group: unsupported, observations: [observation]).isEmpty
+            && WorkGroupTargetValidator.warnings(group: unsupported, target: member, observation: observation)
+                == [.malformedGroup]
+    )
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
