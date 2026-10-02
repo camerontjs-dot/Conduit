@@ -2091,7 +2091,11 @@ for actual AppModel/status/events acceptance without operator contamination.
 The historical D-058 port decision on #91 remains evidence lineage, not a current
 main acceptance claim. The first maintained owner candidate, cc531dbcda2e, failed
 the actual-app pre-created-root check and is preserved. This POSIX successor
-uses a separate branch and new receipts; that failure is not relabeled.
+uses a separate branch and new receipts; that failure is not relabeled. The
+POSIX predecessor da336dbe8fbb then failed the actual owned-fixture readiness
+check: it listened but returned mainframe_authorization_required. The bootstrap
+successor activates only a directly readable owned fixture, without resolving a
+copied bookmark; the ordinary security-bookmark path remains unchanged.
 
 **Acceptance:** Portable configuration/path/ownership/preferences controls,
 actual isolated app/listener negative controls and repository-native tests/build

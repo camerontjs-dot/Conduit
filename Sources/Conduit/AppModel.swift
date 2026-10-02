@@ -1612,6 +1612,13 @@ final class AppModel: ObservableObject {
     }
 
     private func activateSavedRootAccess() -> Bool {
+        let instance = ConduitInstanceConfiguration.current
+        if instance.isQualification {
+            guard let root = settings.mainframeRoot else { return true }
+            // Bootstrap has already refused external roots and discarded copied
+            // bookmarks. This process may scan only its directly readable fixture.
+            return instance.containsOwnedURL(root) && rootIsDirectlyReadable(root)
+        }
         guard let bookmark = settings.mainframeRootBookmark else {
             return settings.mainframeRoot == nil
         }

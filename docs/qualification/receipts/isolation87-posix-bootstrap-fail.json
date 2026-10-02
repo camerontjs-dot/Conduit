@@ -1,0 +1,30 @@
+{
+  "classification": "TERMINAL_OWNER_NATIVE_FAIL_OWNED_ROOT_NEVER_READY",
+  "debug_binary_sha256": "04896d62582d50ccea4d1a3db736286046d695aee47896054c87ea869c2cd32a",
+  "downstream": "NOT_RUN MCP/task/write-off/lease/collision checks for this red attempt; separate earlier twelve-control receipt remains bounded",
+  "independent_qualification": "NOT_RUN",
+  "observed": {
+    "configured_mainframe": "canonical directly readable qualification-owned fixture",
+    "copied_bookmark": "synthetic invalid bookmark must not resolve",
+    "listener": "127.0.0.1:18842",
+    "readyz": {
+      "body": "mainframe_authorization_required",
+      "http_status": 503
+    }
+  },
+  "predecessor_head": "da336dbe8fbbdd26e862c72b83f898672865f411",
+  "predecessor_tree": "aacd1d55ce92b3e57a8b2ef93c49df7e623fd425",
+  "red_receipt_sha256": {
+    "isolation87-native-owner-bootstrap-red-v5.json": "e3fea1de5fdecbedbbf2b2fc6b33f3b67b666701275ac37f400da80289e1b6ae",
+    "isolation87-native-owner-bootstrap-red-v5.log": "0ac823fa64b36b6b7d2115cadf062430187d04e09a7d8aba611bf148c34d2831"
+  },
+  "schema_version": 1,
+  "source_files_sha256": {
+    "Sources/Conduit/AppModel.swift": "1f375d24561512ace753699d161ab0bc295fc34efc9085e10d9705cb994a747b",
+    "Sources/Conduit/ConduitSessionAPIServer.swift": "d6d13590f179aa216352dc1cef4af4176e1ae55403c937c96da561289a5c9a5b",
+    "Sources/ConduitCore/ConduitInstanceConfiguration.swift": "a3db78cad0e043be2f9dbf9af768f725f98084d0ab9072defc651bc3ba9bb717",
+    "Sources/ConduitCore/QualificationPreferences.swift": "138fa3902a951708082fbfef59636c20449f2754b8e518e5e95cba8b27579f2a"
+  },
+  "successor_branch": "fix/issue87-owned-state-bootstrap-successor-20261002",
+  "successor_required": "Qualification-only direct activation of validated owned fixture; ordinary security-bookmark semantics preserved"
+}

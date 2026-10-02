@@ -26,7 +26,8 @@ Settings, preferences, API token, adapter thread records, task and conversation
 logs, worklog, attachments, context bundles and snapshots stay under that root.
 UI preferences use the same private file-backed UserDefaults interface as
 AppModel. A configured fixture MainFrame directory must be inside the owned
-root. Copied security bookmarks and automatic session restoration are disabled.
+root and directly readable. It is activated without a security bookmark; copied
+bookmarks and automatic session restoration are disabled.
 A fresh root has no MainFrame configuration and no listener until its own
 settings explicitly enable the API. The separate API write gate stays off by
 default.
@@ -50,6 +51,14 @@ startup with a valid pre-created root because Foundation normalized a canonical
 `receipts/isolation87-initial-native-fail.json`. The separate POSIX successor adds
 an existing-marker reopen regression, keeps its first red result and refuses a
 boolean schema marker rather than coercing it to integer authority.
+
+The POSIX predecessor `da336dbe8fbbdd26e862c72b83f898672865f411` then
+failed the owned-fixture readiness check: the listener was reachable but `/readyz`
+returned `503 mainframe_authorization_required`. The separate bootstrap successor
+uses only the already validated directly readable fixture and requires the native
+`200 ready` response plus its project inventory. See
+`receipts/isolation87-posix-bootstrap-fail.json`; the earlier twelve passing
+controls do not supersede this wider-boundary falsifier.
 
 Repository-native tests, strict signed build and disposable actual-app checks
 are implementation-owner evidence. The exact frozen successor still needs a

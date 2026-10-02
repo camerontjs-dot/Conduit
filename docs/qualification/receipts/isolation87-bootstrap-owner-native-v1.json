@@ -1,0 +1,173 @@
+{
+  "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "boundaries": {
+    "API_write_gate_enabled": false,
+    "CODEX_HOME_reassigned": false,
+    "HOME_reassigned": false,
+    "all_owned_app_processes_exited": true,
+    "no_release_or_install": true,
+    "real_provider_turns_requested": 0,
+    "reserved_native_ports": [
+      18841,
+      18842,
+      18843,
+      18844
+    ],
+    "sentinel_provider_tmux_tunnel_command_invocations": 0
+  },
+  "checks": [
+    {
+      "name": "fresh root does not adopt default settings or tasks",
+      "observed_at_utc": "2026-10-02T16:54:27.381352+00:00",
+      "passed": true
+    },
+    {
+      "name": "marked root restart preserves private preferences",
+      "observed_at_utc": "2026-10-02T16:54:27.991164+00:00",
+      "passed": true
+    },
+    {
+      "name": "foreign state fails closed before startup",
+      "observed_at_utc": "2026-10-02T16:54:28.155348+00:00",
+      "passed": true
+    },
+    {
+      "name": "operator port override fails closed without creating state",
+      "observed_at_utc": "2026-10-02T16:54:28.310376+00:00",
+      "passed": true
+    },
+    {
+      "name": "external MainFrame fixture fails before listener startup",
+      "observed_at_utc": "2026-10-02T16:54:28.744080+00:00",
+      "passed": true
+    },
+    {
+      "name": "missing configured root stays LISTENING but never autodetects READY",
+      "observed_at_utc": "2026-10-02T16:54:29.185902+00:00",
+      "passed": true
+    },
+    {
+      "name": "owned listener binds selected reserved port",
+      "observed_at_utc": "2026-10-02T16:54:29.703054+00:00",
+      "passed": true
+    },
+    {
+      "name": "owned configured MainFrame reaches READY beyond LISTENING",
+      "observed_at_utc": "2026-10-02T16:54:29.729794+00:00",
+      "passed": true
+    },
+    {
+      "name": "READY inventory contains the exact owned fixture project",
+      "observed_at_utc": "2026-10-02T16:54:29.758790+00:00",
+      "passed": true
+    },
+    {
+      "name": "MCP read exposes no operator tasks",
+      "observed_at_utc": "2026-10-02T16:54:29.789194+00:00",
+      "passed": true
+    },
+    {
+      "name": "write gate stays off and creates no task",
+      "observed_at_utc": "2026-10-02T16:54:29.818288+00:00",
+      "passed": true
+    },
+    {
+      "name": "second app cannot acquire same state root",
+      "observed_at_utc": "2026-10-02T16:54:29.981606+00:00",
+      "passed": true
+    },
+    {
+      "name": "occupied reserved port does not fall back",
+      "observed_at_utc": "2026-10-02T16:54:31.017025+00:00",
+      "passed": true
+    },
+    {
+      "name": "startup never invokes provider/tmux/tunnel commands",
+      "observed_at_utc": "2026-10-02T16:54:31.053759+00:00",
+      "passed": true
+    },
+    {
+      "name": "all qualification app processes exited",
+      "observed_at_utc": "2026-10-02T16:54:31.079265+00:00",
+      "passed": true
+    }
+  ],
+  "classification": "IMPLEMENTATION_OWNER_EVIDENCE_NOT_INDEPENDENT_QUALIFICATION",
+  "failed_predecessors": [
+    {
+      "disposition": "TERMINAL_OWNER_NATIVE_FAIL_PRECREATED_ROOT_CANONICAL_ALIAS",
+      "head": "cc531dbcda2ec6b192b419cfec4b34e5e7a05020",
+      "receipt": "isolation87-initial-native-fail.json",
+      "tree": "73f0750f1d3d30ba88ba9e17bccd345f0671c32d"
+    },
+    {
+      "disposition": "TERMINAL_OWNER_NATIVE_FAIL_OWNED_ROOT_NEVER_READY",
+      "head": "da336dbe8fbbdd26e862c72b83f898672865f411",
+      "receipt": "isolation87-posix-bootstrap-fail.json",
+      "tree": "aacd1d55ce92b3e57a8b2ef93c49df7e623fd425"
+    }
+  ],
+  "native_debug_binary_sha256": "de15c1dc3519db988977bc4e37e3fba48328b2c01c8e010e8817cb86178946a9",
+  "native_debug_bundle": "task-owned ad hoc signed bundle with distinct qualification bundle ID; no install",
+  "observed_at_utc": "2026-10-02T16:57:07.232132+00:00",
+  "preserved_owner_apparatus_deviations": [
+    "Native commands used a task-owned Swift wrapper to redirect module/package/config/security caches and TMPDIR while invoking the real Xcode compiler; repository scripts unmodified",
+    "First POSIX owner collection had a decoder defect for plain-text MCP tool errors; corrected only in a collection successor on new resources, with original outputs preserved",
+    "First bootstrap owner red harness expected uppercase READY; actual503 observation preserved, then corrected lowercase wire oracle was repeated before source repair",
+    "Tests use an explicit task-owned CONDUIT_TEST_TMPDIR and POSIX fixture parent to avoid Foundation temporary display aliases"
+  ],
+  "private_receipt_sha256": {
+    "isolation87-bootstrap-build.log": "f845940c1db51a9be297c16611f051c121871704aa7d4cdf280628f14264e7e1",
+    "isolation87-bootstrap-full.log": "765704208d7742bee2db09c8b5868692a51d14fafed6b8549044b7beb6bde545",
+    "isolation87-native-owner-bootstrap-red-v5.json": "e3fea1de5fdecbedbbf2b2fc6b33f3b67b666701275ac37f400da80289e1b6ae",
+    "isolation87-native-owner-bootstrap-red-v5.log": "0ac823fa64b36b6b7d2115cadf062430187d04e09a7d8aba611bf148c34d2831",
+    "isolation87-native-owner-bootstrap-successor-v6.json": "1917dbd27d87b8d00223b06ce66f4d03c77ade89c0753eaa05c22cdefd0e5bd6",
+    "isolation87-native-owner-bootstrap-successor.log": "ffcfcad0523e4875ca88e5aabbed0d113bb90d7b116f7877579abf18ac733980",
+    "isolation87-native-owner-bootstrap-successor.py": "f67722065f3bab78415ed4463bebc0c34d51be0937a1edeaa06470a99a742a07"
+  },
+  "readiness_boundary": {
+    "copied_bookmark_fixture": "synthetic invalid bookmark discarded; direct activation only inside owned root",
+    "external_synthetic_fixture": "exit78 before listener/token",
+    "missing_configuration": "503 mainframe_not_configured; no autodetection",
+    "owned_configured_fixture": "200 ready; project slugs exactly mainframe/disposable"
+  },
+  "release_binary_sha256": "a6de22adb5341d1e55053092fd6cf29cd44222ac70d5d1f03080afbbd2a89234",
+  "repository_native_checks": {
+    "python": {
+      "failed": 0,
+      "passed": 10
+    },
+    "release_build": "PASS",
+    "selftest": {
+      "failed": 0,
+      "passed": 468
+    },
+    "strict_codesign": "PASS",
+    "xctest": {
+      "executed": 611,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "schema_version": 1,
+  "skipped_boundaries": [
+    "live Gemini ACP installed runtime",
+    "installed OpenCode persistence",
+    "live Shell/OpenCode correlation"
+  ],
+  "source_files_sha256": {
+    "Sources/Conduit/AppModel.swift": "e2547ecbcb99c4538d08fd23fc285975bda2c3f03615b3fde1706e292ed6c81a",
+    "Sources/Conduit/ConduitSessionAPIServer.swift": "d6d13590f179aa216352dc1cef4af4176e1ae55403c937c96da561289a5c9a5b",
+    "Sources/ConduitCore/ConduitInstanceConfiguration.swift": "a3db78cad0e043be2f9dbf9af768f725f98084d0ab9072defc651bc3ba9bb717",
+    "Sources/ConduitCore/QualificationPreferences.swift": "138fa3902a951708082fbfef59636c20449f2754b8e518e5e95cba8b27579f2a"
+  },
+  "successor_branch": "fix/issue87-owned-state-bootstrap-successor-20261002",
+  "unknown": [
+    "Fresh independent qualification",
+    "Current-main composition with other unmerged repairs",
+    "HTTP write-enabled task launch/status/events authority",
+    "Real provider/account/session/hosted behaviour",
+    "Installed/operator release acceptance"
+  ]
+}
