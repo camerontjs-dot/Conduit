@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Ordinary application quit now offers Save/Discard/Cancel for the retained
+  primary Explorer buffer, including while Sessions is visible. Cancel and
+  failed explicit saves keep Conduit open and preserve the buffer; a native
+  failure notice reports why saving was refused. Repeated Quit and window
+  close requests cannot bypass the pending decision (#54).
+
 - Explorer can explicitly edit eligible Markdown, source, configuration, and
   ordinary UTF-8 text with bounded undo/redo, literal find and replace, and
   Save/Discard/Cancel navigation, tab-close, and window-close decisions. Save

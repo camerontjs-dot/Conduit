@@ -7,8 +7,9 @@ import SwiftUI
 /// task, runtime or provider lifecycle behavior.
 struct MainframeExplorerWindowCloseGuard: NSViewRepresentable {
     @ObservedObject var explorer: MainframeExplorerWorkspaceModel
+    var applicationDelegate: MainframeExplorerApplicationDelegate? = nil
 
-    func makeCoordinator() -> Coordinator { Coordinator(explorer: explorer) }
+    func makeCoordinator() -> Coordinator { Coordinator(explorer: explorer, applicationDelegate: applicationDelegate) }
     func makeNSView(context: Context) -> GuardView { GuardView(coordinator: context.coordinator) }
     func updateNSView(_ view: GuardView, context: Context) { context.coordinator.explorer = explorer }
     static func dismantleNSView(_ view: GuardView, coordinator: Coordinator) { coordinator.detach() }
@@ -26,21 +27,27 @@ struct MainframeExplorerWindowCloseGuard: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSWindowDelegate {
         weak var explorer: MainframeExplorerWorkspaceModel?
+        private weak var applicationDelegate: MainframeExplorerApplicationDelegate?
         private weak var window: NSWindow?
         private weak var previousDelegate: NSWindowDelegate?
 
-        init(explorer: MainframeExplorerWorkspaceModel) { self.explorer = explorer }
+        init(explorer: MainframeExplorerWorkspaceModel, applicationDelegate: MainframeExplorerApplicationDelegate? = nil) {
+            self.explorer = explorer
+            self.applicationDelegate = applicationDelegate
+        }
 
-        func attach(to window: NSWindow?) {
+        @MainActor func attach(to window: NSWindow?) {
             if self.window === window { return }
             detach()
             guard let window else { return }
             self.window = window
             previousDelegate = window.delegate
             window.delegate = self
+            if let explorer { applicationDelegate?.registerExplorer(explorer, window: window) }
         }
 
-        func detach() {
+        @MainActor func detach() {
+            if let window, let explorer { applicationDelegate?.unregisterExplorer(explorer, window: window) }
             if let window, window.delegate === self { window.delegate = previousDelegate }
             window = nil
             previousDelegate = nil
@@ -56,6 +63,7 @@ struct MainframeExplorerWindowCloseGuard: NSViewRepresentable {
         }
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
+            if applicationDelegate?.isDecidingTermination == true { return false }
             if let explorer, explorer.editor.hasUnsavedChanges {
                 let alert = NSAlert()
                 alert.messageText = "Unsaved Explorer changes"

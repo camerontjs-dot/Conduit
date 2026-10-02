@@ -5,6 +5,7 @@ import SwiftUI
 
 @main
 struct ConduitApp: App {
+    @NSApplicationDelegateAdaptor(MainframeExplorerApplicationDelegate.self) private var explorerApplicationDelegate
     @StateObject private var model = AppModel()
     @StateObject private var themeStore = ThemeStore()
 
@@ -19,6 +20,7 @@ struct ConduitApp: App {
         // sessions or create a second runtime authority.
         Window("Conduit", id: "main") {
             RootView()
+                .environmentObject(explorerApplicationDelegate)
                 .environmentObject(model)
                 .environmentObject(themeStore)
                 .frame(minWidth: 1080, minHeight: 720)
