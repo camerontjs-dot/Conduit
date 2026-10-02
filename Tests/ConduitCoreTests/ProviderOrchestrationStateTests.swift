@@ -49,12 +49,46 @@ final class ProviderOrchestrationStateTests: XCTestCase {
             providerSpecific: .unknown
         )
 
-        XCTAssertEqual(lineage.schemaVersion, 2)
+        XCTAssertEqual(lineage.schemaVersion, 3)
         XCTAssertEqual(lineage.providerSessionID.value, "ses_external_fixture")
         XCTAssertEqual(lineage.relationship, .discovered)
         XCTAssertEqual(lineage.conduitTaskID.state, .unknown)
         XCTAssertEqual(lineage.runtimeAttemptID.state, .unknown)
         XCTAssertEqual(lineage.writerControllerID.state, .unknown)
+    }
+
+    func testWorkerLineageV2PayloadDecodesWithoutExecutionWorkspaceBinding() throws {
+        let lineage = WorkerLineage(
+            schemaVersion: 2,
+            conduitTaskID: .known("task-legacy"),
+            runtimeAttemptID: .known("attempt-legacy"),
+            runtime: .known("OpenCode"),
+            adapter: .known("http-server"),
+            providerHostID: .known("host-legacy"),
+            providerSessionID: .known("ses-legacy"),
+            turns: [],
+            workspace: unknownWorkspace,
+            process: unknownProcess,
+            origin: .conduit,
+            relationship: .owned,
+            writerControllerID: .known("controller-legacy"),
+            terminal: unfinished,
+            observation: observed,
+            providerSpecific: .unknown
+        )
+        let encoded = try JSONEncoder().encode(lineage)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "executionWorkspace")
+        let v2Data = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(WorkerLineage.self, from: v2Data)
+
+        XCTAssertEqual(decoded.schemaVersion, 2)
+        XCTAssertNil(decoded.executionWorkspace)
+        XCTAssertEqual(decoded.providerSessionID.value, "ses-legacy")
+        XCTAssertEqual(decoded.workspace, unknownWorkspace)
     }
 
     func testModelIdentityIsTurnScopedAndCanChangeInsideOneProviderSession() {

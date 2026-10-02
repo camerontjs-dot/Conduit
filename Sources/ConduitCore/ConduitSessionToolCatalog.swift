@@ -313,13 +313,19 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_create_task",
-            "Start a Conduit agent session and return its taskSessionID. Read objective_delivery_state, not objective_delivered, to decide what to do next: delivered means it reached the runtime; queued means Conduit owns delivery and will complete it without another call, so resending would run the objective twice; failed means the runtime refused it and objective_resend_required is true, so wait for ready then send it with conduit_send_prompt. The model remains the operator-configured profile choice; this tool has no model override. Approvals stay on the Mac. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Start a Conduit agent session and return its taskSessionID. Read objective_delivery_state, not objective_delivered, to decide what to do next: delivered means it reached the runtime; queued means Conduit owns delivery and will complete it without another call, so resending would run the objective twice; failed means the runtime refused it and objective_resend_required is true, so wait for ready then send it with conduit_send_prompt. The model remains the operator-configured profile choice; this tool has no model override. An optional isolated_git_worktree request makes Conduit resolve the supplied base revision, allocate a task worktree, acquire its workspace writer lease, and pass the qualified workspace preflight before any provider launch. Approvals stay on the Mac. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: stateChangingAnnotations,
             properties: [
                 "agent": property("string", "Enabled profile name or command from conduit_list_adapters. An unlisted or disabled profile is refused."),
-                "project_slug": property("string", "Existing project slug from conduit_list_projects; it sets the session working directory."),
+                "project_slug": property("string", "Existing project slug from conduit_list_projects. It remains the logical project identity; when no workspace_mode is supplied it is also the process working directory."),
                 "objective": property("string", "Optional first prompt. A structured runtime is normally still starting when this returns; Conduit holds the objective and delivers it when the runtime reports ready, which is what objective_delivery_state queued means. Do not resend a queued objective."),
                 "idempotency_key": property("string", "Optional stable key for a safe repeated create. An identical repeat returns the original task."),
+                "workspace_mode": [
+                    "type": "string",
+                    "enum": ["isolated_git_worktree"],
+                    "description": "Optional. Request one Conduit-allocated isolated Git worktree. Omit to preserve the existing project-directory launch behavior.",
+                ],
+                "workspace_base_revision": property("string", "Required with workspace_mode=isolated_git_worktree. Git revision Conduit must resolve to an exact SHA before allocation; it is never silently retargeted after preparation."),
             ],
             required: ["agent", "project_slug"]
         ),

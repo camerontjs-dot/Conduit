@@ -18,6 +18,18 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
         XCTAssertTrue((create["description"] as? String)?.contains("no model override") == true)
         XCTAssertTrue((create["description"] as? String)?.contains("always advertised") == true)
         XCTAssertTrue((create["description"] as? String)?.contains("enables Session API writes locally") == true)
+        XCTAssertTrue((create["description"] as? String)?.contains("isolated_git_worktree") == true)
+        let createProperties = try XCTUnwrap(
+            createSchema["properties"] as? [String: Any]
+        )
+        let workspaceMode = try XCTUnwrap(
+            createProperties["workspace_mode"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            workspaceMode["enum"] as? [String],
+            ["isolated_git_worktree"]
+        )
+        XCTAssertNotNil(createProperties["workspace_base_revision"])
 
         let listProviders = try XCTUnwrap(
             ConduitSessionToolCatalog.tool(named: "conduit_list_provider_sessions")

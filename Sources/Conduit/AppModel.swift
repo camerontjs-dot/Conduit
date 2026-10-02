@@ -1965,7 +1965,8 @@ final class AppModel: ObservableObject {
     func createTask(
         agent: AgentProfile,
         project: MainframeProject,
-        taskSessionID requestedTaskSessionID: TaskSessionID? = nil
+        taskSessionID requestedTaskSessionID: TaskSessionID? = nil,
+        executionWorkspace: ExecutionWorkspace? = nil
     ) -> TerminalRuntime? {
         guard enabledAgents.contains(where: { $0.id == agent.id }) else {
             errorMessage = "That agent is not currently enabled."
@@ -1994,7 +1995,9 @@ final class AppModel: ObservableObject {
             entry: .started(
                 agentName: agent.name,
                 requestedBackend: hosted.requested
-            )
+            ),
+            executionWorkspace: executionWorkspace,
+            workspaceAction: .launch
         )
         if runtime != nil {
             showNewTask = false
@@ -2084,7 +2087,9 @@ final class AppModel: ObservableObject {
                 entry: .started(
                     agentName: agent.name,
                     requestedBackend: "\(agent.preferredSessionBackend.requestedBackendDescription) resume"
-                )
+                ),
+                executionWorkspace: task.executionWorkspace,
+                workspaceAction: task.executionWorkspace == nil ? .launch : .reuse
             )
             return
         }
@@ -2171,6 +2176,14 @@ final class AppModel: ObservableObject {
                     ? "direct PTY retry"
                     : "safe durable runtime reconciliation"
             ),
+            executionWorkspace: task.executionWorkspace,
+            workspaceAction: task.executionWorkspace == nil
+                ? .launch
+                : (targetSessionName != nil
+                    || AdapterThreadStore(
+                        directory: AdapterThreadStore.defaultDirectory()
+                    ).record(for: task.id) != nil
+                    ? .reuse : .launch),
             requiresDurableSession: targetSessionName != nil
         )
     }
@@ -2495,6 +2508,9 @@ final class AppModel: ObservableObject {
             )
 
         beginWorkSessionIfNeeded(project)
+        let boundWorkspace = taskSessions.first(where: {
+            $0.id == taskSessionID
+        })?.executionWorkspace
         let runtime = start(
             descriptor: SessionDescriptor(
                 projectPath: project.path,
@@ -2513,6 +2529,8 @@ final class AppModel: ObservableObject {
                 tmuxSessionName: discovered.tmuxName,
                 attachedElsewhere: discovered.attachedClients > 0
             ),
+            executionWorkspace: boundWorkspace,
+            workspaceAction: boundWorkspace == nil ? .launch : .reuse,
             requiresDurableSession: true
         )
         guard let runtime else { return nil }
@@ -2545,11 +2563,121 @@ final class AppModel: ObservableObject {
         )
     }
 
+    var executionWorkspaceRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".conduit/workspaces", isDirectory: true)
+    }
+
+    var executionWorkspaceAuthorityDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".conduit/workspace-authority", isDirectory: true)
+    }
+
+    private func executionWorkspaceLeaseStore() -> WorkspaceLeaseStore {
+        WorkspaceLeaseStore(directory: executionWorkspaceAuthorityDirectory)
+    }
+
+    private func samePhysicalWorkspacePath(_ lhs: String, _ rhs: String) -> Bool {
+        URL(fileURLWithPath: lhs, isDirectory: true)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL.path
+            == URL(fileURLWithPath: rhs, isDirectory: true)
+                .resolvingSymlinksInPath()
+                .standardizedFileURL.path
+    }
+
+    /// Read-only reuse observation. Today only OpenCode persistence exposes the
+    /// existing provider session directory strongly enough to satisfy the #100
+    /// reuse preflight. Other providers remain UNKNOWN and therefore fail
+    /// closed for workspace-bound reuse.
+    private func observedWorkerForWorkspaceReuse(
+        taskSessionID: TaskSessionID,
+        descriptor: SessionDescriptor,
+        workspace: ExecutionWorkspace,
+        reconciliation: ExecutionWorkspaceReconciliation
+    ) -> WorkerLineage? {
+        guard descriptor.agent.preferredSessionBackend == .httpServer else {
+            return nil
+        }
+        let threadStore = AdapterThreadStore(
+            directory: AdapterThreadStore.defaultDirectory()
+        )
+        guard let record = threadStore.record(for: taskSessionID),
+              record.backend == AgentSessionBackend.httpServer.workSessionLabel
+        else {
+            return nil
+        }
+        let binding = ProviderObservationBinding(
+            conduitTaskID: taskSessionID.rawValue.uuidString,
+            runtimeAttemptID: nil
+        )
+        guard var worker = try? sessionAPIOpenCodeObserver().observeSession(
+            providerSessionID: record.threadID,
+            binding: binding
+        ) else {
+            return nil
+        }
+        worker = worker.bindingExecutionWorkspace(
+            workspace,
+            activeLease: reconciliation.activeLease
+        )
+        if let expectedPath = workspace.path,
+           let observedCWD = worker.workspace.cwd.value,
+           samePhysicalWorkspacePath(observedCWD, expectedPath),
+           let worktree = reconciliation.worktree {
+            worker.workspace.worktree = .known(worktree.path)
+            if let repository = workspace.repository {
+                worker.workspace.repositoryRoot = .known(
+                    repository.repositoryRoot
+                )
+            }
+        }
+        return worker
+    }
+
+    private func executionWorkspaceMount(
+        taskSessionID: TaskSessionID,
+        descriptor: SessionDescriptor,
+        workspace: ExecutionWorkspace,
+        action: ExecutionWorkspaceRuntimeAction
+    ) -> ExecutionWorkspaceRuntimeMount {
+        let reconciliation = GitExecutionWorkspaceController().reconcile(
+            workspace,
+            leaseStore: executionWorkspaceLeaseStore()
+        )
+        let existingWorker = action == .reuse
+            ? observedWorkerForWorkspaceReuse(
+                taskSessionID: taskSessionID,
+                descriptor: descriptor,
+                workspace: workspace,
+                reconciliation: reconciliation
+            )
+            : nil
+        return ExecutionWorkspaceRuntimeMountPlanner.plan(
+            action: action,
+            requiredWorkspace: workspace,
+            reconciliation: reconciliation,
+            existingWorker: existingWorker,
+            expectedLeaseOwnerID: "task:\(taskSessionID.rawValue.uuidString.lowercased())"
+        )
+    }
+
+    private func executionWorkspacePreflightFailure(
+        _ preflight: ExecutionWorkspaceRuntimePreflight
+    ) -> String {
+        let issues = preflight.blockingIssues + preflight.unknownFacts
+        let codes = issues.map(\.code.rawValue).joined(separator: ", ")
+        let suffix = codes.isEmpty ? "" : " (\(codes))"
+        return "Execution workspace \(preflight.disposition.rawValue)\(suffix); provider launch/reuse was not attempted."
+    }
+
     private func start(
         descriptor: SessionDescriptor,
         project: MainframeProject,
         backendLabel: String,
         entry: SessionEntry,
+        executionWorkspace: ExecutionWorkspace? = nil,
+        workspaceAction: ExecutionWorkspaceRuntimeAction = .launch,
         requiresDurableSession: Bool = false
     ) -> TerminalRuntime? {
         var descriptor = descriptor
@@ -2589,6 +2717,20 @@ final class AppModel: ObservableObject {
             return nil
         }
         descriptor.taskSessionID = taskSessionID
+        if let executionWorkspace,
+           taskSessions.first(where: { $0.id == taskSessionID })?
+                .executionWorkspace != executionWorkspace {
+            guard appendTaskEvent(
+                TaskSessionEvent(
+                    taskSessionID: taskSessionID,
+                    authority: .conduitRecorded,
+                    kind: .executionWorkspaceBound(executionWorkspace)
+                )
+            ) else {
+                return nil
+            }
+        }
+
         let runtimeAttemptID = RuntimeAttemptID()
         guard appendTaskEvent(
             TaskSessionEvent(
@@ -2605,6 +2747,39 @@ final class AppModel: ObservableObject {
         ) else {
             return nil
         }
+
+        if let executionWorkspace {
+            let mount = executionWorkspaceMount(
+                taskSessionID: taskSessionID,
+                descriptor: descriptor,
+                workspace: executionWorkspace,
+                action: workspaceAction
+            )
+            guard mount.isEligible,
+                  let executionDirectory = mount.executionDirectory else {
+                let reason = executionWorkspacePreflightFailure(
+                    mount.preflight
+                )
+                _ = appendTaskEvent(
+                    TaskSessionEvent(
+                        taskSessionID: taskSessionID,
+                        authority: .conduitRecorded,
+                        kind: .operationalStateChanged(
+                            .runtimeProvisioningFailed(
+                                runtimeAttemptID,
+                                tmuxSessionName: descriptor.tmuxSessionName,
+                                reason: reason,
+                                recoverable: true
+                            )
+                        )
+                    )
+                )
+                errorMessage = reason
+                return nil
+            }
+            descriptor.executionDirectory = executionDirectory
+        }
+
         let priorConversation =
             conversationHistoryByTask[taskSessionID] ?? []
         let runtime = TerminalRuntime(
@@ -2659,7 +2834,7 @@ final class AppModel: ObservableObject {
             let backend = descriptor.agent.preferredSessionBackend
             runtime.attachStructuredAdapter(
                 backend: backend,
-                cwd: descriptor.projectPath,
+                cwd: descriptor.runtimeDirectory,
                 model: descriptor.agent.model,
                 resumeSessionID: resumeThreadID
             )
@@ -4390,12 +4565,19 @@ final class AppModel: ObservableObject {
                     "MindGraph output was not a JSON array; raw output retained"
             }
             return payload
-        case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
+        case .createTask(
+            let agentName,
+            let projectSlug,
+            let objective,
+            let idempotencyKey,
+            let executionWorkspace
+        ):
             return sessionAPICreateTask(
                 agentName: agentName,
                 projectSlug: projectSlug,
                 objective: objective,
                 idempotencyKey: idempotencyKey,
+                workspaceRequest: executionWorkspace,
                 caller: caller
             )
         case .reconcileTask(let rawID):
@@ -5975,6 +6157,29 @@ final class AppModel: ObservableObject {
         if let failure {
             payload["failure"] = failure
         }
+        if let workspace = task.executionWorkspace {
+            var workspacePayload: [String: Any] = [
+                "id": workspace.id,
+                "mode": workspace.mode.rawValue,
+                "authority": workspace.authority.rawValue,
+                "lifecycle": workspace.lifecycle.rawValue,
+            ]
+            if let path = workspace.path {
+                workspacePayload["path"] = path
+            }
+            if let baseSHA = workspace.baseSHA {
+                workspacePayload["base_sha"] = baseSHA
+            }
+            if let branchRef = workspace.branchRef {
+                workspacePayload["branch_ref"] = branchRef
+            }
+            if let leaseID = workspace.leaseID {
+                workspacePayload["lease_id"] = leaseID
+            }
+            payload["execution_workspace"] = workspacePayload
+            payload["execution_workspace_authority"] =
+                "task-owned workspace binding; runtime cwd must be re-observed separately"
+        }
         // A caller told `queued` was told not to resend. Surfacing the count
         // makes that promise observable while it is outstanding, instead of a
         // silent gap between the create response and the delivery.
@@ -6119,11 +6324,80 @@ final class AppModel: ObservableObject {
         ).jsonObject()
     }
 
+    private enum SessionAPIWorkspacePreparationError: LocalizedError {
+        case leaseFailed(workspace: ExecutionWorkspace, detail: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .leaseFailed(let workspace, let detail):
+                return "Allocated workspace \(workspace.path ?? workspace.id) but writer lease failed: \(detail)"
+            }
+        }
+
+        var preservedWorkspace: ExecutionWorkspace {
+            switch self {
+            case .leaseFailed(let workspace, _):
+                return workspace
+            }
+        }
+    }
+
+    private func sessionAPIPrepareExecutionWorkspace(
+        request: ConduitExecutionWorkspaceRequest,
+        project: MainframeProject,
+        taskSessionID: TaskSessionID
+    ) throws -> (workspace: ExecutionWorkspace, warnings: [String]) {
+        switch request {
+        case .isolatedGitWorktree(let baseRevision):
+            let trimmedBase = baseRevision.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            guard !trimmedBase.isEmpty else {
+                throw GitExecutionWorkspaceControllerError.commandFailed(
+                    arguments: ["rev-parse", "<empty>^{commit}"],
+                    status: 2,
+                    stderr: "workspace_base_revision is empty"
+                )
+            }
+            try FileManager.default.createDirectory(
+                at: executionWorkspaceRoot,
+                withIntermediateDirectories: true
+            )
+            let taskKey = taskSessionID.rawValue.uuidString.lowercased()
+            let branchName = "conduit/task-\(taskKey)"
+            let controller = GitExecutionWorkspaceController()
+            let plan = try controller.prepareAllocation(
+                repositoryRoot: project.path,
+                workspaceRoot: executionWorkspaceRoot,
+                branchName: branchName,
+                baseRevision: trimmedBase
+            )
+            let allocation = try controller.allocate(plan)
+            do {
+                let lease = try executionWorkspaceLeaseStore().acquire(
+                    workspaceID: allocation.workspace.id,
+                    ownerID: "task:\(taskKey)",
+                    runID: taskKey
+                )
+                return (
+                    allocation.workspace.binding(lease),
+                    allocation.warnings.map(\.message)
+                )
+            } catch {
+                throw SessionAPIWorkspacePreparationError.leaseFailed(
+                    workspace: allocation.workspace,
+                    detail: error.localizedDescription
+                )
+            }
+        }
+    }
+
     private func sessionAPICreateTask(
         agentName: String,
         projectSlug: String,
         objective: String,
         idempotencyKey: String?,
+        workspaceRequest: ConduitExecutionWorkspaceRequest?,
         caller: ConduitSessionCaller
     ) -> [String: Any] {
         // Gate, agent, and project are one decision, evaluated in ConduitCore
@@ -6168,6 +6442,8 @@ final class AppModel: ObservableObject {
                             namespace: "mcp-create-objective",
                             text: objective
                         ),
+                        workspaceRequest?.fingerprintComponent
+                            ?? "project_directory",
                     ]
                 )
             )
@@ -6201,19 +6477,104 @@ final class AppModel: ObservableObject {
         }
 
         let taskID = TaskSessionID()
+        let preparedWorkspace: ExecutionWorkspace?
+        let workspaceWarnings: [String]
+        if let workspaceRequest {
+            do {
+                let prepared = try sessionAPIPrepareExecutionWorkspace(
+                    request: workspaceRequest,
+                    project: project,
+                    taskSessionID: taskID
+                )
+                preparedWorkspace = prepared.workspace
+                workspaceWarnings = prepared.warnings
+            } catch let error as SessionAPIWorkspacePreparationError {
+                let workspace = error.preservedWorkspace
+                return [
+                    "error": error.localizedDescription,
+                    "agent": agent.name,
+                    "project": project.slug,
+                    "execution_workspace_requested": true,
+                    "execution_workspace_path": workspace.path ?? "",
+                    "execution_workspace_id": workspace.id,
+                    "workspace_preservation_required": true,
+                    "provider_mutation": "none",
+                    "authority": "workspace allocation succeeded but writer authority was not established; worktree/branch were preserved",
+                ]
+            } catch let error as GitExecutionWorkspaceControllerError {
+                var payload: [String: Any] = [
+                    "error": error.localizedDescription,
+                    "agent": agent.name,
+                    "project": project.slug,
+                    "execution_workspace_requested": true,
+                    "provider_mutation": "none",
+                    "authority": "workspace preparation failed before provider launch",
+                ]
+                if case .allocationReceiptFailed(let path, _) = error {
+                    payload["execution_workspace_path"] = path
+                    payload["workspace_preservation_required"] = true
+                    payload["workspace_cleanup_performed"] = false
+                }
+                return payload
+            } catch {
+                return [
+                    "error": error.localizedDescription,
+                    "agent": agent.name,
+                    "project": project.slug,
+                    "execution_workspace_requested": true,
+                    "provider_mutation": "none",
+                    "authority": "workspace preparation failed before provider launch",
+                ]
+            }
+        } else {
+            preparedWorkspace = nil
+            workspaceWarnings = []
+        }
+
         guard let runtime = createTask(
             agent: agent,
             project: project,
-            taskSessionID: taskID
+            taskSessionID: taskID,
+            executionWorkspace: preparedWorkspace
         ) else {
-            guard let task = taskSessions.first(where: { $0.id == taskID }) else {
-                return [
+            let task = taskSessions.first(where: { $0.id == taskID })
+            var unclaimedWorkspacePayload: [String: Any] = [:]
+            if let workspace = preparedWorkspace,
+               task?.executionWorkspace != workspace {
+                if let leaseID = workspace.leaseID {
+                    do {
+                        _ = try executionWorkspaceLeaseStore().release(
+                            workspaceID: workspace.id,
+                            ownerID: "task:\(taskID.rawValue.uuidString.lowercased())",
+                            expectedLeaseID: leaseID
+                        )
+                        unclaimedWorkspacePayload["workspace_lease_released"] = true
+                    } catch {
+                        unclaimedWorkspacePayload["workspace_lease_released"] = false
+                        unclaimedWorkspacePayload["workspace_lease_release_error"] =
+                            error.localizedDescription
+                    }
+                }
+                unclaimedWorkspacePayload["execution_workspace_path"] =
+                    workspace.path ?? ""
+                unclaimedWorkspacePayload["execution_workspace_id"] =
+                    workspace.id
+                unclaimedWorkspacePayload["workspace_preservation_required"] = true
+                unclaimedWorkspacePayload["workspace_cleanup_performed"] = false
+            }
+            guard let task else {
+                var payload: [String: Any] = [
                     "error": errorMessage ?? "create_task failed",
                     "agent": agent.name,
                     "project": project.slug,
+                    "provider_mutation": "none",
+                    "authority": "runtime was not started; any allocated worktree/branch is preserved",
                 ]
+                payload.merge(unclaimedWorkspacePayload) { _, new in new }
+                return payload
             }
             var failedPayload = sessionAPITaskPayload(for: task)
+            failedPayload.merge(unclaimedWorkspacePayload) { _, new in new }
             failedPayload["error"] = task.metadata.agentName == agent.name
                 ? (failedPayload["failure"] as? String ?? errorMessage ?? "create_task failed")
                 : (errorMessage ?? "create_task failed")
@@ -6229,6 +6590,9 @@ final class AppModel: ObservableObject {
             }
             failedPayload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
             failedPayload["authority"] = "task registered; provisioning failed"
+            if !workspaceWarnings.isEmpty {
+                failedPayload["execution_workspace_warnings"] = workspaceWarnings
+            }
             return failedPayload
         }
         // A runtime exists for this id, so the reserved slot is now genuinely
@@ -6255,6 +6619,9 @@ final class AppModel: ObservableObject {
         var payload = sessionAPITaskPayload(for: task)
         payload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
         payload["authority"] = "session created; not verification"
+        if !workspaceWarnings.isEmpty {
+            payload["execution_workspace_warnings"] = workspaceWarnings
+        }
         guard !trimmed.isEmpty else {
             // A whitespace-only objective is discarded. Say so rather than
             // returning a task that looks like it carries an instruction.
