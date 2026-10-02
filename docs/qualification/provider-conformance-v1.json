@@ -92,16 +92,16 @@
     "CODEX-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/CodexAppServerClient.swift",
-        "sha256": "06ab2762e1437dd317e53cd411c70d53015452d50e01e492368c83f4ed636365"
+        "sha256": "5832ec2047a7c2c7cfd4c7b0d75b22dd37e51315c6fc0f8199007d2122db8326"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current issue114 native thread-receipt successor source snapshot; 33 owner offline controls passed; frozen owner failure49c1 preserved; not independent or vendor qualification",
+      "freshness": "current issue114 explicit returned-thread identity successor source snapshot; frozen owner failures retained; not independent or vendor qualification",
       "identity": {
         "path": "Sources/Conduit/CodexAppServerClient.swift"
       },
       "kind": "source_test",
       "limitation": "Current adapter captures active turn ID and requires exact thread and turn IDs for interrupt.",
-      "observed_at_utc": "2026-10-02T17:53:40.743161+00:00",
+      "observed_at_utc": "2026-10-02T18:08:53.210911+00:00",
       "procedure_id": "codex-app-server-adapter-source-v1"
     },
     "CODEX-FIX-TEST": {
@@ -175,16 +175,16 @@
     "CODEX-PROTOCOL": {
       "artifact": {
         "path": "Sources/ConduitCore/CodexAppServerProtocol.swift",
-        "sha256": "d40cd6b9605d1ad3e598c961cc2e0280ec8cc0106aeeffb47ec5ef04f7e95881"
+        "sha256": "32d0198cf78f4a6c47e821c727070e441a48ac43ee9a66dd223344968245b25f"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current issue114 response-authority owner source snapshot; owner native failure preserved; not independent or vendor qualification",
+      "freshness": "current issue114 explicit returned-thread identity successor source snapshot; frozen owner failures retained; not independent or vendor qualification",
       "identity": {
         "path": "Sources/ConduitCore/CodexAppServerProtocol.swift"
       },
       "kind": "source_test",
       "limitation": "Current protocol mapper/request builder preserves exact active turn identity.",
-      "observed_at_utc": "2026-10-02T17:43:19.196308+00:00",
+      "observed_at_utc": "2026-10-02T18:08:53.211033+00:00",
       "procedure_id": "codex-app-server-protocol-source-v1"
     },
     "CODEX-STREAM-TESTS": {

@@ -276,15 +276,16 @@ final class CodexAppServerClient: ObservableObject {
                 )
             )
         }
-        if let threadID = started["thread"]?["id"]?.stringValue
-            ?? started["threadId"]?.stringValue
-            ?? resumeThreadID {
-            self.threadID = threadID
-            streamPump?.setThreadID(threadID)
+        // A requested resume id is caller intent, not a returned native identity.
+        // Keep opaque ids byte-exact while rejecting absent or blank authority.
+        guard let liveThreadID = started["thread"]?["id"]?.stringValue
+            ?? started["threadId"]?.stringValue,
+              !liveThreadID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw ClientError.protocolError("thread start/resume did not return a usable thread id.")
         }
-        guard let liveThreadID = self.threadID else {
-            throw ClientError.protocolError("thread start/resume did not return a thread id.")
-        }
+        self.threadID = liveThreadID
+        streamPump?.setThreadID(liveThreadID)
         effectiveModel = started["model"]?.stringValue ?? model
         resumeProvenance = SessionResumeSemantics.classify(
             requested: resumeThreadID,

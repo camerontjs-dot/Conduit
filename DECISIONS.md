@@ -2100,6 +2100,11 @@ hiding the matching owned terminal failure. That candidate also remains FAIL.
    `onReady` can deliver held input. It does not rely on a separately queued
    mapper effect that a later malformed stream may discard. Native mapper
    thread effects cannot publish a second or conflicting client identity.
+8. Readiness and the native thread receipt require a nonblank string identity
+   returned by the correlated thread start/resume reply. The requested resume
+   id is caller intent and cannot substitute for missing returned identity.
+   Opaque nonblank ids retain their exact bytes; malformed handshake is not
+   promoted to a provider terminal turn failure.
 
 **Lineage:** #115, #116 and #118 remain immutable failed predecessors. This decision
 describes a new current-main successor; their original negative receipts are
@@ -2110,6 +2115,11 @@ An owner response-correlation phase also failed its expanded native gate:
 did not reliably produce the persistence callback under malformed ingress.
 That frozen phase remains in ancestry; the native receipt successor repairs
 this separate defect.
+The subsequent owner native receipt phase also failed handshake pressure:
+`f0932075d401fcec0038427bac9ba27d5d9a85c8`, tree
+`44eb23cde359eb91bc996ecf7b4f000d0601177e` (7 failures in 12 controls).
+Empty/blank or absent returned identities could manufacture readiness from
+caller intent. It remains frozen FAIL in ancestry.
 
 **Non-claims:** In-memory retired ids do not prove provider-side exactly-once
 delivery or a persistent provider tombstone service. Owner fixtures do not

@@ -112,6 +112,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   hide a matching owned turn's terminal failure (#114 response successor).
   The correlated handshake records its thread identity before held input is
   delivered, so a later malformed stream cannot discard that receipt.
+  A missing or blank returned thread identity now refuses readiness; a requested
+  resume id alone cannot become native session authority.
 
 - Codex app-server terminal rejection now ends the provider turn and retains a
   safe, durable failure receipt even when no assistant output was produced.

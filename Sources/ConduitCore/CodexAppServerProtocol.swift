@@ -251,7 +251,8 @@ public struct CodexAppServerMapper: Equatable, Sendable {
         case .response(let id, let result):
             guard id == expectedThreadResponseID else { return [] }
             expectedThreadResponseID = nil
-            if let threadID = Self.threadID(in: result), !threadID.isEmpty {
+            if let threadID = Self.threadID(in: result),
+               !threadID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 self.threadID = threadID
                 return [.threadStarted(id: threadID)]
             }

@@ -3834,6 +3834,18 @@ check("canceled thread response remains without authority",
       responseMapper.apply(.response(id: .number(3), result: .object(["threadId": .string("foreign-thread")]))).isEmpty
       && responseMapper.threadID == "owned-thread")
 
+var blankReplyMapper = CodexAppServerMapper()
+blankReplyMapper.expectThreadResponse(.number(71))
+check("blank correlated thread identity cannot establish authority",
+      blankReplyMapper.apply(.response(id: .number(71), result: .object(["threadId": .string("  \t\n")]))).isEmpty
+      && blankReplyMapper.threadID == nil)
+check("blank response consumes its request expectation",
+      blankReplyMapper.apply(.response(id: .number(71), result: .object(["threadId": .string("late-thread")]))).isEmpty
+      && blankReplyMapper.threadID == nil)
+blankReplyMapper.expectThreadResponse(.number(72))
+check("nonblank opaque thread identity is preserved byte-exact",
+      blankReplyMapper.apply(.response(id: .number(72), result: .object(["threadId": .string("  opaque-thread  ")]))) == [.threadStarted(id: "  opaque-thread  ")])
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

@@ -2,6 +2,34 @@ import XCTest
 @testable import ConduitCore
 
 final class CodexTerminalReplayTests: XCTestCase {
+    func testBlankThreadReplyCannotEstablishNativeIdentity() {
+        for value in ["", "  \t\n"] {
+            var mapper = CodexAppServerMapper()
+            mapper.expectThreadResponse(.number(41))
+            XCTAssertTrue(mapper.apply(.response(
+                id: .number(41),
+                result: .object(["thread": .object(["id": .string(value)])])
+            )).isEmpty)
+            XCTAssertNil(mapper.threadID)
+            XCTAssertTrue(mapper.apply(.response(
+                id: .number(41),
+                result: .object(["threadId": .string("late-thread")])
+            )).isEmpty)
+            XCTAssertNil(mapper.threadID)
+        }
+    }
+
+    func testNonblankOpaqueThreadReplyRetainsExactBytes() {
+        var mapper = CodexAppServerMapper()
+        mapper.expectThreadResponse(.number(41))
+        let identity = "  opaque-thread  "
+        XCTAssertEqual(mapper.apply(.response(
+            id: .number(41),
+            result: .object(["threadId": .string(identity)])
+        )), [.threadStarted(id: identity)])
+        XCTAssertEqual(mapper.threadID, identity)
+    }
+
     func testUnsolicitedForeignThreadResponseCannotHideOwnedTerminalFailure() {
         var mapper = CodexAppServerMapper()
         mapper.threadID = "replay-thread"
