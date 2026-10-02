@@ -6802,6 +6802,147 @@ final class AppModel: ObservableObject {
         return reconciliation
     }
 
+    private func sessionAPICleanupOwnedResidualDescendants(
+        taskID: TaskSessionID,
+        runtime: TerminalRuntime,
+        preflight: LifecyclePreflight,
+        reconciliation: ProcessTreeReconciliation
+    ) -> ProcessTreeReconciliation {
+        let plan = ProcessTreeCleanupPlanner.plan(
+            declaredTargets: preflight.cleanupEligibleDescendants,
+            reconciliation: reconciliation
+        )
+        var current = reconciliation
+
+        func cleanupReceipt(
+            disposition: ProcessTreeCleanupDisposition,
+            targets: [ProcessTreeCleanupTarget] = [],
+            signalResults: [ProcessTreeCleanupSignalResult] = [],
+            evidence: [String],
+            reobserved: Bool
+        ) -> ProcessTreeCleanupReceipt {
+            ProcessTreeCleanupReceipt(
+                disposition: disposition,
+                targetedPIDs: targets.map(\.pid),
+                targetingBasis: .known(evidence),
+                targets: targets.isEmpty ? nil : targets,
+                signalResults: signalResults.isEmpty ? nil : signalResults,
+                reobservedAfterCleanup: .known(reobserved)
+            )
+        }
+
+        switch plan.disposition {
+        case .notAuthorizedYet:
+            current.cleanup = cleanupReceipt(
+                disposition: .notAttempted,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .notRequired:
+            current.cleanup = cleanupReceipt(
+                disposition: .notRequired,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .refusedUnknownOwnership:
+            current.cleanup = cleanupReceipt(
+                disposition: .refusedUnknownOwnership,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .refusedUnsafeTarget:
+            current.cleanup = cleanupReceipt(
+                disposition: .refusedUnsafeTarget,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .eligible:
+            break
+        }
+
+        var evidence = [plan.reason]
+        var signalResults: [ProcessTreeCleanupSignalResult] = []
+        var signalFailed = false
+        var unsafeTarget = false
+        for target in plan.targets {
+            let started = target.startIdentity.startTime.value
+                .map { String($0.timeIntervalSince1970) } ?? "unknown"
+            let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+            signalResults.append(result)
+            var row =
+                "pid=\(target.pid);start_time=\(started);"
+                + "basis=\(target.ownershipBasis.rawValue);"
+                + "signal=\(result.signalName);"
+                + "result=\(result.disposition.rawValue)"
+            if let code = result.errorCode.value {
+                row += ";errno=\(code)"
+            }
+            evidence.append(row)
+            switch result.disposition {
+            case .signalFailed:
+                signalFailed = true
+            case .identityMismatch, .identityUnverifiable, .unsafeTarget:
+                unsafeTarget = true
+            case .signalRequested, .alreadyExited:
+                break
+            }
+        }
+
+        let afterCleanup = sessionAPIObserveProcessTree(
+            taskID: taskID,
+            runtime: runtime,
+            prior: reconciliation.after
+        )
+        var final = ProcessTreeReconciler.reconcile(
+            before: reconciliation.before,
+            after: afterCleanup,
+            requestedOperation: .known(.stopProviderHost)
+        )
+        evidence.append(
+            "reobserved_owned_residual_pids="
+                + final.ownedResidualDescendants.map {
+                    String($0.pid)
+                }.joined(separator: ",")
+        )
+        evidence.append(
+            "reobserved_unknown_residual_pids="
+                + final.unknownOwnershipResidualDescendants.map {
+                    String($0.pid)
+                }.joined(separator: ",")
+        )
+
+        let disposition: ProcessTreeCleanupDisposition
+        if signalFailed {
+            disposition = .signalFailed
+        } else if unsafeTarget {
+            disposition = .refusedUnsafeTarget
+        } else if !final.unknownOwnershipResidualDescendants.isEmpty {
+            disposition = .refusedUnknownOwnership
+        } else if final.ownedResidualDescendants.isEmpty {
+            disposition = .completed
+        } else {
+            disposition = .incompleteResidual
+        }
+
+        final.cleanup = cleanupReceipt(
+            disposition: disposition,
+            targets: plan.targets,
+            signalResults: signalResults,
+            evidence: evidence,
+            reobserved: true
+        )
+        sessionAPIProcessTreeReconciliations[taskID] = final
+        return final
+    }
+
     private func sessionAPILifecyclePlan(
         taskID: TaskSessionID,
         operation: LifecycleOperation
@@ -6954,11 +7095,17 @@ final class AppModel: ObservableObject {
                 mcpAdmission?.markTaskEnded(taskID)
             }
             let runtimeEnded = endSession(runtime)
-            let processTreeReconciliation = sessionAPIReconcileProcessTree(
+            var processTreeReconciliation = sessionAPIReconcileProcessTree(
                 taskID: taskID,
                 runtime: runtime,
                 before: preActionProcessTree,
                 operation: operation
+            )
+            processTreeReconciliation = sessionAPICleanupOwnedResidualDescendants(
+                taskID: taskID,
+                runtime: runtime,
+                preflight: preflight,
+                reconciliation: processTreeReconciliation
             )
             var payload: [String: Any] = [
                 "taskSessionID": rawID,
@@ -6984,24 +7131,24 @@ final class AppModel: ObservableObject {
                     payload["stop_signal"] = "SIGTERM"
                     payload["escalation"] = "SIGKILL after 1s only if the same exact PTY child remains unobserved"
                     payload["authority"] =
-                        "Conduit signaled only the exact SwiftTerm-owned direct PTY child and has not yet observed process exit. The task remains live and execution capacity remains occupied until the existing waitpid-backed callback reports termination; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit requested stop for the exact SwiftTerm-owned direct PTY child and has not yet received waitpid-backed exit confirmation. The task remains live and execution capacity remains occupied until that callback reports termination. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .awaitingExistingExit:
                     payload["stop"] = "awaiting_existing_exit"
                     payload["authority"] =
-                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into an exit fact; capacity remains occupied until the waitpid-backed callback reports termination."
+                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into a waitpid-backed exit fact; capacity remains occupied until the callback reports termination. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .signalFailed(_, let code):
                     payload["executed"] = false
                     payload["stop"] = "signal_failed"
                     payload["errno"] = Int(code)
                     payload["error"] = "direct PTY signal request failed; runtime remains live"
                     payload["authority"] =
-                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .unavailable, .notRequested:
                     payload["executed"] = false
                     payload["stop"] = "unavailable"
                     payload["error"] = "no live direct PTY process identity was available to signal"
                     payload["authority"] =
-                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 }
                 payload["completion"] = "pending_process_observation"
             } else if !runtimeEnded {

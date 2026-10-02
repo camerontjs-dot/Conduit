@@ -1,0 +1,25 @@
+{
+  "classification": "TERMINAL_OWNER_UNIT_FAIL_CROSS_SCOPE_CLEANUP_ELIGIBLE",
+  "frozen_predecessor_head": "ff17bcffae7ffbeddd0dd978cd5b0ef2e2aa267a",
+  "frozen_predecessor_tree": "95061985c46f900f682c8483f7900a2676672cae",
+  "full_native_gates": "NOT_RUN after failed scope boundary",
+  "implementation_base_head": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+  "implementation_base_tree": "e022251b34654c9cfcbd93f36e13099b347d393b",
+  "independent_qualification": "NOT_RUN",
+  "live_destructive_cases": "NOT_RUN",
+  "observed": "Pure planner still returned eligible/nonempty targets after changing task, runtime attempt or launcher PID between before and after snapshots. Nine focused tests, six assertions failed in one adversarial case; the eight predecessor controls passed.",
+  "private_red_receipts_sha256": {
+    "cleanup78-initial-integration-scope-red.log": "d6757aae1228c417babd1e4527f5ac2c16f4e17e4e0ff45ed3a25f73fced706f",
+    "cleanup78-red-before-absent-maintained-code.log": "2aab8f1b3d8411c7b51ccaae0b29edc9fe288378debddd2e57072ac826f941ca"
+  },
+  "schema_version": 1,
+  "source_files_sha256": {
+    "Sources/Conduit/AppModel.swift": "0ad3ec6e68a66b12cc243e4e984e6e6273b9835db4ff326e8606939c651654ff",
+    "Sources/ConduitCore/ProcessTreeCleanup.swift": "0f366c8a5ec3eb5d3531a2257cfb41d476a6f1cc35c7207c8117b137a7d8351b",
+    "Sources/ConduitCore/ProcessTreeObserver.swift": "7ceb50663be6c14d75ee75b0c2aaf5a40581edc5d7d7e5268513ec446e92964c",
+    "Sources/ConduitCore/ProcessTreeReconciliation.swift": "c4f646e0be0af33504e652d964a197b20f1e5b055e230f8c522c1d5cc48417e2",
+    "Tests/ConduitCoreTests/ProcessTreeCleanupTests.swift": "7ebd7ef22106525c955ce57b482e889526ad5bb93b95d3b84eed5cb8c225ae28"
+  },
+  "source_test_catalog": "Unrenewed #123 pins intentionally preserved; no blind hash refresh",
+  "successor_required": "Exact task/runtime/launcher binding, prior-snapshot validation and fail-closed target scope; new branch/object before repair"
+}

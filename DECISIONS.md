@@ -2102,3 +2102,36 @@ actual isolated app/listener negative controls and repository-native tests/build
 are implementation-owner evidence. Fresh independent qualification is separate.
 No operator installation, release, account/credential change or hosted connection
 is part of this decision. Ordinary app defaults remain compatible.
+
+
+## D-063: Descendant cleanup binds the stop to task, attempt and launcher
+
+**Status:** Proposed — maintained #78 successor to frozen #84; #123 is an
+unmerged owned-state instrumentation dependency, not inherited qualification.
+
+**Decision:** The existing explicit stop_provider_host operation may clean only
+predeclared descendants whose task, runtime attempt, launcher PID/start identity,
+ancestry and own PID/start identity remain established on both sides of the
+stop. Prior snapshots from a different or unknown scope cannot grant ownership.
+Legacy unbound cleanup records stay readable and confer no new signal authority.
+UNKNOWN, pre-existing, partial, duplicate or stale identities are refused.
+Descendants receive single-PID SIGTERM only, with a fresh mutation-boundary
+identity check; no group signal or descendant SIGKILL escalation is introduced.
+
+Pending parent termination and descendant cleanup are separate states. A
+maintained candidate must either complete its predeclared orphan boundary after
+observed parent exit or record an explicit bounded refusal/residual result.
+Task/capacity release, provider completion and objective acceptance are not
+inferred from descendant exit. Exact side effects remain in typed receipts.
+
+**Context:** Frozen #84 supplied a Core orphan cleanup path and an AppModel
+pending/no-descendant authority receipt at old objects. The initial maintained
+source transfer reproduced a pure-planner defect: changing task, runtime or
+launcher scope still produced eligible targets. That failed object and its
+red receipt are preserved before repair; no live destructive case followed it.
+
+**Acceptance:** Current repository-native checks and exact disposable native
+orphan/control/pending-stop runs are owner evidence. Independent qualification
+and executed hosted CI are separate promotion gates. Operator/provider sessions,
+accounts, authentication, model defaults, installation and release remain outside
+this decision. No historical receipt PID becomes current signal authority.

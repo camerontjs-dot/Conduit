@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Explicit `stop_provider_host` lifecycle preflight and reconciliation carry
+  exact owned-descendant cleanup targets and typed signal outcomes. Cleanup
+  refuses UNKNOWN/pre-existing ownership and uses single-PID SIGTERM with
+  fresh identity checks and re-observation; provider completion and objective
+  acceptance remain separate (#78, #53). Maintained promotion requires the
+  stricter task/runtime/launcher boundary and independent qualification.
+
 - Explicit qualification launches pair `CONDUIT_QUALIFICATION_ROOT` with a
   reserved loopback `CONDUIT_SESSION_API_PORT` (18750–18849). They keep Conduit
   state and preferences under one marked, process-owned root, reject foreign or
