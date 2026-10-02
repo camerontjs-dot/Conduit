@@ -301,6 +301,44 @@ final class ProcessTreeCleanupTests: XCTestCase {
         XCTAssertTrue(plan.targets.isEmpty)
     }
 
+    func testLiveParentCannotDeferUnsafeDeclaredScope() throws {
+        let owned = node(pid: 901, start: childStart, ownership: .taskCreated,
+            basis: .descendantObservedAfterLauncher, liveness: .live, parentPID: 900)
+        let current = reconciliation(descendants: [owned], launcherLiveness: .live)
+        let legacy = ProcessTreeCleanupTarget(pid: owned.pid,
+            startIdentity: try XCTUnwrap(owned.startIdentity.value), ownershipBasis: owned.ownershipBasis)
+        XCTAssertEqual(ProcessTreeCleanupPlanner.plan(declaredTargets: .known([legacy]), reconciliation: current).disposition, .refusedUnsafeTarget)
+        XCTAssertEqual(ProcessTreeCleanupPlanner.plan(declaredTargets: .known([]), reconciliation: current).disposition, .refusedUnsafeTarget)
+    }
+
+    func testReadReobservationPreservesReceiptOnlyForExactScope() {
+        var previous = reconciliation(descendants: [])
+        previous.cleanup = ProcessTreeCleanupReceipt(disposition: .completed, targetedPIDs: [901],
+            targetingBasis: .known(["exact owned child exit was observed"]), reobservedAfterCleanup: .known(true))
+        let current = ProcessTreeReconciler.reobserve(previous: previous, after: previous.after)
+        XCTAssertEqual(current.cleanup, previous.cleanup)
+        for axis in ["task", "runtime", "launcher", "start"] {
+            var wrong = previous.after
+            if axis == "task" { wrong.taskSessionID = "other-task" }
+            if axis == "runtime" { wrong.runtimeAttemptID = .known("other-attempt") }
+            if axis == "launcher", var root = wrong.launcher.value { root.pid = 999; wrong.launcher = .known(root) }
+            if axis == "start", var root = wrong.launcher.value { root.startIdentity = .known(ProcessStartIdentity(startTime: .known(childStart))); wrong.launcher = .known(root) }
+            XCTAssertNotEqual(ProcessTreeReconciler.reobserve(previous: previous, after: wrong).cleanup, previous.cleanup, axis)
+        }
+    }
+
+    func testReadPreservesFailedCleanupAndFreshResidualPostcondition() {
+        let owned = node(pid: 901, start: childStart, ownership: .taskCreated,
+            basis: .preservedFromPriorIdentity, liveness: .live, parentPID: 1)
+        var previous = reconciliation(descendants: [owned])
+        previous.cleanup = ProcessTreeCleanupReceipt(disposition: .signalFailed, targetedPIDs: [901],
+            targetingBasis: .known(["signal request failed"]), reobservedAfterCleanup: .known(true))
+        let current = ProcessTreeReconciler.reobserve(previous: previous, after: previous.after)
+        XCTAssertEqual(current.cleanup.disposition, .signalFailed)
+        XCTAssertEqual(current.postcondition, .incompleteResidual)
+        XCTAssertEqual(current.ownedResidualDescendants.map(\.pid), [901])
+    }
+
 #if os(macOS)
     func testSignalBoundaryRefusesMismatchedCurrentPIDWithoutSignaling() {
         let target = ProcessTreeCleanupTarget(

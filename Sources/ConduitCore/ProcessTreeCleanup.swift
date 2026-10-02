@@ -83,13 +83,10 @@ public enum ProcessTreeCleanupPlanner {
             return ProcessTreeCleanupPlan(disposition: .refusedUnsafeTarget, targets: [],
                 reason: "exact task/runtime/launcher binding must be established in both pre-stop and post-stop observations")
         }
-        guard reconciliation.after.launcher.value?.liveness == .exited else {
-            return ProcessTreeCleanupPlan(
-                disposition: .notAuthorizedYet,
-                targets: [],
-                reason: "provider/runtime parent exit has not been observed; descendant cleanup is not authorized yet",
-                binding: binding
-            )
+        guard before.launcher.value?.ownership == .taskCreated,
+              reconciliation.after.launcher.value?.ownership == .taskCreated else {
+            return ProcessTreeCleanupPlan(disposition: .refusedUnsafeTarget, targets: [],
+                reason: "both exact launcher observations must have task-created ownership")
         }
         guard reconciliation.unknownOwnershipResidualDescendants.isEmpty else {
             return ProcessTreeCleanupPlan(
@@ -103,16 +100,14 @@ public enum ProcessTreeCleanupPlanner {
             .filter { $0.liveness == .live }
             .sorted { $0.pid < $1.pid }
         guard !ownedResiduals.isEmpty else {
+            if reconciliation.after.launcher.value?.liveness != .exited {
+                return waitingForParent(binding: binding)
+            }
             return ProcessTreeCleanupPlan(
                 disposition: .notRequired,
                 targets: [],
                 reason: "no live task-created residual descendant requires cleanup"
             )
-        }
-        guard before.launcher.value?.ownership == .taskCreated,
-              reconciliation.after.launcher.value?.ownership == .taskCreated else {
-            return ProcessTreeCleanupPlan(disposition: .refusedUnsafeTarget, targets: [],
-                reason: "both exact launcher observations must have task-created ownership")
         }
         guard let declared = declaredTargets.value else {
             return ProcessTreeCleanupPlan(
@@ -163,12 +158,21 @@ public enum ProcessTreeCleanupPlanner {
             }
             targets.append(target)
         }
+        guard reconciliation.after.launcher.value?.liveness == .exited else {
+            return waitingForParent(binding: binding)
+        }
         return ProcessTreeCleanupPlan(
             disposition: .eligible,
             targets: targets,
             reason: "every cleanup target is an exact predeclared task/runtime/launcher-bound residual with prior task-created ancestry",
             binding: binding
         )
+    }
+
+    private static func waitingForParent(binding: ProcessTreeCleanupBinding) -> ProcessTreeCleanupPlan {
+        ProcessTreeCleanupPlan(disposition: .notAuthorizedYet, targets: [],
+            reason: "provider/runtime parent exit has not been observed; descendant cleanup is not authorized yet",
+            binding: binding)
     }
 
     public static func isStrongDescendantBasis(

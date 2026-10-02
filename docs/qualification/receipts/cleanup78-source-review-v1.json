@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "classification": "REVIEWED_SOURCE_ONLY_RENEWAL_NOT_PROVIDER_RUNTIME_QUALIFICATION",
+  "base_head": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+  "failed_predecessor": "63786efb5ae9838d81184b6cab05e1407f2eb5ff",
+  "protected_functions": {
+    "sessionAPICreateTask": {
+      "base_and_successor_function_bytes_equal": true,
+      "sha256": "2abae78818daa4376a15b93dda6230fbfbce60f1b5835310523a058ff038f9d7"
+    },
+    "sessionAPISendPrompt": {
+      "base_and_successor_function_bytes_equal": true,
+      "sha256": "46fce396beeb28bf1943dc53824770481ff34e8616235807ce1b6c73f8436751"
+    },
+    "sessionAPIDeliver": {
+      "base_and_successor_function_bytes_equal": true,
+      "sha256": "195dbb271f82aad09f4254fd2b02d4e67f58b416d22298e1507d31c7d3488086"
+    },
+    "activateSavedRootAccess": {
+      "base_and_successor_function_bytes_equal": true,
+      "sha256": "11f6907dcb191260866e2daa2592422251d688cc772758a2c547ba9e35c1b347"
+    }
+  },
+  "reviewed_scope": "Added bounded explicit cleanup to the stop operation; exact task/runtime/launcher+child binding, prior snapshot refusal, single-PID SIGTERM, reobservation, bounded2s pending continuation, duplicate token and read-preserved receipt. Existing create/send/deliver/bookmark functions unchanged. Preflight existing mapping unchanged except additional bound declaration; tests added without weakening existing assertions.",
+  "renewals": [
+    {
+      "record_id": "CONDUIT-API-SCOPE",
+      "predecessor": {
+        "artifact": {
+          "path": "Sources/Conduit/AppModel.swift",
+          "sha256": "e2547ecbcb99c4538d08fd23fc285975bda2c3f03615b3fde1706e292ed6c81a"
+        },
+        "authority": "reviewed source-only #87 owned-fixture bootstrap successor; ordinary bookmark and create/send/deliver function bytes preserved; see receipts/isolation87-source-review-v3.json",
+        "freshness": "current candidate source snapshot; not a provider runtime observation",
+        "identity": {
+          "path": "Sources/Conduit/AppModel.swift"
+        },
+        "kind": "source_test",
+        "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior. Qualification mode refuses implicit operator inventory/credential access; this source review supplies no new native provider, hosted, continuity or objective-acceptance evidence.",
+        "observed_at_utc": "2026-10-02T16:53:00Z",
+        "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
+      },
+      "successor": {
+        "artifact": {
+          "path": "Sources/Conduit/AppModel.swift",
+          "sha256": "2059023d197aadbdd0301690f028b2093b20766c1d130a588338cbdbf5b62c56"
+        },
+        "authority": "reviewed source-only #78 exact-scope and bounded pending-stop successor; see receipts/cleanup78-source-review-v1.json",
+        "freshness": "current candidate source snapshot; not a provider runtime observation",
+        "identity": {
+          "path": "Sources/Conduit/AppModel.swift"
+        },
+        "kind": "source_test",
+        "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior. Qualification mode refuses implicit operator inventory/credential access; this source review supplies no new native provider, hosted, continuity or objective-acceptance evidence. Maintained cleanup adds only an explicit predeclared owned-descendant stop continuation; source review is not current native runtime qualification.",
+        "observed_at_utc": "2026-10-02T18:05:09.946562+00:00",
+        "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
+      }
+    },
+    {
+      "record_id": "LIFECYCLE-PLANNER",
+      "predecessor": {
+        "artifact": {
+          "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift",
+          "sha256": "4113d7c4c1ae9f2dbe6c52d3449841507918de6a4e539c1d62d5cc721caca4fb"
+        },
+        "authority": "read-only source and test inspection in the candidate checkout",
+        "freshness": "current candidate source snapshot; not a provider runtime observation",
+        "identity": {
+          "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift"
+        },
+        "kind": "source_test",
+        "limitation": "Planner behavior is not a direct runtime operation; PR #63 provides the qualified OpenCode/Codex/tmux/direct-PTY cases.",
+        "observed_at_utc": "2026-09-23T23:07:42Z",
+        "procedure_id": "conduit-lifecycle-preflight-planner-v1"
+      },
+      "successor": {
+        "artifact": {
+          "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift",
+          "sha256": "2238967d0a27588eec48f2577e135c85f2ce53d66d361f058848d16215214b94"
+        },
+        "authority": "reviewed source-only #78 exact-scope and bounded pending-stop successor; see receipts/cleanup78-source-review-v1.json",
+        "freshness": "current candidate source snapshot; not a provider runtime observation",
+        "identity": {
+          "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift"
+        },
+        "kind": "source_test",
+        "limitation": "Reviewed existing operation mapping plus exact task/runtime/launcher/child cleanup target declaration. It does not establish provider lifecycle behavior; historical native records are unchanged.",
+        "observed_at_utc": "2026-10-02T18:05:09.955379+00:00",
+        "procedure_id": "conduit-lifecycle-preflight-planner-v1"
+      }
+    },
+    {
+      "record_id": "LIFECYCLE-TESTS",
+      "predecessor": {
+        "artifact": {
+          "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift",
+          "sha256": "41501c2466e809b2ff06792a4c0b4ddc3b2b8ae21e1f370f314a8ad6b8070307"
+        },
+        "authority": "read-only source and test inspection in the candidate checkout",
+        "freshness": "current candidate source snapshot; not a provider runtime observation",
+        "identity": {
+          "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift"
+        },
+        "kind": "source_test",
+        "limitation": "Deterministic tests establish planner mapping, not provider runtime behavior.",
+        "observed_at_utc": "2026-09-23T23:07:42Z",
+        "procedure_id": "lifecycle-preflight-contract-tests-v1"
+      },
+      "successor": {
+        "artifact": {
+          "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift",
+          "sha256": "4b3edd1f9712eab8c1026ad647888d268d4725f335b98ea27e72f6132fc5ef32"
+        },
+        "authority": "reviewed source-only #78 exact-scope and bounded pending-stop successor; see receipts/cleanup78-source-review-v1.json",
+        "freshness": "current candidate source snapshot; not a provider runtime observation",
+        "identity": {
+          "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift"
+        },
+        "kind": "source_test",
+        "limitation": "Reviewed deterministic planner tests, including bound target declaration and UNKNOWN/partial ownership. Tests are not independent runtime qualification.",
+        "observed_at_utc": "2026-10-02T18:05:09.963413+00:00",
+        "procedure_id": "lifecycle-preflight-contract-tests-v1"
+      }
+    }
+  ],
+  "preserved": "All other matrix fields/status/native records, validator, schema and wrapper unchanged from exact#123 base; all prior source reviews and failed native candidates preserved.",
+  "non_claims": [
+    "no new hosted provider behavior",
+    "no provider/session/objective acceptance",
+    "no independent qualification",
+    "no production install or release"
+  ]
+}

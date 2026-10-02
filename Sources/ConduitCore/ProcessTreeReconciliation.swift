@@ -229,9 +229,8 @@ public struct ProcessTreeObservation: Codable, Equatable, Sendable {
     }
 }
 
-/// Explicitly records that Slice 6A did not perform destructive residual
-/// cleanup. Keeping this receipt in the read model prevents a future caller
-/// from treating an empty target list as proof that cleanup succeeded.
+/// Records the last explicit bounded cleanup operation, or a deliberate
+/// refusal/defer. An empty target list does not prove cleanup succeeded.
 public struct ProcessTreeCleanupReceipt: Codable, Equatable, Sendable {
     public var disposition: ProcessTreeCleanupDisposition
     public var targetedPIDs: [Int32]
@@ -328,6 +327,21 @@ public struct ProcessTreeReconciliation: Codable, Equatable, Sendable {
 }
 
 public enum ProcessTreeReconciler {
+    /// Refresh topology without replacing the receipt of the last explicit
+    /// cleanup operation. A read never signals and cannot borrow a receipt
+    /// from another task/runtime/launcher binding.
+    public static func reobserve(
+        previous: ProcessTreeReconciliation,
+        after: ProcessTreeObservation
+    ) -> ProcessTreeReconciliation {
+        var current = reconcile(before: previous.before, after: after,
+                                requestedOperation: previous.requestedOperation)
+        if ProcessTreeCleanupBinding.matches(before: previous.after, after: after) {
+            current.cleanup = previous.cleanup
+        }
+        return current
+    }
+
     public static func reconcile(
         before: ProcessTreeObservation?,
         after: ProcessTreeObservation,

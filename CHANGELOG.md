@@ -33,6 +33,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   fresh identity checks and re-observation; provider completion and objective
   acceptance remain separate (#78, #53). Maintained promotion requires the
   stricter task/runtime/launcher boundary and independent qualification.
+  An explicit stop retains its exact scope for a bounded parent-exit wait;
+  status reads preserve cleanup receipts, while undeclared children and
+  surviving SIGTERM targets remain explicit refusal or incomplete residue.
 
 - Explicit qualification launches pair `CONDUIT_QUALIFICATION_ROOT` with a
   reserved loopback `CONDUIT_SESSION_API_PORT` (18750–18849). They keep Conduit

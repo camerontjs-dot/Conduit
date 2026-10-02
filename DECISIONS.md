@@ -2121,6 +2121,11 @@ identity check; no group signal or descendant SIGKILL escalation is introduced.
 Pending parent termination and descendant cleanup are separate states. A
 maintained candidate must either complete its predeclared orphan boundary after
 observed parent exit or record an explicit bounded refusal/residual result.
+An already-authorized stop may retain its exact in-memory scope for at most 2s
+of monotonic parent-exit observation. Duplicate requests do not create a second
+continuation, runtime replacement or ambiguous observations refuse it, and
+startup/replay never resumes destructive cleanup. A read refreshes topology
+while preserving the last operation receipt only within its exact binding.
 Task/capacity release, provider completion and objective acceptance are not
 inferred from descendant exit. Exact side effects remain in typed receipts.
 
@@ -2129,6 +2134,13 @@ pending/no-descendant authority receipt at old objects. The initial maintained
 source transfer reproduced a pure-planner defect: changing task, runtime or
 launcher scope still produced eligible targets. That failed object and its
 red receipt are preserved before repair; no live destructive case followed it.
+The first native orphan fixture terminated both parent and child, so that
+fixture failure is also preserved. A subsequent single-PID control established
+the orphan and passed Core controls, then actual AppModel pressure falsified an
+immediate-only implementation: a delayed parent exit leaked its owned orphan
+and a read erased the stop receipt. That failed object is preserved before this
+bounded continuation successor. Native owner pressure includes a SIGTERM-ignoring
+child (incomplete residue) and a post-stop undeclared child (all targets refused).
 
 **Acceptance:** Current repository-native checks and exact disposable native
 orphan/control/pending-stop runs are owner evidence. Independent qualification

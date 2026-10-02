@@ -3838,6 +3838,14 @@ check("partial process coverage refuses cleanup", ProcessTreeCleanupPlanner.plan
 let cleanup78Live = ProcessTreeReconciler.reconcile(before: cleanup78Before, after: cleanup78Before,
     requestedOperation: .known(.stopProviderHost))
 check("parent still live authorizes no descendant signal", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: cleanup78Live).disposition == .notAuthorizedYet)
+check("unsafe scope cannot acquire a deferred stop intent", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78LegacyTarget]), reconciliation: cleanup78Live).disposition == .refusedUnsafeTarget)
+var cleanup78Completed = cleanup78Reconciliation
+cleanup78Completed.cleanup = ProcessTreeCleanupReceipt(disposition: .completed, targetedPIDs: [901],
+    targetingBasis: .known(["owner fixture receipt"]), reobservedAfterCleanup: .known(true))
+check("read-only topology refresh preserves the exact scope cleanup receipt", ProcessTreeReconciler.reobserve(previous: cleanup78Completed, after: cleanup78After).cleanup == cleanup78Completed.cleanup)
+var cleanup78OtherScope = cleanup78After
+cleanup78OtherScope.runtimeAttemptID = .known("other-attempt")
+check("read-only topology refresh cannot borrow another runtime receipt", ProcessTreeReconciler.reobserve(previous: cleanup78Completed, after: cleanup78OtherScope).cleanup != cleanup78Completed.cleanup)
 check("read-only operation never grants cleanup", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: ProcessTreeReconciler.reconcile(before: cleanup78Before, after: cleanup78After)).disposition == .notRequired)
 if let encoded = try? JSONEncoder().encode(cleanup78LegacyTarget),
    let decoded = try? JSONDecoder().decode(ProcessTreeCleanupTarget.self, from: encoded) {

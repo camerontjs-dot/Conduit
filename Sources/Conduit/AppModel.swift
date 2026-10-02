@@ -412,6 +412,9 @@ final class AppModel: ObservableObject {
     /// infer writer authority, task completion, or objective acceptance.
     private var sessionAPIProcessTreeBaselines: [TaskSessionID: ProcessTreeObservation] = [:]
     private var sessionAPIProcessTreeReconciliations: [TaskSessionID: ProcessTreeReconciliation] = [:]
+    /// Tokens for a bounded continuation of an already-authorized stop. These
+    /// are in memory only; startup/replay never resumes destructive cleanup.
+    private var sessionAPIPendingCleanupOperations: [TaskSessionID: UUID] = [:]
 
     var chatgptTunnelID: String? {
         let url = AdapterThreadStore.defaultDirectory()
@@ -6762,12 +6765,12 @@ final class AppModel: ObservableObject {
             "lifecycle_mutation": "none",
         ]
         if let baseline {
-            let reconciliation = ProcessTreeReconciler.reconcile(
-                before: baseline,
-                after: observation,
-                requestedOperation: sessionAPIProcessTreeReconciliations[taskID]?
-                    .requestedOperation ?? .unknown
-            )
+            let reconciliation: ProcessTreeReconciliation
+            if let previous = sessionAPIProcessTreeReconciliations[taskID] {
+                reconciliation = ProcessTreeReconciler.reobserve(previous: previous, after: observation)
+            } else {
+                reconciliation = ProcessTreeReconciler.reconcile(before: baseline, after: observation)
+            }
             sessionAPIProcessTreeReconciliations[taskID] = reconciliation
             payload["reconciliation"] = sessionAPIJSONObject(reconciliation) as Any
             payload["postcondition"] = reconciliation.postcondition.rawValue
@@ -6806,7 +6809,8 @@ final class AppModel: ObservableObject {
         taskID: TaskSessionID,
         runtime: TerminalRuntime,
         preflight: LifecyclePreflight,
-        reconciliation: ProcessTreeReconciliation
+        reconciliation: ProcessTreeReconciliation,
+        allowDeferral: Bool = true
     ) -> ProcessTreeReconciliation {
         let plan = ProcessTreeCleanupPlanner.plan(
             declaredTargets: preflight.cleanupEligibleDescendants,
@@ -6835,10 +6839,16 @@ final class AppModel: ObservableObject {
         case .notAuthorizedYet:
             current.cleanup = cleanupReceipt(
                 disposition: .notAttempted,
-                evidence: [plan.reason],
+                evidence: [plan.reason, "explicit stop intent may be reobserved for at most 2s; no descendant signal is authorized while the parent is live"],
                 reobserved: false
             )
             sessionAPIProcessTreeReconciliations[taskID] = current
+            if allowDeferral, let binding = plan.binding,
+               binding.taskSessionID == taskID.rawValue.uuidString,
+               binding.runtimeAttemptID == runtime.runtimeAttemptID.rawValue.uuidString {
+                sessionAPIDeferOwnedResidualCleanup(taskID: taskID, runtime: runtime,
+                    preflight: preflight, reconciliation: current, binding: binding)
+            }
             return current
         case .notRequired:
             current.cleanup = cleanupReceipt(
@@ -6876,7 +6886,10 @@ final class AppModel: ObservableObject {
             sessionAPIProcessTreeReconciliations[taskID] = current
             return current
         }
-        var evidence = [plan.reason]
+        let launcherStarted = binding.launcherStartIdentity.startTime.value
+            .map { String($0.timeIntervalSince1970) } ?? "unknown"
+        var evidence = [plan.reason,
+            "task_session_id=\(binding.taskSessionID);runtime_attempt_id=\(binding.runtimeAttemptID);launcher_pid=\(binding.launcherPID);launcher_start_time=\(launcherStarted)"]
         var signalResults: [ProcessTreeCleanupSignalResult] = []
         var signalFailed = false
         var unsafeTarget = false
@@ -6949,6 +6962,57 @@ final class AppModel: ObservableObject {
         )
         sessionAPIProcessTreeReconciliations[taskID] = final
         return final
+    }
+
+    private func sessionAPIDeferOwnedResidualCleanup(
+        taskID: TaskSessionID,
+        runtime: TerminalRuntime,
+        preflight: LifecyclePreflight,
+        reconciliation: ProcessTreeReconciliation,
+        binding: ProcessTreeCleanupBinding
+    ) {
+        guard sessionAPIPendingCleanupOperations[taskID] == nil else { return }
+        let operationID = UUID()
+        sessionAPIPendingCleanupOperations[taskID] = operationID
+        Task { @MainActor [weak self] in
+            var latest = reconciliation
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            for _ in 0..<40 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                guard !Task.isCancelled, let self,
+                      self.sessionAPIPendingCleanupOperations[taskID] == operationID else { return }
+                if ContinuousClock.now >= deadline { break }
+                if let replacement = self.sessionAPILiveRuntime(for: taskID),
+                   replacement.runtimeAttemptID != runtime.runtimeAttemptID {
+                    latest.cleanup = .deferred(reason: "cleanup continuation refused because the task has a different current runtime attempt; no descendant signal requested")
+                    latest.cleanup.disposition = .refusedUnsafeTarget
+                    self.sessionAPIProcessTreeReconciliations[taskID] = latest
+                    self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+                    return
+                }
+                let observed = self.sessionAPIObserveProcessTree(taskID: taskID, runtime: runtime, prior: latest.after)
+                let refreshed = ProcessTreeReconciler.reconcile(before: reconciliation.before,
+                    after: observed, requestedOperation: .known(.stopProviderHost))
+                guard ProcessTreeCleanupBinding.capture(observed) == binding else {
+                    var refused = refreshed
+                    refused.cleanup = .deferred(reason: "cleanup continuation refused because exact task/runtime/launcher scope could not be reobserved; no descendant signal requested")
+                    refused.cleanup.disposition = .refusedUnsafeTarget
+                    self.sessionAPIProcessTreeReconciliations[taskID] = refused
+                    self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+                    return
+                }
+                latest = refreshed
+                if observed.launcher.value?.liveness == .live { continue }
+                self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+                _ = self.sessionAPICleanupOwnedResidualDescendants(taskID: taskID, runtime: runtime,
+                    preflight: preflight, reconciliation: refreshed, allowDeferral: false)
+                return
+            }
+            guard let self, self.sessionAPIPendingCleanupOperations[taskID] == operationID else { return }
+            latest.cleanup = .deferred(reason: "bounded 2s parent-exit observation expired; descendant cleanup was not attempted and no descendant signal requested")
+            self.sessionAPIProcessTreeReconciliations[taskID] = latest
+            self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+        }
     }
 
     private func sessionAPILifecyclePlan(
