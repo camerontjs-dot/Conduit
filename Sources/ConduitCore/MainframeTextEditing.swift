@@ -50,7 +50,7 @@ public struct MainframeTextFileWriter: @unchecked Sendable {
         }
 
         let observed = try scanner.readUTF8Text(root: root, file: file, maxBytes: limit)
-        guard observed == expectedSource else {
+        guard observed.utf8.elementsEqual(expectedSource.utf8) else {
             throw MainframeTextEditError.conflict(file.path)
         }
 
@@ -69,7 +69,7 @@ public struct MainframeTextFileWriter: @unchecked Sendable {
             file: file,
             maxBytes: limit
         )
-        guard immediatelyBeforeReplace == expectedSource else {
+        guard immediatelyBeforeReplace.utf8.elementsEqual(expectedSource.utf8) else {
             throw MainframeTextEditError.conflict(file.path)
         }
 

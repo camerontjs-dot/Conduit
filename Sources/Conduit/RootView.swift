@@ -44,6 +44,7 @@ struct RootView: View {
         }
         .tint(palette.accent)
         .background(palette.app)
+        .background(MainframeExplorerWindowCloseGuard(explorer: explorerModel).frame(width: 0, height: 0))
         .conduitSurfaceChrome(
             finish: themeStore.surfaceFinish,
             colorScheme: colorScheme
