@@ -116,13 +116,18 @@ public enum CodexJSONRPCMessage: Equatable, Sendable {
         let id = CodexJSONRPCID.parse(json["id"])
         let method = json["method"]?.stringValue
         if let error = json["error"] {
-            let message = error["message"]?.stringValue ?? "app-server error"
-            let code: Int?
-            if case .number(let value) = error["code"], value.isFinite,
-               value.rounded() == value, (Double(Int32.min)...Double(Int32.max)).contains(value) {
-                code = Int(value)
-            } else { code = nil }
-            return .error(id: id, message: message, code: code)
+            // JSON-RPC rejection authority requires a valid Error object, not
+            // merely a matching request id. Preserve malformed envelopes as a
+            // stream/protocol failure instead of manufacturing provider-turn
+            // failure semantics from correlation alone.
+            guard case .object(let object) = error,
+                  let message = object["message"]?.stringValue,
+                  case .number(let rawCode)? = object["code"],
+                  rawCode.isFinite,
+                  rawCode.rounded() == rawCode,
+                  (Double(Int32.min)...Double(Int32.max)).contains(rawCode)
+            else { return nil }
+            return .error(id: id, message: message, code: Int(rawCode))
         }
         if let method {
             let params = json["params"] ?? .object([:])
