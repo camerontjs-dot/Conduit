@@ -556,7 +556,7 @@ public enum LifecycleProcessScope: String, Codable, Equatable, Sendable {
 /// snapshots supply the facts; unknown and unsupported consequences stay
 /// explicit instead of being mapped to a more convenient lifecycle verb.
 public struct LifecyclePreflight: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 4
 
     public var schemaVersion: Int
     public var operation: LifecycleOperation

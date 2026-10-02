@@ -12,6 +12,11 @@ final class ProcessTreeCleanupTests: XCTestCase {
     private let launcherStart = Date(timeIntervalSince1970: 1_799_999_900)
     private let childStart = Date(timeIntervalSince1970: 1_799_999_950)
 
+    private var binding: ProcessTreeCleanupBinding {
+        ProcessTreeCleanupBinding(taskSessionID: taskID, runtimeAttemptID: attemptID,
+            launcherPID: 900, launcherStartIdentity: ProcessStartIdentity(startTime: .known(launcherStart)))
+    }
+
     private var stamp: SupervisionObservationStamp {
         SupervisionObservationStamp(
             authority: .processObserved,
@@ -42,6 +47,13 @@ final class ProcessTreeCleanupTests: XCTestCase {
             exitObservedAt: liveness == .exited ? .known(observedAt) : .unknown,
             observation: stamp
         )
+    }
+
+    private func authorization(for target: ProcessTreeCleanupTarget) -> ProcessTreeCleanupPlan {
+        let owned = node(pid: target.pid, start: target.startIdentity.startTime.value ?? childStart,
+            ownership: .taskCreated, basis: .preservedFromPriorIdentity, liveness: .live, parentPID: 1)
+        return ProcessTreeCleanupPlanner.plan(declaredTargets: .known([target]),
+                                              reconciliation: reconciliation(descendants: [owned]))
     }
 
     private func reconciliation(
@@ -81,7 +93,12 @@ final class ProcessTreeCleanupTests: XCTestCase {
                         parentPID: 1
                     )
                 ),
-                descendants: [],
+                descendants: descendants.map { node in
+                    var before = node
+                    before.parentPID = .known(900)
+                    if before.ownership == .taskCreated { before.ownershipBasis = .descendantObservedAfterLauncher }
+                    return before
+                },
                 coverage: .complete,
                 observation: stamp
             ),
@@ -102,7 +119,8 @@ final class ProcessTreeCleanupTests: XCTestCase {
         let target = ProcessTreeCleanupTarget(
             pid: owned.pid,
             startIdentity: try XCTUnwrap(owned.startIdentity.value),
-            ownershipBasis: .descendantObservedAfterLauncher
+            ownershipBasis: .descendantObservedAfterLauncher,
+            binding: binding
         )
         let plan = ProcessTreeCleanupPlanner.plan(
             declaredTargets: .known([target]),
@@ -118,7 +136,7 @@ final class ProcessTreeCleanupTests: XCTestCase {
                          basis: .preservedFromPriorIdentity, liveness: .live, parentPID: 1)
         let target = ProcessTreeCleanupTarget(pid: owned.pid,
                                              startIdentity: try XCTUnwrap(owned.startIdentity.value),
-                                             ownershipBasis: .descendantObservedAfterLauncher)
+                                             ownershipBasis: .descendantObservedAfterLauncher, binding: binding)
         for changedAxis in ["task", "runtime", "launcher"] {
             let original = reconciliation(descendants: [owned])
             var after = original.after
@@ -134,6 +152,45 @@ final class ProcessTreeCleanupTests: XCTestCase {
             XCTAssertNotEqual(plan.disposition, .eligible, changedAxis + " authority must not be borrowed")
             XCTAssertTrue(plan.targets.isEmpty, changedAxis + " mismatch must not signal an identity")
         }
+    }
+
+    func testLegacyTargetAndUndeclaredAncestryCannotSignal() throws {
+        let owned = node(pid: 901, start: childStart, ownership: .taskCreated,
+                         basis: .preservedFromPriorIdentity, liveness: .live, parentPID: 1)
+        let legacy = ProcessTreeCleanupTarget(pid: owned.pid, startIdentity: try XCTUnwrap(owned.startIdentity.value),
+                                              ownershipBasis: .descendantObservedAfterLauncher)
+        var current = reconciliation(descendants: [owned])
+        XCTAssertEqual(ProcessTreeCleanupPlanner.plan(declaredTargets: .known([legacy]), reconciliation: current).disposition, .refusedUnsafeTarget)
+        var target = legacy; target.binding = binding
+        current.before?.descendants = []
+        XCTAssertEqual(ProcessTreeCleanupPlanner.plan(declaredTargets: .known([target]), reconciliation: current).disposition, .refusedUnsafeTarget)
+    }
+
+    func testWrongDeclaredBindingAndDuplicateIdentityAreRefused() throws {
+        let owned = node(pid: 901, start: childStart, ownership: .taskCreated,
+                         basis: .preservedFromPriorIdentity, liveness: .live, parentPID: 1)
+        let current = reconciliation(descendants: [owned])
+        let correct = ProcessTreeCleanupTarget(pid: owned.pid, startIdentity: try XCTUnwrap(owned.startIdentity.value),
+                                               ownershipBasis: .descendantObservedAfterLauncher, binding: binding)
+        for axis in ["task", "runtime", "launcher", "launcher-start"] {
+            var wrong = correct
+            if axis == "task" { wrong.binding?.taskSessionID = "other-task" }
+            if axis == "runtime" { wrong.binding?.runtimeAttemptID = "other-attempt" }
+            if axis == "launcher" { wrong.binding?.launcherPID = 999 }
+            if axis == "launcher-start" { wrong.binding?.launcherStartIdentity.startTime = .known(launcherStart.addingTimeInterval(-10)) }
+            let plan = ProcessTreeCleanupPlanner.plan(declaredTargets: .known([wrong]), reconciliation: current)
+            XCTAssertEqual(plan.disposition, .refusedUnsafeTarget, axis)
+            XCTAssertTrue(plan.targets.isEmpty)
+        }
+        XCTAssertEqual(ProcessTreeCleanupPlanner.plan(declaredTargets: .known([correct, correct]), reconciliation: current).disposition, .refusedUnsafeTarget)
+    }
+
+    func testLegacyTargetDecodePreservesAbsenceOfAuthority() throws {
+        let target = ProcessTreeCleanupTarget(pid: 901, startIdentity: ProcessStartIdentity(startTime: .known(childStart)),
+                                              ownershipBasis: .descendantObservedAfterLauncher)
+        let encoded = try JSONEncoder().encode(target)
+        let decoded = try JSONDecoder().decode(ProcessTreeCleanupTarget.self, from: encoded)
+        XCTAssertNil(decoded.binding)
     }
 
     func testUnknownResidualRefusesAllCleanup() throws {
@@ -156,7 +213,8 @@ final class ProcessTreeCleanupTests: XCTestCase {
         let target = ProcessTreeCleanupTarget(
             pid: owned.pid,
             startIdentity: try XCTUnwrap(owned.startIdentity.value),
-            ownershipBasis: owned.ownershipBasis
+            ownershipBasis: owned.ownershipBasis,
+            binding: binding
         )
         let plan = ProcessTreeCleanupPlanner.plan(
             declaredTargets: .known([target]),
@@ -180,7 +238,8 @@ final class ProcessTreeCleanupTests: XCTestCase {
             startIdentity: ProcessStartIdentity(
                 startTime: .known(childStart.addingTimeInterval(-20))
             ),
-            ownershipBasis: owned.ownershipBasis
+            ownershipBasis: owned.ownershipBasis,
+            binding: binding
         )
         let plan = ProcessTreeCleanupPlanner.plan(
             declaredTargets: .known([staleTarget]),
@@ -202,7 +261,8 @@ final class ProcessTreeCleanupTests: XCTestCase {
         let target = ProcessTreeCleanupTarget(
             pid: owned.pid,
             startIdentity: try XCTUnwrap(owned.startIdentity.value),
-            ownershipBasis: owned.ownershipBasis
+            ownershipBasis: owned.ownershipBasis,
+            binding: binding
         )
         let plan = ProcessTreeCleanupPlanner.plan(
             declaredTargets: .known([target]),
@@ -227,7 +287,8 @@ final class ProcessTreeCleanupTests: XCTestCase {
         let target = ProcessTreeCleanupTarget(
             pid: owned.pid,
             startIdentity: try XCTUnwrap(owned.startIdentity.value),
-            ownershipBasis: .descendantObservedAfterLauncher
+            ownershipBasis: .descendantObservedAfterLauncher,
+            binding: binding
         )
         let plan = ProcessTreeCleanupPlanner.plan(
             declaredTargets: .known([target]),
@@ -247,10 +308,28 @@ final class ProcessTreeCleanupTests: XCTestCase {
             startIdentity: ProcessStartIdentity(
                 startTime: .known(Date(timeIntervalSince1970: 1))
             ),
-            ownershipBasis: .preservedFromPriorIdentity
+            ownershipBasis: .preservedFromPriorIdentity,
+            binding: binding
         )
-        let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+        let result = MacOSProcessTreeObserver.signalCleanupTarget(target, binding: binding, authorization: authorization(for: target))
         XCTAssertEqual(result.disposition, .identityMismatch)
+    }
+
+    func testSignalBoundaryRefusesWrongRuntimeScopeBeforeSignal() {
+        let target = ProcessTreeCleanupTarget(pid: Int32(getpid()),
+            startIdentity: ProcessStartIdentity(startTime: .known(childStart)),
+            ownershipBasis: .descendantObservedAfterLauncher, binding: binding)
+        var other = binding; other.runtimeAttemptID = "different-attempt"
+        XCTAssertEqual(MacOSProcessTreeObserver.signalCleanupTarget(target, binding: other, authorization: authorization(for: target)).disposition, .unsafeTarget)
+    }
+
+    func testSignalBoundaryRefusesTargetOutsideAuthorizedPlan() {
+        let target = ProcessTreeCleanupTarget(pid: 901, startIdentity: ProcessStartIdentity(startTime: .known(childStart)),
+            ownershipBasis: .descendantObservedAfterLauncher, binding: binding)
+        let permitted = authorization(for: target)
+        var other = target; other.pid = Int32(getpid())
+        XCTAssertEqual(MacOSProcessTreeObserver.signalCleanupTarget(other, binding: binding,
+            authorization: permitted).disposition, .unsafeTarget)
     }
 
     func testSignalBoundaryRejectsPIDOneWithoutSignaling() {
@@ -259,9 +338,10 @@ final class ProcessTreeCleanupTests: XCTestCase {
             startIdentity: ProcessStartIdentity(
                 startTime: .known(observedAt)
             ),
-            ownershipBasis: .descendantObservedAfterLauncher
+            ownershipBasis: .descendantObservedAfterLauncher,
+            binding: binding
         )
-        let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+        let result = MacOSProcessTreeObserver.signalCleanupTarget(target, binding: binding, authorization: authorization(for: target))
         XCTAssertEqual(result.disposition, .unsafeTarget)
     }
 #endif

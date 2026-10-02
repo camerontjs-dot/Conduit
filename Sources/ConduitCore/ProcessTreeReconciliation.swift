@@ -59,19 +59,59 @@ public enum ProcessTreeCleanupDisposition: String, Codable, Equatable, Sendable 
     case incompleteResidual = "incomplete_residual"
 }
 
+/// Complete process scope attached to a stop intent before any mutation.
+/// A decoded legacy target without this binding grants no cleanup authority.
+public struct ProcessTreeCleanupBinding: Codable, Equatable, Sendable {
+    public var taskSessionID: String
+    public var runtimeAttemptID: String
+    public var launcherPID: Int32
+    public var launcherStartIdentity: ProcessStartIdentity
+
+    public init(taskSessionID: String, runtimeAttemptID: String, launcherPID: Int32,
+                launcherStartIdentity: ProcessStartIdentity) {
+        self.taskSessionID = taskSessionID
+        self.runtimeAttemptID = runtimeAttemptID
+        self.launcherPID = launcherPID
+        self.launcherStartIdentity = launcherStartIdentity
+    }
+
+    public var isComplete: Bool {
+        !taskSessionID.isEmpty && !runtimeAttemptID.isEmpty && launcherPID > 1
+            && launcherStartIdentity.startTime.value != nil
+    }
+
+    public static func capture(_ observation: ProcessTreeObservation) -> Self? {
+        guard let attempt = observation.runtimeAttemptID.value,
+              let launcher = observation.launcher.value,
+              let identity = launcher.startIdentity.value else { return nil }
+        let binding = Self(taskSessionID: observation.taskSessionID,
+                           runtimeAttemptID: attempt, launcherPID: launcher.pid,
+                           launcherStartIdentity: identity)
+        return binding.isComplete ? binding : nil
+    }
+
+    public static func matches(before: ProcessTreeObservation, after: ProcessTreeObservation) -> Bool {
+        guard let first = capture(before), let last = capture(after) else { return false }
+        return first == last
+    }
+}
+
 public struct ProcessTreeCleanupTarget: Codable, Equatable, Sendable {
     public var pid: Int32
     public var startIdentity: ProcessStartIdentity
     public var ownershipBasis: ProcessOwnershipBasis
+    public var binding: ProcessTreeCleanupBinding?
 
     public init(
         pid: Int32,
         startIdentity: ProcessStartIdentity,
-        ownershipBasis: ProcessOwnershipBasis
+        ownershipBasis: ProcessOwnershipBasis,
+        binding: ProcessTreeCleanupBinding? = nil
     ) {
         self.pid = pid
         self.startIdentity = startIdentity
         self.ownershipBasis = ownershipBasis
+        self.binding = binding
     }
 }
 
@@ -234,7 +274,7 @@ public struct ProcessTreeCleanupReceipt: Codable, Equatable, Sendable {
 /// process observation. A parent exit is only one input; it is never enough by
 /// itself to produce the `complete` postcondition.
 public struct ProcessTreeReconciliation: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var taskSessionID: String
@@ -293,10 +333,15 @@ public enum ProcessTreeReconciler {
         after: ProcessTreeObservation,
         requestedOperation: OrchestrationValue<LifecycleOperation> = .unknown
     ) -> ProcessTreeReconciliation {
-        let normalizedAfter = preservingEstablishedOwnership(
-            after: after,
-            before: before
-        )
+        var normalizedAfter = after
+        if let before, !ProcessTreeCleanupBinding.matches(before: before, after: after) {
+            normalizedAfter.coverage = .ambiguous
+            normalizedAfter.diagnostics = .known((after.diagnostics.value ?? []) + [
+                "prior snapshot task/runtime/launcher scope is absent or different; ownership cannot be borrowed"
+            ])
+        } else {
+            normalizedAfter = preservingEstablishedOwnership(after: after, before: before)
+        }
         let liveResiduals = normalizedAfter.descendants.filter {
             $0.liveness == .live
         }

@@ -3777,6 +3777,73 @@ do {
     check("canonical owned-root preparation executes", false)
 }
 
+// MARK: - Owned descendant cleanup authority
+
+let cleanup78Stamp = SupervisionObservationStamp(authority: .processObserved, freshness: .current,
+    observedAt: .known(Date(timeIntervalSince1970: 1_800_000_000)))
+let cleanup78RootIdentity = ProcessStartIdentity(startTime: .known(Date(timeIntervalSince1970: 1_799_999_900)))
+let cleanup78ChildIdentity = ProcessStartIdentity(startTime: .known(Date(timeIntervalSince1970: 1_799_999_950)))
+let cleanup78Root = ProcessNodeObservation(pid: 900, parentPID: .known(1), processGroupID: .known(900),
+    startIdentity: .known(cleanup78RootIdentity), commandName: .known("owned-fixture"), ownership: .taskCreated,
+    ownershipBasis: .launcherIdentity, liveness: .live, observation: cleanup78Stamp)
+let cleanup78Child = ProcessNodeObservation(pid: 901, parentPID: .known(900), processGroupID: .known(900),
+    startIdentity: .known(cleanup78ChildIdentity), commandName: .known("owned-fixture-child"), ownership: .taskCreated,
+    ownershipBasis: .descendantObservedAfterLauncher, liveness: .live, observation: cleanup78Stamp)
+let cleanup78Before = ProcessTreeObservation(taskSessionID: "owned-task", runtimeAttemptID: .known("owned-attempt"),
+    providerTurnID: .unknown, launcher: .known(cleanup78Root), descendants: [cleanup78Child],
+    coverage: .complete, observation: cleanup78Stamp)
+let cleanup78Binding = ProcessTreeCleanupBinding(taskSessionID: "owned-task", runtimeAttemptID: "owned-attempt",
+    launcherPID: 900, launcherStartIdentity: cleanup78RootIdentity)
+let cleanup78Target = ProcessTreeCleanupTarget(pid: 901, startIdentity: cleanup78ChildIdentity,
+    ownershipBasis: .descendantObservedAfterLauncher, binding: cleanup78Binding)
+var cleanup78After = cleanup78Before
+var cleanup78ExitedRoot = cleanup78Root
+cleanup78ExitedRoot.liveness = .exited
+cleanup78After.launcher = .known(cleanup78ExitedRoot)
+cleanup78After.descendants[0].parentPID = .known(1)
+cleanup78After.descendants[0].ownershipBasis = .preservedFromPriorIdentity
+let cleanup78Reconciliation = ProcessTreeReconciler.reconcile(before: cleanup78Before, after: cleanup78After,
+    requestedOperation: .known(.stopProviderHost))
+let cleanup78Plan = ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: cleanup78Reconciliation)
+check("cleanup admits only a declared exact owned residual after parent exit", cleanup78Plan.disposition == .eligible && cleanup78Plan.targets == [cleanup78Target])
+for axis in ["task", "runtime", "launcher", "launcher-start"] {
+    var changed = cleanup78After
+    if axis == "task" { changed.taskSessionID = "other-task" }
+    if axis == "runtime" { changed.runtimeAttemptID = .known("other-attempt") }
+    if axis == "launcher", var launcher = changed.launcher.value { launcher.pid = 999; changed.launcher = .known(launcher) }
+    if axis == "launcher-start", var launcher = changed.launcher.value { launcher.startIdentity = .known(ProcessStartIdentity(startTime: .known(Date(timeIntervalSince1970: 1)))); changed.launcher = .known(launcher) }
+    let current = ProcessTreeReconciler.reconcile(before: cleanup78Before, after: changed,
+        requestedOperation: .known(.stopProviderHost))
+    let plan = ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: current)
+    check("cleanup refuses a changed " + axis + " scope", plan.disposition == .refusedUnsafeTarget && plan.targets.isEmpty)
+}
+var cleanup78LegacyTarget = cleanup78Target
+cleanup78LegacyTarget.binding = nil
+check("legacy cleanup target carries no destructive authority", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78LegacyTarget]), reconciliation: cleanup78Reconciliation).disposition == .refusedUnsafeTarget)
+check("duplicate cleanup target identity is refused", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target, cleanup78Target]), reconciliation: cleanup78Reconciliation).disposition == .refusedUnsafeTarget)
+var cleanup78NoAncestry = cleanup78Reconciliation
+cleanup78NoAncestry.before?.descendants = []
+check("cleanup cannot borrow ancestry from the post-stop snapshot", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: cleanup78NoAncestry).disposition == .refusedUnsafeTarget)
+var cleanup78Unknown = cleanup78Reconciliation
+var cleanup78UnknownChild = cleanup78Child
+cleanup78UnknownChild.pid = 902
+cleanup78UnknownChild.ownership = .unknown
+cleanup78UnknownChild.ownershipBasis = .notEstablished
+cleanup78Unknown.after.descendants.append(cleanup78UnknownChild)
+cleanup78Unknown.unknownOwnershipResidualDescendants.append(cleanup78UnknownChild)
+check("UNKNOWN residual refuses all cleanup", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: cleanup78Unknown).disposition == .refusedUnknownOwnership)
+var cleanup78Partial = cleanup78Reconciliation
+cleanup78Partial.after.coverage = .partial
+check("partial process coverage refuses cleanup", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: cleanup78Partial).disposition == .refusedUnsafeTarget)
+let cleanup78Live = ProcessTreeReconciler.reconcile(before: cleanup78Before, after: cleanup78Before,
+    requestedOperation: .known(.stopProviderHost))
+check("parent still live authorizes no descendant signal", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: cleanup78Live).disposition == .notAuthorizedYet)
+check("read-only operation never grants cleanup", ProcessTreeCleanupPlanner.plan(declaredTargets: .known([cleanup78Target]), reconciliation: ProcessTreeReconciler.reconcile(before: cleanup78Before, after: cleanup78After)).disposition == .notRequired)
+if let encoded = try? JSONEncoder().encode(cleanup78LegacyTarget),
+   let decoded = try? JSONDecoder().decode(ProcessTreeCleanupTarget.self, from: encoded) {
+    check("old unbound target remains readable without acquiring authority", decoded.binding == nil)
+} else { check("old unbound target remains readable without acquiring authority", false) }
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

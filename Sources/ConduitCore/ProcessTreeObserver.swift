@@ -4,8 +4,9 @@ import Foundation
 
 /// macOS process observation for the provider-neutral Core read model.
 ///
-/// This observer is deliberately read-only. It uses libproc snapshots and
-/// `kill(pid, 0)` probes only; it never signals a process. The caller must
+/// Observation uses libproc snapshots and `kill(pid, 0)` probes only. The
+/// separate package cleanup entry validates a complete declared binding before
+/// a single-PID SIGTERM; observation never grants signal authority. The caller must
 /// explicitly supply whether the selected root has task-specific ownership
 /// evidence. A root PID used only for observation defaults to UNKNOWN and
 /// cannot grant ownership to descendants from topology or timing alone. PPID
@@ -127,6 +128,13 @@ public enum MacOSProcessTreeObserver {
             observedAt: .known(observedAt)
         )
 
+        if let prior, taskSessionID.isEmpty || runtimeAttempt.value == nil
+            || prior.taskSessionID != taskSessionID || prior.runtimeAttemptID != runtimeAttempt {
+            return .unavailable(taskSessionID: taskSessionID, runtimeAttemptID: runtimeAttempt,
+                                providerTurnID: providerTurn,
+                                reason: "prior snapshot task/runtime scope does not match this observation",
+                                observedAt: observedAt)
+        }
         guard rootPID > 0 else {
             return .unavailable(
                 taskSessionID: taskSessionID,
@@ -547,9 +555,13 @@ public enum MacOSProcessTreeObserver {
 
     package static func signalCleanupTarget(
         _ target: ProcessTreeCleanupTarget,
-        signal: Int32 = SIGTERM
+        binding: ProcessTreeCleanupBinding,
+        authorization: ProcessTreeCleanupPlan? = nil
     ) -> ProcessTreeCleanupSignalResult {
-        guard target.pid > 1,
+        guard let authorization, authorization.disposition == .eligible,
+              authorization.binding == binding, authorization.targets.contains(target),
+              binding.isComplete, target.binding == binding,
+              target.pid > 1, target.pid != binding.launcherPID,
               ProcessTreeCleanupPlanner.isStrongDescendantBasis(
                 target.ownershipBasis
               ),
@@ -583,7 +595,7 @@ public enum MacOSProcessTreeObserver {
         }
 
         errno = 0
-        guard kill(pid_t(target.pid), signal) == 0 else {
+        guard kill(pid_t(target.pid), SIGTERM) == 0 else {
             let code = Int32(errno)
             if code == ESRCH {
                 return ProcessTreeCleanupSignalResult(

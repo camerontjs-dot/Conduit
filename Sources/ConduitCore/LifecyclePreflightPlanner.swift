@@ -570,7 +570,13 @@ public enum LifecyclePreflightPlanner {
         guard launcher.ownership == .taskCreated else {
             return .known([])
         }
+        guard let binding = ProcessTreeCleanupBinding.capture(processTree),
+              binding.taskSessionID == snapshot.taskSessionID,
+              binding.runtimeAttemptID == snapshot.runtimeAttemptID.value else {
+            return .unknown
+        }
 
+        guard Set(processTree.descendants.map(\.pid)).count == processTree.descendants.count else { return .unknown }
         var targets: [ProcessTreeCleanupTarget] = []
         for node in processTree.descendants where node.liveness == .live {
             guard node.ownership == .taskCreated else { continue }
@@ -586,7 +592,8 @@ public enum LifecyclePreflightPlanner {
                 ProcessTreeCleanupTarget(
                     pid: node.pid,
                     startIdentity: startIdentity,
-                    ownershipBasis: node.ownershipBasis
+                    ownershipBasis: node.ownershipBasis,
+                    binding: binding
                 )
             )
         }

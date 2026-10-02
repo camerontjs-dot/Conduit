@@ -6868,6 +6868,14 @@ final class AppModel: ObservableObject {
             break
         }
 
+        guard let binding = plan.binding,
+              binding.taskSessionID == taskID.rawValue.uuidString,
+              binding.runtimeAttemptID == runtime.runtimeAttemptID.rawValue.uuidString else {
+            current.cleanup = cleanupReceipt(disposition: .refusedUnsafeTarget,
+                evidence: ["cleanup plan does not match the current task/runtime attempt"], reobserved: false)
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        }
         var evidence = [plan.reason]
         var signalResults: [ProcessTreeCleanupSignalResult] = []
         var signalFailed = false
@@ -6875,7 +6883,7 @@ final class AppModel: ObservableObject {
         for target in plan.targets {
             let started = target.startIdentity.startTime.value
                 .map { String($0.timeIntervalSince1970) } ?? "unknown"
-            let result = MacOSProcessTreeObserver.signalCleanupTarget(target)
+            let result = MacOSProcessTreeObserver.signalCleanupTarget(target, binding: binding, authorization: plan)
             signalResults.append(result)
             var row =
                 "pid=\(target.pid);start_time=\(started);"
