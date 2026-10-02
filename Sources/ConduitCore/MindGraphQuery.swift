@@ -284,7 +284,7 @@ public enum MindGraphQuerySupport {
             let output = String(decoding: data, as: UTF8.self)
             guard let text = MindGraphOutput.jsonPayload(in: output),
                   let json = text.data(using: .utf8),
-                  let envelope = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any],
+                  let envelope = (try? UniqueJSONMembers.object(from: json)) as? [String: Any],
                   envelope["schema_version"] as? String == "mindgraph-query-identity/v1",
                   let identity = envelope["database_identity"] as? [String: Any],
                   operationsDatabaseIdentityMatches(identity),

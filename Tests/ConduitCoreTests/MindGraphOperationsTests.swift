@@ -267,4 +267,48 @@ final class MindGraphOperationsTests: XCTestCase {
         let data = try JSONSerialization.data(withJSONObject: receipts, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: URL(fileURLWithPath: receiptPath), options: .withoutOverwriting)
     }
+
+    func testAmbiguousEnvelopeMembersFailBeforeNominationAdmission() throws {
+        let row: [String: Any] = ["index_id": "mainframe-operations", "trust_profile": "operations_status",
+                                  "path": "40_operations/example/README.md", "chunk_text": "must not escape"]
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data().write(to: temporary)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        for rows in [[row], []] {
+            let original = String(decoding: try envelope(rows), as: UTF8.self)
+            for name in ["index_id", #"\u0069ndex_id"#] {
+                for repeated in ["mainframe-projects", "mainframe-operations"] {
+                    for order in [true, false] {
+                        let member = #""index_id":"mainframe-operations""#
+                        let duplicate = "\"\(name)\":\"\(repeated)\""
+                        let raw = original.replacingOccurrences(of: member,
+                            with: order ? duplicate + "," + member : member + "," + duplicate)
+                        XCTAssertNotEqual(raw, original)
+                        XCTAssertThrowsError(try MindGraphQuerySupport.decodeHits(from: Data(raw.utf8), scope: .operations))
+                        let payload = MindGraphQuerySupport.sessionQuery(question: "compass", scope: .operations,
+                            binary: temporary, database: temporary, run: { _, _, _ in (0, raw) })
+                        XCTAssertNotNil(payload["error"])
+                        XCTAssertNil(payload["results"])
+                        XCTAssertNil(payload["database_identity"])
+                        XCTAssertFalse(String(describing: payload).contains("must not escape"))
+                    }
+                }
+            }
+            for member in ["results", "database_identity", "schema_version"] {
+                let raw = "{\"\(member)\":null," + original.dropFirst()
+                XCTAssertThrowsError(try MindGraphQuerySupport.decodeHits(from: Data(raw.utf8), scope: .operations))
+            }
+        }
+    }
+
+    func testUniqueMemberScannerPreservesStringsArraysAndSeparateObjects() throws {
+        let source = #"{"first":{"key":null},"second":{"key":true},"array":[1,-2.5,"escaped \"index_id\": text",false],"unicode":"\u263a"}"#
+        let result = try UniqueJSONMembers.object(from: Data(source.utf8)) as? [String: Any]
+        XCTAssertEqual(result?.count, 4)
+        for source in [#"{"key":1,"key":1}"#, #"{"key":1,"\u006bey":2}"#,
+                       #"{"array":[{"key":1,"key":2}]}"#] {
+            XCTAssertThrowsError(try UniqueJSONMembers.object(from: Data(source.utf8)))
+        }
+    }
+
 }

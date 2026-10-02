@@ -7,6 +7,24 @@ MainFrame-only coordination decisions live outside this tree.
 
 ---
 
+
+## 2026-10-02 — Preserve one interpretation of operations JSON identity
+
+The frozen source-map consumer accepted contradictory JSON identity members by
+selecting the first value. The engine selected the last value, so the same bytes
+could describe different corpora. Preserve that candidate and its failed control.
+
+The separate successor checks original operations envelope bytes for unique
+object members before interpreting the decoded dictionary. Repeated identical
+values, escaped-equivalent names, nested row members and envelope members are
+rejected before nominations are exposed. Valid envelopes, JSON string content
+and separate objects using the same member name remain compatible.
+
+This affects only the opt-in operations identity envelope. Knowledge/projects
+legacy arrays and Context Compiler admission remain unchanged. It establishes
+unambiguous representation, not source truth, current decisions or authenticated
+execution authority.
+
 ## D-001: MainFrame-specific personal app
 
 **Status:** Accepted  

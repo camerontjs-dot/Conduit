@@ -1,5 +1,8 @@
 # Changelog
 
+- Reject duplicate decoded JSON members in operations identity envelopes before
+  exposing nominations, including repeated identical and escaped-equivalent names.
+
 All notable product changes to Conduit are recorded here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
