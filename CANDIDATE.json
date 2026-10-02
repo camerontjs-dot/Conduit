@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "candidate_id": "conduit-issue114-terminal-replay-successor-20261002-rc0",
+  "product_line": "Conduit",
+  "issue": 114,
+  "base_commit": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "source_commit": "390197f477b2fb908885f1afef42718bf34d1f88",
+  "source_tree": "d444741cefa02cd0447f0d59453fee7d5b746af9",
+  "freeze_commit_resolution": "git log -1 --format=%H -- CANDIDATE.json; exact freeze head/tree recorded in Draft PR receipt",
+  "lifecycle_state": "FROZEN",
+  "created_at_utc": "2026-10-02T16:09:23.627469+00:00",
+  "advancement_readiness_at_freeze": "OWNER_NATIVE_PASS_BOUNDED; INDEPENDENT_AND_LIVE_APP_WIRING_PENDING; NOT_MERGE_READY",
+  "included_scope": [
+    "Current-main net source of #115/#116 durable safe structured failure repair",
+    "Exact integer pending request correlation and unambiguous error envelope",
+    "Sticky first terminal native failure until explicit new input",
+    "Retired turn replay protection and known-wrong thread/turn rejection",
+    "Durable failed latest-delivered input outranks contradictory live flags; genuine later delivered input retains separate state"
+  ],
+  "excluded_scope": [
+    "#113 model eligibility and real vendor/provider calls",
+    "#82 queue and #97 routing composition",
+    "Operator authentication, defaults, subscription, quota, installation or release",
+    "UI-independent execution service, provider exactly-once delivery or persistent provider tombstones"
+  ],
+  "predecessors": [
+    {
+      "pr": 115,
+      "head": "6e80f00992e15df47c082c1b92cfcb1f39eefb92",
+      "tree": "8bc05da77b46999f4d40a672076327af9721c74d",
+      "disposition": "FROZEN_TERMINAL_FAIL_PRESERVED"
+    },
+    {
+      "pr": 116,
+      "head": "fa1567829f22e7e9ab1949d0dace57991ae9db7f",
+      "tree": "78f7092566af785573cb60ccbf75f57cc606ce81",
+      "disposition": "FROZEN_TERMINAL_FAIL_PRESERVED",
+      "receipt": "https://github.com/camerontjs-dot/Conduit/pull/116#issuecomment-5955183181"
+    }
+  ],
+  "evidence_at_freeze": {
+    "owner_suite": {
+      "selftests": 472,
+      "python": 10,
+      "xctest": 630,
+      "skipped": 3,
+      "failures": 0
+    },
+    "owner_native_subprocess": {
+      "cases": 25,
+      "failures": 0,
+      "real_provider_calls": 0,
+      "all_owned_children_absent": true
+    },
+    "release_build": "PASS",
+    "bundle_strict_codesign": "PASS",
+    "built_executable_sha256": "438bdf216ace4eb886795ba702de01b09d44a529279ff97244f8c9e4d2415d1b",
+    "machine_receipt_sha256": "44ce48e08a4d9577f9b4fad2ce3df79e706453855eb9271b42c07efccee16e21",
+    "remote_ci": "PENDING",
+    "fresh_independent": "NOT_RUN",
+    "live_AppModel_HTTP_task_lifecycle": "WAIT_ACTIVE_ISOLATION_87"
+  },
+  "non_claims": [
+    "Owner tests are not independent qualification.",
+    "The native harness uses actual client/Core/log with its own wiring; actual AppModel and HTTP are separately pending.",
+    "No runtime queue, model entitlement, installed operator, verification or objective acceptance claim."
+  ],
+  "profile": {
+    "structural_type": "manifest",
+    "lifecycle_scope": "workbench",
+    "owner_surface": "CANDIDATE.json",
+    "authority": "generated-state",
+    "privacy": "public-safe",
+    "volatility": "generated",
+    "source_of_truth": true,
+    "update_rule": "immutable after freeze; any source repair requires successor",
+    "verification": [
+      "git diff --exit-code",
+      "scripts/test.sh",
+      "scripts/build-app.sh",
+      "git log -1 --format=%H -- CANDIDATE.json"
+    ],
+    "related_surfaces": [
+      "AGENTS.md",
+      "DECISIONS.md#D-061",
+      "CHANGELOG.md"
+    ],
+    "do_not_use_for": [
+      "credentials",
+      "operator state",
+      "merge or release authority"
+    ]
+  },
+  "freeze_rule": {
+    "binds": "development in this exact candidate",
+    "tier": "T0",
+    "check": "manual clean tree/source identity; no automated candidate validator",
+    "escape": "new successor branch/worktree; never repair frozen candidate"
+  }
+}
