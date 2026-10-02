@@ -210,6 +210,22 @@ public final class CodexAppServerStreamPump: @unchecked Sendable {
         }
     }
 
+    /// Registers request identity in stream order before the client writes
+    /// its thread request, so unsolicited responses cannot retarget mapping.
+    public func expectThreadResponse(_ id: CodexJSONRPCID) {
+        worker.async { [weak self] in
+            guard let self, self.isAccepting else { return }
+            self.mapper.expectThreadResponse(id)
+        }
+    }
+
+    public func cancelThreadResponseExpectation() {
+        worker.async { [weak self] in
+            guard let self, self.isAccepting else { return }
+            self.mapper.cancelThreadResponseExpectation()
+        }
+    }
+
     /// Stops accepting work without reporting a protocol failure.
     public func cancel() {
         stateLock.lock()

@@ -25,6 +25,7 @@ final class CodexAppServerStreamPumpTests: XCTestCase {
         )
         let split = input.count / 2
 
+        pump.expectThreadResponse(.number(1))
         XCTAssertTrue(pump.ingest(input.prefix(split)))
         XCTAssertTrue(pump.ingest(input.suffix(from: split)))
 

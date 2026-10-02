@@ -3816,6 +3816,24 @@ let replayNext = replayMapper.apply(.notification(method: "turn/started", params
 check("distinct next turn starts without inheriting failure",
       replayNext == [.turnStarted(id: "next-turn")] && replayMapper.turnActive && replayMapper.lastTurnStatus == nil)
 
+var responseMapper = CodexAppServerMapper()
+let responseThread = CodexJSON.object(["thread": .object(["id": .string("owned-thread")])])
+check("unsolicited thread-shaped response has no thread authority",
+      responseMapper.apply(.response(id: .number(1), result: responseThread)).isEmpty && responseMapper.threadID == nil)
+responseMapper.expectThreadResponse(.number(2))
+check("thread response preserves exact request-id type",
+      responseMapper.apply(.response(id: .string("2"), result: responseThread)).isEmpty && responseMapper.threadID == nil)
+check("registered thread response establishes exact identity",
+      responseMapper.apply(.response(id: .number(2), result: responseThread)) == [.threadStarted(id: "owned-thread")])
+check("consumed thread response cannot retarget mapper",
+      responseMapper.apply(.response(id: .number(2), result: .object(["threadId": .string("foreign-thread")]))).isEmpty
+      && responseMapper.threadID == "owned-thread")
+responseMapper.expectThreadResponse(.number(3))
+responseMapper.cancelThreadResponseExpectation()
+check("canceled thread response remains without authority",
+      responseMapper.apply(.response(id: .number(3), result: .object(["threadId": .string("foreign-thread")]))).isEmpty
+      && responseMapper.threadID == "owned-thread")
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

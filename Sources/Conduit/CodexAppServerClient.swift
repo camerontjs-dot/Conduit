@@ -531,6 +531,10 @@ final class CodexAppServerClient: ObservableObject {
         payload["id"] = id
         return try await withCheckedThrowingContinuation { continuation in
             pendingResponses[id] = continuation
+            if let method = payload["method"] as? String,
+               method == "thread/start" || method == "thread/resume" {
+                streamPump?.expectThreadResponse(.number(id))
+            }
             send(payload)
         }
     }
@@ -552,6 +556,7 @@ final class CodexAppServerClient: ObservableObject {
     }
 
     private func failPending(_ message: String) {
+        streamPump?.cancelThreadResponseExpectation()
         let pending = pendingResponses
         pendingResponses.removeAll()
         for continuation in pending.values {

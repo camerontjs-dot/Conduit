@@ -220,6 +220,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     public var lastAppendWasNote = false
     private var lastFailedTurnID: String?
     private var lastTerminalTurnID: String?
+    private var expectedThreadResponseID: CodexJSONRPCID?
     // A new input resets its presentation, not the identity of retired turns.
     // Keep tombstones for this host/thread so delayed notifications cannot
     // become authority for a later input.
@@ -227,14 +228,30 @@ public struct CodexAppServerMapper: Equatable, Sendable {
 
     public init() {}
 
+    /// The client registers its own outstanding thread/start or thread/resume
+    /// request before sending it. A response's shape alone is not identity
+    /// authority, and this expectation is consumed exactly once.
+    public mutating func expectThreadResponse(_ id: CodexJSONRPCID) {
+        expectedThreadResponseID = id
+    }
+
+    public mutating func cancelThreadResponseExpectation() {
+        expectedThreadResponseID = nil
+    }
+
     public mutating func apply(
         _ message: CodexJSONRPCMessage
     ) -> [CodexAppServerEffect] {
         switch message {
-        case .error(_, let message, _):
+        case .error(let id, let message, _):
+            if id == expectedThreadResponseID {
+                expectedThreadResponseID = nil
+            }
             return [.failed(message)]
-        case .response(_, let result):
-            if let threadID = Self.threadID(in: result) {
+        case .response(let id, let result):
+            guard id == expectedThreadResponseID else { return [] }
+            expectedThreadResponseID = nil
+            if let threadID = Self.threadID(in: result), !threadID.isEmpty {
                 self.threadID = threadID
                 return [.threadStarted(id: threadID)]
             }

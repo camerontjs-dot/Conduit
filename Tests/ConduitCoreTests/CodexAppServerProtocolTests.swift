@@ -142,6 +142,7 @@ final class CodexAppServerProtocolTests: XCTestCase {
 
     func testMapperThreadStartResponseAndApproval() {
         var mapper = CodexAppServerMapper()
+        mapper.expectThreadResponse(.number(1))
         let started = mapper.apply(
             .response(
                 id: .number(1),

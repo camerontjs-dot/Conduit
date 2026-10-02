@@ -106,6 +106,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Codex thread identity is now established from a response only when its exact
+  outstanding thread start/resume request was registered by the client.
+  Unsolicited, duplicate and canceled responses cannot retarget the mapper or
+  hide a matching owned turn's terminal failure (#114 response successor).
+
 - Codex app-server terminal rejection now ends the provider turn and retains a
   safe, durable failure receipt even when no assistant output was produced.
   Session status and events use the same turn projection after runtime close.

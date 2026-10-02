@@ -2,6 +2,77 @@ import XCTest
 @testable import ConduitCore
 
 final class CodexTerminalReplayTests: XCTestCase {
+    func testUnsolicitedForeignThreadResponseCannotHideOwnedTerminalFailure() {
+        var mapper = CodexAppServerMapper()
+        mapper.threadID = "replay-thread"
+        _ = mapper.apply(notification("turn/started", turn: "current"))
+        let unrelated = mapper.apply(.response(id: .number(776655), result: .object([
+            "thread": .object(["id": .string("foreign-thread")])
+        ])))
+        XCTAssertTrue(unrelated.isEmpty)
+        XCTAssertEqual(mapper.threadID, "replay-thread")
+        let effects = mapper.apply(notification("turn/completed", turn: "current", status: "failed"))
+        guard case .turnFailed(let receipt) = effects.first else {
+            return XCTFail("matching owned terminal failure must remain observable")
+        }
+        XCTAssertEqual(receipt.threadID, "replay-thread")
+        XCTAssertEqual(receipt.turnID, "current")
+        XCTAssertFalse(mapper.turnActive)
+    }
+
+    func testResponseShapeAloneCannotEstablishThreadAuthority() {
+        var mapper = CodexAppServerMapper()
+        XCTAssertTrue(mapper.apply(.response(id: .number(91), result: .object([
+            "thread": .object(["id": .string("unrequested-thread")])
+        ]))).isEmpty)
+        XCTAssertNil(mapper.threadID)
+    }
+
+    func testOnlyExactOutstandingThreadRequestCanEstablishIdentityOnce() {
+        var mapper = CodexAppServerMapper()
+        mapper.expectThreadResponse(.number(17))
+        let result = CodexJSON.object(["thread": .object(["id": .string("owned-thread")])])
+        for id in [CodexJSONRPCID.number(18), .string("17")] {
+            XCTAssertTrue(mapper.apply(.response(id: id, result: result)).isEmpty)
+            XCTAssertNil(mapper.threadID)
+        }
+        XCTAssertEqual(mapper.apply(.response(id: .number(17), result: result)), [.threadStarted(id: "owned-thread")])
+        XCTAssertTrue(mapper.apply(.response(id: .number(17), result: .object([
+            "thread": .object(["id": .string("duplicate-foreign-thread")])
+        ]))).isEmpty)
+        XCTAssertEqual(mapper.threadID, "owned-thread")
+    }
+
+    func testCanceledOrRejectedThreadRequestCannotAdmitLateResponse() {
+        for rejection in [false, true] {
+            var mapper = CodexAppServerMapper()
+            mapper.threadID = "owned-thread"
+            mapper.expectThreadResponse(.number(17))
+            if rejection {
+                _ = mapper.apply(.error(id: .number(17), message: "request refused", code: -32602))
+            } else {
+                mapper.cancelThreadResponseExpectation()
+            }
+            XCTAssertTrue(mapper.apply(.response(id: .number(17), result: .object([
+                "thread": .object(["id": .string("late-thread")])
+            ]))).isEmpty)
+            XCTAssertEqual(mapper.threadID, "owned-thread")
+        }
+    }
+
+    func testEmptyThreadResponseConsumesExpectationWithoutIdentity() {
+        var mapper = CodexAppServerMapper()
+        mapper.expectThreadResponse(.number(17))
+        XCTAssertTrue(mapper.apply(.response(id: .number(17), result: .object([
+            "thread": .object(["id": .string("")])
+        ]))).isEmpty)
+        XCTAssertNil(mapper.threadID)
+        XCTAssertTrue(mapper.apply(.response(id: .number(17), result: .object([
+            "thread": .object(["id": .string("late-thread")])
+        ]))).isEmpty)
+        XCTAssertNil(mapper.threadID)
+    }
+
     func testFractionalReplyIdentityCannotBecomeIntegerRequestAuthority() {
         XCTAssertNil(CodexJSONRPCID.parse(.number(3.5)))
         let reply = CodexJSONRPCMessage.parseLine(#"{"id":3.5,"error":{"code":400,"message":"rejected"}}"#)

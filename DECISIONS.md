@@ -2066,6 +2066,9 @@ provider failure. Its frozen successor #116 repaired error-object validation,
 but independent native qualification then reproduced a delayed duplicate
 `turn/started` reopening a failed turn without a new input. Hosted CI and
 passing Core tests did not establish this lifecycle boundary.
+Frozen #118 then retained terminal input state, but independent qualification
+reproduced an unsolicited response replacing the mapper thread identity and
+hiding the matching owned terminal failure. That candidate also remains FAIL.
 
 **Decision:**
 
@@ -2088,8 +2091,13 @@ passing Core tests did not establish this lifecycle boundary.
    objective acceptance retain separate authority. Raw error payloads and
    arbitrary messages are withheld from durable history. Ambiguous transport
    or PTY closure cannot establish a failed provider turn.
+6. Response-shaped thread data has identity authority only for an outstanding
+   thread/start or thread/resume request explicitly registered by the native
+   client before sending. Matching consumes the expectation once; request
+   refusal, cancellation or timeout clears it. Other responses still reach
+   their request continuations without changing mapper thread identity.
 
-**Lineage:** #115 and #116 remain immutable failed predecessors. This decision
+**Lineage:** #115, #116 and #118 remain immutable failed predecessors. This decision
 describes a new current-main successor; their original negative receipts are
 not revised or converted into acceptance.
 
