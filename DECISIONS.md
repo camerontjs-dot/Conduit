@@ -1449,6 +1449,27 @@ normal OpenCode worker service for planning; parsing arbitrary model prose into
 a task; using a hidden task queue; treating a plan as verification; or falling
 back to a cloud model when a local planner is unavailable.
 
+**Static routing foundation (2026-10-02, #56):** A pure deterministic resolver
+accepts explicit requirements, caller-supplied runtime facts and references to
+versioned model profiles. It preserves supported, unsupported and UNKNOWN
+capability claims and their stated evidence/freshness; a model declaration
+cannot supply runtime tools, capabilities or writer authority. An absent claim
+is UNKNOWN and an explicitly stale claim cannot satisfy a requirement. Static
+fixture declarations remain fixture evidence. Authenticating a live source,
+selected-model entitlement, capacity and approved launch authority belong to
+later qualified consumers, not this schema layer.
+
+The decision records all input facts, hard rejections, explicit preference
+rules and exact configuration/thread/workspace identities where supplied.
+Canonical receipt bytes provide replay/content identity, not approval or a
+signature. Invalid or duplicate identities fail closed before selection;
+equivalent candidates require explicit policy rather than model reputation.
+Regular Chat plus GitHub remains a separate surface, ChatGPT Work is prohibited
+by default and creation is disabled by default. A creation-required decision
+creates nothing. The existing suggestedAgent proposal hint and disabled Start
+seam remain unchanged. Frozen #97 is preserved as predecessor; its acceptance
+is not inherited by this maintained successor.
+
 ## D-047: A replaced session is reported as replaced, and never overwrites the way back
 
 **Context.** Every structured client accepts a resume id and every one of them
