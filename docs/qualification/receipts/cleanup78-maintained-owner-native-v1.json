@@ -1,0 +1,562 @@
+{
+  "schema_version": 1,
+  "disposition": "OWNER_BOUNDED_PASS_NOT_INDEPENDENT_QUALIFICATION",
+  "observed_at_utc": "2026-10-02T18:14:05.016679+00:00",
+  "tested_product_head": "96994011d46101cfbb19d4619c09fdacde9b8596",
+  "tested_product_tree": "f0cb1a3e600c571a00d0787d1ec4c50f6568b18c",
+  "ancestry": {
+    "live_main_base": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+    "live_main_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+    "instrumentation_dependency_pr": 123,
+    "instrumentation_dependency_head": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+    "instrumentation_dependency_tree": "e022251b34654c9cfcbd93f36e13099b347d393b",
+    "frozen_source_lineage_pr": 84,
+    "frozen_source_lineage_head": "ff17bcffae7ffbeddd0dd978cd5b0ef2e2aa267a",
+    "frozen_source_lineage_tree": "95061985c46f900f682c8483f7900a2676672cae"
+  },
+  "failed_maintained_predecessors": [
+    {
+      "head": "a887d7dd59625df958e6f5a29460f731d2a0b7cf",
+      "tree": "789e17f2b361d97188cd6756df50873edaf8af4a",
+      "disposition": "FAIL_CROSS_TASK_RUNTIME_LAUNCHER_AUTHORITY",
+      "receipt": "cleanup78-initial-scope-fail.json"
+    },
+    {
+      "head": "446ea99db93ce42e864aef54fa66beda21d9d857",
+      "tree": "4883d25ddc4aa574909e639ef70dff900d66b3ad",
+      "disposition": "FAIL_FIXTURE_ORPHAN_NOT_ESTABLISHED",
+      "receipt": "cleanup78-native-fixture-fail-v1.json"
+    },
+    {
+      "head": "63786efb5ae9838d81184b6cab05e1407f2eb5ff",
+      "tree": "b7a2e5598159865e7ffc82b2da9344afc5d5a59f",
+      "disposition": "FAIL_PENDING_STOP_OWNED_ORPHAN",
+      "receipt": "cleanup78-pending-stop-fail-v1.json"
+    }
+  ],
+  "owner_checks": {
+    "self_checks": {
+      "executed": 484,
+      "failed": 0
+    },
+    "python": {
+      "executed": 11,
+      "failed": 0
+    },
+    "xctest": {
+      "executed": 631,
+      "failed": 0,
+      "skipped": 3,
+      "skip_names": [
+        "installed OpenCode authority journey",
+        "installed OpenCode persistence",
+        "live Shell/OpenCode fixture correlation"
+      ]
+    },
+    "focused_cleanup_lifecycle_reconciliation": {
+      "executed": 41,
+      "failed": 0
+    },
+    "native_core_orphan_and_negative_control": "PASS included in full native",
+    "signed_release_build_and_strict_codesign": "PASS",
+    "debug_app_pressure": {
+      "executed": 18,
+      "failed": 0
+    },
+    "release_app_pressure": {
+      "executed": 20,
+      "failed": 0
+    }
+  },
+  "release_executable_sha256": "a6304313a33cce3f02bf674cb1c449bcdbdf16ff602437623f6771e5776c2fbe",
+  "owned_qualification_executable_sha256": "04e056bbda8c4b8622ceb828b545c1c8ab52fdcb44579b6233c9d41e83c64595",
+  "source_sha256": {
+    "Sources/Conduit/AppModel.swift": "2059023d197aadbdd0301690f028b2093b20766c1d130a588338cbdbf5b62c56",
+    "Sources/ConduitCore/ProcessTreeCleanup.swift": "125e1085d8fdaa37791c5b4604bfc1d14fc927e8a50f492e3a3062f8e954c325",
+    "Sources/ConduitCore/ProcessTreeObserver.swift": "24d346fe0becd9f80246560a00f476058468c342abba1e8e4122e0cfc1891b29"
+  },
+  "controls": [
+    {
+      "name": "owned fixture reaches READY",
+      "passed": true,
+      "at": "2026-10-02T18:10:40.982506+00:00"
+    },
+    {
+      "name": "normal: task starts exactly the owned fixture",
+      "passed": true,
+      "at": "2026-10-02T18:10:41.052158+00:00"
+    },
+    {
+      "name": "normal: initial stop is pending exact parent exit",
+      "passed": true,
+      "at": "2026-10-02T18:10:41.122328+00:00"
+    },
+    {
+      "name": "normal: delayed owned orphan is cleaned by product",
+      "passed": true,
+      "at": "2026-10-02T18:10:42.654198+00:00"
+    },
+    {
+      "name": "normal: exactly one declared SIGTERM receipt",
+      "passed": true,
+      "at": "2026-10-02T18:10:42.654493+00:00"
+    },
+    {
+      "name": "normal: receipt preserves full launcher start identity",
+      "passed": true,
+      "at": "2026-10-02T18:10:42.654761+00:00"
+    },
+    {
+      "name": "normal: read preserves receipt and causes no repeated mutation",
+      "passed": true,
+      "at": "2026-10-02T18:10:42.656165+00:00"
+    },
+    {
+      "name": "ignore: task starts exactly the owned fixture",
+      "passed": true,
+      "at": "2026-10-02T18:10:42.776698+00:00"
+    },
+    {
+      "name": "ignore: initial stop is pending exact parent exit",
+      "passed": true,
+      "at": "2026-10-02T18:10:42.781414+00:00"
+    },
+    {
+      "name": "ignore: surviving child remains explicit incomplete residue",
+      "passed": true,
+      "at": "2026-10-02T18:10:44.294002+00:00"
+    },
+    {
+      "name": "ignore: only one SIGTERM without descendant escalation",
+      "passed": true,
+      "at": "2026-10-02T18:10:44.294571+00:00"
+    },
+    {
+      "name": "ignore: receipt preserves full launcher start identity",
+      "passed": true,
+      "at": "2026-10-02T18:10:44.295464+00:00"
+    },
+    {
+      "name": "ignore: read preserves receipt and causes no repeated mutation",
+      "passed": true,
+      "at": "2026-10-02T18:10:44.297697+00:00"
+    },
+    {
+      "name": "late: task starts exactly the owned fixture",
+      "passed": true,
+      "at": "2026-10-02T18:10:44.368782+00:00"
+    },
+    {
+      "name": "late: initial stop is pending exact parent exit",
+      "passed": true,
+      "at": "2026-10-02T18:10:44.379526+00:00"
+    },
+    {
+      "name": "late: post-stop fixture creates distinct undeclared child",
+      "passed": true,
+      "at": "2026-10-02T18:10:44.380329+00:00"
+    },
+    {
+      "name": "late: changed declared scope refuses all descendant signals",
+      "passed": true,
+      "at": "2026-10-02T18:10:45.894015+00:00"
+    },
+    {
+      "name": "late: read preserves receipt and causes no repeated mutation",
+      "passed": true,
+      "at": "2026-10-02T18:10:45.896617+00:00"
+    },
+    {
+      "name": "unrelated disposable process remains live",
+      "passed": true,
+      "at": "2026-10-02T18:10:45.897511+00:00"
+    },
+    {
+      "name": "no provider trap was executed",
+      "passed": true,
+      "at": "2026-10-02T18:10:45.898364+00:00"
+    }
+  ],
+  "typed_cleanup_outcomes": {
+    "normal": {
+      "targetingBasis": {
+        "state": "known",
+        "value": [
+          "every cleanup target is an exact predeclared task/runtime/launcher-bound residual with prior task-created ancestry",
+          "task_session_id=B34A16FB-84EB-4C02-BEE0-9D9413C9832D;runtime_attempt_id=1D9DA74C-9569-46B2-9161-8B666B3A37A6;launcher_pid=87811;launcher_start_time=1790964640.989896",
+          "pid=87812;start_time=1790964641.013363;basis=descendant_observed_after_launcher;signal=SIGTERM;result=signal_requested",
+          "reobserved_owned_residual_pids=",
+          "reobserved_unknown_residual_pids="
+        ]
+      },
+      "targets": [
+        {
+          "ownershipBasis": "descendant_observed_after_launcher",
+          "binding": {
+            "launcherStartIdentity": {
+              "startTime": {
+                "state": "known",
+                "value": "2026-10-02T18:10:40Z"
+              }
+            },
+            "launcherPID": 87811,
+            "taskSessionID": "B34A16FB-84EB-4C02-BEE0-9D9413C9832D",
+            "runtimeAttemptID": "1D9DA74C-9569-46B2-9161-8B666B3A37A6"
+          },
+          "startIdentity": {
+            "startTime": {
+              "value": "2026-10-02T18:10:41Z",
+              "state": "known"
+            }
+          },
+          "pid": 87812
+        }
+      ],
+      "targetedPIDs": [
+        87812
+      ],
+      "signalResults": [
+        {
+          "signalName": "SIGTERM",
+          "errorCode": {
+            "state": "unknown"
+          },
+          "disposition": "signal_requested",
+          "target": {
+            "binding": {
+              "launcherStartIdentity": {
+                "startTime": {
+                  "value": "2026-10-02T18:10:40Z",
+                  "state": "known"
+                }
+              },
+              "taskSessionID": "B34A16FB-84EB-4C02-BEE0-9D9413C9832D",
+              "launcherPID": 87811,
+              "runtimeAttemptID": "1D9DA74C-9569-46B2-9161-8B666B3A37A6"
+            },
+            "ownershipBasis": "descendant_observed_after_launcher",
+            "startIdentity": {
+              "startTime": {
+                "state": "known",
+                "value": "2026-10-02T18:10:41Z"
+              }
+            },
+            "pid": 87812
+          }
+        }
+      ],
+      "reobservedAfterCleanup": {
+        "state": "known",
+        "value": true
+      },
+      "disposition": "completed"
+    },
+    "ignore": {
+      "targets": [
+        {
+          "ownershipBasis": "descendant_observed_after_launcher",
+          "binding": {
+            "launcherPID": 87845,
+            "taskSessionID": "9EF45337-C897-4946-9ACB-E6ED94ECF562",
+            "launcherStartIdentity": {
+              "startTime": {
+                "state": "known",
+                "value": "2026-10-02T18:10:42Z"
+              }
+            },
+            "runtimeAttemptID": "42E8EFBD-A576-4F9D-9B24-4DBFEBF6BE19"
+          },
+          "startIdentity": {
+            "startTime": {
+              "state": "known",
+              "value": "2026-10-02T18:10:42Z"
+            }
+          },
+          "pid": 87847
+        }
+      ],
+      "targetingBasis": {
+        "state": "known",
+        "value": [
+          "every cleanup target is an exact predeclared task/runtime/launcher-bound residual with prior task-created ancestry",
+          "task_session_id=9EF45337-C897-4946-9ACB-E6ED94ECF562;runtime_attempt_id=42E8EFBD-A576-4F9D-9B24-4DBFEBF6BE19;launcher_pid=87845;launcher_start_time=1790964642.660408",
+          "pid=87847;start_time=1790964642.685421;basis=descendant_observed_after_launcher;signal=SIGTERM;result=signal_requested",
+          "reobserved_owned_residual_pids=87847",
+          "reobserved_unknown_residual_pids="
+        ]
+      },
+      "targetedPIDs": [
+        87847
+      ],
+      "signalResults": [
+        {
+          "signalName": "SIGTERM",
+          "errorCode": {
+            "state": "unknown"
+          },
+          "disposition": "signal_requested",
+          "target": {
+            "ownershipBasis": "descendant_observed_after_launcher",
+            "binding": {
+              "launcherPID": 87845,
+              "taskSessionID": "9EF45337-C897-4946-9ACB-E6ED94ECF562",
+              "launcherStartIdentity": {
+                "startTime": {
+                  "state": "known",
+                  "value": "2026-10-02T18:10:42Z"
+                }
+              },
+              "runtimeAttemptID": "42E8EFBD-A576-4F9D-9B24-4DBFEBF6BE19"
+            },
+            "startIdentity": {
+              "startTime": {
+                "state": "known",
+                "value": "2026-10-02T18:10:42Z"
+              }
+            },
+            "pid": 87847
+          }
+        }
+      ],
+      "reobservedAfterCleanup": {
+        "state": "known",
+        "value": true
+      },
+      "disposition": "incomplete_residual"
+    },
+    "late": {
+      "targetingBasis": {
+        "state": "known",
+        "value": [
+          "the post-stop owned residual was not present with the same exact identity in the preflight cleanup scope"
+        ]
+      },
+      "targetedPIDs": [],
+      "reobservedAfterCleanup": {
+        "state": "known",
+        "value": false
+      },
+      "disposition": "refused_unsafe_target"
+    }
+  },
+  "exact_owned_teardown": [
+    {
+      "original": {
+        "pid": 87888,
+        "sec": 1790964644,
+        "usec": 378265,
+        "ppid": 87886,
+        "pgid": 87888
+      },
+      "events": [
+        {
+          "signal": "SIGTERM",
+          "pid": 87888,
+          "identity": {
+            "pid": 87888,
+            "sec": 1790964644,
+            "usec": 378265,
+            "ppid": 1,
+            "pgid": 87888
+          },
+          "at": "2026-10-02T18:10:45.899220+00:00"
+        }
+      ],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87887,
+        "sec": 1790964644,
+        "usec": 328549,
+        "ppid": 87886,
+        "pgid": 87887
+      },
+      "events": [
+        {
+          "signal": "SIGTERM",
+          "pid": 87887,
+          "identity": {
+            "pid": 87887,
+            "sec": 1790964644,
+            "usec": 328549,
+            "ppid": 1,
+            "pgid": 87887
+          },
+          "at": "2026-10-02T18:10:46.009263+00:00"
+        }
+      ],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87886,
+        "sec": 1790964644,
+        "usec": 304121,
+        "ppid": 87808,
+        "pgid": 87886
+      },
+      "events": [],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87847,
+        "sec": 1790964642,
+        "usec": 685421,
+        "ppid": 87845,
+        "pgid": 87847
+      },
+      "events": [
+        {
+          "signal": "SIGTERM",
+          "pid": 87847,
+          "identity": {
+            "pid": 87847,
+            "sec": 1790964642,
+            "usec": 685421,
+            "ppid": 1,
+            "pgid": 87847
+          },
+          "at": "2026-10-02T18:10:46.119306+00:00"
+        },
+        {
+          "signal": "SIGKILL",
+          "pid": 87847,
+          "identity": {
+            "pid": 87847,
+            "sec": 1790964642,
+            "usec": 685421,
+            "ppid": 1,
+            "pgid": 87847
+          },
+          "at": "2026-10-02T18:10:46.220931+00:00"
+        }
+      ],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87845,
+        "sec": 1790964642,
+        "usec": 660408,
+        "ppid": 87808,
+        "pgid": 87845
+      },
+      "events": [],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87812,
+        "sec": 1790964641,
+        "usec": 13363,
+        "ppid": 87811,
+        "pgid": 87812
+      },
+      "events": [],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87811,
+        "sec": 1790964640,
+        "usec": 989896,
+        "ppid": 87808,
+        "pgid": 87811
+      },
+      "events": [],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87808,
+        "sec": 1790964640,
+        "usec": 261495,
+        "ppid": 87804,
+        "pgid": 87804
+      },
+      "events": [
+        {
+          "signal": "SIGTERM",
+          "pid": 87808,
+          "identity": {
+            "pid": 87808,
+            "sec": 1790964640,
+            "usec": 261495,
+            "ppid": 87804,
+            "pgid": 87804
+          },
+          "at": "2026-10-02T18:10:46.330994+00:00"
+        }
+      ],
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 87807,
+        "sec": 1790964640,
+        "usec": 259883,
+        "ppid": 87804,
+        "pgid": 87804
+      },
+      "events": [
+        {
+          "signal": "SIGTERM",
+          "pid": 87807,
+          "identity": {
+            "pid": 87807,
+            "sec": 1790964640,
+            "usec": 259883,
+            "ppid": 87804,
+            "pgid": 87804
+          },
+          "at": "2026-10-02T18:10:46.441060+00:00"
+        }
+      ],
+      "current": null
+    }
+  ],
+  "negative_evidence_preserved": {
+    "stale_catalog_pin_run": "481 selfchecks PASS; 11 Python with2 failures on3stale source-only pins, XCTest NOT_RUN",
+    "source_review": "cleanup78-source-review-v1.json",
+    "changed_catalog_records": [
+      "CONDUIT-API-SCOPE",
+      "LIFECYCLE-PLANNER",
+      "LIFECYCLE-TESTS"
+    ],
+    "historical_native_records": "UNCHANGED"
+  },
+  "raw_receipt_sha256": {
+    "cleanup78-initial-integration-scope-red.log": "d6757aae1228c417babd1e4527f5ac2c16f4e17e4e0ff45ed3a25f73fced706f",
+    "cleanup78-binding-focused-sealed-plan.log": "75f3bdf31e3f7ec22cb826f8e79d6766f7d843eef774b53e8b68f7bd98f961d4",
+    "cleanup78-binding-native-core-v1.log": "e0c6fe97443967fd3ccdc6a24d24209c7d64b3a28cfa34deb3650709c7dc8039",
+    "cleanup78-binding-native-core-v1.json": "08d352ca75de679dd10fdef39e826b4b14cf63d6b01af292979e4b95c5baeda8",
+    "cleanup78-binding-native-core-v3.log": "130869c0acf5b3894f337fc440d7e790ba54d0d0316dc423c5cef4b7c32ec8dd",
+    "cleanup78-binding-native-core-v3.json": "2897bf1f809021b87ba2f8e03c5317a1028d45b7e7f16c06f4923d1af15c098e",
+    "cleanup78-app-pending-stop-v1.py": "4165fa75fff42b24106dda1114cf7b4da4799f089c7b10bf51bb47bf3046696b",
+    "cleanup78-app-pending-stop-v1.log": "405425ba705b2da9c3ec30589b3d7890af9545124b19fbdf1dd28361e74ec116",
+    "cleanup78-app-pending-stop-v1.json": "2e39b0b305ad61682bab3fdbd8568151039f3be56555ee59c265d37450d1f265",
+    "cleanup78-deferred-focused-v1.log": "96e2608a0429c4d0721e9f04a535b86bd6a61688f56f0d772926491f94c7a445",
+    "cleanup78-full-native-prepins-v1.log": "be5b6d6d39f630a9fbfd75c531fc006cacf69c3ddfd306c59c5b52b0267de900",
+    "cleanup78-final-full-native-v1.log": "d550bf2c0c00f9e9934735f7ae1a7b3f1521deaf9e01141f11a787ce12d4a481",
+    "cleanup78-final-native-core-v1.json": "684eba8f7386c2cd295fe3e810527ff027450f452f3eaad7d1fc3e21f545270b",
+    "cleanup78-final-native-build-v1.log": "9347ea40b4d19ec10b491e8393fb35af375f887f0df5ed0865ba9515245638a5",
+    "cleanup78-app-pending-stop-v4.log": "5eb0140e040b152e5d24acb4afb05a6e4aff35a14bdc53db26b6320129e36c7f",
+    "cleanup78-app-pending-stop-v4.json": "cef43ba749f3a3620e237acbd13e3cc3dde16a72c8b1c40a21150041d166ee0f",
+    "cleanup78-app-pending-stop-v5.py": "14a9f7e1daea63f9313df7f14e60f127e8b6c0a7e3fc581357c257d594a785ce",
+    "cleanup78-app-pending-stop-v5.log": "6ebf9e30874e7a55f3a11e253d784203a44d1913646f6898dbde4bc0543f6a74",
+    "cleanup78-app-pending-stop-v5.json": "2b56595d254e86eedaa904e4e185cb1affade1dfdf2a279b471230bbc26fd357"
+  },
+  "authority": {
+    "provider_calls": 0,
+    "HOME_reassigned": false,
+    "CODEX_HOME_reassigned": false,
+    "operator_install_release": "NOT_RUN_NOT_AUTHORIZED",
+    "independent_qualification": "NOT_RUN_SEPARATE_GATE",
+    "hosted_ci": "NOT_RUN_AT_OWNER_FREEZE",
+    "restart_cleanup": "UNSUPPORTED_IN_MEMORY_INTENT_ONLY",
+    "atomic_kernel_incarnation_handle": "NOT_CLAIMED",
+    "provider_completion_objective_acceptance": "UNKNOWN_NOT_ESTABLISHED"
+  }
+}
