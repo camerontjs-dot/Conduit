@@ -59,6 +59,28 @@ final class CodexAppServerStreamPumpTests: XCTestCase {
         XCTAssertTrue(recorder.deliveries.isEmpty)
     }
 
+    func testMalformedMatchingRPCErrorIsProtocolFailureNotErrorDelivery() {
+        let failed = expectation(description: "invalid JSON-RPC error rejected")
+        let recorder = CodexDeliveryRecorder { _ in }
+        let pump = CodexAppServerStreamPump(
+            configuration: configuration(deliveryCoalescingInterval: 0),
+            deliveryQueue: DispatchQueue(label: "test.codex.delivery.invalid-rpc-error"),
+            onDelivery: { recorder.record($0) },
+            onFailure: {
+                recorder.record(failure: $0)
+                failed.fulfill()
+            }
+        )
+
+        XCTAssertTrue(
+            pump.ingest(Data(#"{"id":3,"error":null}"#.utf8) + Data([0x0A]))
+        )
+
+        wait(for: [failed], timeout: 2)
+        XCTAssertEqual(recorder.failure, .malformedMessage)
+        XCTAssertTrue(recorder.deliveries.isEmpty)
+    }
+
     func testOversizedChunkIsRejectedBeforeItIsQueued() {
         let failed = expectation(description: "chunk limit failure")
         let recorder = CodexDeliveryRecorder { _ in }
