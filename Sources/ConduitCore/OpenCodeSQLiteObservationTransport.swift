@@ -247,8 +247,9 @@ public struct OpenCodeSQLiteObservationTransport: OpenCodeProviderObservationTra
                   path.hasPrefix(instance.stateDirectory.path + "/") else {
                 throw TransportError.persistenceUnavailable("Qualification discovery requires an explicit owned OPENCODE_DB; default provider inventory is disabled.")
             }
-            let url = URL(fileURLWithPath: path).standardizedFileURL
-            guard url.path == path, url.resolvingSymlinksInPath().path == path,
+            let url = URL(fileURLWithPath: path)
+            guard instance.containsOwnedURL(url),
+                  (try? ConduitInstanceConfiguration.canonicalPOSIXPath(path)) == path,
                   fileManager.fileExists(atPath: path) else {
                 throw TransportError.persistenceUnavailable("Qualification OpenCode persistence is not an exact owned file.")
             }

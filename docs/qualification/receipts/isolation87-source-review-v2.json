@@ -1,0 +1,59 @@
+{
+  "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "classification": "REVIEWED_SOURCE_ONLY_RENEWAL_NOT_PROVIDER_RUNTIME_QUALIFICATION",
+  "non_claims": [
+    "No provider runtime, hosted, continuity or objective acceptance supplied",
+    "No independent qualification"
+  ],
+  "predecessor": {
+    "artifact": {
+      "path": "Sources/Conduit/AppModel.swift",
+      "sha256": "cd9892938647909780f03b96c946853a79c30a77a25f1bb7da50cda94b1f868f"
+    },
+    "authority": "reviewed source-only #87 qualification-mode successor; ordinary provider protocol/delivery functions preserved; see receipts/isolation87-source-review-v1.json",
+    "freshness": "current candidate source snapshot; not a provider runtime observation",
+    "identity": {
+      "path": "Sources/Conduit/AppModel.swift"
+    },
+    "kind": "source_test",
+    "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior. Qualification mode refuses implicit operator inventory/credential access; this source review supplies no new native provider, hosted, continuity or objective-acceptance evidence.",
+    "observed_at_utc": "2026-10-02T16:09:09Z",
+    "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
+  },
+  "predecessor_disposition": "TERMINAL_OWNER_NATIVE_FAIL_PRECREATED_ROOT_REFUSED",
+  "predecessor_head": "cc531dbcda2ec6b192b419cfec4b34e5e7a05020",
+  "preserved": "Every other conformance matrix field/status/native record, schema, validator and wrapper unchanged from cc531dbcda2e; earlier v1 source review and first failed native attempt remain immutable.",
+  "protected_functions": {
+    "sessionAPICreateTask": {
+      "base_and_successor_function_bytes_equal": true,
+      "sha256": "399b85061389f90b2f0cd83469173c60fa6ad177fe3b591acccb9d247af0a64a"
+    },
+    "sessionAPIDeliver": {
+      "base_and_successor_function_bytes_equal": true,
+      "sha256": "1f6a342ffe3e4038135e0945d835de59e0167b013edf29fe618c910ff839dc5b"
+    },
+    "sessionAPISendPrompt": {
+      "base_and_successor_function_bytes_equal": true,
+      "sha256": "14a5a48a968512cb78a59824cde20735eb8b22998b9231e448ffb9d5202931c7"
+    }
+  },
+  "record_id": "CONDUIT-API-SCOPE",
+  "reviewed_scope": "AppModel qualification root parsing, bootstrap scan and manual root selection; POSIX path identity replaces Foundation aliases only within explicit qualification mode",
+  "schema_version": 1,
+  "successor": {
+    "artifact": {
+      "path": "Sources/Conduit/AppModel.swift",
+      "sha256": "1f375d24561512ace753699d161ab0bc295fc34efc9085e10d9705cb994a747b"
+    },
+    "authority": "reviewed source-only #87 POSIX owned-root successor; ordinary create/send/deliver functions preserved; see receipts/isolation87-source-review-v2.json",
+    "freshness": "current candidate source snapshot; not a provider runtime observation",
+    "identity": {
+      "path": "Sources/Conduit/AppModel.swift"
+    },
+    "kind": "source_test",
+    "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior. Qualification mode refuses implicit operator inventory/credential access; this source review supplies no new native provider, hosted, continuity or objective-acceptance evidence.",
+    "observed_at_utc": "2026-10-02T16:43:59Z",
+    "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
+  },
+  "successor_branch": "fix/issue87-owned-state-posix-successor-20261002"
+}

@@ -1,8 +1,21 @@
 import Foundation
 import XCTest
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 @testable import ConduitCore
 
 final class ConduitInstanceConfigurationTests: XCTestCase {
+    private func fixtureDirectory() throws -> URL {
+        let rawParent = ProcessInfo.processInfo.environment["CONDUIT_TEST_TMPDIR"] ?? FileManager.default.temporaryDirectory.path
+        let parent = try ConduitInstanceConfiguration.canonicalPOSIXPath(rawParent)
+        let directory = URL(fileURLWithPath: parent).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
     func testOrdinaryDefaultsDoNotChange() throws {
         let home = URL(fileURLWithPath: "/fixture-home")
         let config = try ConduitInstanceConfiguration.resolve(environment: [:], home: home)
@@ -36,8 +49,7 @@ final class ConduitInstanceConfigurationTests: XCTestCase {
     }
 
     func testUnownedExistingRootAndSymlinkAreRefused() throws {
-        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        let parent = try fixtureDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
         let unowned = parent.appendingPathComponent("unowned")
         try FileManager.default.createDirectory(at: unowned, withIntermediateDirectories: true)
@@ -51,8 +63,9 @@ final class ConduitInstanceConfigurationTests: XCTestCase {
     }
 
     func testOwnedRootPreferencesPersistAndRejectLinkedArtifacts() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
+        let parent = try fixtureDirectory()
+        let root = parent.appendingPathComponent("state")
+        defer { try? FileManager.default.removeItem(at: parent) }
         let config = try ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": root.path, "CONDUIT_SESSION_API_PORT": "18750"])
         try config.prepareQualificationStateRoot()
         let prefs = try QualificationPreferences(file: config.stateDirectory.appendingPathComponent("preferences.plist"))
@@ -77,8 +90,9 @@ final class ConduitInstanceConfigurationTests: XCTestCase {
     }
 
     func testWrongMarkerAndHardLinkedArtifactAreRefused() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-        defer { try? FileManager.default.removeItem(at: root) }
+        let parent = try fixtureDirectory()
+        let root = parent.appendingPathComponent("state")
+        defer { try? FileManager.default.removeItem(at: parent) }
         let config = try ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": root.path, "CONDUIT_SESSION_API_PORT": "18750"])
         try config.prepareQualificationStateRoot()
         let marker = config.stateURL(ConduitInstanceConfiguration.rootMarkerName)
@@ -94,9 +108,31 @@ final class ConduitInstanceConfigurationTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: external), "protected")
     }
 
+    func testMarkedCanonicalRootCanBeReopened() throws {
+        let parent = try fixtureDirectory()
+        let root = parent.appendingPathComponent("state")
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let environment = ["CONDUIT_QUALIFICATION_ROOT": root.path, "CONDUIT_SESSION_API_PORT": "18750"]
+        let first = try ConduitInstanceConfiguration.resolve(environment: environment)
+        try first.prepareQualificationStateRoot()
+        let reopened = try ConduitInstanceConfiguration.resolve(environment: environment)
+        XCTAssertEqual(reopened.stateDirectory.path, root.path)
+        try reopened.prepareQualificationStateRoot()
+    }
+
+    func testBooleanSchemaMarkerIsNotNumericAuthority() throws {
+        let parent = try fixtureDirectory()
+        let root = parent.appendingPathComponent("state")
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let config = try ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": root.path, "CONDUIT_SESSION_API_PORT": "18750"])
+        try config.prepareQualificationStateRoot()
+        let falseMarker = try JSONSerialization.data(withJSONObject: ["schema_version": true, "kind": "conduit_qualification", "root": root.path])
+        try falseMarker.write(to: config.stateURL(ConduitInstanceConfiguration.rootMarkerName))
+        XCTAssertThrowsError(try config.prepareQualificationStateRoot())
+    }
+
     func testSettingsWithoutConfiguredRootDoNotAutodetect() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try fixtureDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let settings = SettingsStore.loadSnapshot(directory: root, allowRootAutodetection: false)
         XCTAssertNil(settings.mainframeRoot)

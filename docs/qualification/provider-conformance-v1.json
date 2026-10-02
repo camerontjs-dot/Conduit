@@ -205,16 +205,16 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "cd9892938647909780f03b96c946853a79c30a77a25f1bb7da50cda94b1f868f"
+        "sha256": "1f375d24561512ace753699d161ab0bc295fc34efc9085e10d9705cb994a747b"
       },
-      "authority": "reviewed source-only #87 qualification-mode successor; ordinary provider protocol/delivery functions preserved; see receipts/isolation87-source-review-v1.json",
+      "authority": "reviewed source-only #87 POSIX owned-root successor; ordinary create/send/deliver functions preserved; see receipts/isolation87-source-review-v2.json",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
       "identity": {
         "path": "Sources/Conduit/AppModel.swift"
       },
       "kind": "source_test",
       "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior. Qualification mode refuses implicit operator inventory/credential access; this source review supplies no new native provider, hosted, continuity or objective-acceptance evidence.",
-      "observed_at_utc": "2026-10-02T16:09:09Z",
+      "observed_at_utc": "2026-10-02T16:43:59Z",
       "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
     },
     "CONFORMANCE-HARNESS": {

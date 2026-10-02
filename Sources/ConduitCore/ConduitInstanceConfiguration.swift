@@ -28,19 +28,54 @@ public struct ConduitInstanceConfiguration: Equatable, Sendable {
               qualificationPorts.contains(port) else {
             throw ConfigurationError("Qualification requires an absolute CONDUIT_QUALIFICATION_ROOT and canonical CONDUIT_SESSION_API_PORT in 18750...18849.")
         }
-        let url = URL(fileURLWithPath: root, isDirectory: true).standardizedFileURL
-        let homePath = home.standardizedFileURL.path
-        let operatorPath = home.appendingPathComponent(".conduit").standardizedFileURL.path
+        let url = URL(fileURLWithPath: root, isDirectory: true)
+        let homePath = home.path
+        let operatorPath = home.appendingPathComponent(".conduit").path
         guard root == url.path, url.path != "/", url.path != homePath,
               url.path != operatorPath, !url.path.hasPrefix(operatorPath + "/"),
-              url.resolvingSymlinksInPath().path == url.path else {
+              try canonicalPOSIXPath(root) == root else {
             throw ConfigurationError("Qualification root must be canonical, separate from operator state, and free of symlink ancestors.")
         }
         return Self(stateDirectory: url, sessionAPIPort: port, isQualification: true)
     }
 
+    /// Foundation file-URL normalization can choose a display alias for an
+    /// existing macOS temporary path. Filesystem ownership uses POSIX realpath,
+    /// including the deepest existing ancestor when the final root is new.
+    public static func canonicalPOSIXPath(_ path: String) throws -> String {
+        guard path.hasPrefix("/"), !path.contains("\0"),
+              path == "/" || (!path.hasSuffix("/") && !path.contains("//")),
+              !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+            throw ConfigurationError("Qualification path is not lexically canonical.")
+        }
+        var existing = path
+        var suffix: [String] = []
+        var attributes = stat()
+        while lstat(existing, &attributes) != 0 {
+            guard errno == ENOENT, existing != "/" else {
+                throw ConfigurationError("Could not inspect qualification path ancestor.")
+            }
+            let components = existing.split(separator: "/").map(String.init)
+            guard let last = components.last else { throw ConfigurationError("Invalid qualification path.") }
+            suffix.insert(last, at: 0)
+            existing = components.count == 1 ? "/" : "/" + components.dropLast().joined(separator: "/")
+        }
+        guard let pointer = realpath(existing, nil) else {
+            throw ConfigurationError("Qualification path has an unresolved filesystem identity.")
+        }
+        let base = String(cString: pointer)
+        free(pointer)
+        return suffix.reduce(base) { ($0 == "/" ? "" : $0) + "/" + $1 }
+    }
+
+    public func containsOwnedURL(_ url: URL) -> Bool {
+        guard isQualification else { return true }
+        guard let path = try? Self.canonicalPOSIXPath(url.path) else { return false }
+        return path.hasPrefix(stateDirectory.path + "/")
+    }
+
     public func stateURL(_ component: String, isDirectory: Bool = false) -> URL {
-        precondition(!component.contains("/") && component != ".." && !component.isEmpty)
+        precondition(!component.contains("/") && component != "." && component != ".." && !component.isEmpty)
         return stateDirectory.appendingPathComponent(component, isDirectory: isDirectory)
     }
 
@@ -48,7 +83,7 @@ public struct ConduitInstanceConfiguration: Equatable, Sendable {
     /// opened. Existing foreign files, symlinks and hard links are not adopted.
     public func prepareQualificationStateRoot(fileManager: FileManager = .default) throws {
         guard isQualification else { return }
-        guard stateDirectory.resolvingSymlinksInPath().path == stateDirectory.path else {
+        guard try Self.canonicalPOSIXPath(stateDirectory.path) == stateDirectory.path else {
             throw ConfigurationError("Qualification root acquired a symlink.")
         }
         let marker = stateURL(Self.rootMarkerName)
@@ -62,10 +97,10 @@ public struct ConduitInstanceConfiguration: Equatable, Sendable {
             if !children.isEmpty {
                 try validateOwnedTree(fileManager: fileManager)
                 let data = try Data(contentsOf: marker)
-                guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      value["schema_version"] as? Int == 1,
-                      value["kind"] as? String == "conduit_qualification",
-                      value["root"] as? String == stateDirectory.path else {
+                let value = try JSONDecoder().decode(RootMarker.self, from: data)
+                guard value.schema_version == 1,
+                      value.kind == "conduit_qualification",
+                      value.root == stateDirectory.path else {
                     throw ConfigurationError("Existing state lacks the exact qualification root marker.")
                 }
                 return
@@ -95,6 +130,12 @@ public struct ConduitInstanceConfiguration: Equatable, Sendable {
                 throw ConfigurationError("Qualification state contains a foreign, linked or nonregular artifact.")
             }
         }
+    }
+
+    private struct RootMarker: Decodable {
+        let schema_version: Int
+        let kind: String
+        let root: String
     }
 
     private static var rootLease: Int32 = -1

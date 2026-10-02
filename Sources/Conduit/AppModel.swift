@@ -1416,12 +1416,12 @@ final class AppModel: ObservableObject {
         )
         if instance.isQualification {
             if let root = settings.mainframeRoot {
-                let resolved = root.resolvingSymlinksInPath().standardizedFileURL
-                guard resolved.path == root.standardizedFileURL.path,
-                      resolved.path.hasPrefix(instance.stateDirectory.path + "/") else {
+                guard instance.containsOwnedURL(root),
+                      let resolved = try? ConduitInstanceConfiguration.canonicalPOSIXPath(root.path) else {
                     fputs("Conduit qualification refused external MainFrame root.\n", stderr)
                     exit(78)
                 }
+                settings.mainframeRoot = URL(fileURLWithPath: resolved, isDirectory: true)
             }
             // Never restore a copied security bookmark or adopt shared tmux.
             settings.mainframeRootBookmark = nil
@@ -1469,6 +1469,11 @@ final class AppModel: ObservableObject {
         guard let root = settings.mainframeRoot else {
             projects = []
             selectedProjectID = nil
+            return false
+        }
+        guard ConduitInstanceConfiguration.current.containsOwnedURL(root) else {
+            projects = []
+            errorMessage = "Qualification cannot scan an external MainFrame root."
             return false
         }
         guard !isScanningProjects else { return false }
@@ -1556,6 +1561,10 @@ final class AppModel: ObservableObject {
         panel.allowsMultipleSelection = false
         panel.directoryURL = settings.mainframeRoot
         if panel.runModal() == .OK, let url = panel.url {
+            guard ConduitInstanceConfiguration.current.containsOwnedURL(url) else {
+                errorMessage = "Qualification MainFrame roots must remain inside the owned qualification root."
+                return
+            }
             endScopedRootAccess()
             do {
                 let bookmark = try url.bookmarkData(

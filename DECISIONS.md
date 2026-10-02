@@ -2063,7 +2063,9 @@ externally started tunnel untouched.
 **Decision:** Qualification is an explicit process mode selected by the paired
 `CONDUIT_QUALIFICATION_ROOT` and `CONDUIT_SESSION_API_PORT` variables. A port-only
 launch is refused. The root must be canonical and separate from operator state;
-only new/empty roots or roots with the exact qualification marker are opened.
+only new/empty roots or roots with the exact typed qualification marker are opened.
+Canonical identity uses POSIX realpath rather than Foundation display aliases,
+including when an existing marked root is reopened.
 Linked, foreign or nonregular state is refused, and a process-lifetime lease
 prevents two app processes from writing the same root. The port is limited to
 18750–18849. Invalid configuration and occupied ports never fall back to 8750.
@@ -2087,7 +2089,9 @@ unpublished mechanical child. Current maintained main still used 8750 and
 operator-default preferences/state paths. A new maintained candidate is required
 for actual AppModel/status/events acceptance without operator contamination.
 The historical D-058 port decision on #91 remains evidence lineage, not a current
-main acceptance claim.
+main acceptance claim. The first maintained owner candidate, cc531dbcda2e, failed
+the actual-app pre-created-root check and is preserved. This POSIX successor
+uses a separate branch and new receipts; that failure is not relabeled.
 
 **Acceptance:** Portable configuration/path/ownership/preferences controls,
 actual isolated app/listener negative controls and repository-native tests/build
