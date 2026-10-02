@@ -27,6 +27,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Explorer can explicitly edit eligible Markdown, source, configuration, and
+  ordinary UTF-8 text with bounded undo/redo, literal find and replace, and
+  Save/Discard/Cancel navigation, tab-close, and window-close decisions. Save
+  preserves supported LF/CRLF line endings and checks exact disk bytes through
+  the existing file writer. Conflicts retain the buffer and offer read-only
+  disk comparison; binary files and unsupported encodings remain read-only
+  (#54). Application quit protection remains a separate follow-up.
+
 - Explorer uses one exact-path preview route for bounded UTF-8 text, static
   native images, PDFs, and explicit unsupported-file metadata. Images provide
   Fit, 100%, zoom, and scrolling; PDFs provide page navigation, Fit, and zoom.
