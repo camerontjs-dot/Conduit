@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 /// them and enough room remains. Runtime/session identity lives below this shell
 /// and is never recreated by opening or closing chrome.
 struct RootView: View {
+    @EnvironmentObject private var explorerApplicationDelegate: MainframeExplorerApplicationDelegate
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
@@ -44,7 +45,7 @@ struct RootView: View {
         }
         .tint(palette.accent)
         .background(palette.app)
-        .background(MainframeExplorerWindowCloseGuard(explorer: explorerModel).frame(width: 0, height: 0))
+        .background(MainframeExplorerWindowCloseGuard(explorer: explorerModel, applicationDelegate: explorerApplicationDelegate).frame(width: 0, height: 0))
         .conduitSurfaceChrome(
             finish: themeStore.surfaceFinish,
             colorScheme: colorScheme
