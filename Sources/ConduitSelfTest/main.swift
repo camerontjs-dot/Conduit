@@ -3748,6 +3748,74 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Durable Codex terminal failure (#114)
+
+check("fractional and overflowing RPC ids cannot alias integer requests",
+      CodexJSONRPCID.parse(.number(3.5)) == nil
+      && CodexJSONRPCID.parse(.number(Double.greatestFiniteMagnitude)) == nil
+      && CodexJSONRPCID.parse(.number(3)) == .number(3)
+      && CodexJSONRPCID.parse(.string("3")) == .string("3"))
+check("conflicting RPC reply shapes are malformed",
+      CodexJSONRPCMessage.parseLine(#"{"id":3,"result":{},"error":{"code":400,"message":"rejected"}}"#) == nil
+      && CodexJSONRPCMessage.parseLine(#"{"id":3,"method":"turn/started","error":{"code":400,"message":"rejected"}}"#) == nil)
+
+withTempDir { directory in
+    let log = ConversationEventLog(directory: directory, taskSessionID: TaskSessionID())
+    let queued = SessionPresentation.promptEvent(text: "fixture", attachmentPaths: [], renderedPayload: "fixture")
+    let prompt = SessionPresentation.updatingPromptDelivery(in: [queued], eventID: queued.id, to: .delivered)[0]
+    var receipt = ProviderTurnFailureReceipt.codex(
+        threadID: "fixture-thread", turnID: "fixture-turn", source: "error.willRetry=false",
+        error: .object(["codexErrorInfo": .string("unauthorized"),
+                        "message": .string("untrusted private message")])
+    )
+    receipt.promptEventID = prompt.id
+    do {
+        try log.append(prompt)
+        try log.append(SessionPresentation.providerFailureEvent(receipt))
+        let replay = log.read()
+        let source = ConduitSessionEventSource(taskSessionID: "fixture-task", backend: .appServer,
+            sessionLifecycle: "closed", runtimeState: "closed", live: false, ready: false,
+            events: replay.events, persistedThreadID: "fixture-thread")
+        let turn = ConduitSessionEventExport.turnSnapshot(source: source)
+        let page = ConduitSessionEventExport.page(source: source)
+        check("Codex terminal failure survives durable replay without a live adapter", turn.state == "failed" && turn.failure == receipt)
+        check("session status and events agree about the failed provider turn", page.turn == turn && page.observation.checkpoint == .structuredFailed)
+        check("provider failure preserves observed runtime close separately", page.session.lifecycle == "closed" && !page.session.live)
+        check("provider failure produces no assistant output", replay.events.allSatisfy { if case .agentOutput = $0.kind { return false }; return true })
+        check("provider failure withholds arbitrary error text", receipt.messageWithheld && !receipt.reason.contains("private message"))
+        var staleLive = source
+        staleLive.adapter = .init(threadID: "fixture-thread", turnActive: true, lastTurnStatus: "failed", pendingApproval: true)
+        check("latest durable failed input outranks stale active and approval flags",
+              ConduitSessionEventExport.turnSnapshot(source: staleLive).failure == receipt
+              && ConduitSessionEventExport.page(source: staleLive).observation.checkpoint == .structuredFailed)
+        let control = ConduitSessionEventSource(taskSessionID: "control", backend: .appServer,
+            sessionLifecycle: "closed", runtimeState: "closed", live: false, ready: false, events: [prompt])
+        check("runtime close without a terminal protocol result is not provider failure", ConduitSessionEventExport.turnSnapshot(source: control).state != "failed")
+    } catch {
+        check("durable provider failure selftest writes real history", false)
+    }
+}
+
+var replayMapper = CodexAppServerMapper()
+replayMapper.threadID = "fixture-thread"
+let replayStart = CodexJSONRPCMessage.notification(method: "turn/started", params: .object([
+    "threadId": .string("fixture-thread"), "turn": .object(["id": .string("fixture-turn")])
+]))
+_ = replayMapper.apply(replayStart)
+_ = replayMapper.apply(.notification(method: "turn/completed", params: .object([
+    "threadId": .string("fixture-thread"),
+    "turn": .object(["id": .string("fixture-turn"), "status": .string("failed")])
+])))
+check("terminal turn cannot reopen from duplicate start",
+      replayMapper.apply(replayStart).isEmpty && !replayMapper.turnActive && replayMapper.lastTurnStatus == "failed")
+replayMapper.resetTurn()
+check("new-input reset retains terminal turn identity", replayMapper.apply(replayStart).isEmpty && !replayMapper.turnActive)
+let replayNext = replayMapper.apply(.notification(method: "turn/started", params: .object([
+    "threadId": .string("fixture-thread"), "turn": .object(["id": .string("next-turn")])
+])))
+check("distinct next turn starts without inheriting failure",
+      replayNext == [.turnStarted(id: "next-turn")] && replayMapper.turnActive && replayMapper.lastTurnStatus == nil)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

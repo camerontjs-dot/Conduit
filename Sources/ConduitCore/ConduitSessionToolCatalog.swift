@@ -45,6 +45,19 @@ public enum ConduitSessionToolCatalog {
         "openWorldHint": false,
     ]
 
+    private static let providerFailureSchema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "provider_id": ["type": "string"], "runtime": ["type": "string"],
+            "thread_id": ["type": "string"], "turn_id": ["type": "string"],
+            "request_id": ["type": "integer"], "prompt_event_id": ["type": "string"],
+            "model_id": ["type": "string"], "source": ["type": "string"],
+            "error_type": ["type": "string"], "http_status_code": ["type": "integer"],
+            "rpc_error_code": ["type": "integer"], "reason": ["type": "string"],
+            "message_withheld": ["type": "boolean"]
+        ]
+    ]
+
     private static let sessionEventsOutputSchema: [String: Any] = [
         "type": "object",
         "required": [
@@ -80,6 +93,7 @@ public enum ConduitSessionToolCatalog {
                         "enum": ["live", "persisted", "unavailable"],
                     ],
                     "pending_approval": ["type": "boolean"],
+                    "failure": providerFailureSchema,
                 ],
             ],
             "observation": [
@@ -145,6 +159,7 @@ public enum ConduitSessionToolCatalog {
                             ],
                         ],
                         "turn_status": ["type": "string"],
+                        "provider_failure": providerFailureSchema,
                         "content_digest": ["type": "string"],
                     ],
                 ],
@@ -263,7 +278,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_session_events",
-            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification.",
+            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a terminal failure; partial output, if present, is not completion. Safe Codex provider_turn_failure receipts survive runtime close. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification or objective acceptance.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Durable Conduit task UUID."),

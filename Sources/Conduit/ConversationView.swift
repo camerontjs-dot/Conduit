@@ -525,6 +525,11 @@ struct ConversationView: View {
         case .boundary(let event):
             if case .sessionOpened(let entry) = event.kind {
                 sessionBoundary(entry, event: event)
+            } else if case .providerTurnFailed(let receipt) = event.kind {
+                Text("Provider turn failed: " + receipt.reason)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
         case .exchange(let user, let outputs):
             VStack(alignment: .leading, spacing: layout.withinTurnSpacing) {
@@ -1118,6 +1123,11 @@ struct ConversationHistoryView: View {
         case .boundary(let event):
             if case .sessionOpened(let entry) = event.kind {
                 historyBoundary(entry, event: event)
+            } else if case .providerTurnFailed(let receipt) = event.kind {
+                Text("Provider turn failed: " + receipt.reason)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
         case .exchange(let user, let outputs):
             VStack(alignment: .leading, spacing: layout.withinTurnSpacing) {

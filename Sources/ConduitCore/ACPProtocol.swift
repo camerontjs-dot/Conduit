@@ -149,7 +149,7 @@ public struct ACPSessionMapper: Equatable, Sendable {
 
     public mutating func apply(_ message: CodexJSONRPCMessage) -> [StructuredAdapterEffect] {
         switch message {
-        case .error(_, let message):
+        case .error(_, let message, _):
             return [.failed(message)]
         case .response(_, let result):
             return applyResponse(result)

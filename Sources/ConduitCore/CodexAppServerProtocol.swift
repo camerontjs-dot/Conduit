@@ -87,7 +87,10 @@ public enum CodexJSONRPCID: Equatable, Sendable {
         case .string(let value):
             return .string(value)
         case .number(let value):
-            return .number(Int(value))
+            // Conduit's outbound request ids are integers. Never truncate a
+            // fractional or out-of-range provider value into another request.
+            guard let integer = Int(exactly: value) else { return nil }
+            return .number(integer)
         default:
             return nil
         }
@@ -105,7 +108,7 @@ public enum CodexJSONRPCMessage: Equatable, Sendable {
     case notification(method: String, params: CodexJSON)
     case request(id: CodexJSONRPCID, method: String, params: CodexJSON)
     case response(id: CodexJSONRPCID, result: CodexJSON)
-    case error(id: CodexJSONRPCID?, message: String)
+    case error(id: CodexJSONRPCID?, message: String, code: Int? = nil)
 
     public static func parseLine(_ line: String) -> CodexJSONRPCMessage? {
         guard let json = CodexJSON.parseLine(line) else { return nil }
@@ -113,13 +116,27 @@ public enum CodexJSONRPCMessage: Equatable, Sendable {
     }
 
     public static func parse(_ json: CodexJSON) -> CodexJSONRPCMessage? {
+        guard case .object = json else { return nil }
         let id = CodexJSONRPCID.parse(json["id"])
+        if let rawID = json["id"], rawID != .null, id == nil { return nil }
         let method = json["method"]?.stringValue
         if let error = json["error"] {
-            let message = error["message"]?.stringValue ?? "app-server error"
-            return .error(id: id, message: message)
+            // JSON-RPC rejection authority requires a valid Error object, not
+            // merely a matching request id. Preserve malformed envelopes as a
+            // stream/protocol failure instead of manufacturing provider-turn
+            // failure semantics from correlation alone.
+            guard json["result"] == nil, json["method"] == nil,
+                  case .object(let object) = error,
+                  let message = object["message"]?.stringValue,
+                  case .number(let rawCode)? = object["code"],
+                  rawCode.isFinite,
+                  rawCode.rounded() == rawCode,
+                  (Double(Int32.min)...Double(Int32.max)).contains(rawCode)
+            else { return nil }
+            return .error(id: id, message: message, code: Int(rawCode))
         }
-        if let method {
+        if json["method"] != nil {
+            guard let method, !method.isEmpty, json["result"] == nil else { return nil }
             let params = json["params"] ?? .object([:])
             if let id {
                 return .request(id: id, method: method, params: params)
@@ -189,6 +206,7 @@ public enum CodexAppServerEffect: Equatable, Sendable {
     case upsertOutput(text: String, state: AgentOutputState)
     case requestApproval(CodexAppServerApproval)
     case turnCompleted(status: String)
+    case turnFailed(ProviderTurnFailureReceipt)
     case failed(String)
 }
 
@@ -200,6 +218,12 @@ public struct CodexAppServerMapper: Equatable, Sendable {
     public var turnActive = false
     public var lastTurnStatus: String?
     public var lastAppendWasNote = false
+    private var lastFailedTurnID: String?
+    private var lastTerminalTurnID: String?
+    // A new input resets its presentation, not the identity of retired turns.
+    // Keep tombstones for this host/thread so delayed notifications cannot
+    // become authority for a later input.
+    private var retiredTurnIDs: Set<String> = []
 
     public init() {}
 
@@ -207,7 +231,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
         _ message: CodexJSONRPCMessage
     ) -> [CodexAppServerEffect] {
         switch message {
-        case .error(_, let message):
+        case .error(_, let message, _):
             return [.failed(message)]
         case .response(_, let result):
             if let threadID = Self.threadID(in: result) {
@@ -219,6 +243,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             return applyNotification(method: method, params: params)
         case .request(let id, let method, let params):
             if Self.isApprovalMethod(method) {
+                guard acceptsNonterminal(params) else { return [] }
                 let summary = Self.approvalSummary(method: method, params: params)
                 return [
                     .requestApproval(
@@ -241,6 +266,8 @@ public struct CodexAppServerMapper: Equatable, Sendable {
         turnActive = false
         lastTurnStatus = nil
         lastAppendWasNote = false
+        lastFailedTurnID = nil
+        lastTerminalTurnID = nil
     }
 
     private mutating func applyNotification(
@@ -250,17 +277,31 @@ public struct CodexAppServerMapper: Equatable, Sendable {
         switch method {
         case "thread/started":
             if let threadID = Self.threadID(in: params) {
+                guard self.threadID == nil || self.threadID == threadID else { return [] }
                 self.threadID = threadID
                 return [.threadStarted(id: threadID)]
             }
             return []
         case "turn/started":
-            turnActive = true
-            activeTurnID = params["turn"]?["id"]?.stringValue
+            let incomingTurn = params["turn"]?["id"]?.stringValue
                 ?? params["turnId"]?.stringValue
-            guard let activeTurnID else { return [] }
-            return [.turnStarted(id: activeTurnID)]
+            guard let incomingTurn, !incomingTurn.isEmpty,
+                  !retiredTurnIDs.contains(incomingTurn),
+                  lastTurnStatus == nil,
+                  activeTurnID == nil || activeTurnID == incomingTurn
+            else { return [] }
+            if let incoming = params["threadId"]?.stringValue {
+                guard threadID == nil || threadID == incoming else { return [] }
+                threadID = incoming
+            }
+            turnActive = true
+            lastTurnStatus = nil
+            lastFailedTurnID = nil
+            lastTerminalTurnID = nil
+            activeTurnID = incomingTurn
+            return [.turnStarted(id: incomingTurn)]
         case "item/agentMessage/delta":
+            guard acceptsNonterminal(params) else { return [] }
             let delta = Self.deltaText(in: params)
             guard !delta.isEmpty else { return [] }
             if lastAppendWasNote, !accumulatedText.hasSuffix("\n"), !delta.hasPrefix("\n") {
@@ -271,6 +312,7 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             turnActive = true
             return [.upsertOutput(text: accumulatedText, state: .live)]
         case "item/started", "item/completed":
+            guard acceptsNonterminal(params) else { return [] }
             // Skip chat-chrome items (userMessage, agentMessage, …). Those
             // already have Conversation events; dumping `[userMessage]` into
             // the assistant card makes the turn look like a protocol dump.
@@ -282,12 +324,41 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             }
             return []
         case "turn/completed":
+            let incomingThread = params["threadId"]?.stringValue
+            let incomingTurn = params["turn"]?["id"]?.stringValue ?? params["turnId"]?.stringValue
+            if let incomingTurn, retiredTurnIDs.contains(incomingTurn) { return [] }
+            guard incomingThread == nil || threadID == nil || incomingThread == threadID,
+                  incomingTurn == nil || activeTurnID == nil || incomingTurn == activeTurnID
+            else { return [] }
+            if !turnActive, let lastFailedTurnID, incomingTurn != lastFailedTurnID { return [] }
+            if !turnActive, let lastTerminalTurnID, incomingTurn != lastTerminalTurnID { return [] }
+            let status = params["turn"]?["status"]?.stringValue
+                ?? params["status"]?.stringValue ?? "completed"
+            if status == "failed" {
+                guard let thread = incomingThread, thread == threadID,
+                      let turn = incomingTurn,
+                      turn == activeTurnID || (!turnActive && turn == lastFailedTurnID)
+                else { return [] }
+                let receipt = ProviderTurnFailureReceipt.codex(
+                    threadID: thread, turnID: turn,
+                    source: "turn/completed.failed", error: params["turn"]?["error"] ?? .null
+                )
+                turnActive = false
+                activeTurnID = nil
+                lastTurnStatus = "failed"
+                lastFailedTurnID = receipt.turnID
+                lastTerminalTurnID = receipt.turnID
+                retiredTurnIDs.insert(turn)
+                return [.turnFailed(receipt)]
+            }
+            if lastTurnStatus == "failed", incomingTurn == lastFailedTurnID { return [] }
+            if let terminalTurn = incomingTurn ?? activeTurnID {
+                retiredTurnIDs.insert(terminalTurn)
+            }
             turnActive = false
             activeTurnID = nil
-            let status = params["turn"]?["status"]?.stringValue
-                ?? params["status"]?.stringValue
-                ?? "completed"
             lastTurnStatus = status
+            lastTerminalTurnID = incomingTurn
             var effects: [CodexAppServerEffect] = []
             if !accumulatedText.isEmpty {
                 effects.append(.upsertOutput(text: accumulatedText, state: .closed))
@@ -295,10 +366,38 @@ public struct CodexAppServerMapper: Equatable, Sendable {
             effects.append(.turnCompleted(status: status))
             return effects
         case "error":
-            return [.failed(params["message"]?.stringValue ?? "app-server error")]
+            // Retryable and uncorrelated errors are diagnostics, not turn results.
+            guard params["willRetry"]?.boolValue == false,
+                  let thread = params["threadId"]?.stringValue, thread == threadID,
+                  let turn = params["turnId"]?.stringValue, turn == activeTurnID,
+                  turnActive, case .object = params["error"],
+                  params["error"]?["message"]?.stringValue != nil else { return [] }
+            let receipt = ProviderTurnFailureReceipt.codex(
+                threadID: thread, turnID: turn,
+                source: "error.willRetry=false", error: params["error"] ?? .null
+            )
+            turnActive = false
+            activeTurnID = nil
+            lastTurnStatus = "failed"
+            lastFailedTurnID = turn
+            lastTerminalTurnID = turn
+            retiredTurnIDs.insert(turn)
+            return [.turnFailed(receipt)]
         default:
             return []
         }
+    }
+
+    private func acceptsNonterminal(_ params: CodexJSON) -> Bool {
+        guard lastTurnStatus == nil else { return false }
+        if let incomingThread = params["threadId"]?.stringValue,
+           let threadID, incomingThread != threadID { return false }
+        if let incomingTurn = params["turnId"]?.stringValue
+            ?? params["turn"]?["id"]?.stringValue {
+            if retiredTurnIDs.contains(incomingTurn) { return false }
+            if let activeTurnID, incomingTurn != activeTurnID { return false }
+        }
+        return true
     }
 
     private static func isApprovalMethod(_ method: String) -> Bool {
