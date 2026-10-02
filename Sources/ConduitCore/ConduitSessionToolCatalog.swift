@@ -275,13 +275,13 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_query_mindgraph",
-            "Semantic search over the operator's local MindGraph index. scope selects knowledge or projects. Results are ranked nominations, not evidence; not_citable documents remain separate from results.",
+            "Semantic search over the operator's local MindGraph index. scope selects knowledge, projects or operations. Results are ranked nominations, not evidence; not_citable documents remain separate from results.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "question": property("string", "Free-text search phrase. Empty questions are refused."),
                 "scope": [
                     "type": "string",
-                    "enum": ["knowledge", "projects"],
+                    "enum": ["knowledge", "projects", "operations"],
                     "description": "Which index to search. Required; there is no blended default.",
                 ],
             ],
