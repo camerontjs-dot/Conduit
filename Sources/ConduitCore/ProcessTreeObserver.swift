@@ -129,10 +129,11 @@ public enum MacOSProcessTreeObserver {
         )
 
         if let prior, taskSessionID.isEmpty || runtimeAttempt.value == nil
-            || prior.taskSessionID != taskSessionID || prior.runtimeAttemptID != runtimeAttempt {
+            || prior.taskSessionID != taskSessionID || prior.runtimeAttemptID != runtimeAttempt
+            || prior.launcher.value?.pid != rootPID {
             return .unavailable(taskSessionID: taskSessionID, runtimeAttemptID: runtimeAttempt,
                                 providerTurnID: providerTurn,
-                                reason: "prior snapshot task/runtime scope does not match this observation",
+                                reason: "prior snapshot task/runtime/launcher scope does not match this observation",
                                 observedAt: observedAt)
         }
         guard rootPID > 0 else {

@@ -77,11 +77,17 @@ final class ProcessTreeCleanupNativeOwnerTests: XCTestCase {
             taskSessionID: "wrong-task", runtimeAttemptID: attempt, rootOwnership: .taskCreated, prior: observed)
         let wrongRuntime = MacOSProcessTreeObserver.observe(rootPID: launcher.processIdentifier,
             taskSessionID: task, runtimeAttemptID: "wrong-attempt", rootOwnership: .taskCreated, prior: observed)
+        let wrongLauncher = MacOSProcessTreeObserver.observe(rootPID: decoy.processIdentifier,
+            taskSessionID: task, runtimeAttemptID: attempt, rootOwnership: .taskCreated, prior: observed)
         XCTAssertEqual(wrongTask.coverage, .unavailable)
         XCTAssertEqual(wrongRuntime.coverage, .unavailable)
+        XCTAssertEqual(wrongLauncher.coverage, .unavailable)
         trace["wrong_task_observation"] = object(wrongTask)
         trace["wrong_runtime_observation"] = object(wrongRuntime)
-        launcher.terminate()
+        trace["wrong_launcher_observation"] = object(wrongLauncher)
+        // Foundation Process.terminate did not establish an orphan in the
+        // preserved first control. Use only the exact owned launcher PID.
+        XCTAssertEqual(Darwin.kill(launcher.processIdentifier, SIGTERM), 0)
         XCTAssertTrue(waitUntil { !launcher.isRunning })
         let after = MacOSProcessTreeObserver.observe(rootPID: launcher.processIdentifier,
             taskSessionID: task, runtimeAttemptID: attempt, rootOwnership: .taskCreated, prior: observed)
