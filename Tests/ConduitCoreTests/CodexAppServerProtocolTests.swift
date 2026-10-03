@@ -31,6 +31,35 @@ final class CodexAppServerProtocolTests: XCTestCase {
         XCTAssertEqual(params["reason"]?.stringValue, "edit parser.swift")
     }
 
+    func testJSONRPCErrorRequiresValidErrorObjectAuthority() {
+        let valid = CodexJSONRPCMessage.parseLine(
+            #"{"id":7,"error":{"code":-32602,"message":"invalid params"}}"#
+        )
+        XCTAssertEqual(
+            valid,
+            .error(id: .number(7), message: "invalid params", code: -32602)
+        )
+
+        let malformed = [
+            #"{"id":7,"error":null}"#,
+            #"{"id":7,"error":"failed"}"#,
+            #"{"id":7,"error":[]}"#,
+            #"{"id":7,"error":1}"#,
+            #"{"id":7,"error":{}}"#,
+            #"{"id":7,"error":{"message":"missing code"}}"#,
+            #"{"id":7,"error":{"code":"-32602","message":"string code"}}"#,
+            #"{"id":7,"error":{"code":-32602}}"#,
+            #"{"id":7,"error":{"code":-32602,"message":1}}"#,
+            #"{"id":7,"error":{"code":-32602.5,"message":"fractional code"}}"#
+        ]
+        for line in malformed {
+            XCTAssertNil(
+                CodexJSONRPCMessage.parseLine(line),
+                "Malformed JSON-RPC error must not gain rejection authority: \(line)"
+            )
+        }
+    }
+
     func testMapperAccumulatesDeltasThenClosesOnTurnCompleted() {
         var mapper = CodexAppServerMapper()
         let first = mapper.apply(
@@ -113,6 +142,7 @@ final class CodexAppServerProtocolTests: XCTestCase {
 
     func testMapperThreadStartResponseAndApproval() {
         var mapper = CodexAppServerMapper()
+        mapper.expectThreadResponse(.number(1))
         let started = mapper.apply(
             .response(
                 id: .number(1),

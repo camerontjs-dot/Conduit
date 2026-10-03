@@ -2054,3 +2054,82 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-061: Terminal provider results retain their input identity across replay
+
+**Status:** Proposed (2026-10-02; issue #114 maintained successor)
+
+**Context:** Frozen #115 accepted a correlated malformed RPC error as a durable
+provider failure. Its frozen successor #116 repaired error-object validation,
+but independent native qualification then reproduced a delayed duplicate
+`turn/started` reopening a failed turn without a new input. Hosted CI and
+passing Core tests did not establish this lifecycle boundary.
+Frozen #118 then retained terminal input state, but independent qualification
+reproduced an unsolicited response replacing the mapper thread identity and
+hiding the matching owned terminal failure. That candidate also remains FAIL.
+
+**Decision:**
+
+1. A provider rejection needs a valid, unambiguous error envelope and the exact
+   pending integer request identity. Fractional or overflowing numeric ids
+   cannot be coerced into another request; conflicting reply shapes fail as
+   protocol observations without manufacturing provider failure.
+2. Retired turn ids remain retired for the current notification mapper even
+   when an explicit new input resets presentation state. Known wrong thread
+   and turn ids cannot replace an active turn or append its output. Only a
+   distinct eligible turn can start after a new input.
+3. The native client retains its first terminal failure for the input until
+   an explicit new send. Delayed presentation or terminal notifications cannot
+   reopen that failed input or replace its failure receipt.
+4. A durable, tool-reported failure bound to the latest actually delivered
+   prompt outranks contradictory active/approval flags in status and event
+   projections. A later delivered prompt is a new boundary; queued input
+   alone cannot hide the failed input.
+5. Provider failure, runtime liveness, task lifecycle, verification and
+   objective acceptance retain separate authority. Raw error payloads and
+   arbitrary messages are withheld from durable history. Ambiguous transport
+   or PTY closure cannot establish a failed provider turn.
+6. Response-shaped thread data has identity authority only for an outstanding
+   thread/start or thread/resume request explicitly registered by the native
+   client before sending. Matching consumes the expectation once; request
+   refusal, cancellation or timeout clears it. Other responses still reach
+   their request continuations without changing mapper thread identity.
+7. The native handshake emits its thread identity receipt exactly once before
+   `onReady` can deliver held input. It does not rely on a separately queued
+   mapper effect that a later malformed stream may discard. Native mapper
+   thread effects cannot publish a second or conflicting client identity.
+8. Readiness and the native thread receipt require a nonblank string identity
+   returned by the correlated thread start/resume reply. The requested resume
+   id is caller intent and cannot substitute for missing returned identity.
+   Opaque nonblank ids retain their exact bytes; malformed handshake is not
+   promoted to a provider terminal turn failure.
+
+**Lineage:** #115, #116 and #118 remain immutable failed predecessors. This decision
+describes a new current-main successor; their original negative receipts are
+not revised or converted into acceptance.
+An owner response-correlation phase also failed its expanded native gate:
+`49c1ca09e2babb29262edd057737183e7f85ac86`, tree
+`1c3ed36f7a0e1a6da795b6c5928b5783d080f481`. Its correct in-memory identity
+did not reliably produce the persistence callback under malformed ingress.
+That frozen phase remains in ancestry; the native receipt successor repairs
+this separate defect.
+The subsequent owner native receipt phase also failed handshake pressure:
+`f0932075d401fcec0038427bac9ba27d5d9a85c8`, tree
+`44eb23cde359eb91bc996ecf7b4f000d0601177e` (7 failures in 12 controls).
+Empty/blank or absent returned identities could manufacture readiness from
+caller intent. It remains frozen FAIL in ancestry.
+
+**Non-claims:** In-memory retired ids do not prove provider-side exactly-once
+delivery or a persistent provider tombstone service. Owner fixtures do not
+prove the live AppModel/HTTP wiring, vendor behavior, queue drain, installed
+operator acceptance, verification or release.
+
+**Binds:** Codex RPC parsing, native turn effects and Session API projections.
+**Tier:** T1 (detected).
+**Check:** Native Core replay/request-identity tests and selftests; owned native
+subprocess probes; independent exact-candidate qualification before promotion.
+**Escape:** Preserve malformed/ambiguous observations and UNKNOWNs. A frozen
+failure requires a separately identified successor; no qualification repair
+may change the frozen candidate.

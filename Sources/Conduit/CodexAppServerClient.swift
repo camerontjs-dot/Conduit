@@ -35,14 +35,12 @@ final class CodexAppServerClient: ObservableObject {
     @Published private(set) var lastTurnStatus: String?
     @Published var pendingApproval: CodexAppServerApproval?
     @Published private(set) var lastError: String?
-    /// Set only when a failure ends a turn that was still running.
-    ///
-    /// A `.failed` effect that arrives after the turn already completed does
-    /// not un-complete it: interrupting a finished turn makes the provider
-    /// report an error, and treating that as a turn failure erases a real
-    /// observed completion. `lastError` keeps every error for display; this
-    /// field carries only the ones that are the turn's outcome.
+    /// Set only by a correlated terminal provider result. Diagnostics and
+    /// transport loss remain independent of the turn's outcome.
     @Published private(set) var turnFailure: String?
+    @Published private(set) var terminalFailureReceipt: ProviderTurnFailureReceipt?
+    private var pendingTurnStartID: Int?
+    private var effectiveModel: String?
 
     /// Where the session this client is driving came from.
     ///
@@ -278,21 +276,27 @@ final class CodexAppServerClient: ObservableObject {
                 )
             )
         }
-        if let threadID = started["thread"]?["id"]?.stringValue
-            ?? started["threadId"]?.stringValue
-            ?? resumeThreadID {
-            self.threadID = threadID
-            streamPump?.setThreadID(threadID)
+        // A requested resume id is caller intent, not a returned native identity.
+        // Keep opaque ids byte-exact while rejecting absent or blank authority.
+        guard let liveThreadID = started["thread"]?["id"]?.stringValue
+            ?? started["threadId"]?.stringValue,
+              !liveThreadID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw ClientError.protocolError("thread start/resume did not return a usable thread id.")
         }
-        guard let liveThreadID = self.threadID else {
-            throw ClientError.protocolError("thread start/resume did not return a thread id.")
-        }
+        self.threadID = liveThreadID
+        streamPump?.setThreadID(liveThreadID)
+        effectiveModel = started["model"]?.stringValue ?? model
         resumeProvenance = SessionResumeSemantics.classify(
             requested: resumeThreadID,
             started: liveThreadID,
             attempt: attempt
         )
         isReady = true
+        // This receipt belongs to the correlated handshake, before a queued
+        // input may arrive. A later malformed stream can discard queued mapper
+        // deliveries, so persistence must not depend on that incidental queue.
+        onEffect?(.threadStarted(id: liveThreadID))
         onReady?()
     }
 
@@ -309,7 +313,7 @@ final class CodexAppServerClient: ObservableObject {
         } else {
             streamPump?.resetTurn()
             activeTurnID = nil
-            send(
+            pendingTurnStartID = send(
                 CodexAppServerRequests.turnStart(
                     id: 0,
                     threadID: threadID,
@@ -318,12 +322,11 @@ final class CodexAppServerClient: ObservableObject {
             )
         }
         isTurnActive = true
-        // A new turn must not inherit the previous turn's failure. lastError
-        // is what marks a turn failed rather than completed, so leaving it set
-        // would report every later successful turn on this task as failed.
+        // A new turn must not inherit the previous turn's failure.
         lastTurnStatus = nil
         lastError = nil
         turnFailure = nil
+        terminalFailureReceipt = nil
     }
 
     func interrupt() {
@@ -413,11 +416,26 @@ final class CodexAppServerClient: ObservableObject {
         for delivery in deliveries {
             switch delivery {
             case .response(let id, let result):
+                if case .number(let number) = id, number == pendingTurnStartID {
+                    pendingTurnStartID = nil
+                }
                 if case .number(let number) = id,
                    let continuation = pendingResponses.removeValue(forKey: number) {
                     continuation.resume(returning: result)
                 }
-            case .error(let id, let message):
+            case .error(let id, let message, let code):
+                if case .number(let number)? = id, number == pendingTurnStartID,
+                   let code, let threadID, isTurnActive {
+                    // Request correlation is necessary but not sufficient.
+                    // Only a parser-validated JSON-RPC Error object carries
+                    // rejection authority for terminalizing this provider turn.
+                    pendingTurnStartID = nil
+                    apply(.turnFailed(.codex(
+                        threadID: threadID, turnID: activeTurnID, requestID: number,
+                        source: "turn/start.jsonrpc_error",
+                        error: .object(["message": .string(message)]), rpcErrorCode: code
+                    )))
+                }
                 if case .number(let number)? = id,
                    let continuation = pendingResponses.removeValue(forKey: number) {
                     continuation.resume(throwing: ClientError.protocolError(message))
@@ -444,9 +462,22 @@ final class CodexAppServerClient: ObservableObject {
     }
 
     private func apply(_ effect: CodexAppServerEffect) {
+        // A matching turn/start RPC rejection can arrive without a turn id,
+        // outside the notification mapper. Only an explicit new send clears
+        // that terminal receipt; late presentation effects cannot reopen it.
+        if terminalFailureReceipt != nil {
+            switch effect {
+            case .turnStarted, .upsertOutput, .requestApproval, .turnCompleted, .turnFailed:
+                return
+            default:
+                break
+            }
+        }
         switch effect {
-        case .threadStarted(let id):
-            threadID = id
+        case .threadStarted:
+            // Handshake owns this client's thread identity and its one receipt.
+            // Mapper notifications/responses cannot publish another identity.
+            return
         case .turnStarted(let id):
             activeTurnID = id
             isTurnActive = true
@@ -458,12 +489,25 @@ final class CodexAppServerClient: ObservableObject {
             isTurnActive = false
             activeTurnID = nil
             lastTurnStatus = status
+        case .turnFailed(var receipt):
+            guard receipt.threadID == threadID,
+                  receipt.turnID == nil || activeTurnID == nil || receipt.turnID == activeTurnID
+            else { return }
+            receipt.modelID = effectiveModel
+            isTurnActive = false
+            activeTurnID = nil
+            pendingTurnStartID = nil
+            pendingApproval = nil
+            lastTurnStatus = "failed"
+            turnFailure = receipt.reason
+            terminalFailureReceipt = receipt
+            lastError = receipt.reason
+            onEffect?(.turnFailed(receipt))
+            return
         case .failed(let message):
             lastError = message
-            if isTurnActive {
-                isTurnActive = false
-                turnFailure = message
-            }
+            // RPC diagnostics and transport trouble do not establish that a
+            // provider turn failed. Only correlated terminal protocol facts do.
         }
         onEffect?(effect)
     }
@@ -493,11 +537,16 @@ final class CodexAppServerClient: ObservableObject {
         payload["id"] = id
         return try await withCheckedThrowingContinuation { continuation in
             pendingResponses[id] = continuation
+            if let method = payload["method"] as? String,
+               method == "thread/start" || method == "thread/resume" {
+                streamPump?.expectThreadResponse(.number(id))
+            }
             send(payload)
         }
     }
 
-    private func send(_ payload: [String: Any]) {
+    @discardableResult
+    private func send(_ payload: [String: Any]) -> Int? {
         var payload = payload
         if payload["id"] as? Int == 0 {
             payload["id"] = nextID
@@ -506,12 +555,14 @@ final class CodexAppServerClient: ObservableObject {
         guard let stdinHandle,
               let data = try? JSONSerialization.data(withJSONObject: payload),
               var line = String(data: data, encoding: .utf8)
-        else { return }
+        else { return nil }
         line += "\n"
         stdinHandle.write(Data(line.utf8))
+        return payload["id"] as? Int
     }
 
     private func failPending(_ message: String) {
+        streamPump?.cancelThreadResponseExpectation()
         let pending = pendingResponses
         pendingResponses.removeAll()
         for continuation in pending.values {

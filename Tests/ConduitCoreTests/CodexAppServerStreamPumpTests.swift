@@ -25,6 +25,7 @@ final class CodexAppServerStreamPumpTests: XCTestCase {
         )
         let split = input.count / 2
 
+        pump.expectThreadResponse(.number(1))
         XCTAssertTrue(pump.ingest(input.prefix(split)))
         XCTAssertTrue(pump.ingest(input.suffix(from: split)))
 
@@ -56,6 +57,28 @@ final class CodexAppServerStreamPumpTests: XCTestCase {
         wait(for: [failed], timeout: 2)
         XCTAssertEqual(recorder.failure, .malformedMessage)
         XCTAssertFalse(recorder.failure?.localizedDescription.contains("must-not-echo") ?? true)
+        XCTAssertTrue(recorder.deliveries.isEmpty)
+    }
+
+    func testMalformedMatchingRPCErrorIsProtocolFailureNotErrorDelivery() {
+        let failed = expectation(description: "invalid JSON-RPC error rejected")
+        let recorder = CodexDeliveryRecorder { _ in }
+        let pump = CodexAppServerStreamPump(
+            configuration: configuration(deliveryCoalescingInterval: 0),
+            deliveryQueue: DispatchQueue(label: "test.codex.delivery.invalid-rpc-error"),
+            onDelivery: { recorder.record($0) },
+            onFailure: {
+                recorder.record(failure: $0)
+                failed.fulfill()
+            }
+        )
+
+        XCTAssertTrue(
+            pump.ingest(Data(#"{"id":3,"error":null}"#.utf8) + Data([0x0A]))
+        )
+
+        wait(for: [failed], timeout: 2)
+        XCTAssertEqual(recorder.failure, .malformedMessage)
         XCTAssertTrue(recorder.deliveries.isEmpty)
     }
 

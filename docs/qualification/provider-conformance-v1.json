@@ -62,61 +62,61 @@
     "ACP-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/GrokACPClient.swift",
-        "sha256": "be5a39358df68c6311637ad2dae09bfac083c37044ffcb18982c3d2914f8994f"
+        "sha256": "82cff4e1d0f730ff968370a7c7901efad48a09adf3ecc98ad85bd677d403f0cd"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "current issue114 candidate source snapshot; prior provider runtime receipts are not new qualification",
       "identity": {
         "path": "Sources/Conduit/GrokACPClient.swift"
       },
       "kind": "source_test",
       "limitation": "The generic ACP client is configured with provider-specific launch/auth behavior; the direct Grok run is the runtime authority.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-01T13:46:16Z",
       "procedure_id": "acp-adapter-source-v1"
     },
     "ACP-PROTOCOL": {
       "artifact": {
         "path": "Sources/ConduitCore/ACPProtocol.swift",
-        "sha256": "496ca6fdae99d5735d38a61fd00dc5fc22d1d0ec6ca4d90cecf40b42834591af"
+        "sha256": "52cec7b72b89f330c99f9c732d6f8b18cc7c2b6c3d35bce4b3205b9a3040726d"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "current issue114 candidate source snapshot; prior provider runtime receipts are not new qualification",
       "identity": {
         "path": "Sources/ConduitCore/ACPProtocol.swift"
       },
       "kind": "source_test",
       "limitation": "ACP permission and event mapping are adapter-level; the installed Grok permission path was not triggered.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-01T13:46:16Z",
       "procedure_id": "acp-protocol-source-v1"
     },
     "CODEX-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/CodexAppServerClient.swift",
-        "sha256": "bb70c445990b9050c23ed8ad9b3bb3e42a69c7f499b39ea4d2775a0db011063f"
+        "sha256": "5832ec2047a7c2c7cfd4c7b0d75b22dd37e51315c6fc0f8199007d2122db8326"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "current issue114 explicit returned-thread identity successor source snapshot; frozen owner failures retained; not independent or vendor qualification",
       "identity": {
         "path": "Sources/Conduit/CodexAppServerClient.swift"
       },
       "kind": "source_test",
       "limitation": "Current adapter captures active turn ID and requires exact thread and turn IDs for interrupt.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-02T18:08:53.210911+00:00",
       "procedure_id": "codex-app-server-adapter-source-v1"
     },
     "CODEX-FIX-TEST": {
       "artifact": {
         "path": "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift",
-        "sha256": "c16be21db8e6059662cd8cf337a5d80d63d03f6db7b6d272c85bc5eb8d154e15"
+        "sha256": "f4751b67a9bfaa766bf132dd5996c00dd4314f2fe820b32313577572aab961f2"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "current issue114 response-authority owner source snapshot; owner native failure preserved; not independent or vendor qualification",
       "identity": {
         "path": "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift"
       },
       "kind": "source_test",
       "limitation": "Deterministic protocol tests accompany the direct installed-runtime interrupted-turn receipt.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-02T17:43:19.196308+00:00",
       "procedure_id": "codex-turn-id-interrupt-regression-test-v1"
     },
     "CODEX-FIX-TEST-RUN": {
@@ -175,46 +175,46 @@
     "CODEX-PROTOCOL": {
       "artifact": {
         "path": "Sources/ConduitCore/CodexAppServerProtocol.swift",
-        "sha256": "18b661335b7a911e4eda2d33fa5147e2fcb7cbb38d15f78d00e96a52ac63f9b7"
+        "sha256": "32d0198cf78f4a6c47e821c727070e441a48ac43ee9a66dd223344968245b25f"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "current issue114 explicit returned-thread identity successor source snapshot; frozen owner failures retained; not independent or vendor qualification",
       "identity": {
         "path": "Sources/ConduitCore/CodexAppServerProtocol.swift"
       },
       "kind": "source_test",
       "limitation": "Current protocol mapper/request builder preserves exact active turn identity.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-02T18:08:53.211033+00:00",
       "procedure_id": "codex-app-server-protocol-source-v1"
     },
     "CODEX-STREAM-TESTS": {
       "artifact": {
         "path": "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift",
-        "sha256": "74ca21e897ec80f984d79af12649e5dd611a3b2058afb87b2947bf7a398cef81"
+        "sha256": "699a073438c1d8977aa2b2c4b3a5b9cdec4196197053caeaa77e16d2fb875be5"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "current issue114 response-authority owner source snapshot; owner native failure preserved; not independent or vendor qualification",
       "identity": {
         "path": "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift"
       },
       "kind": "source_test",
       "limitation": "Event parser tests establish adapter handling, not an additional provider feature.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-02T17:43:19.196308+00:00",
       "procedure_id": "codex-app-server-stream-tests-v1"
     },
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "984b152671d566f81c5812d2fb43da4de997de886d2ce8401a6bec02604e8162"
+        "sha256": "b145eb58e8a673fb91562a097c55b6b5dd653c6039ac2d33c3450fe7a72528b5"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "current issue114 candidate source snapshot; not a provider runtime observation",
       "identity": {
         "path": "Sources/Conduit/AppModel.swift"
       },
       "kind": "source_test",
       "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior.",
-      "observed_at_utc": "2026-09-29T17:13:22Z",
+      "observed_at_utc": "2026-10-01T13:44:26Z",
       "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
     },
     "CONFORMANCE-HARNESS": {

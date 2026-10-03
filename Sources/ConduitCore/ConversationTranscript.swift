@@ -18,6 +18,8 @@ public enum ConversationTranscript {
             return ConversationDisplayText.workstationDerived(output.text)
         case .interruptRequested:
             return "Interrupt requested"
+        case .providerTurnFailed(let receipt):
+            return receipt.reason
         }
     }
 
@@ -41,6 +43,8 @@ public enum ConversationTranscript {
                     sections.append("---\n\n_\(sessionBoundaryText(entry))_")
                 case .interruptRequested:
                     sections.append("---\n\n_Interrupt requested_")
+                case .providerTurnFailed(let receipt):
+                    sections.append("---\n\n_Provider turn failed: \(receipt.reason)_")
                 case .userPrompt, .agentOutput:
                     break
                 }

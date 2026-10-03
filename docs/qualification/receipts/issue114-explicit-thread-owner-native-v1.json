@@ -1,0 +1,120 @@
+{
+  "schema": "conduit-issue114-owner-native/v1",
+  "at": "2026-10-02T18:24:38.648976+00:00",
+  "owner_issue": 114,
+  "base": {
+    "head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+    "tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010"
+  },
+  "disposition": "PASS_BOUNDED_OWNER_REGRESSION_NOT_INDEPENDENT_ACCEPTANCE",
+  "objective": "Registered exact thread reply authority, native thread receipt before held input, explicit usable returned identity, retained terminal input/failure authority.",
+  "source_sha256": {
+    "Sources/Conduit/CodexAppServerClient.swift": "5832ec2047a7c2c7cfd4c7b0d75b22dd37e51315c6fc0f8199007d2122db8326",
+    "Sources/ConduitCore/CodexAppServerProtocol.swift": "32d0198cf78f4a6c47e821c727070e441a48ac43ee9a66dd223344968245b25f"
+  },
+  "product_source_inventory_sha256": "041f4947726226db9b5789d2305c39e6c176c8ba87e3806247673f5b3471f876",
+  "frozen_failed_predecessors": [
+    {
+      "pr": 115,
+      "head": "6e80f00992e15df47c082c1b92cfcb1f39eefb92",
+      "tree": "8bc05da77b46999f4d40a672076327af9721c74d",
+      "authority": "independent terminal FAIL preserved"
+    },
+    {
+      "pr": 116,
+      "head": "fa1567829f22e7e9ab1949d0dace57991ae9db7f",
+      "tree": "78f7092566af785573cb60ccbf75f57cc606ce81",
+      "authority": "fresh independent terminal FAIL preserved"
+    },
+    {
+      "pr": 118,
+      "head": "e6303d8bdc6b212304b1d44f4a1488b6bdc4f792",
+      "tree": "aa1c68d0e05a7f424aeee8b55641e42132ceb65d",
+      "authority": "fresh independent terminal FAIL preserved",
+      "independent_result_sha256": "42c8f2e70caf1abec6e4c6e317535e8fd72599c8b77d87f4f0559df43594fc86"
+    },
+    {
+      "head": "49c1ca09e2babb29262edd057737183e7f85ac86",
+      "tree": "1c3ed36f7a0e1a6da795b6c5928b5783d080f481",
+      "authority": "owner actual-client FAIL14/33; preserved in ancestry"
+    },
+    {
+      "head": "f0932075d401fcec0038427bac9ba27d5d9a85c8",
+      "tree": "44eb23cde359eb91bc996ecf7b4f000d0601177e",
+      "authority": "owner handshake FAIL7/12; preserved in ancestry"
+    }
+  ],
+  "native_pressure": [
+    {
+      "artifact": "114-response-native-v3/result.json",
+      "sha256": "589d4e9cad1a219bd11e63ce135c93b7d25cc55756669b0630d97b7a49bdba74",
+      "controls": 33,
+      "failures": 0,
+      "teardown_sha256": "94cb788a47852cd9143adef84a8a908292a08958cf1217054d08c58923138333",
+      "all_exact_owned_pids_absent": true,
+      "signals_sent": 0
+    },
+    {
+      "artifact": "114-handshake-identity-pressure-green/result.json",
+      "sha256": "e777a67c7fc2d00f34d5aba0ea43b729743d9bba3ef40e753d75621edd2d3277",
+      "controls": 12,
+      "failures": 0,
+      "teardown_sha256": "2f05e28af81ec3a79598ac1e2b05717ef27cba34d143416c4c2b28e99fdd0fa6",
+      "all_exact_owned_pids_absent": true,
+      "signals_sent": 0
+    }
+  ],
+  "gates": {
+    "focused_native": {
+      "executed": 45,
+      "failures": 0,
+      "log_sha256": "c508e1ec98ea596a8d4b10db336e6c26815f5f6bee16748ce47f066f58d9b3f7"
+    },
+    "repository_native_full": {
+      "self_tests": 480,
+      "script_contracts": 10,
+      "xctest_executed": 637,
+      "xctest_skipped": 3,
+      "failures": 0,
+      "log_sha256": "98d080b39eceb07ed7e4e971774dbee62b190378f145392639c66a7e225cf1f7",
+      "receipt_sha256": "b1fbac66875ad7b65346631d299a602acb99d0dc7fda4b871defe25baa712b0a",
+      "skipped_tests": [
+        "ProviderSessionAuthorityTests.testInstalledOpenCodeAuthorityJourneyWhenExplicitlyRequested",
+        "ProviderSessionObservationTests.testInstalledOpenCodePersistenceWhenExplicitlyRequested",
+        "ShellTelemetrySocketServerTests.testLiveShellOpenCodeSessionCorrelationWhenIsolatedFixtureConfigured"
+      ]
+    },
+    "release_package_strict_signature": {
+      "exit_code": 0,
+      "log_sha256": "dfad406b7dd6e71205c6adb8d85babf27786db566f364ea0b13c6972e6bd7bda",
+      "receipt_sha256": "611876483490eb38cddd65c7fdef88a5eb668bb358c95a6a4f48c073665fb81f",
+      "cdhash": "0cf9a995023c58fa972b475302bc18adf3ece460",
+      "installed": false,
+      "launched": false,
+      "source_inventory_unchanged": true,
+      "procedure": "unchanged repository scripts/build-app.sh; inherited --disable-sandbox is part of that script, not an owner acceptance weakening"
+    }
+  },
+  "red_before_preserved": {
+    "blank_core_native_test": 1,
+    "blank_core_assertions": 3,
+    "log_sha256": "061ff75537654b2870dd73de20e47b89c3ae082e7e2da982b5af8cb57adc32f0",
+    "previous_response_regression_tests": 2,
+    "previous_response_assertions": 5
+  },
+  "other_failures_preserved": [
+    "prior native33 missing callback phase",
+    "prior native12 malformed identity phase",
+    "owner self-test syntax compile failure",
+    "managed sandbox process-read denial and unchanged scoped audit"
+  ],
+  "real_provider_calls": 0,
+  "operator_state_or_processes_changed": false,
+  "credential_or_account_changes": false,
+  "fresh_independent_qualification": "NOT_RUN_PRIVATE_SOURCE_ACCESS_AUTHORITY_PENDING",
+  "actual_appmodel_http_task_runtime_binding": "NOT_RUN",
+  "fifo_queue_composition": "NOT_RUN",
+  "installed_operator_vendor_compatibility": "UNKNOWN",
+  "hosted_ci": "NOT_RUN_UNTIL_FROZEN_PUSH",
+  "merge_readiness": false
+}

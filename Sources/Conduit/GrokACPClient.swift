@@ -265,7 +265,7 @@ final class GrokACPClient: ObservableObject {
                let continuation = pendingResponses.removeValue(forKey: number) {
                 continuation.resume(returning: result)
             }
-        case .error(let id, let message):
+        case .error(let id, let message, _):
             if case .number(let number)? = id,
                let continuation = pendingResponses.removeValue(forKey: number) {
                 continuation.resume(throwing: ClientError.protocolError(message))

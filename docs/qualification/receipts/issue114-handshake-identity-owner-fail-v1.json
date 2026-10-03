@@ -1,0 +1,198 @@
+{
+  "schema": "conduit-owner-handshake-identity-failure/v1",
+  "owner_issue": 114,
+  "independent": false,
+  "disposition": "FAIL_FROZEN_OWNER_PHASE",
+  "predecessor": {
+    "head": "49c1ca09e2babb29262edd057737183e7f85ac86",
+    "tree": "1c3ed36f7a0e1a6da795b6c5928b5783d080f481",
+    "disposition": "FAIL_FROZEN_OWNER_PHASE"
+  },
+  "client_source_sha256": "06ab2762e1437dd317e53cd411c70d53015452d50e01e492368c83f4ed636365",
+  "boundary": "ef91f48d34e7b2b309da23727d65481ae3c84199c1e34945f81f5a7a792a8036",
+  "result_sha256": "e78cd9ec0123b8fc0865674d013663ef8dbf818d45928b9ae4cb7bc57b8fcdc2",
+  "cases": [
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "fresh-valid",
+      "pass": true,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "owner-thread"
+      ],
+      "thread_id": "owner-thread",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "protocolError(\"thread start/resume did not return a thread id.\")",
+      "host_after_stop": "NONE",
+      "mode": "fresh-missing",
+      "pass": true,
+      "ready": false,
+      "ready_callback_count": 0,
+      "thread_effects": [],
+      "thread_id": "NONE",
+      "threw": true,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "fresh-empty",
+      "pass": false,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        ""
+      ],
+      "thread_id": "",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "fresh-blank",
+      "pass": false,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "  \t\n"
+      ],
+      "thread_id": "  \t\n",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "protocolError(\"thread start/resume did not return a thread id.\")",
+      "host_after_stop": "NONE",
+      "mode": "fresh-numeric",
+      "pass": true,
+      "ready": false,
+      "ready_callback_count": 0,
+      "thread_effects": [],
+      "thread_id": "NONE",
+      "threw": true,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "resume-valid",
+      "pass": true,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "owner-thread"
+      ],
+      "thread_id": "owner-thread",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "resume-missing",
+      "pass": false,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "owner-thread"
+      ],
+      "thread_id": "owner-thread",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "resume-empty",
+      "pass": false,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        ""
+      ],
+      "thread_id": "",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "resume-blank",
+      "pass": false,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "  \t\n"
+      ],
+      "thread_id": "  \t\n",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "resume-numeric",
+      "pass": false,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "owner-thread"
+      ],
+      "thread_id": "owner-thread",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "resume-refused-valid",
+      "pass": true,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "owner-thread"
+      ],
+      "thread_id": "owner-thread",
+      "threw": false,
+      "turn_failure_count": 0
+    },
+    {
+      "error": "NONE",
+      "host_after_stop": "NONE",
+      "mode": "resume-refused-missing",
+      "pass": false,
+      "ready": true,
+      "ready_callback_count": 1,
+      "thread_effects": [
+        "owner-thread"
+      ],
+      "thread_id": "owner-thread",
+      "threw": false,
+      "turn_failure_count": 0
+    }
+  ],
+  "failures": 7,
+  "controls": 12,
+  "prior_owner_passes": {
+    "offline_actual_client": 33,
+    "focused_xctest": 62,
+    "selftest": 477,
+    "script_contract": 10,
+    "full_xctest": 635,
+    "explicit_environment_skips": 3,
+    "release": true,
+    "package_strict_signature": true
+  },
+  "real_provider_turns": 0,
+  "operator_state_changed": false,
+  "installed_build_changed": false,
+  "fresh_independent": "NOT_RUN_PRIVATE_SOURCE_AUTHORITY_PENDING",
+  "actual_appmodel_http": "NOT_RUN",
+  "remaining": "A separate successor must require usable returned thread identity before readiness or persistence receipt."
+}
