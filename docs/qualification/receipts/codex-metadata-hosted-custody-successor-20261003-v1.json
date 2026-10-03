@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "receipt_type": "codex_metadata_hosted_custody_successor_preregistration",
+  "recorded_at_utc": "2026-10-03T13:06:31.572196+00:00",
+  "independent": false,
+  "authority_issues": [
+    53,
+    49,
+    60
+  ],
+  "proposal": "D070 remains Proposed/T0",
+  "disposition": "WORKFLOW_SUCCESSOR_HOSTED_CUSTODY_CHECK_PENDING",
+  "predecessor_pr": 136,
+  "predecessor_head": "087fc7a8c472ed1af18c60fa62b962d712b2f660",
+  "predecessor_tree": "d2ca458590a106971e6aca5f66fa3a7350d98a6b",
+  "main_base": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "tested_product_source_head": "20d02b09c14d4cb075632d56284192ea59b67c24",
+  "tested_product_source_tree": "149127567afddd04ee6605a924b3e1f3abfd3e3d",
+  "unchanged_source_test_script_count": 248,
+  "inherited_owner_receipt_sha256": "883453550b203e485badb2c6c1ba2d10b4204689e55f9b0702c067b38a3490eb",
+  "predecessor_actual_hosted_run": {
+    "run_id": 37124302410,
+    "job_id": 111206400678,
+    "run_conclusion": "success",
+    "executed_steps": 15,
+    "step_list": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1
+      },
+      {
+        "name": "Run actions/checkout@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2
+      },
+      {
+        "name": "Check tunnel script syntax",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3
+      },
+      {
+        "name": "Select Xcode",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4
+      },
+      {
+        "name": "Selftest",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5
+      },
+      {
+        "name": "Test",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6
+      },
+      {
+        "name": "Upload test diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7
+      },
+      {
+        "name": "Codex metadata native owner fixture",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8
+      },
+      {
+        "name": "Upload Codex metadata owner diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9
+      },
+      {
+        "name": "Build release app",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10
+      },
+      {
+        "name": "Upload build diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11
+      },
+      {
+        "name": "Package macOS app",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12
+      },
+      {
+        "name": "Upload macOS app",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13
+      },
+      {
+        "name": "Post Run actions/checkout@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 26
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 27
+      }
+    ],
+    "synthetic_checkout_commit": "3b14a895224c28506d06c92152275ce3202c0a9d",
+    "synthetic_checkout_tree": "d2ca458590a106971e6aca5f66fa3a7350d98a6b",
+    "decoded_log_sha256": "5518aae21cfb7b3102cc8dca2be3cc3350caf88f7f8a8190e195b21b39a55dda",
+    "product_observation": "476 selftests; 616 reported XCTest with 3 explicit real-provider skips and no failures; 18 fake native scenarios; release/package completed.",
+    "custody_disposition": "FAIL_HOSTED_NATIVE_FIXTURE_ARTIFACT_MISSING",
+    "warning": "No files were found with the provided path: .build/codex-metadata-owner-*/. No artifacts will be uploaded.",
+    "artifact_inventory": [
+      {
+        "id": 11274660105,
+        "name": "conduit-build-log",
+        "size_in_bytes": 1019,
+        "url": "https://api.github.com/repos/camerontjs-dot/Conduit/actions/artifacts/11274660105",
+        "archive_download_url": "https://api.github.com/repos/camerontjs-dot/Conduit/actions/artifacts/11274660105/zip",
+        "expired": false,
+        "created_at": "2026-10-03T12:56:06Z",
+        "expires_at": "2027-01-01T12:52:42Z",
+        "updated_at": "2026-10-03T12:56:06Z",
+        "digest": "sha256:3b1d8bcc473e187376cd2222d53699b627fd21976b1c1ac5fd137b0ac0a855c4",
+        "workflow_run": {
+          "id": 37124302410,
+          "repository_id": 1307095884,
+          "head_repository_id": 1307095884,
+          "head_branch": "codex/issue53-codex-discovery-20261003",
+          "head_sha": "087fc7a8c472ed1af18c60fa62b962d712b2f660"
+        }
+      },
+      {
+        "id": 11274169435,
+        "name": "conduit-macos-arm64",
+        "size_in_bytes": 11594656,
+        "url": "https://api.github.com/repos/camerontjs-dot/Conduit/actions/artifacts/11274169435",
+        "archive_download_url": "https://api.github.com/repos/camerontjs-dot/Conduit/actions/artifacts/11274169435/zip",
+        "expired": false,
+        "created_at": "2026-10-03T12:56:08Z",
+        "expires_at": "2027-01-01T12:52:42Z",
+        "updated_at": "2026-10-03T12:56:08Z",
+        "digest": "sha256:4e23aac1a98d85cd07b39e70c8d2f1a0f0a09b7eb0b2f49e5c3ed3b839cd17b2",
+        "workflow_run": {
+          "id": 37124302410,
+          "repository_id": 1307095884,
+          "head_repository_id": 1307095884,
+          "head_branch": "codex/issue53-codex-discovery-20261003",
+          "head_sha": "087fc7a8c472ed1af18c60fa62b962d712b2f660"
+        }
+      },
+      {
+        "id": 11273919836,
+        "name": "conduit-swift-test-log",
+        "size_in_bytes": 22014,
+        "url": "https://api.github.com/repos/camerontjs-dot/Conduit/actions/artifacts/11273919836",
+        "archive_download_url": "https://api.github.com/repos/camerontjs-dot/Conduit/actions/artifacts/11273919836/zip",
+        "expired": false,
+        "created_at": "2026-10-03T12:54:12Z",
+        "expires_at": "2027-01-01T12:52:42Z",
+        "updated_at": "2026-10-03T12:54:12Z",
+        "digest": "sha256:8b0c4565d201ee1aeff3c9a29b2165690e1c91a7986519cd99e20532e6f325c7",
+        "workflow_run": {
+          "id": 37124302410,
+          "repository_id": 1307095884,
+          "head_repository_id": 1307095884,
+          "head_branch": "codex/issue53-codex-discovery-20261003",
+          "head_sha": "087fc7a8c472ed1af18c60fa62b962d712b2f660"
+        }
+      }
+    ],
+    "exact_named_native_artifact_query": [],
+    "private_raw_failure_receipt_sha256": "6374054dc72760ab647019eda754f6a70679b78a1f1a4eada0998ccfe017e79b"
+  },
+  "successor_scope": {
+    "workflow_upload_name": "codex-metadata-owner",
+    "path": ".build/codex-metadata-owner-*/",
+    "path_unchanged": true,
+    "include_hidden_files": true,
+    "if_no_files_found": "error",
+    "other_upload_steps_unchanged": true,
+    "local_reviewed_owned_fixture_file_count": 54,
+    "local_fixture_inventory_sha256": "a447861ce27a61cc7dfd72ddb7e63fb56922840ab2c1c624bc827205d0e961a9",
+    "local_upload_path_review_receipt_sha256": "58f368aa4aeee970becc9486660d293142eaa207e5bc4c8a8a003b23d0b576b6",
+    "content_boundary": "Synthetic owned fake stdio setup only; no real provider/session/token/default/environment/cache files. Native binary is this repository build.",
+    "changelog": "N/A; workflow custody only, maintained product behavior unchanged."
+  },
+  "governing_upstream_input": "https://github.com/actions/upload-artifact/blob/v4/action.yml",
+  "prospective_acceptance": {
+    "exact_head_and_synthetic_tree": "New hosted candidate SHA and checkout commit/tree must match the separately frozen successor.",
+    "actual_steps": "Product/native fake fixture and diagnostics upload must physically execute.",
+    "actual_archive": "Named codex-metadata-owner artifact must exist and its downloaded ZIP digest/inventory must agree with API; receipt, compiled native binary, 18 scenario files, 17 wire logs and 17 termination records must be present. no-host creates no process, wire or termination file.",
+    "identity": "54 expected fixture files; no unrelated cache/source/auth/environment file; native receipt reports owner scope, actual scenarios and owned teardown.",
+    "stop_rule": "First identity, custody, input or apparatus failure is preserved; dependent claims NOT_RUN. No silent rerun or repaired result replaces #136.",
+    "expected_regular_file_count": 54
+  },
+  "owner_gates": "Prior local source/native/release/package evidence is carried only with exact unchanged source/test/script hashes. No redundant heavy local source build requested for this workflow-only repair.",
+  "not_claimed": [
+    "Independent qualification",
+    "Real-provider external-thread support",
+    "Mounted #87 AppModel/HTTP acceptance",
+    "Generic #114/#128 RPC authority",
+    "Writer adoption",
+    "Production installation or release",
+    "Merge authority"
+  ],
+  "later_reconciliation": "Exact successor head/tree, actual hosted archive identities and final disposition belong to its PR/#53/#49 and private receipt; this preregistration is not a PASS."
+}

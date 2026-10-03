@@ -41,7 +41,9 @@ jobs:
         with:
           name: codex-metadata-owner
           path: .build/codex-metadata-owner-*/
-          if-no-files-found: warn
+          # Only this owned fake-wire fixture path; no build/cache sweep.
+          include-hidden-files: true
+          if-no-files-found: error
       - name: Build release app
         id: build
         shell: bash
