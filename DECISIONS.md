@@ -2054,3 +2054,64 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-066: Local operations retain a bounded observation and a separate authorizer
+
+**Status:** Proposed (2026-10-03; #51 maintained implementation candidate)
+
+**Context:** #51 adopts a Local Operator V1 through the existing ChatGPT-facing
+Shell/task surface. Durable task logs and #70 already record Shell execution
+identity, process observation and bounded provider correlation. They do not
+record one operation's nominated files, protected state, objective or acceptance
+boundary, and a provider or Shell exit cannot establish objective acceptance.
+
+**Proposed decision:**
+
+1. Record an operation UUID bound to one existing Shell task, runtime attempt,
+   project and working directory. The explicit objective, acceptance condition,
+   requested mode and nominated relative files are immutable. Preserve separate
+   explicit protected paths and bounded unrelated pre-existing dirty files.
+2. Keep requested `OBSERVE`, `BOUNDED_WRITE` and `CONSEQUENT_LOCAL_CHANGE`
+   separate from an execution-owner observation of the existing local Session
+   API write gate. The listener's current `clientInfo` remains nominal metadata,
+   not a scoped principal. V1 has no consequent authority grant.
+3. Begin and checkpoint reuse the existing write gate without changing listener,
+   bearer-token or tunnel topology. Read helpers return historical receipts
+   without reconnecting a runtime, refreshing a provider, writing state or
+   inferring liveness. A preflight alone creates no operation or authority.
+4. Observe at most 64 nominated/protected regular files, each bounded to 1 MiB,
+   through directory/file descriptors that refuse symlink traversal. Retain
+   paths and SHA-256 digests, not file bodies. Preserve Git identity and status;
+   incomplete coverage, protected changes, OBSERVE mutations, changed repository
+   identity and new status changes outside the nominated scope fail closed.
+5. Append content-free Shell observations and existing Fleet/#70 correlations
+   without resolving or promoting them again. Command exit, provider identity,
+   process liveness, turn state, verification and acceptance remain separate.
+   One bounded Fleet page does not establish an exhaustive child inventory.
+6. Supplying a local operation UUID to existing `conduit_send_prompt` requires
+   the exact continuing BOUNDED_WRITE operation, observed gate, current Shell
+   cwd and unchanged file/repository/root plus live owned process identity before
+   delivery. Unknown evidence refuses this helper. Generic Shell remains its
+   existing separately authorized surface; this check is not an arbitrary-command
+   sandbox and does not make check plus delivery atomic.
+7. Store bounded immutable revisions under the existing task state directory.
+   Exclusive writes and expected revisions reject concurrent/stale writers.
+   Reads recompute change summaries and disposition constraints, refusing torn,
+   gapped or semantically inconsistent history without repairing its bytes.
+   Terminal or blocked operations cannot reopen; a separately identified new
+   operation is required after review. Acceptance remains `NOT_ESTABLISHED`.
+
+**Consequences:** The supervisor can recover one bounded operation from typed
+records instead of reconstructing terminal prose. Existing generic Shell
+behavior remains compatible when no local operation UUID is supplied. Local
+state is owner-readable metadata, not an authenticated audit against other
+processes running as the same OS user. No provider execution, adoption, lifecycle
+control, worktree lease, network exposure or production installation is added.
+
+**Qualification boundary:** Core tests and owner file/Git/process fixtures can
+establish these bounded mechanics. The mounted AppModel/listener/Shell path,
+actual restart readback, artifact reveal and cross-surface journey require #87
+isolation and fresh independent qualification before #51 V1 can be consumed as
+qualified runtime evidence. See `docs/qualification/local-operator-v1.md`.

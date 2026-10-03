@@ -3748,6 +3748,121 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Local Operator bounded receipts
+
+check("Local Operator authority modes stay distinct",
+      LocalOperatorAuthorityMode.allCases.map(\.rawValue) == ["OBSERVE", "BOUNDED_WRITE", "CONSEQUENT_LOCAL_CHANGE"])
+check("Local Operator catalog publishes bounded read and existing-gate write helpers",
+      ConduitSessionToolCatalog.tools().count == 25 && ConduitSessionToolCatalog.writeToolNames.count == 9
+        && ["preflight", "status", "receipt", "changes", "children"].allSatisfy {
+            (ConduitSessionToolCatalog.tool(named: "conduit_local_" + $0)?["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool == true
+        })
+check("Local Operator malformed supplied operation cannot fall back to generic Shell",
+      !LocalOperatorToolParser.isValidOptionalOperationID(.number(0))
+        && !LocalOperatorToolParser.isValidOptionalOperationID(.string("bad-id"))
+        && LocalOperatorToolParser.isValidOptionalOperationID(nil))
+check("Local Operator requires canonical full UUID identities",
+      LocalOperatorToolParser.fullUUID("12345678") == nil
+        && LocalOperatorToolParser.fullUUID(UUID().uuidString.replacingOccurrences(of: "-", with: "")) == nil)
+for path in ["/outside", "../outside", "nested/../file", "double//file", "nul\0byte"] {
+    check("Local Operator rejects unsafe nominated path \(path.debugDescription)",
+          !LocalOperatorBoundary.validRelativePath(path))
+}
+withTempDir { root in
+    let boundary = try LocalOperatorBoundary(taskSessionID: TaskSessionID(), runtimeAttemptID: RuntimeAttemptID(),
+        projectSlug: "fixture", workingDirectory: root, objective: "Observe bounded physical artifacts",
+        acceptanceCondition: "Retain exact path and byte digests", authorityMode: .boundedWrite,
+        relativePaths: ["modified.txt", "created.txt", "deleted.txt"], protectedRelativePaths: ["protected.txt"])
+    let processes = ProcessTreeObservation.unavailable(taskSessionID: boundary.taskSessionID.rawValue.uuidString,
+        runtimeAttemptID: .known(boundary.runtimeAttemptID.rawValue.uuidString), providerTurnID: .unknown,
+        reason: "No process claim in this file fixture")
+    let inspector = LocalOperatorInspector()
+    try Data("before".utf8).write(to: root.appendingPathComponent("modified.txt"))
+    try Data("delete".utf8).write(to: root.appendingPathComponent("deleted.txt"))
+    try Data("keep".utf8).write(to: root.appendingPathComponent("protected.txt"))
+    let before = try inspector.snapshot(boundary: boundary, processes: processes)
+    let first = LocalOperatorReceiptBuilder.begin(boundary: boundary, snapshot: before,
+        authorization: .init(localWriteGateObserved: true))
+    var wrongAxisRejected = false
+    do {
+        _ = try LocalOperatorBoundary(taskSessionID: boundary.taskSessionID, runtimeAttemptID: boundary.runtimeAttemptID,
+            operationID: boundary.runtimeAttemptID.rawValue, projectSlug: "fixture", workingDirectory: root,
+            objective: "Wrong axis", acceptanceCondition: "Must refuse", authorityMode: .boundedWrite,
+            relativePaths: ["modified.txt"])
+    } catch { wrongAxisRejected = true }
+    check("Local Operator operation UUID cannot reuse runtime-attempt authority", wrongAxisRejected)
+    let unauthorised = LocalOperatorReceiptBuilder.begin(boundary: boundary, snapshot: before)
+    check("Local Operator requested mode cannot supply local write-gate authorizer",
+          LocalOperatorReceiptBuilder.deliveryRefusal(receipt: unauthorised, current: before,
+            taskSessionID: boundary.taskSessionID, runtimeAttemptID: boundary.runtimeAttemptID)?.contains("authorizer") == true)
+    let hook = ShellTelemetryEvent(shellExecutionID: UUID().uuidString,
+        runtimeAttemptID: boundary.runtimeAttemptID.rawValue.uuidString, phase: .directoryChanged, shellPID: getpid(),
+        workingDirectory: .known(root.deletingLastPathComponent().path),
+        observation: .init(authority: .shellHookObserved, freshness: .current, observedAt: .known(Date())))
+    check("Local Operator actual Shell cwd cannot change operation scope",
+          LocalOperatorReceiptBuilder.shellWorkingDirectoryRefusal(receipt: first, telemetry: hook)?.contains("changed") == true)
+    check("Local Operator fractional checkpoint revision is refused",
+          LocalOperatorToolParser.command(named: "conduit_local_checkpoint", arguments: [
+            "taskSessionID": .string(boundary.taskSessionID.rawValue.uuidString), "operation_id": .string(boundary.operationID.uuidString),
+            "expected_revision": .number(0.5)]) == nil)
+    check("Local Operator real preflight is valid and bounded", first.isValid && before.files.count == 4)
+    check("Local Operator distinguishes non-Git workspace from clean Git", before.repository.notRepository && before.repository.headSHA == nil)
+    try Data("after".utf8).write(to: root.appendingPathComponent("modified.txt"))
+    try Data("artifact".utf8).write(to: root.appendingPathComponent("created.txt"))
+    try FileManager.default.removeItem(at: root.appendingPathComponent("deleted.txt"))
+    let after = try inspector.snapshot(boundary: boundary, processes: processes)
+    let receipt = LocalOperatorReceiptBuilder.checkpoint(previous: first, snapshot: after, terminal: true)
+    check("Local Operator physically observes created, changed and deleted files",
+          Set(receipt.changes.map(\.kind)) == Set([.created, .modified, .deleted]))
+    check("Local Operator does not infer authorship or acceptance", receipt.changes.allSatisfy { $0.attribution == "OBSERVED_ONLY_AUTHOR_UNKNOWN" } && receipt.acceptance == "NOT_ESTABLISHED")
+    check("Local Operator rejects external change before bounded delivery",
+          LocalOperatorReceiptBuilder.deliveryRefusal(receipt: first, current: after,
+              taskSessionID: boundary.taskSessionID, runtimeAttemptID: boundary.runtimeAttemptID)?.contains("External") == true)
+    let store = LocalOperatorRecordStore(directory: root.appendingPathComponent("records"))
+    try store.append(first, expectedRevision: nil); try store.append(receipt, expectedRevision: 0)
+    let recovered = try LocalOperatorRecordStore(directory: store.directory).records(taskSessionID: boundary.taskSessionID, operationID: boundary.operationID)
+    check("Local Operator immutable receipt recovers without terminal output", recovered == [first, receipt])
+    var rejected = false
+    do { try store.append(first, expectedRevision: nil) } catch LocalOperatorError.staleRevision { rejected = true }
+    check("Local Operator rejects duplicate stale writer", rejected)
+    check("Local Operator terminal replay cannot reopen authority",
+          LocalOperatorReceiptBuilder.checkpoint(previous: receipt, snapshot: after).disposition == .terminal)
+    try Data("external protected change".utf8).write(to: root.appendingPathComponent("protected.txt"))
+    let protectedSnapshot = try inspector.snapshot(boundary: boundary, processes: processes)
+    check("Local Operator preserves protected-change failure",
+          LocalOperatorReceiptBuilder.checkpoint(previous: first, snapshot: protectedSnapshot).disposition == .blocked)
+    let consequent = try LocalOperatorBoundary(taskSessionID: boundary.taskSessionID, runtimeAttemptID: boundary.runtimeAttemptID,
+        projectSlug: "fixture", workingDirectory: root, objective: "Requires authority", acceptanceCondition: "Operator decision",
+        authorityMode: .consequentLocalChange, relativePaths: boundary.relativePaths)
+    let consequentSnapshot = try inspector.snapshot(boundary: consequent, processes: processes)
+    check("Local Operator does not grant consequent machine change",
+          LocalOperatorReceiptBuilder.begin(boundary: consequent, snapshot: consequentSnapshot).disposition == .operatorDecisionRequired)
+    check("Local Operator observed write gate has no consequent authority",
+          first.authorization.effectiveAuthority(for: .consequentLocalChange) == "NO_CONSEQUENT_GRANT"
+            && first.authorization.callerIdentityAuthority == "NOMINAL_INITIALIZE_CLIENT_INFO_NOT_SCOPED_PRINCIPAL")
+    let processStamp = SupervisionObservationStamp(authority: .processObserved, freshness: .current,
+        observedAt: .known(Date(timeIntervalSince1970: 1_800_000_000)))
+    let link = ShellProviderCorrelation(kind: .exact, taskSessionID: .known(boundary.taskSessionID.rawValue.uuidString),
+        runtimeAttemptID: .known(boundary.runtimeAttemptID.rawValue.uuidString), shellExecutionID: .known(hook.shellExecutionID),
+        processPID: .known(123), providerSessionID: .known("ses_fixture"), candidateSessionIDs: ["ses_fixture"],
+        processObservation: processStamp,
+        providerObservation: .init(authority: .providerObserved, freshness: .current, observedAt: processStamp.observedAt))
+    let wireEncoder = JSONEncoder(); wireEncoder.dateEncodingStrategy = .iso8601; wireEncoder.keyEncodingStrategy = .convertToSnakeCase
+    let wireObject = try JSONSerialization.jsonObject(with: wireEncoder.encode(link))
+    let fleetData = try JSONSerialization.data(withJSONObject: ["provider_sessions": ["items": [["shell_correlation": wireObject]]]])
+    let wireLinks = try LocalOperatorFleetLinkReader.read(fleetData, taskSessionID: boundary.taskSessionID,
+        runtimeAttemptID: boundary.runtimeAttemptID)
+    check("Local Operator preserves #70 Fleet wire identity without resolving again", wireLinks == [link])
+    let lastURL = store.directory.appendingPathComponent("\(boundary.taskSessionID.rawValue.uuidString).\(boundary.operationID.uuidString).001.json")
+    var tampered = try JSONSerialization.jsonObject(with: Data(contentsOf: lastURL)) as! [String: Any]
+    tampered["changes"] = []
+    try JSONSerialization.data(withJSONObject: tampered).write(to: lastURL)
+    var tamperRefused = false
+    do { _ = try store.records(taskSessionID: boundary.taskSessionID, operationID: boundary.operationID) }
+    catch { tamperRefused = true }
+    check("Local Operator semantic tampering cannot hide physical file changes", tamperRefused)
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

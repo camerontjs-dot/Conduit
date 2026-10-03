@@ -84,6 +84,12 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     case sessionStatus(taskSessionID: String)
     case processTree(taskSessionID: String)
     case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
+    case localPreflight(taskSessionID: String, relativePaths: [String])
+    case localRead(taskSessionID: String, operationID: String, section: LocalOperatorReadSection)
+    case localBegin(taskSessionID: String, operationID: String, objective: String,
+                    acceptanceCondition: String, mode: LocalOperatorAuthorityMode,
+                    relativePaths: [String], protectedRelativePaths: [String])
+    case localCheckpoint(taskSessionID: String, operationID: String, expectedRevision: Int, terminal: Bool)
     case queryMindGraph(question: String, scope: String)
     case createTask(
         agent: String,
@@ -92,7 +98,7 @@ public enum ConduitSessionCommand: Equatable, Sendable {
         idempotencyKey: String?
     )
     case reconcileTask(taskSessionID: String)
-    case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin)
+    case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin, localOperationID: String? = nil)
     case lifecyclePreflight(
         taskSessionID: String,
         operation: LifecycleOperation
@@ -128,10 +134,10 @@ public enum ConduitSessionAPI {
         switch command {
         case .listProjects, .listSessions, .listAdapters, .listProviderSessions,
              .fleetSnapshot, .observeWorker, .sessionStatus, .processTree, .sessionEvents, .queryMindGraph,
-             .lifecyclePreflight:
+              .lifecyclePreflight, .localPreflight, .localRead:
             return false
         case .adoptProviderSession, .createTask, .reconcileTask, .sendPrompt,
-             .lifecycleOperation, .interrupt, .closeSession:
+              .lifecycleOperation, .interrupt, .closeSession, .localBegin, .localCheckpoint:
             return true
         }
     }

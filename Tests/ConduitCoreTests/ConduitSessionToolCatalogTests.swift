@@ -7,8 +7,23 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 18)
-        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 7)
+        XCTAssertEqual(names.count, 25)
+        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 9)
+    }
+
+    func testLocalOperationToolsKeepReadAndWriteAuthoritySeparate() throws {
+        for suffix in ["preflight", "status", "receipt", "changes", "children"] {
+            let tool = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_local_" + suffix))
+            XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, true)
+        }
+        for suffix in ["begin", "checkpoint"] {
+            let tool = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_local_" + suffix))
+            XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, false)
+        }
+        let send = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: "conduit_send_prompt"))
+        let properties = (send["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+        XCTAssertNotNil(properties?["local_operation_id"])
+        XCTAssertTrue((send["description"] as? String)?.contains("not a command sandbox") == true)
     }
 
     func testRequiredArgumentsAndDescriptionsRemainActionable() throws {
