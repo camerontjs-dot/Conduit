@@ -1,10 +1,16 @@
 # Conduit
 
-Conduit is a native macOS work surface for operating **MainFrame** through the CLI agents already installed on your computer.
+Conduit is a local agent control plane with a native macOS workspace for operating **MainFrame** through installed CLI agents.
 
 **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — update on every user-visible product change (see `AGENTS.md`).
 
-It is deliberately a personal daily driver before it becomes an orchestration platform. The current app gives MainFrame a focused desktop face without replacing its file tree, its evidence rules, or the native agent CLIs underneath it.
+Conversation is the main work surface. Profiles declare first-party structured
+hosts and PTY fallbacks; Shell uses a real PTY. The app process
+currently owns runtime coordination and the Session API/MCP. The
+[chat-first programme](https://github.com/camerontjs-dot/Conduit/issues/4) and
+[execution train](https://github.com/camerontjs-dot/Conduit/issues/60) govern
+the separate extraction and restart qualification work. MainFrame's file tree,
+evidence rules and independent agent CLIs retain their authority.
 
 ## Daily loop
 
@@ -15,18 +21,20 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 3. Use the **All MainFrame** scope control when you want to filter task history
    by project. Project browsing is navigation over MainFrame files, not a
    second project registry.
-4. The task opens in Conversation while its real PTY starts independently in
-   the background. Press `⌘F` to search task history.
+4. The task opens in Conversation and launches its selected runtime backend
+   independently of the Raw view. Press `⌘F` to search task history.
 5. Compose multiline prompts, dictate them, paste screenshots, capture a screen
    region, or attach files and folders. Conduit records the exact native
-   composer submission and whether it is **Queued**, **Sent to terminal**, or
-   **Delivery failed**. Visible CLI output appears as a best-effort
-   **Derived from Raw** block and the thread is retained locally.
+   composer submission and its delivery state. Provider-native output retains
+   its source label; terminal output appears as a best-effort
+   **Derived from Raw** block. Conversation history is retained locally.
 6. Build a labeled context bundle from project coordination files.
-7. Open **Raw** for the live SwiftTerm PTY/TUI surface, approvals, direct CLI
-   input, and unsupported TUI behavior; return to Conversation with one click
-   or `⌘1`. Raw remains authoritative; Conduit retains source-labelled
-   conversation events, not an unprocessed Raw byte transcript.
+7. Use **Raw** for live SwiftTerm PTY/TUI work, approvals, direct CLI input and
+   unsupported terminal behavior when the task uses a terminal runtime. Return
+   to Conversation with one click or `⌘1`. Raw is the terminal authority;
+   provider-native observations retain their separate source. Conduit stores
+   source-labelled conversation events rather than an unprocessed Raw byte
+   transcript.
 8. Forward selected terminal output to another agent with an explicit
    verification boundary.
 9. Close the work session and write an append-only receipt under
@@ -37,11 +45,20 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 ### Agent workspace
 
 - Conversation-first sessions with a per-session **Conversation / Raw**
-  switcher. Conversation shows exact native prompts plus bounded rendered
-  output labelled **Derived from Raw**. Generic activity is never called
-  private thinking, completion, or verification.
-- Raw keeps the unchanged SwiftTerm PTY as the authoritative live execution
-  surface and direct-control escape hatch.
+  switcher. Conversation shows exact native prompts, source-labelled structured
+  output and bounded terminal projections labelled **Derived from Raw**.
+  Generic activity is never called private thinking, completion, or verification.
+- Raw keeps the unchanged SwiftTerm PTY as the terminal execution authority and
+  direct-control escape hatch for PTY/TUI work. An attachable Raw surface is not
+  promised for every structured provider.
+- The app-hosted Session API/MCP exposes observations and separately gated
+  lifecycle commands. A listening API or working tunnel does not grant write
+  authority. Provider compatibility remains bounded by the
+  [conformance evidence](docs/qualification/provider-conformance-v1.md).
+- The proposal-only **Orchestrate** workspace reviews local-planner or fixture
+  envelopes through deterministic policy. **Start one worker** remains disabled;
+  [#56](https://github.com/camerontjs-dot/Conduit/issues/56) owns routing and the
+  separately qualified launch handoff.
 - Task-history sidebar with Pinned, Active, Recent, optional Archived, and a
   secondary Discovered recovery section. Selecting history never reconnects a
   process; reconnect is always explicit.

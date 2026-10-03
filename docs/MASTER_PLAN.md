@@ -11,6 +11,13 @@ The app supplies context, execution continuity, and evidence-aware closeout
 around independent installed CLI agents. It does not replace MainFrame's file
 tree, impersonate agent APIs, or infer completion from terminal prose.
 
+The current dependency-ordered programme is tracked in
+[#60](https://github.com/camerontjs-dot/Conduit/issues/60), under
+[#4](https://github.com/camerontjs-dot/Conduit/issues/4) and its owner lanes.
+This file records the original workspace foundation and component status.
+Source implementation, independent qualification, mounted acceptance and
+release remain separate.
+
 ## Current daily-driver condition
 
 Cameron can stay in Conduit for the ordinary MainFrame loop when:
@@ -63,6 +70,11 @@ Conduit must:
 - defer ingest, promotion, retrieval, and knowledge extraction to MainFrame's deterministic tools
 
 ## Architecture
+
+The diagram records the PTY workspace foundation. Current source also contains
+the first-party structured hosts in [D-040](../DECISIONS.md#d-040-per-agent-first-party-structured-hosts)
+and an app-hosted Session API/MCP. AppModel still owns runtime coordination;
+#4's UI-independent ownership and GUI-restart acceptance remain separate gates.
 
 ```text
 SwiftUI application shell
@@ -122,6 +134,7 @@ ConduitCore (AppKit-free, with selftest/XCTest coverage)
 | Task continuity | Append-only metadata logs under `~/.conduit/task-sessions/` |
 | Conversation history | Append-only source-labelled events under `~/.conduit/conversations/` |
 | Terminal execution and TUI | Live PTY process exposed through Raw |
+| Provider-native session/turn observations | Declared structured adapter events, with their own source labels |
 | Work-session continuity | Append-only events under `~/.conduit/worklog/` |
 | Work-session receipt | New Markdown file under MainFrame `20_live/conduit/sessions/` |
 | Temporary pasted images | `~/.conduit/attachments/` |
@@ -165,8 +178,8 @@ rendered buffer or `tmux capture-pane`. Those blocks are always labelled
 agent prose. Generic activity is not private chain-of-thought, an approval, or
 a completion boundary.
 
-Raw is the live execution authority over the same controller. It is not stored
-as an unprocessed PTY-byte transcript. Conversation events survive runtime and
+For PTY/TUI work, Raw is the live terminal authority over the same controller.
+It is not stored as an unprocessed PTY-byte transcript. Conversation events survive runtime and
 app relaunch in a separate append-only local stream. A content-free task marker
 records that history is expected after the first successful conversation
 append. Missing marked history is called unavailable; an unmarked task remains
@@ -270,7 +283,10 @@ on the append-only source.
 
 ## Phase map
 
-Legend: **done** · **partial** · **planned**.
+Legend: **done** · **partial** · **planned**. The early **done** entries record
+foundation history. **Implemented in source** identifies landed components;
+their provider, installed-app and system qualification remains separately
+recorded by the current owner lanes.
 
 ### Phase 1: Daily-driver foundation — **done**
 
@@ -313,7 +329,7 @@ The foundation's terminal layer, rebuilt for correctness (see ADRs D-015…D-019
 - All MainFrame task rail with project filter and Discovered recovery —
   **implemented in source**
 - explicit New Task agent/scope selection — **implemented in source**
-- Conversation default, Raw secondary over the same real PTY —
+- Conversation default, Raw available for PTY/TUI work —
   **implemented in source**
 - append-only retained prompts and source-labelled rendered output —
   **implemented in source**
@@ -322,32 +338,47 @@ The foundation's terminal layer, rebuilt for correctness (see ADRs D-015…D-019
 - selected task/window navigation persistence — **planned**
 - destructive clear-history and transcript-body search — **deferred**
 
-### Phase 3: Capability-declared agent events
+### Phase 3: Capability-declared agent events — **partial**
 
-- declare adapter capabilities per agent rather than assume one common stream
-- accept agent-native structured output where the CLI supports it
-- add source-labelled approval, tool, change, test, and artifact events
-- degrade to the current Conversation subset plus Raw when an adapter is absent
-  or fails
+- per-profile first-party launch surfaces and native protocol envelopes —
+  **implemented in source** ([D-040](../DECISIONS.md#d-040-per-agent-first-party-structured-hosts))
+- source-labelled output, approval, completion and failure events —
+  **implemented in source** for declared adapters; completion is not verification
+- broader tool, change, test and artifact coverage and version-specific
+  conformance — remaining implementation/qualification under
+  [#53](https://github.com/camerontjs-dot/Conduit/issues/53)
+- explicit PTY fallback and Raw remain the terminal path when a structured
+  surface is unavailable
 - never infer structured facts merely because a CLI printed matching prose
 
-### Phase 4: Assurance and retrieval
+### Phase 4: Assurance and retrieval — **partial**
 
-- add review surfaces for changes, tests, files, and artifacts backed by
-  deterministic inspection
-- separate MindGraph durable-knowledge and project-context result groups
-- `@file` and `@context` picker
+- deterministic file/Git inspection and review surfaces — **implemented in
+  source**; broader changes/tests/artifacts acceptance remains with
+  [#50](https://github.com/camerontjs-dot/Conduit/issues/50) /
+  [#54](https://github.com/camerontjs-dot/Conduit/issues/54)
+- separate MindGraph Knowledge/Projects scopes and citation classes —
+  **implemented in source**; retrieval remains nomination/context
+- Context Compiler core — merged after bounded component qualification in
+  [#108](https://github.com/camerontjs-dot/Conduit/pull/108); source adapters,
+  UI/destination wiring and delivery qualification remain with
+  [#58](https://github.com/camerontjs-dot/Conduit/issues/58)
+- `@file` and `@context` picker — retained roadmap scope
 - retain operator-reviewed terminal-output forwarding
-- evidence-bearing handoff notes
+- evidence-bearing handoff notes — delivery and acceptance qualification remain
+  with #58 and #53
 - no unlabelled blending of retrieval classes
 
-### Phase 5: Resource-aware workstation
+### Phase 5: Resource-aware workstation — **partial**
 
-- process and memory dashboard
-- explicit Ollama model unload controls
-- service profiles for image-generation workloads
-- resource policies and launch warnings
-- optional Pixel Agent Tracker projection of recorded state
+- process and memory dashboard — **implemented in source**
+- explicit Ollama model unload controls — **implemented in source**; an unload
+  request and an observed model release remain separate evidence
+- resource admission/circuit foundations — **implemented in source**; launch
+  warnings and capacity qualification remain with #53
+- service profiles for image-generation workloads — retained roadmap scope
+- optional Pixel Agent Tracker projection of recorded state — conditional
+  roadmap scope
 
 ## Out of scope until proven useful
 
