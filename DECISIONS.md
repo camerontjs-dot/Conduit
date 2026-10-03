@@ -2054,3 +2054,33 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+
+## D-073: MindGraph query presentation retains exact request identity
+
+**Status:** Proposed (2026-10-03; #50 / #60 candidate)
+
+**Boundary:** The query station keys its view-owned cache by transport-trimmed
+question as exact UTF8 bytes, explicit Knowledge or Projects scope, result limit
+and exact configured root identity. Canonically equivalent but byte-distinct
+Unicode questions remain distinct transport requests. A request has
+its own opaque identity. Completion updates only its retained loading entry;
+only a still-selected, successfully admitted result reaches the existing
+nomination callback. A root change retires only other-root entries; stale completion refuses without
+clearing current-root work. View unmount invalidates retained requests.
+No automatic query, context pin, source admission or transport change follows.
+
+The cache retains at most 16 entries and two pending requests per view. Pending
+entries are protected from eviction; refused starts create no queued work.
+These are representation/request-count bounds, not a measured global process
+or physical memory bound. Existing retrieval calls may finish after unmount;
+their output has no retained presentation authority.
+
+Cached results remain query snapshots. They do not prove current source bytes,
+Git state, producer binding, corpus quality or verified claims. Query explicitly
+refreshes a selection. Trust labels and excerpts remain those of the nomination.
+
+> **Binds:** this candidate's MindGraph presentation cache and query view.
+> **Tier:** T0; the proposal confers no merge or installed qualification.
+> **Check:** owner Core fixtures, selftest/XCTest parity, source review and native compile/package receipts; fresh independent and mounted qualification remain separate.
+> **Escape:** reject stale or mismatched completion and keep explicit loading/error/unqueried state; unavailable qualification remains NOT_RUN rather than source freshness or whole-product PASS.
