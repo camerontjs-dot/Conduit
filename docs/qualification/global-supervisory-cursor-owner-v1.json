@@ -1,0 +1,163 @@
+{
+  "NOT_RUN": [
+    "Fresh independent qualification",
+    "App/HTTP/MCP source adapter or endpoint integration",
+    "Authentic physical source selection and bounded traversal",
+    "Typed queue/delivery/provider-turn/approval/recovery fact integration",
+    "Mounted restart or duplicate create/send qualification",
+    "Consequential consumer acceptance",
+    "Installed/operator/release journey"
+  ],
+  "candidate_base": "7512943469f2f2c65b268fe9db542c6a46908fbf",
+  "candidate_base_tree": "e95d4b114034717b7dc8d68212a5b2cec85e303b",
+  "checks": {
+    "archived_current_post_package_pair": {
+      "SDK": "26.5",
+      "equal_program_sections": 41,
+      "equal_resources": 25,
+      "independent_or_publisher_authentication": false,
+      "minimum_macos": "13.0",
+      "only_declared_signing_fields_and_signature_regions_differ": true,
+      "opaque_suffix_semantics": "UNKNOWN; exact bytes retained",
+      "oracle_sha256": "d802a4b31382f8095079e3bee5b8c4d3623671d762832bd4f4fa0af519eb1cea",
+      "package_CDHash": "8f4662543a44f80975c33d62250fe22398dd460e",
+      "physically_archived_files": 55,
+      "raw_sha256": "baae04d27f18da9af73fadc1bcfe7c109e5fe9497dd5fffc4d5e79105a49b290",
+      "receipt_sha256": "c97edb4edeb361af0168f8677d7977171fc34638a267554942847962c62c93dd",
+      "recomputed_CodeDirectory_page_hashes": 8268,
+      "signed_sha256": "97e5c410c920eda10fba987d8673428f57f398a26941ef7ce66c16c42900cbd8"
+    },
+    "existing_native_socket_fixture": {
+      "actual_native_temp_root": "System temporary root; canonical alias interpretation is retained in the private receipt.",
+      "bounded_interpretation_sha256": "db9faede8431de65d562e592c161ff9ceadacaad64ccd9ecfbf24025958e05c2",
+      "configured_TMPDIR_used_by_native_fixture": false,
+      "exact_observed_socket_and_profile_parent_absent_after_exit": true,
+      "failures": 0,
+      "general_profile_isolation_or_exhaustive_descendants": "UNKNOWN",
+      "native_PID": 71246,
+      "observed_sockets": 1,
+      "receipt_sha256": "c9792d77042d716bdea83a624d340105831e3346ee51b30fa2783a080884e2d4",
+      "tests": 1
+    },
+    "focused_XCTest": {
+      "failures": 0,
+      "receipt_sha256": "cb4fb9682342c9724017d3a8b2097f2a23c4bf13e492e38a75d7f6702f617031",
+      "tests": 42
+    },
+    "hosted_CI": {
+      "authority": "The actual run, job and step disposition will be reconciled in the owning PR; no CI pass is implied here.",
+      "disposition": "NOT_RUN_BEFORE_DRAFT_PUBLICATION"
+    },
+    "maintained_package": {
+      "passed": true,
+      "receipt_sha256": "74c5fccd1b769a62a3732f089a79f14571c51b3b160249710174a5dda933afc8",
+      "source_unchanged": true,
+      "strict_native_signature_verification": true
+    },
+    "maintained_test_script": {
+      "Python_contract_tests": 10,
+      "XCTest": 645,
+      "existing_provider_opt_in_skips": 3,
+      "failures": 0,
+      "outside_outer_sandbox": true,
+      "provider_opt_ins_removed": true,
+      "receipt_sha256": "c775e1c87dc3f576bde341636a0a8054ffa9a2b7582a409532626df273fee6a4",
+      "selftests": 475,
+      "source_unchanged": true
+    },
+    "release_build": {
+      "initial_executable_byte_custody": "FAIL_NOT_COPIED_BEFORE_MAINTAINED_PACKAGE_REBUILD",
+      "initial_executable_sha256": "97ed39a62b5971a1365987055729d0166315cba2530faf45c5e096581d91fb5a",
+      "initial_release_versus_package_body_identity": "NOT_RUN_UNKNOWN",
+      "passed": true,
+      "receipt_sha256": "95ff916859ae3604770a79da6492525b4e223c7f0c656e16c04ebfa4a219f8da",
+      "source_unchanged": true
+    },
+    "standalone_pressure": {
+      "actual_distinct_process_log_and_cursor_recovery": true,
+      "checks": 85,
+      "failures": 0,
+      "native_commands": 68,
+      "receipt_sha256": "f3af9ee61472136d55c371c3dfb8179ed831941dfed7d860bdd0ea8c847df68c",
+      "source_record_bytes_not_physical_source_authentication": true
+    }
+  },
+  "claims_excluded": [
+    "Second append/task-state authority",
+    "Source authenticity from supplied namespace or decoded digest",
+    "Signed cursor or proof of client consumption",
+    "Total chronological order or global append time",
+    "Provider readiness/completion, verification or acceptance",
+    "General cryptographic confidentiality from content-free hashes",
+    "Initial release-versus-package body equality",
+    "General #87 profile isolation and exhaustive fixture descendants",
+    "Independent qualification or completion of #4 programme"
+  ],
+  "core_source_sha256": "1cfa1c669d4d94e93d3de6b706fee6abc17c4b7a31b7477e7be64e8a2d1b7025",
+  "decision": "D-074 Proposed/T0",
+  "disposition": "PASS_FOR_BOUNDED_SOURCE_SCHEMA_AND_FIXTURES_ONLY",
+  "governing_acceptance_comments": [
+    5843421082,
+    5843421229
+  ],
+  "independent_qualification": false,
+  "live_main_before_native_freeze": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "live_main_tree_before_native_freeze": "3308565e9fbc35f8541911cea9a38b4e1b251260",
+  "new_xctest_source_sha256": "e5eef8c57e473092143839427c4d4939d1c0724ec4c839b64a1a85096fa7872f",
+  "owning_issue": 4,
+  "pre_edit_oracle_sha256": "f0404e4db692a6a8529d8eaa4892eb6012c08230fa8a07896183d71a75c198f5",
+  "preserved_negative_evidence": [
+    {
+      "disposition": "GAP_NOT_IMPLEMENTED",
+      "kind": "No historical baseline regression was executed",
+      "receipt_sha256": "5482176743b72520486668d8e757224f85185e556b6376a100d988c81eec3155"
+    },
+    {
+      "kind": "Initial working-copy/main audit mismatch; corrected exact main Git-object comparison",
+      "receipt_sha256": "f37ab43d54e0a535c9e6153342f93b03971c6f342f3b2435b527eb19ebff67bc"
+    },
+    {
+      "kind": "Wrong-store pressure request construction failed before any native trial",
+      "receipt_sha256": "2e7089d7e3d2670033412f35454ed425e77d1191e0a1ac286cfe3f4e794174c8"
+    },
+    {
+      "kind": "Pretrial native manifest metadata boolean incorrectly described post-oracle source changes",
+      "receipt_sha256": "c59390f21d58e5e0cec7ce16d011df43d8039817198676eacf92f5b900092303"
+    },
+    {
+      "kind": "Restricted dependency DNS before compilation",
+      "receipt_sha256": "ca5fd9995cc6ff51888dc6a77686d8b91271ed1cc6e2e5683cb5c36961252c0a"
+    },
+    {
+      "kind": "Nested sandbox manifest EPERM before maintained checks",
+      "receipt_sha256": "fbcff7b268d6a20fc0675ab83dd5cc871f27b7a0fab7378b9584f792ab8ba41b"
+    },
+    {
+      "kind": "Existing socket fixture outer sandbox bind EPERM and unwaited expectation; two failures retained",
+      "receipt_sha256": "ef74a39d52b3758f023b8f4b952f7b5b3a2e8bd93ec465c4aa4b632b03d0f573"
+    },
+    {
+      "kind": "Native pass but broad custody apparatus counted ignored CPython bytecode; no source modifications",
+      "receipt_sha256": "876ba54af0f3ef4e1a9a251afd89b7c17434692194f1a202037f498dfb64565f"
+    },
+    {
+      "disposition": "UNKNOWN; not teardown evidence",
+      "kind": "Empty socket monitor observation",
+      "receipt_sha256": "c775e1c87dc3f576bde341636a0a8054ffa9a2b7582a409532626df273fee6a4"
+    },
+    {
+      "kind": "Release observer failed after spawn; producer outcome UNKNOWN, no binary",
+      "receipt_sha256": "1d34b3985fe2ffac2ee478342474ef95ba343ccf49dbcd1cab8033aa308a9469"
+    },
+    {
+      "disposition": "FAIL_INITIAL_ARTIFACT_BYTE_CUSTODY",
+      "kind": "Initial successful release executable was overwritten before archival byte copy",
+      "receipt_sha256": "af8fcebd40012153643e68f9b0d7029d3c64fd4b9c68cdd015418e7a49c7d8ad"
+    }
+  ],
+  "role": "source_exposed_implementation_owner",
+  "schema_version": 1,
+  "selftest_source_sha256": "a91257ff56ab91137a262e949aa85e3a69081e7a1697bedb7583d6a9569266aa",
+  "source_manifest_sha256": "0ac7984c4f45630246001215ac6d3888d259c9bdd56456e34cb74d954dc144e4",
+  "source_native_binding": "All 244 main native Git blobs are unchanged between the candidate base and observed main. The candidate adds two native files and changes the matched SelfTests."
+}

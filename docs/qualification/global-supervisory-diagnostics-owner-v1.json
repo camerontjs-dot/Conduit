@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "role": "INHERITED_IMPLEMENTATION_OWNER_NOT_INDEPENDENT",
+  "disposition": "PASS_BOUNDED_OWNER_NATIVE_AND_ARTIFACT_GATES_INDEPENDENT_NOT_RUN",
+  "owning_issue": 4,
+  "decision": "D-074 Proposed/T0; repair successor, no accepted runtime authority",
+  "candidate_base": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "candidate_base_tree": "3308565e9fbc35f8541911cea9a38b4e1b251260",
+  "predecessor": {
+    "PR": 145,
+    "head": "272bba2797ed81a958e812f35583a58c8e0bedb6",
+    "tree": "273f26ca953a6a739395704cda12b8bb098fafe0",
+    "disposition": "TERMINAL_FAIL_REFUSAL_OUTPUT_BOUND",
+    "root_pressure_result_sha256": "11b77e5e74434a63ddcaea9d8688d5d39e8287497363f6c36e60a545aac7f534",
+    "root_pressure_publication": "https://github.com/camerontjs-dot/Conduit/pull/145#issuecomment-5971864673",
+    "historical_owner_proof_sha256": "3fe0044398539985345a138a69954cf22a551db491eeadd149298ee3765d2827",
+    "historical_initial_release_byte_custody": "FAIL_PRESERVED",
+    "historical_temporary_artifact_current_custody": "UNAVAILABLE_AT_RECORDED_PATHS"
+  },
+  "source_binding": {
+    "native_file_count": 246,
+    "native_checkpoint_manifest_sha256": "a441451ef06a9f78fc99ba501010578a58ce2ea3f4c51bca154453c07e2dea67",
+    "core_source_sha256": "bd7a8ed41f9c4fa97c3aed5f350d96adb2f4255ed06492754671d0a77fc102cd",
+    "xctest_source_sha256": "4748acda3fc588d4af71bd6c9b9afcd3053a3f3a832d0c469b92866c3204c00c",
+    "selftest_source_sha256": "ed10492719bd320da7b59779e130498698e80f3e92743c1265d6a499950c725d"
+  },
+  "owner_oracle_sha256": "9d31e9381cc81fbf6a0d947ceaef13c1d04c02e2da3267196fe44913b2402640",
+  "unchanged_root_driver_sha256": "eb45b815588f1ee5ded25d1037e88682b3dc14168b413e37d7a967763890aafa",
+  "red_replay": {
+    "complete_actual_Core_files": 15,
+    "five_canonical_outputs_byte_exact_to_root": true,
+    "result_sha256": "31d7983376031c45c09f8c63da84a5f8742458269bea9b8b09a3b683a9139433"
+  },
+  "green_replay": {
+    "same_driver_and_five_declared_inputs": true,
+    "only_changed_Core_closure_file": "TaskSupervisoryEvents.swift",
+    "empty_store_bytes_unchanged": 617,
+    "one_kind_bytes_unchanged": 170,
+    "8193_repeated_kind_bytes": 170,
+    "32769_repeated_kind_bytes": 170,
+    "9216_mixed_kind_bytes": 343,
+    "mixed_distinct_kinds_preserved": 9,
+    "fail_closed_privacy_and_roundtrip": "PASS",
+    "result_sha256": "fc299b03f87d04be7fb12edbbefda8d82432a978dd2d80159e7dab0ec64e9844",
+    "minimum_macos_load_command": "13.0",
+    "SDK_load_command": "13.0",
+    "explicit_compiler_SDK_argument": "MacOSX26.5.sdk",
+    "light_source_validation_receipt_sha256": "68112e46c7096fbeb98aa17c60b77aa42ebd06d49035937b9e6df319daa8f172"
+  },
+  "portable_regression_source": {
+    "new_XCTest_cases": 3,
+    "matching_new_SelfTest_checks": 3,
+    "execution": "PASS: all three added XCTest cases and matching SelfTest checks executed in focused and full maintained suites."
+  },
+  "compatibility": "Diagnostic snapshots/refusals now contain every distinct kind once in sorted order. Per-task diagnostics remain unchanged. Ready-page/cursor policy, task/runtime authority and source append/read behavior remain unchanged.",
+  "preserved_apparatus_deviation": {
+    "hygiene_initializer_template_replacement": "Restored exact maintained main hook before commit; no bypass or test execution with replacement.",
+    "receipt_sha256": "2028eeb3444f5a2ebe218d6d8f080b190dd5b53e7a809211ea8aabba15344acc",
+    "native_temporary_path_discovery_warning": "confstr warning retained; no general profile isolation or SDK26.5 executable claim"
+  },
+  "NOT_RUN": [
+    "Fresh independent qualification",
+    "Authentic physical source selection and bounded traversal",
+    "Mounted AppModel/API/MCP and runtime/provider integration",
+    "Hosted execution at source freeze; first natural Draft attempt is recorded separately in PR and owner issue",
+    "Installed/operator qualification, merge, installation or release"
+  ],
+  "claims_excluded": [
+    "Total process memory or upstream decoding bound",
+    "Live transport, crash or concurrency qualification",
+    "Recovery of missing historical native artifact bytes",
+    "Provider completion, verification or acceptance authority",
+    "Independent or whole issue4 acceptance",
+    "Exhaustive native fixture or descendant teardown observation",
+    "General #87 profile isolation; Foundation fixtures may use system temporaryDirectory despite configured TMPDIR"
+  ],
+  "tested_source_tree": "9731f1f8136054a1ec8badfc9caab32bd8b47b40",
+  "owner_native_terminal_receipt_sha256": "212c4480693f2c89938592c0a1e14edeb0ef4dd96ddf68af111cad918b8f5be0",
+  "native_owner_gates": {
+    "focused_XCTest": 45,
+    "full_XCTest": 648,
+    "full_XCTest_existing_provider_fixture_skips": 3,
+    "XCTest_failures": 0,
+    "SelfTest_pass": 478,
+    "SelfTest_failures": 0,
+    "Python_contract_pass": 10,
+    "maintained_release_and_package": "PASS; no installation or launch",
+    "all_346_source_files_unchanged_during_each_gate": true,
+    "native_246_files_unchanged_after_final_metadata": "Required final freeze receipt; this file is the only post-gate metadata edit.",
+    "focused_acceptance_sha256": "35251f33bc6d23e1868d4c67efd313b5df53b193c817120009fdc7a90a8625d5",
+    "full_acceptance_sha256": "fb00d0bbb93529a85c7b4c65c0a87d99478bed0fc5cee0182fdcb9f767062e09",
+    "ordinary_root_source_review_sha256": "af554461942b6fd20c32644ac95bc50a2b561959bfbd56bdf041a6c8d95b81b7",
+    "review_is_source_exposed_not_independent": true
+  },
+  "current_artifact_custody": {
+    "first_release_binary_sha256": "a14f73ffd9be2e01ad0fb737dae412e16d1dba37365b3cb3d74de564c92fe42a",
+    "physically_archived_before_package_build": true,
+    "first_release_custody_sha256": "198ca7ac87dccddf50bb0e179181873163e48a3764802774c882429271a7d06e",
+    "current_linker_binary_sha256": "a14f73ffd9be2e01ad0fb737dae412e16d1dba37365b3cb3d74de564c92fe42a",
+    "first_release_equals_current_linker": true,
+    "signed_bundle_executable_sha256": "747ec769cf16682cf87a9dcb9c23b9b1e49838ecf996b515ae8154590df1cc85",
+    "current_pair_custody_sha256": "389a4dfa5e9e90fe19c8928d8d8945cf9e88a3286d05a83cd10ee85b2d1568aa",
+    "package_identity_oracle_sha256": "c2048e2284a2babf7f5b6ce2574f85e6e840707be6f84fcebe1438824dec07f9",
+    "bounded_identity_result_sha256": "093511e81fd7d673271323aca8cae2ad6cb1e33c6b85e69710ad1a653264f6e9",
+    "program_sections_exact": 41,
+    "matched_CodeDirectory_page_hashes": [
+      6615,
+      1654
+    ],
+    "actual_special_slots_resource_checks_and_native_strict_verification": "PASS",
+    "exact_resource_files": 25,
+    "actual_minimum_macos_load_command": "13.0",
+    "actual_SDK_load_command": "26.5",
+    "opaque_signature_suffixes": "Exact entire signature regions and 4/9 suffix bytes preserved; suffix semantics UNKNOWN.",
+    "no_general_signing_normalization_or_authenticated_publisher_claim": true,
+    "historical145_artifacts_reconstructed": false
+  }
+}

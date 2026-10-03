@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Changed
 
+- The proposed global supervisory cursor now summarizes read diagnostics as
+  distinct sorted kinds. Repeated malformed or unreadable observations remain
+  explicit refusals without growing the produced diagnostic payload; source
+  paths/details and diagnostic counts remain outside the export. This repairs
+  the pressure failure preserved on frozen #145 and adds no runtime authority.
+
 - Product documentation now describes the existing structured hosts,
   app-hosted control plane and proposal-only Orchestrate baseline. The master
   plan points to the current #60 train and separates landed components from
@@ -39,6 +45,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   for Conduit's actual checks, exact candidate identities and negative evidence.
 
 ### Added
+
+- ConduitCore adds a proposed source-derived global supervisory cursor over
+  decoded per-task event snapshots. It preserves compound identity and source
+  order, detects prefix mutation and conflicting retries, and exports bounded
+  content-free records with explicit unsupported facts. No app, HTTP or MCP
+  integration is included; provider completion, verification and acceptance
+  remain separate (#4, D-074 Proposed/T0).
 
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
