@@ -89,14 +89,77 @@ identity and inference are retained without a remote or mounted reproduction
 claim. The earlier 49-check result remains evidence for its earlier source,
 separate from the revised 50-check source.
 
+## Maintained owner execution
+
+The source was frozen at head
+`474022628dacd20bb3c5508691648a56463433f6`, tree
+`ea7d872105e93788dbdc72b2e876e0a254f5d6ef`, before maintained owner execution.
+The completed native runs used the actual Xcode toolchain with an explicit
+macOS 13 target and SDK 26.5. All 352 tracked source files and the two exact
+dependency checkouts matched the input freeze before and after every gate.
+
+The 20 maintained lexical XCTest methods executed with no failures or skips.
+The complete selftest passed 548 checks, the Python repository contract suite
+passed 10 tests, and the complete native XCTest suite executed 646 tests with
+zero failures and three explicit provider skips. Those skips leave installed
+OpenCode authority, persistence and shell correlation qualification **NOT_RUN**.
+They are not provider success evidence. Existing compiler warnings remain in
+the physical traces.
+
+The first release executable and resource bundles were physically copied and
+byte-verified before the unchanged package script ran. Release and package
+producers both completed their actual waits with exit zero. The retained raw
+executable is SHA-256
+`2f9d8a25df4a9e5ad2852caa153c1318a8936f4127a12d83644d3f95a9ee45c1`;
+the retained package executable is
+`92f30269716a44cf233d617a345f000f36048780a7fe665c4985bec82c702e07`.
+
+A separately frozen, path-only adaptation of the established V7 artifact
+protocol passed for these exact artifacts. It compared all 41 section headers
+and contents, recomputed 6,637 release and 1,660 package code-page hashes,
+verified package plist/resource special slots and actual strict native
+signatures, and checked 25 resource files including both resource bundles.
+The observed package minimum OS is 13.0 and SDK is 26.5. The comparison masks
+only three declared signing header fields before comparing the remaining
+pre-signature body. Entire original binaries and signature regions remain
+retained. Opaque signature suffix semantics, authenticated publisher identity,
+general normalization and source provenance remain unknown.
+
+| Maintained owner receipt | SHA-256 |
+| --- | --- |
+| Input/source/dependency closure | `b037d0e234a8890f00a6bd71a4dc28ad87c76da961675b881b7f571d8bc72de0` |
+| Native oracle | `d8dc0ee716c68bb7c967a5af602a6c8b2d5fd6c401d30b1b5235c919ba00db10` |
+| Focused XCTest execution | `7e3f5a51a041637c1f1732b21142c1848f81096b5da68e66a93e97a784bb2e64` |
+| Complete selftest | `ae4b73eb73ef5638d035a5dba990190da9652f08d11f29a45f5e65c883e81b85` |
+| Python contracts | `c088e612c4238501b9301f6efe0fb8dbcc474d2d192c8b8e2304fd7e635070fc` |
+| Complete XCTest execution | `2a16eb9cebf10762639ad54ff1ef88ca3d20b0d6e2b896b88b840005c18515ff` |
+| Release producer | `4b2a5ae8eb641c6228e49007a279b593295189304af7ff99db9dd93233028a4d` |
+| First release byte custody | `cc833ccea369e2788b017b8e86fe7b5911b9d190177b0388b61024c0fe82b6a6` |
+| Package producer | `2389bdd25eca9a31b790656f7e106657403f544295f6819b7c791ff5288603a7` |
+| Complete package byte custody | `b788c1779ccbc471e1af780ceed2d67447c5dc8e2332c01fc52d04788e94508e` |
+| Artifact oracle | `366271c31e80904bd771a5b4c432bcc1a156a213bfe1eb3f530c446c360d4f9d` |
+| Artifact execution | `128fdc4d181e66394d20b5a9a9b41aae1bb19e28cafe15fe9ec0910439f5fc9d` |
+| Bounded artifact result | `e97a22047a6fdc4ecf85a420d24ad15b1d311b0110c7c1897271cf61d17c1d73` |
+| Native owner terminal | `e59047f3ce9e85350340958bdc49a1968c0bd158cdaf75e9363aee0871e86fe9` |
+
+The first dependency-input copy refused borrowed Git alternates before test
+execution. Its failure is retained; the successor copied exact bare objects
+and made independent, no-hardlink checkouts with unchanged package pins and
+verified canonical commit/tree/blob closure. A first inverse path-adaptation
+preparation failure is also retained separately from artifact execution. Neither
+failure was converted into a source/test pass. Complete source bytes, a Git
+bundle, both original app artifacts and post-run test binaries are retained.
+Per-test launch binary hashes and exhaustive fixture descendant/socket teardown
+were not observed. Candidate-owned caches and temporary paths do not establish
+complete installed-profile isolation.
+
 ## Pending acceptance
 
-Maintained full selftest, native XCTest execution, repository contract suite,
-release/package/signing/resource checks and hosted CI are **NOT_RUN** for this
-checkpoint. Their queued execution is a separate gate. Fresh independent
-qualification is **NOT_RUN**; this inherited owner context is ineligible to
-self-qualify useful independence. Dependency or exact whole-stack acceptance,
-governing review and branch policy are required before promotion.
+This is inherited implementer owner evidence and ordinary source-exposed
+review. Fresh independent qualification remains **NOT_RUN**. Dependency or
+exact whole-stack acceptance, governing review and branch policy are required
+before promotion. Hosted CI is a separate first-publication gate; no hosted
+execution or retry is claimed by these local receipts.
 
 No app mount, MainFrame staged-entry composition, delivery, provider turn,
 acceptance, operator mutation, installation, release or merge is established.
