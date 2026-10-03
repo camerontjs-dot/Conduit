@@ -91,6 +91,10 @@ final class MainframeSourceEditingSession: ObservableObject {
         return count
     }
 
+    func noteNavigationBlocked() {
+        statusMessage = "Choose Save, Discard or Cancel before closing this source buffer."
+    }
+
     @discardableResult
     func save(root: URL, file: URL) -> Bool {
         guard canEdit else {

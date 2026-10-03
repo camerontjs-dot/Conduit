@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "at": "2026-10-03T02:12:48.646841+00:00",
+  "kind": "OWNER_COMPONENT_RECEIPT_SUMMARY",
+  "governing_issues": [
+    54,
+    50,
+    60
+  ],
+  "proposal": "D-067 PROPOSED T0",
+  "parent": {
+    "pull_request": 129,
+    "head": "0bc997d43b06b81867c9f7236c69493d585dbd00",
+    "tree": "8f353046c6aba9dd4a71972ac5a520f9f7eba069"
+  },
+  "product_sources_sha256": {
+    "Sources/Conduit/ConduitApp.swift": "6f987883a72dbf3f1a00c6133e15902420f1864a4713a2371f27830cfef44e57",
+    "Sources/Conduit/MainframeExplorerApplicationDelegate.swift": "6162f4fd8bf6ae9c2c1dd0ec35448b07f81381a71e02cbf90644a44e93640e41",
+    "Sources/Conduit/MainframeExplorerWindowCloseGuard.swift": "4107b70c3a563ccbb19bb4352297b73960abc63a19324066139e307c6bfbcb30",
+    "Sources/Conduit/MainframeSourceEditingSession.swift": "8c0842ce1e2868064079f7f5eb8c7a5c0ec30c758f3048382bbac79569f34fa2",
+    "Sources/Conduit/MainframeSourceWorkbenchCloseGuard.swift": "5401cd4114a4b02102aa23e0037b665d75f24f90923e00c27c7c0b8297b87aea",
+    "Sources/Conduit/MainframeSourceWorkbenchView.swift": "d97c2a18c45e3e6aec4178d722349e264b3b0e3caf4b1a9f3c715efade388bd5"
+  },
+  "independence": "OWNER_ONLY",
+  "native_passes": [
+    {
+      "private_receipt": "source-workbench54-native-green-attempt3.json",
+      "receipt_sha256": "fe2b4443917e8b07336b5516ac78fc156939ad33a1725c18cb4ab90151a1f177",
+      "disposition": "OWNER_NATIVE_COMPONENT_PASS",
+      "checks_passed": 220,
+      "checks_failed": 0,
+      "scenario_count": 31,
+      "source_unchanged": true,
+      "probe_sha256": "7453be7d328483e9cc50a8c6f632d699013585558a0b969a8fb3319238326731",
+      "binary_sha256": "c22f545761e52f20965279838ef78e4e2342f8484a37abce19a3faa7c0bc28c6",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "private_receipt": "source-workbench54-native-detach-v2-attempt2.json",
+      "receipt_sha256": "4e45ff23f4d8c0652b9810f327d7030a582010a316313ae51b6983f7c8402ad5",
+      "disposition": "OWNER_NATIVE_COMPONENT_PASS",
+      "checks_passed": 10,
+      "checks_failed": 0,
+      "scenario_count": 1,
+      "source_unchanged": true,
+      "probe_sha256": "7138b9494adc01c0c65a80e229a5d22559f020805488a97906ca57ddde61eb73",
+      "binary_sha256": "b0c994b1128637d96a59bcb96fe56f7bef27eb83471872b184abb94416dde437",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "private_receipt": "source-workbench54-native-detach-v3-attempt1.json",
+      "receipt_sha256": "a6812da1367ecbfef5bbcc100b0a670830aac387361fcb8e8e28646037571e04",
+      "disposition": "OWNER_NATIVE_COMPONENT_PASS",
+      "checks_passed": 63,
+      "checks_failed": 0,
+      "scenario_count": 6,
+      "source_unchanged": true,
+      "probe_sha256": "7138b9494adc01c0c65a80e229a5d22559f020805488a97906ca57ddde61eb73",
+      "binary_sha256": "b0c994b1128637d96a59bcb96fe56f7bef27eb83471872b184abb94416dde437",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "private_receipt": "source-workbench54-primary-regression-20261003T015918Z.json",
+      "receipt_sha256": "f90c2af1e2f462d9ca16a0c08b599e4f2ee1cc329fafc9f4e9a5c7bc01d2e961",
+      "disposition": "OWNER_NATIVE_PASS",
+      "checks_passed": 14,
+      "checks_failed": 0,
+      "scenario_count": 2,
+      "source_unchanged": true,
+      "probe_sha256": "6077795a414ed0e721fa91f176b65216946670898f4cb4f4acbb50b6dbf4624e",
+      "binary_sha256": "ecfe229cf192ff512ba0d21ceda180be510000b6a63d3d107f95658829aac659",
+      "log_sha256": "e5062040477b22e44dd7bd2cdc3569ed23e56d91296b0f119fd41189e3319e2c"
+    },
+    {
+      "private_receipt": "source-workbench54-primary-regression-20261003T020007Z.json",
+      "receipt_sha256": "8145af6640319a238c36f6bb0415bceb62b179d2b32204d4fcac65f45b639860",
+      "disposition": "OWNER_NATIVE_PASS",
+      "checks_passed": 49,
+      "checks_failed": 0,
+      "scenario_count": 9,
+      "source_unchanged": true,
+      "probe_sha256": "6077795a414ed0e721fa91f176b65216946670898f4cb4f4acbb50b6dbf4624e",
+      "binary_sha256": "a644a16478db479cab655a40a897d888871dc80396acd77b9373e3009e4d5bd0",
+      "log_sha256": "a141f4cd1d67bf6a5655e34e7f078745cefeefb2253d9c3cc9a197ea2c279d61"
+    },
+    {
+      "private_receipt": "source-workbench54-primary-close-attempt1.json",
+      "receipt_sha256": "80d803a26f02b672d5a1609a196456d06e350d141beb6746c0a31bc1d512b98b",
+      "disposition": "OWNER_NATIVE_COMPONENT_PASS",
+      "checks_passed": 49,
+      "checks_failed": 0,
+      "scenario_count": 4,
+      "source_unchanged": true,
+      "probe_sha256": "9fbd5c450a5534d9c42066eabb6b65303387add3dedc61c3194d40f71966bc5f",
+      "binary_sha256": "e8a56dc2d33471a88bb0727343cd79b7313ab5e2c95cc06aabea8ff3abc04dc0",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "native_failures_preserved": [
+    {
+      "private_receipt": "source-workbench54-native-red-v2.json",
+      "receipt_sha256": "d2f130db6c11a4f469ce4b713b8d8f8afbb54b9d9df9f16cacc8d3d7b08a41b8",
+      "disposition": "RED_NATIVE_DIRTY_CLOSE_AND_QUIT_FALSIFIED",
+      "checks_passed": null,
+      "checks_failed": null,
+      "scenario_count": 2,
+      "source_unchanged": true,
+      "probe_sha256": "d4d7d4888618da3495bb945d58b06d30c4a7e2c3572df83e3181d5331d605ff5",
+      "binary_sha256": "7abfa6d20029a470db89fcb7eb1bed19772bbf4e8457c043b5f267155e235a91",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "private_receipt": "source-workbench54-native-green-attempt1.json",
+      "receipt_sha256": "d8ef10213bf145bfe2905437574a9626dca874659b6ca04867976ee4ada7b337",
+      "disposition": "OWNER_NATIVE_FAILURE_PRESERVED_DEPENDENT_GATES_NOT_RUN",
+      "checks_passed": 23,
+      "checks_failed": 1,
+      "scenario_count": 4,
+      "source_unchanged": true,
+      "probe_sha256": "7453be7d328483e9cc50a8c6f632d699013585558a0b969a8fb3319238326731",
+      "binary_sha256": "c35234e1b5fe95eb6e467878f34f815d11ca1e5bf8eda2ad0dec3bc965816fb0",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "private_receipt": "source-workbench54-native-detach-v2-attempt1.json",
+      "receipt_sha256": "bb525a511020d1b12a8eab9f1bffebb735fe7f38cd49a8ee6da0f231021b2ed3",
+      "disposition": "OWNER_NATIVE_FAILURE_PRESERVED_DEPENDENT_GATES_NOT_RUN",
+      "checks_passed": 8,
+      "checks_failed": 2,
+      "scenario_count": 1,
+      "source_unchanged": true,
+      "probe_sha256": "7138b9494adc01c0c65a80e229a5d22559f020805488a97906ca57ddde61eb73",
+      "binary_sha256": "73f48b5cfb89a548c557d04ef8503eb067f4a5535e18186ceb5042de59a678aa",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "first_broad_guard_removal_receipt": {
+    "private_receipt": "source-workbench54-native-detach-attempt1.json",
+    "receipt_sha256": "16d43393dcab56da4bbc2364ff6d0afe2379375f235ab5a729cddaced4a91d4e",
+    "claim_boundary_correction": "source-workbench54-native-detach-attempt1-claim-boundary.json",
+    "correction_sha256": "c6036e2b7cb0d07a65c1d7a6210a48ddfc02a5c47880199019843b42bcaec022",
+    "bounded_observation": "Eight broad outcomes passed; direct trace hid the dirty window before a decision and used the later Quit sheet. This was not Close qualification."
+  },
+  "failed_source_snapshots": [
+    {
+      "name": "source-workbench54-owner-source-phase1-failed",
+      "manifest_sha256": "d9798fe83438e7e1646da7d5d413248f5f43a5b497817c551568cecc071136ec"
+    },
+    {
+      "name": "source-workbench54-owner-source-phase2-detach-failed",
+      "manifest_sha256": "e7a2ae955e094a3d41787d14b0c240b03d97a11dd04739a2217ca88fc08e681c"
+    }
+  ],
+  "repository_gates": [
+    {
+      "private_receipt": "source-workbench54-full-20261003T020200Z.json",
+      "receipt_sha256": "5ff7d444d7adea8acb6b5005246ec5d095dffa4a214118ca533ca0cb86f2a426",
+      "exit_code": 0,
+      "compiled_source_unchanged": true,
+      "all_recorded_bytes_unchanged": true,
+      "log_sha256": "3556b353a9253e045f7f90e2f019771fe832e64d35e00e6d208e3cd6ae29a455"
+    },
+    {
+      "private_receipt": "source-workbench54-selftest-20261003T020346Z.json",
+      "receipt_sha256": "a779849215bdc541be629972ee74d6c36d923826e57e1b4e9d087d841bb56525",
+      "exit_code": 0,
+      "compiled_source_unchanged": true,
+      "all_recorded_bytes_unchanged": true,
+      "log_sha256": "3eadf06c31d198f20ff997f7ce398f5967d4807703ddc679064c45f7d5708f7a"
+    },
+    {
+      "private_receipt": "source-workbench54-contracts-20261003T015930Z.json",
+      "receipt_sha256": "ce8ca08cfe94c6f6169cc3f864c82f4e1bb41e674565708b7c20e809cfa96444",
+      "exit_code": 0,
+      "compiled_source_unchanged": true,
+      "all_recorded_bytes_unchanged": true,
+      "log_sha256": "58a520a024f15707222afe6575db8a3a9dbe7469c2c156ae0f9979903d48645a"
+    },
+    {
+      "private_receipt": "source-workbench54-test-script-20261003T020421Z.json",
+      "receipt_sha256": "b7447decc1311cf3a7189c5142bc16d02b16a4a8e9e3a9879f74bddc69e027b4",
+      "exit_code": 0,
+      "compiled_source_unchanged": true,
+      "all_recorded_bytes_unchanged": true,
+      "log_sha256": "1be16eedd12a424c2d6bb6490cd5181f2d7458a7d9e279f170896f08ebacff98"
+    },
+    {
+      "private_receipt": "source-workbench54-release-20261003T020458Z.json",
+      "receipt_sha256": "b669fc2ca7572451c2f89a19789ff85fc41cb4476998a8a29a91ad0a5e272ca2",
+      "exit_code": 0,
+      "compiled_source_unchanged": true,
+      "all_recorded_bytes_unchanged": false,
+      "log_sha256": "4eab13d301d86887578ec3b035bbd389009216296c792fcb43cdcb04db9c1c35"
+    },
+    {
+      "private_receipt": "source-workbench54-package-20261003T020726Z.json",
+      "receipt_sha256": "7bdef4a0ac18caf1b005ea286d754582e66f746a3e82fe69753724b46f4e75e5",
+      "exit_code": 0,
+      "compiled_source_unchanged": true,
+      "all_recorded_bytes_unchanged": true,
+      "log_sha256": "94fd4b2dc9f6555959df03eef0ba006bfa96caec0401056815541163afe43302"
+    }
+  ],
+  "counts": {
+    "xctest_executed": 623,
+    "xctest_optional_live_provider_skips": 3,
+    "xctest_failures": 0,
+    "selftest_passed": 466,
+    "python_contracts_passed": 10
+  },
+  "repository_deviation": "Documentation was refined while release compilation ran; all compiled Sources bytes matched, and the maintained package run recorded stable documentation and source bytes.",
+  "uninstalled_bundle": {
+    "private_receipt": "source-workbench54-uninstalled-bundle-v1.json",
+    "receipt_sha256": "475008919a19d0939ad0d9533801a67fc8e03d24dab5dcceac04e0445572c718",
+    "binary_sha256": "b3cdab047f9e4e185e34465e36320a7522bc57a6e29f6574ae4257575fe4fd05",
+    "CDHash": "e683669188208a5a76c868e67ecef0041c23dd7b",
+    "strict_signature": "PASS",
+    "minimum_macos": "13.0",
+    "installed": "NOT_INSTALLED",
+    "launch": "NOT_LAUNCHED"
+  },
+  "environment_failures_preserved": [
+    "Initial sandboxed native readiness failed; unchanged probe executed with scoped native process visibility.",
+    "Nested SwiftPM sandbox refused manifest execution with EPERM; unchanged checks ran with scoped native access.",
+    "Two automatic SwiftPM signing attempts failed before XCTest; read-only verification of the preserved failed debug binary passed. Cause UNKNOWN.",
+    "Disk-full native linking and later receipt creation attempts did not execute their dependent gates. Raw blocker and attempted identities are preserved."
+  ],
+  "native_target": "arm64-apple-macosx13.0, build metadata physically observed on macOS 27 host",
+  "remaining_gates": {
+    "full_Source_Workbench_view_and_Done_button": "NOT_RUN",
+    "full_view_or_AppModel_dismantle": "NOT_RUN",
+    "production_WindowGroup_ConduitApp_AppModel": "NOT_RUN",
+    "installed_keyboard_Dock_journey": "NOT_RUN",
+    "integrated_87_isolation_journey": "NOT_RUN_PENDING_SEPARATE_QUALIFICATION",
+    "fresh_independent_oracle_and_acceptance": "NOT_RUN_PENDING_SEPARATE_AUTHORITY",
+    "provider_runtime_lifecycle": "OUTSIDE_THIS_UI_BOUNDARY"
+  },
+  "operator_state": "NOT_TOUCHED",
+  "provider_calls": "NONE",
+  "merge": "NOT_AUTHORIZED_BY_THIS_RECEIPT",
+  "release": "NOT_RELEASED"
+}

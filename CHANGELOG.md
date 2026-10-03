@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Source Workbench Done, native window Close, and application Quit now share
+  Save/Discard/Cancel decisions with Explorer. Failed explicit saves preserve
+  the buffer and current disk version. Multiple dirty source windows receive
+  separate serial decisions; a dirty source guard stays owned when its native
+  guard representable dismantles. Native Close waits for its decision sheet to finish (#54).
+
 - Ordinary application quit now offers Save/Discard/Cancel for the retained
   primary Explorer buffer, including while Sessions is visible. Cancel and
   failed explicit saves keep Conduit open and preserve the buffer; a native
@@ -39,7 +45,7 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   preserves supported LF/CRLF line endings and checks exact disk bytes through
   the existing file writer. Conflicts retain the buffer and offer read-only
   disk comparison; binary files and unsupported encodings remain read-only
-  (#54). Application quit protection remains a separate follow-up.
+  (#54).
 
 - Explorer uses one exact-path preview route for bounded UTF-8 text, static
   native images, PDFs, and explicit unsupported-file metadata. Images provide
