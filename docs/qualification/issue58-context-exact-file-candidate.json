@@ -1,0 +1,232 @@
+{
+  "advancement_readiness": "DRAFT_PENDING_INDEPENDENT_AND_GOVERNING_ACCEPTANCE",
+  "authority": "exact candidate identity; owner checks remain separate from independent acceptance",
+  "base_commit": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "base_drift": {
+    "authority": "current main docs-only changes inspected; frozen source and original base remain exact",
+    "candidate_rebased": false,
+    "changed_paths": [
+      ".github/pull_request_template.md",
+      "AGENTS.md",
+      "CHANGELOG.md"
+    ],
+    "current_main_commit": "7512943469f2f2c65b268fe9db542c6a46908fbf",
+    "current_main_tree": "e95d4b114034717b7dc8d68212a5b2cec85e303b",
+    "source_test_script_package_objects_unchanged": 244
+  },
+  "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "candidate_id": "conduit-context-exact-file58-owner-20261003-v1",
+  "component_versions": {
+    "context_manifest_compiler": "context-compiler-core-v1",
+    "minimum_macOS_target": 13,
+    "source_adapter": "context-exact-file-source-v1"
+  },
+  "decision_note": "D-072 Proposed/T0; no architecture acceptance implied",
+  "excluded_scope": [
+    "other adopted source adapters",
+    "semantic nomination expansion or automatic source admission",
+    "Git identity or permanent freshness",
+    "adversarial tamper authenticity or atomic filesystem snapshot",
+    "Context Set lifecycle/store changes or snapshot/manifest compiler changes",
+    "AppModel/UI/API mount, provider delivery or acceptance",
+    "MainFrame staged-entry/bootstrap/corpus",
+    "installed app, production installation, release or merge"
+  ],
+  "gates_at_freeze": {
+    "fresh_independent_acceptance": "NOT_RUN; private-source transfer/launch authority pending",
+    "hosted_CI": "NOT_RUN; Draft not yet published",
+    "installed_app": "NOT_RUN; no installation or app launch",
+    "mounted_product_composition": "NOT_RUN; separately qualified app writer/root and source-stage composition boundary",
+    "owner_source_native_package": "OWNER_PASS_BOUNDED",
+    "provider_delivery": "NOT_RUN; outside this slice"
+  },
+  "governing_issues": [
+    "https://github.com/camerontjs-dot/Conduit/issues/58",
+    "https://github.com/camerontjs-dot/Conduit/issues/60"
+  ],
+  "implementation_layer": "inherited owner context; not independent",
+  "included_scope": [
+    "explicit objective/selected/pinned/required-contract file observations",
+    "bounded descriptor-anchored UTF-8 reads and exact SHA256/full-source/excerpt identity",
+    "explicit failures, unknown later freshness and incomplete-batch refusal",
+    "existing compiler reason union, hard pins and structural exact-range deduplication",
+    "physical owned fixtures; public-adapter selftest and maintained native gates"
+  ],
+  "lifecycle_scope": "workbench",
+  "lifecycle_state": "frozen",
+  "manifest_commit_binding": "metadata commit adding this manifest; exact final head/tree recorded in publication receipt and PR",
+  "owner_evidence": {
+    "codedirectory_page_hashes_recomputed": 8214,
+    "focused_xctests": 23,
+    "native_xctest_failures": 0,
+    "native_xctests": 626,
+    "opaque_signature_tail_semantics": "UNKNOWN; exact bytes retained",
+    "optional_installed_fixture_skips": 3,
+    "package_identity": "PASS_BOUNDED_CONTENT_AND_SIGNATURE_IDENTITY",
+    "package_sections_equal": 41,
+    "packaged_resource_files": 25,
+    "pressure_controls": 57,
+    "provider_called": false,
+    "provider_contract_tests": 10,
+    "raw_packaged_whole_file_equality": false,
+    "receipts": {
+      "base_drift": {
+        "receipt": "context-sources58-base-drift-v1.json",
+        "sha256": "ee2db5acb034575935ff046f395fe30273709c80ee63e2c146fec8cb8ea8f572"
+      },
+      "focused23": {
+        "receipt": "context-sources58-native-gates-v3/focused-xctest-receipt.json",
+        "sha256": "728b48479208d36b6ef1d41846ae8fded7c3adbc68a90345bf99f0e9afb78e34"
+      },
+      "full626": {
+        "receipt": "context-sources58-native-gates-v5/full-xctest-receipt.json",
+        "sha256": "21b320568966d81dfe483ae56bfa5e9f7618f1608f7147192861233c54ec0253"
+      },
+      "gap_before": {
+        "receipt": "context-sources58-gap-before-v1/result.json",
+        "sha256": "fa880a8421c12e92531580eb368c7cb69ecbead1ebb26a16cb03f716cb1ec4da"
+      },
+      "package_identity_protocol_v7": {
+        "receipt": "context-sources58-package-identity-v7-oracle.json",
+        "sha256": "c17b7e369f3a12ec75e678a8a0d83aab1f542ed6f19bd1311664003f8932ec03"
+      },
+      "package_identity_v7": {
+        "receipt": "context-sources58-package-identity-v7.json",
+        "sha256": "4423c223275ab149d6af51b8773a5b0b6374685662298bf1d8a69829a2dcee7c"
+      },
+      "pressure_v1_apparatus_failure": {
+        "receipt": "context-sources58-native-owner-v1/receipt.json",
+        "sha256": "3e9b0a6ff7ae819dab9712561279083a3bf02560d604af973b1b3f1fbbce134d"
+      },
+      "pressure_v2": {
+        "receipt": "context-sources58-native-owner-v2/result.json",
+        "sha256": "fd19e92ff49bb510c360f5be908b42c984394455ef88ab2484b8c4b0e409db1a"
+      },
+      "pressure_v3": {
+        "receipt": "context-sources58-native-owner-v3/result.json",
+        "sha256": "96ed65545291bdfa504b7150ffb2793927a9e210130d68210dd1f02b741cf6dd"
+      },
+      "public_pin_authority": {
+        "receipt": "context-sources58-canonical-public-git-data-v1.json",
+        "sha256": "c766f84099133d935d15bfa2b7e97e4c2e38451a78a748f710305f78f9be2d19"
+      },
+      "public_pin_closure": {
+        "receipt": "context-sources58-public-dependency-mirror-v2.json",
+        "sha256": "df053b9237c2545d6196b487fa5a29542cceabd7731b656ec42d21db67f712d4"
+      },
+      "python10": {
+        "receipt": "context-sources58-native-gates-v4/python-contracts-receipt.json",
+        "sha256": "1628db9199f14787c7fccc55e2c25eed394b3cef35c3bc6304e4b7acd2741221"
+      },
+      "release_package": {
+        "receipt": "context-sources58-native-gates-v6/release-package-receipt.json",
+        "sha256": "d34c6cc3297831c7a8c224dd2cb3225dfa2a2456ef76d3eea66788b527f3040c"
+      },
+      "selftest502": {
+        "receipt": "context-sources58-native-gates-v4/selftest-receipt.json",
+        "sha256": "2aa6179558ace4c5317ebc4a28f0683191db371d7c7a14d867ebdfeb2717c9ad"
+      },
+      "v1_DNS_failure": {
+        "receipt": "context-sources58-native-gates-v1/focused-xctest-receipt.json",
+        "sha256": "c708c67bf4fbb6985bcff581a7906d8a597fad79f6ed71158efe083bb575c6c2"
+      },
+      "v2_incomplete_history_failure": {
+        "receipt": "context-sources58-native-gates-v2/focused-xctest-receipt.json",
+        "sha256": "2efb256e4b7a460d9000db0e90a06d1b42d9bcc776f82c224bc421c464edf183"
+      },
+      "v3_native_wrapper_sandbox_failure": {
+        "receipt": "context-sources58-native-gates-v3/full-maintained-receipt.json",
+        "sha256": "589a096b8415202d8d28571200ce954ba0584cf5fdd399ac29dbe51af23e707b"
+      },
+      "v4_native_UNIX_bind_failure": {
+        "receipt": "context-sources58-native-gates-v4/full-xctest-receipt.json",
+        "sha256": "b20e151d1381f111cec2d4aab9f38d2acc03559eac644db2a9c55cb3a0e38084"
+      },
+      "v6_raw_package_equality_failure": {
+        "receipt": "context-sources58-native-gates-v6/package-structure-receipt.json",
+        "sha256": "aa5677c4efa75704f3c808645a451d1b6c411cb649549da61159b38611034dba"
+      }
+    },
+    "selftest_checks": 502
+  },
+  "owner_surface": "Conduit #58 and #60 Phase A C-A-SOURCES",
+  "privacy": "public-safe",
+  "project": "camerontjs-dot/Conduit",
+  "protected_inventory": [
+    {
+      "path": "Sources/ConduitCore/AgentContext.swift",
+      "sha256": "2a2bcda871e779f27e6c69a1110193961dbe39aa0021d09710ef27c1c1992efc"
+    },
+    {
+      "path": "Sources/ConduitCore/ContextCompiler.swift",
+      "sha256": "5602e945f6e463d91412aa5ba46731fe82fdcc83438d85ac6d6cb19b33648359"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ContextCompilerTests.swift",
+      "sha256": "87f40ce93e01b2084a99df598bbc00effcb3b599a458402e3c441d9fdc8f07de"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentContextSnapshotStore.swift",
+      "sha256": "e76df30802b8569b485ac65ac3876ad27621dae255e54da11d1e2202c30f38b8"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/AgentContextSnapshotStoreTests.swift",
+      "sha256": "671d4a68ff1cfded730975e8af898ee19af12d3ab17c26feeff58dceb7a7e279"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeExplorer.swift",
+      "sha256": "31bb03ea8987d0c05c35c3532efaec861ab3f5e448dc6c143708efb344a75622"
+    },
+    {
+      "path": "Package.swift",
+      "sha256": "4509919eea1525a315308f7e3dd1c3e9a9c9fa648748eef6853776f8f54dbda3"
+    },
+    {
+      "path": "Package.resolved",
+      "sha256": "34ee31d52d041b13e94b49af6f8ff1a9c57c5db07dbfc1f86415f9f3ff5e14dd"
+    }
+  ],
+  "remaining_adopted_source_work": [
+    "lexical source candidates and authored links/backlinks",
+    "Git changes, untracked/conflicted candidate reconciliation",
+    "task artifacts and qualification/test receipts",
+    "PR/issue and prior-context snapshot adapters",
+    "task/runtime/lifecycle/project records"
+  ],
+  "schema": "conduit-context-exact-file-owner-candidate/v1",
+  "source_commit": "92e4b6fca9574aa1af82589322c7d465f3c80e26",
+  "source_inventory": [
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "fd7fdae1ece6952ebf081ef4a1f49dacd43204de87531a63fcf2326ebdd16979"
+    },
+    {
+      "path": "DECISIONS.md",
+      "sha256": "718c47621a6f982e6ad22b7f6d0ec14d2292c7c9cc3f728aa3751af0f23f9bf4"
+    },
+    {
+      "path": "Sources/ConduitCore/ContextFileSourceAdapter.swift",
+      "sha256": "b512e2425bb62b5aae8067b923279e43862315fa827381d2a6b5616bf1d4e5f6"
+    },
+    {
+      "path": "Sources/ConduitCore/ContextFileSourceRead.swift",
+      "sha256": "601494e76dc1fa43761b6f8bf9fea0121d41d88ad9aa20eb4a2a0fa6b9959850"
+    },
+    {
+      "path": "Sources/ConduitSelfTest/main.swift",
+      "sha256": "e8e9b67d2ad5f44be4d549478e3840799efbab901095690b997d4bcaf9872bc4"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ContextFileSourceAdapterTests.swift",
+      "sha256": "12935550f118613d90603a640381925926d8a8b0b862b405ed236b45ccd58952"
+    },
+    {
+      "path": "docs/context-exact-file-sources.md",
+      "sha256": "c79ee2de422c282972995575cafce6cd1def365194510f5157fad37acb4e13f4"
+    }
+  ],
+  "source_tree": "e31d099ef483eed62584ba34ad4fb518b12349ed",
+  "structural_type": "manifest",
+  "update_rule": "immutable after metadata freeze; source repair requires separately identified successor",
+  "upstream_separate_gate": "MainFrame staged-entry adapter waits for upstream authority and its own integration qualification"
+}
