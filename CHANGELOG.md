@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Changed
 
+- Product documentation now describes the existing structured hosts,
+  app-hosted control plane and proposal-only Orchestrate baseline. The master
+  plan points to the current #60 train and separates landed components from
+  qualification. D-046 retains Proposed status and distinguishes a model
+  release request from observed unloading; product behavior is unchanged.
+
 - Contributor instructions now distinguish native, package and separately
   authorized installed qualification. Portable closeout uses the owning issue
   or PR instead of assuming sibling coordination files. The PR template asks

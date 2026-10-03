@@ -1414,6 +1414,14 @@ guards.
 
 **Status:** Proposed (2026-08-23)
 
+**Implementation provenance (2026-10-03):** The proposal-only Orchestrate
+surface landed in `90282eebbf48d996d7580f9404cc6f7ef0aaf2f2` and remains in
+`main` at `7512943469f2f2c65b268fe9db542c6a46908fbf`.
+[#56](https://github.com/camerontjs-dot/Conduit/issues/56) adopts that baseline
+and owns the later deterministic routing and runtime handoff. **Start one
+worker** remains disabled. This provenance does not change the Proposed status
+or establish launch, independent or mounted qualification.
+
 **Context:** ChatGPT's available connector surface remains read-only, while a
 local model could make the Conduit cockpit less dependent on cloud agent use.
 That convenience cannot turn a planner response into authority to mutate a
@@ -1437,10 +1445,13 @@ proposal request within the 150-second bound, so the app does not attach to an
 existing OpenCode service or reuse it for planning. The Start action remains
 disabled; a local proposal response is not task creation.
 
-**Resource boundary:** A planner request sends `keep_alive: 0` to release only
-Conduit's requested model after it responds. Ollama is a shared external
-loopback service: Conduit neither starts nor stops the daemon, and it does not
-unload models loaded by another client. The configured MainFrame root may be a
+**Resource boundary:** A planner request sends `keep_alive: 0` for the named
+model, requesting release after the response. The planner neither starts nor
+stops the shared external Ollama daemon. The retained
+[L7.3 receipt](outputs/local-acceptance/orchestrate-ollama.md)
+establishes the declared request boundary and records actual runtime unloading
+as INCONCLUSIVE. Observed model release and co-client noninterference remain
+UNKNOWN until separately tested. The configured MainFrame root may be a
 proposal target, but root selection does not grant the planner filesystem
 access or relax the bounded project-relative path policy.
 
