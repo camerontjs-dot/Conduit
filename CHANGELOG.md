@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- `ConduitCore` can explicitly retain editable operator Context Sets in an
+  append-only revision history. Fixed references keep the existing provenance
+  model; declarative dynamic rules remain unresolved until a source adapter
+  handles them. Stale edits, ambiguous history and replaced state files refuse
+  without adopting a valid prefix. This Core slice does not mount a Context
+  Set editor or send context to a worker (#58, D-068 proposal).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps
