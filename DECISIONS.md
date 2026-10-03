@@ -2089,3 +2089,41 @@ bounded inventory are in [Exact-file context candidates](docs/context-exact-file
 > **Check:** source tests and owner pressure receipts check mechanics; independent qualification and governing acceptance remain separate.
 >
 > **Escape:** preserve incomplete/failed observations, keep promotion pending, and continue other dependency-valid adopted work.
+
+---
+
+## D-075: Keep lexical nominations separate until explicit source observation
+
+**Status:** Proposed (2026-10-03; #58/#60 Phase A additive owner candidate)
+
+**Context:** Find searches a bounded cached-text index. Its previews and supplied
+index metadata cannot establish current file bytes, source authority or complete
+discovery. D-072 supplies exact-file observation; the existing Context Compiler
+already owns reasons, deduplication, manifests and budgets.
+
+**Proposal:** Compose these maintained components through a Core lexical source
+adapter. Validate bounded cached records and rebuild Markdown projections from
+their text before invoking Find. Keep nominations outside Context Set source
+entries. Bind an explicit selection to its exact root, query bytes and active
+discovery generation, then observe selected sources through D-072 using cached
+text digests as required discriminators. Preserve exact source and excerpt
+identities, lexical and hard-reference reasons, and pins. Refuse a complete
+handoff when discovery is partial or any requested source is unresolved.
+
+**Consequences:** Nomination and selection receipts encode but cannot rehydrate
+active selection authority. Stable nomination identities and compiler manifests
+remain separate from ephemeral selection generations. A repeated read is still
+a read, not duplicate-delivery protection. Cached input root declarations and
+digest equality establish no source authorship, corpus completeness, semantic
+relevance, Git identity, later freshness or provider delivery. This slice is
+additive to frozen #140 and reuses the unchanged #108 compiler; it supplies no
+mounted app, runtime or MainFrame session-entry acceptance. Other adopted
+source adapters remain actionable. See [Lexical context candidates](docs/context-lexical-sources.md).
+
+> **Binds:** consideration of this additive adapter for #58/#60's adopted deterministic source stage.
+>
+> **Tier:** T0, proposed architecture guidance.
+>
+> **Check:** maintained tests and owned physical fixture receipts check mechanics; useful independence, dependency acceptance and whole-stack promotion remain separate gates.
+>
+> **Escape:** inspect partial observations, preserve first failures, leave promotion pending and continue other dependency-valid adopted work.

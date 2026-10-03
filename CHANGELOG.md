@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Core can nominate context through the existing cached-text Find engine and
+  expand only explicit selections through exact file observation. It keeps
+  cached previews separate from source bytes, exposes clipped and partial
+  discovery, preserves hard references, and refuses incomplete handoffs.
+  App and runtime composition retain their separate programme gates.
+
 - Core has an exact-file context candidate adapter for explicit objective,
   selected, pinned and contract references. It binds bounded observed UTF-8
   bytes to source and excerpt identities, preserves unresolved requests, and

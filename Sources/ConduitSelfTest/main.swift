@@ -3907,6 +3907,12 @@ withTempDir { root in
     check("exact context non-file root is refused without network", nonFileRoot.batchFailure?.code == .unsafePath && sourceHandoffRefused(nonFileRoot))
 }
 
+// MARK: - Lexical source adapter
+
+withTempDir { root in
+    try runContextLexicalSourceChecks(root: root) { name, condition in check(name, condition) }
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
