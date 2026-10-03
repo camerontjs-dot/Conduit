@@ -2065,3 +2065,54 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-074: Global supervisory pagination derives from per-task source snapshots
+
+**Status:** Proposed/T0 (2026-10-03; bounded #4 schema/fixture candidate)
+
+**Context:** The existing per-task event logs own task append history. The
+presentation timeline's `v1:<index>` cursor is not a global immutable history.
+Issue #4 requires deterministic, bounded, reconciliation-safe supervisory
+pagination without letting a presentation view become runtime authority.
+
+**Proposal:** Add a pure Core helper over declared decoded per-task snapshots.
+Use compound task/event identities, original source ordinals and internally
+computed prefix digests. A versioned cursor binds the entire previously
+observed prefix of every known source, including unconsumed records. Appends
+and new tasks remain visible; mutation, removal, diagnostics and conflicting
+event identities require reconciliation with no usable replacement cursor.
+
+Across tasks, use stable UUID round-robin enumeration rather than inferring a
+global chronological append order. Export content-free recorded kinds and
+directly supplied runtime references; keep provider/turn/progress, approval,
+workspace, verification, acceptance and current native facts unsupported.
+
+**Consequences:** No new writer, task-state owner, source adapter or app/API/MCP
+endpoint is introduced. The logical store UUID and decoded digests do not
+authenticate physical sources. Cursor positions are untrusted, and digests
+are not a confidentiality guarantee. Logical input/output budgets do not claim
+bounded physical traversal or upstream memory allocation.
+
+**Evidence boundary:** Owner source tests and separate-process owned log
+fixtures can establish this narrow helper's mechanics. Fresh independent
+qualification, authentic bounded source selection, integration and the full
+restart/idempotency/runtime disagreement acceptance remain separate gates.
+This proposal does not close #4 or satisfy #53's consequential-consumer gate.
+See [the source contract](docs/task-supervisory-events.md).
+
+**Repair lineage:** Frozen #145 failed subsequent source-exposed supervisor
+pressure on refusal-output cardinality, despite preserving fail-closed/privacy
+controls. A separate main-based successor summarizes read diagnostics as the
+complete sorted set of finite typed kinds before producing a refusal. Neither
+diagnostic multiplicity nor input ordering expands the output; the per-task
+source retains its original diagnostics. Ready-page/cursor policy and source
+authority are unchanged. This is a repair of the proposed logical output bound,
+not acceptance of D-074 or independent qualification of the successor. Original
+negative receipts and unavailable historical native byte custody remain distinct.
+
+> **Binds:** this proposal and candidate's bounded architectural claims.
+> **Tier:** T0, advisory proposal; not accepted runtime authority.
+> **Check:** source and fixture receipts are recorded separately; no promotion is granted by this document.
+> **Escape:** retain explicit refusal/UNKNOWN and return a defect to a separately identified implementation successor before promotion.
