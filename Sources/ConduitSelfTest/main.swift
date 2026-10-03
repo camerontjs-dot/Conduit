@@ -3748,6 +3748,74 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Durable operator Context Sets
+
+withTempDir { root in
+    let directory = root.appendingPathComponent("context-sets")
+    let store = ContextSetStore(directory: directory)
+    let set = ContextSet(id: "operator-set", objective: "Inspect context", taskIdentity: "task-reference",
+        entries: [ContextSetEntry(item: AgentContextItem(id: "nomination", title: "Related", kind: .semanticNomination,
+            authority: .mindGraphNomination, sourceReference: "reference-not-read", freshness: .unknown),
+            disposition: .nominated, inclusionReasons: [ContextInclusionReason(.semanticNomination)])])
+    let rule = ContextSetDynamicRule(id: "dynamic-query", source: .semanticQuery, scopeReference: "explicit-scope", query: "context objective")
+    let missing = try store.read()
+    check("Context Set missing read is empty", missing.history.isEmpty)
+    check("Context Set read creates no state", !FileManager.default.fileExists(atPath: directory.path))
+    let first = try store.save(set, dynamicRules: [rule], at: Date(timeIntervalSince1970: 100.25))
+    let file = directory.appendingPathComponent(ContextSetStore.filename)
+    let before = try Data(contentsOf: file)
+    let restart = try ContextSetStore(directory: directory).read()
+    check("Context Set restart preserves exact definition", restart.latest(contextSetID: set.id)?.contextSet == set)
+    check("Context Set restart preserves dynamic rule", restart.latest(contextSetID: set.id)?.dynamicRules == [rule])
+    check("Context Set retains nomination authority", first.contextSet.entries.first?.item.authority == .mindGraphNomination)
+    check("Context Set retains UNKNOWN freshness", first.contextSet.entries.first?.item.freshness == .unknown)
+    check("Context Set dynamic rule stays unresolved", first.compilerInput.unresolvedPrerequisites.count == 1)
+    check("Context Set rule does not admit context", first.compilerInput.entries == set.entries)
+    let manifest = ContextManifestCompiler.compile(contextSet: first.compilerInput,
+        destination: ContextDestination(), budget: ContextBudget())
+    check("Context Set manifest keeps unresolved rule", manifest.unresolvedPrerequisites == first.compilerInput.unresolvedPrerequisites)
+    check("Context Set manifest retains nomination only", manifest.entries.first?.deliveryState == .nominationOnly)
+    check("Context Set manifest does not deliver nominated context", manifest.deliveredEntries.isEmpty)
+    let changed = ContextSet(id: set.id, objective: "New objective", entries: set.entries)
+    let second = try store.save(changed, expectedRevision: first.revisionID)
+    check("Context Set edit retains exact parent", second.parentRevisionID == first.revisionID)
+    let revisedBytes = try Data(contentsOf: file)
+    check("Context Set edit appends rather than replacing history", revisedBytes.starts(with: before))
+    var collisionRefused = false
+    do { _ = try store.save(set) } catch { collisionRefused = true }
+    check("Context Set duplicate create refuses", collisionRefused)
+    var staleRefused = false
+    do { _ = try store.save(set, expectedRevision: first.revisionID) } catch { staleRefused = true }
+    check("Context Set stale revision refuses", staleRefused)
+    let retired = try store.retire(contextSetID: set.id, expectedRevision: second.revisionID)
+    check("Context Set retirement preserves references", retired.contextSet == changed)
+    let retiredState = try store.read()
+    check("Context Set retired definition is absent from active projection", retiredState.activeRevisions.isEmpty)
+    var reused = false
+    do { _ = try store.save(set, expectedRevision: retired.revisionID) } catch { reused = true }
+    check("Context Set retired identity cannot be reused", reused)
+    let handle = try FileHandle(forWritingTo: file)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data("{torn".utf8))
+    try handle.close()
+    let torn = try Data(contentsOf: file)
+    var readRefused = false
+    do { _ = try store.read() } catch { readRefused = true }
+    check("Context Set torn tail blocks whole history", readRefused)
+    var writeRefused = false
+    do { _ = try store.save(ContextSet(id: "new", objective: "Refuse malformed state", entries: [])) } catch { writeRefused = true }
+    check("Context Set malformed state blocks writes", writeRefused)
+    let afterRefusal = try Data(contentsOf: file)
+    check("Context Set refuses without healing evidence", afterRefusal == torn)
+    let shared = root.appendingPathComponent("shared-state")
+    try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: shared.path)
+    var sharedRefused = false
+    do { _ = try ContextSetStore(directory: shared).save(set) } catch { sharedRefused = true }
+    check("Context Set nonprivate state directory refuses", sharedRefused)
+    check("Context Set refused directory creates no ledger", !FileManager.default.fileExists(atPath: shared.appendingPathComponent(ContextSetStore.filename).path))
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

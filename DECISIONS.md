@@ -2054,3 +2054,61 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-068: Editable Context Set history retains operator state and exact revisions
+
+**Status:** Proposed (2026-10-03; owner Core slice for #58 / #60 Phase A).
+
+**Context:** The qualified compiler already represents `ContextSet` and
+`ContextSetEntry`, while `AgentContextSnapshotStore` records actual handoff
+bundles. Neither is an editable operator definition lifecycle with an exact
+parent revision. Treating a handoff bundle as that lifecycle would discard the
+set identity and dynamic rules and confuse proposed context with delivered
+context.
+
+**Decision:** Add an explicit `ContextSetStore` for operator definitions in
+Conduit state. Each append retains the existing `ContextSet` value, declarative
+dynamic rules, one new revision UUID, an exact optional parent revision,
+global sequence and recorded date. A nil expected revision means create only;
+edits and retirement require the exact current revision. Retirement retains
+the previous definition and reserves its identity.
+
+The entire JSONL history must replay before any mutation. Torn records,
+malformed JSON, repeated decoded object members, unsupported versions,
+identity collisions, sequence gaps and wrong parents block the whole store.
+There is no prefix adoption, history healing, silent pruning or automatic
+identity reuse. Cooperating processes share the same ledger inode lock; its
+directory and named file binding are checked after acquisition and after the
+operation. Existing directories and ledger files must be owner-only. If
+custody moves after append starts, the returned outcome is UNKNOWN with the
+attempted revision identity. The lock is advisory; it serializes cooperating
+Conduit writers. Inode-replacement detection is not a claim of tamper
+authenticity against same-UID actors ignoring that lock and writing in place.
+
+**Authority:** Fixed entries retain their original authority, disposition and
+freshness. Dynamic rules are declarations, not retrieved results. The
+`compilerInput` projection adds unresolved rule prerequisites to the existing
+compiler input and admits no new entries. Recording a definition does not
+read nominated source files, run MindGraph or a provider, create a handoff
+snapshot, deliver context or change task/runtime state.
+
+**Compatibility:** `ContextCompiler.swift`, its qualified tests, and
+`AgentContextSnapshotStore` stay unchanged. Existing handoff snapshots remain
+with that store. The new store requires an explicit directory and has no
+ambient default or UI/control-plane caller in this slice. It retains up to
+10,000 revisions / 16 MiB, with a 1 MiB record limit; exceeding a bound returns
+an explicit refusal rather than evicting history.
+
+**Evidence and limitation:** Owner file/process controls preserve restart,
+conflict, concurrent writer and malformed-input traces. First refused-edit
+and moved-ledger failures are retained separately from their repairs. Owner
+tests do not establish independent acceptance. UI mounting, snapshot-to-turn
+binding, source adapter execution, retrieval quality, live delivery and the
+whole Context Compiler remain separate gates.
+
+**Next boundary:** Independently qualify one exact frozen Core candidate,
+then mount it through the qualified isolated state root and the owning
+AppModel/Context surface. Do not use stored rule declarations as source truth
+or as permission to inject context into a worker.
