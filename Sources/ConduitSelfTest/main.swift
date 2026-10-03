@@ -2074,6 +2074,62 @@ check(
     MindGraphScope.projects.trustProfile == "project_status"
 )
 
+do {
+    let knowledge = MindGraphQueryKey(question: "context", scope: .knowledge, topK: 8)!
+    let projects = MindGraphQueryKey(question: "context", scope: .projects, topK: 8)!
+    check("mindgraph query identity trims transport whitespace",
+          knowledge == MindGraphQueryKey(question: " \ncontext\t", scope: .knowledge, topK: 8))
+    check("mindgraph query identity rejects empty and invalid limit",
+          MindGraphQueryKey(question: " \n", scope: .knowledge, topK: 8) == nil
+          && MindGraphQueryKey(question: "context", scope: .knowledge, topK: 31) == nil)
+    let composedQuestion = "caf" + String(UnicodeScalar(0xe9)!)
+    let decomposedQuestion = "cafe" + String(UnicodeScalar(0x301)!)
+    check("mindgraph query identity preserves transport UTF8 bytes",
+          MindGraphQueryKey(question: composedQuestion, scope: .knowledge, topK: 8)
+          != MindGraphQueryKey(question: decomposedQuestion, scope: .knowledge, topK: 8))
+    var cache = MindGraphQueryCache()
+    let k = cache.begin(for: knowledge)!
+    let p = cache.begin(for: projects)!
+    check("mindgraph pending requests keep captured scope", k.key.scope == .knowledge && p.key.scope == .projects)
+    check("mindgraph duplicate pending query is refused", cache.begin(for: knowledge) == nil)
+    let third = MindGraphQueryKey(question: "third", scope: .knowledge, topK: 8)!
+    check("mindgraph concurrent queries are bounded without fake queue", cache.begin(for: third) == nil && cache.phase(for: third) == nil)
+    cache.complete(k, result: .success(mgHits))
+    check("mindgraph scope switch keeps separate loading", cache.phase(for: projects) == .loading)
+    cache.complete(p, result: .failure(.timedOut))
+    check("mindgraph late error stays in its scope", cache.phase(for: knowledge) == .results(mgHits) && cache.phase(for: projects) == .failed(.timedOut))
+    let refresh = cache.begin(for: knowledge)!
+    check("mindgraph old request cannot replace refreshed result", !cache.complete(k, result: .success([])) && cache.phase(for: knowledge) == .loading)
+    cache.complete(refresh, result: .success([]))
+    check("mindgraph empty query differs from unqueried", cache.phase(for: knowledge) == .results([]) && cache.phase(for: third) == nil)
+    let pending = cache.begin(for: knowledge)!
+    cache.invalidate()
+    check("mindgraph root/unmount invalidates late responses", !cache.complete(pending, result: .success(mgHits)) && cache.count == 0 && cache.runningCount == 0)
+    let wrongScope = cache.begin(for: projects)!
+    cache.complete(wrongScope, result: .success(mgHits))
+    check("mindgraph mismatched scope is not displayed", cache.phase(for: projects) == .failed(.invalidJSON("Result scope does not match the query request.")))
+    for i in 0..<32 {
+        let key = MindGraphQueryKey(question: "query \(i)", scope: .knowledge, topK: 8)!
+        let request = cache.begin(for: key)!
+        cache.complete(request, result: .success([]))
+    }
+    check("mindgraph cache bounds retained snapshots", cache.count == MindGraphQueryCache.maximumEntries && cache.phase(for: projects) == nil)
+    let rootA = URL(fileURLWithPath: "/fixture/root-a")
+    let rootB = URL(fileURLWithPath: "/fixture/root-b")
+    let a = MindGraphQueryKey(question: "context", scope: .knowledge, topK: 8, sourceRoot: rootA)!
+    let b = MindGraphQueryKey(question: "context", scope: .knowledge, topK: 8, sourceRoot: rootB)!
+    cache.invalidate()
+    let oldRootRequest = cache.begin(for: a)!
+    check("mindgraph root selection cannot display old-root state", a != b && cache.phase(for: b) == nil)
+    let newRootRequest = cache.begin(for: b)!
+    cache.retainSourceRoot(rootB)
+    check("mindgraph stale root completion preserves current pending work",
+          !cache.complete(oldRootRequest, result: .success(mgHits)) && cache.ownsPending(newRootRequest))
+    cache.complete(newRootRequest, result: .success([]))
+    check("mindgraph delayed root pruning keeps current result",
+          cache.phase(for: b) == .results([]) && cache.count == 1)
+}
+
 // MARK: - Focus Board (workstation port, pure)
 
 check("focus weekly stale days", FocusBoardConstants.weeklyStaleDays == 8)

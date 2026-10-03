@@ -18,10 +18,36 @@ struct MindGraphQueryView: View {
     @State private var question: String
     @State private var scope: MindGraphScope = .knowledge
     @State private var topK = 8
-    @State private var isRunning = false
-    @State private var hits: [MindGraphHit] = []
-    @State private var errorText: String?
-    @State private var lastQueryLabel: String?
+    @State private var queryCache = MindGraphQueryCache()
+
+    private var queryKey: MindGraphQueryKey? {
+        MindGraphQueryKey(question: question, scope: scope, topK: topK,
+                          sourceRoot: model.settings.mainframeRoot)
+    }
+
+    private var phase: MindGraphQueryPhase? {
+        queryKey.flatMap { queryCache.phase(for: $0) }
+    }
+
+    private var isRunning: Bool { phase == .loading }
+
+    private var hits: [MindGraphHit] {
+        if case .results(let rows) = phase { return rows }
+        return []
+    }
+
+    private var errorText: String? {
+        if case .failed(let error) = phase { return error.displayMessage }
+        return nil
+    }
+
+    private var lastQueryLabel: String? {
+        phase == nil ? nil : queryKey?.label
+    }
+
+    private var canRunQuery: Bool {
+        queryKey.map { queryCache.canBegin(for: $0) } ?? false
+    }
 
     init(
         initialQuestion: String? = nil,
@@ -53,6 +79,12 @@ struct MindGraphQueryView: View {
             if question.isEmpty, let selected = model.selectedProject {
                 question = selected.metadata.title
             }
+        }
+        .onChange(of: model.settings.mainframeRoot) { _ in
+            queryCache.retainSourceRoot(model.settings.mainframeRoot)
+        }
+        .onDisappear {
+            queryCache.invalidate()
         }
     }
 
@@ -110,7 +142,7 @@ struct MindGraphQueryView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isRunning || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!canRunQuery)
                 .keyboardShortcut(.defaultAction)
                 .actionExplainer(
                     ActionExplainerSpec(
@@ -144,7 +176,15 @@ struct MindGraphQueryView: View {
 
     @ViewBuilder
     private var results: some View {
-        if let errorText {
+        if isRunning {
+            VStack(spacing: 8) {
+                ProgressView()
+                Text(queryKey?.label ?? "Querying…")
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let errorText {
             VStack(alignment: .leading, spacing: 8) {
                 Label(errorText, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(palette.dim)
@@ -161,7 +201,7 @@ struct MindGraphQueryView: View {
                     .font(.system(size: 28))
                     .foregroundStyle(palette.faint)
                 Text(lastQueryLabel == nil
-                    ? "Query knowledge or project context"
+                    ? "Query \(scope.displayName) for this question"
                     : "No hits for that query")
                     .font(.callout)
                     .foregroundStyle(palette.dim)
@@ -268,6 +308,14 @@ struct MindGraphQueryView: View {
                 Text("Querying…")
                     .font(.caption2)
                     .foregroundStyle(palette.dim)
+            } else if queryCache.runningCount == MindGraphQueryCache.maximumConcurrentQueries {
+                Text("Two queries are running. Wait before starting another.")
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+            } else if phase != nil {
+                Text("Cached query snapshot · Query refreshes")
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
             }
         }
         .padding(12)
@@ -275,29 +323,20 @@ struct MindGraphQueryView: View {
     }
 
     private func runQuery() {
-        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return }
-        isRunning = true
-        errorText = nil
-        hits = []
-        lastQueryLabel = "\(scope.displayName) · top \(topK) · \(q)"
-        Task {
+        guard let key = queryKey, let request = queryCache.begin(for: key) else { return }
+        Task { @MainActor in
+            guard request.key.matchesSourceRoot(model.settings.mainframeRoot),
+                  queryCache.ownsPending(request) else { return }
             let result = await model.queryMindGraph(
-                question: q,
-                scope: scope,
-                topK: topK
+                question: request.key.question,
+                scope: request.key.scope,
+                topK: request.key.topK
             )
             await MainActor.run {
-                isRunning = false
-                switch result {
-                case .success(let rows):
-                    hits = rows
+                guard request.key.matchesSourceRoot(model.settings.mainframeRoot) else { return }
+                guard queryCache.complete(request, result: result), queryKey == request.key else { return }
+                if case .results(let rows) = queryCache.phase(for: request.key) {
                     onResults?(rows)
-                    if rows.isEmpty {
-                        errorText = nil
-                    }
-                case .failure(let error):
-                    errorText = error.displayMessage
                 }
             }
         }

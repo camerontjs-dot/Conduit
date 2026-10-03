@@ -25,6 +25,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- MindGraph's query view keeps Knowledge and Projects results, loading, errors
+  and empty states with their exact question and result limit. Switching to an
+  unqueried selection clears the prior nominations; switching back restores
+  its cached snapshot. Late, duplicate and invalidated requests cannot replace
+  the current selection or publish mismatched scope results.
+
 ### Changed
 
 - Product documentation now describes the existing structured hosts,
