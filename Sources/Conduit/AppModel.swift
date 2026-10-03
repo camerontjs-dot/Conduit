@@ -3948,7 +3948,7 @@ final class AppModel: ObservableObject {
             token: token,
             allowWrites: settings.enableSessionAPIWrites
         ) { [weak self] command, caller in
-            self?.sessionAPIPayload(command, caller: caller)
+            await self?.sessionAPIAsyncPayload(command, caller: caller)
                 ?? ["error": "Conduit is not ready."]
         }
         do {
@@ -4257,6 +4257,25 @@ final class AppModel: ObservableObject {
         return payload
     }
 
+    /// Only Codex metadata observation suspends. Legacy synchronous commands
+    /// retain their existing write, readiness and modal-error capture behavior.
+    private func sessionAPIAsyncPayload(
+        _ command: ConduitSessionCommand,
+        caller: ConduitSessionCaller
+    ) async -> [String: Any] {
+        guard ConduitSessionAPI.allowsCommand(command, readiness: sessionAPIReadiness) else {
+            return sessionAPIPayload(command, caller: caller)
+        }
+        switch command {
+        case .listProviderSessions(let provider) where sessionAPINormalizedProvider(provider) == "codex":
+            return await sessionAPICodexMetadata(exactID: nil)
+        case .observeWorker(let provider, let id) where sessionAPINormalizedProvider(provider) == "codex":
+            return await sessionAPICodexMetadata(exactID: id)
+        default:
+            return sessionAPIPayload(command, caller: caller)
+        }
+    }
+
     private func sessionAPIDispatch(
         _ command: ConduitSessionCommand,
         caller: ConduitSessionCaller = .unidentified
@@ -4501,6 +4520,102 @@ final class AppModel: ObservableObject {
                 "authority": "provider observation failed; no task/session mutation attempted",
             ]
         }
+    }
+
+    private struct CodexObservationHost {
+        let runtime: TerminalRuntime
+        let client: CodexAppServerClient
+        let hostID: String
+    }
+
+    private func sessionAPICodexReadyHosts() -> [CodexObservationHost] {
+        sessions.compactMap { runtime in
+            guard !runtime.controller.lifecycle.isTerminal,
+                  let client = runtime.appServer,
+                  let hostID = client.metadataObservationHostID
+            else { return nil }
+            return CodexObservationHost(runtime: runtime, client: client, hostID: hostID)
+        }
+    }
+
+    private func sessionAPICodexHostIsCurrent(_ host: CodexObservationHost) -> Bool {
+        sessions.contains(where: {
+            $0 === host.runtime && $0.appServer === host.client
+                && !$0.controller.lifecycle.isTerminal
+                && host.client.metadataObservationHostID == host.hostID
+        })
+    }
+
+    private func sessionAPICodexMetadata(exactID: String?) async -> [String: Any] {
+        let hosts = sessionAPICodexReadyHosts()
+        do {
+            guard !hosts.isEmpty else { throw CodexObservationError.notReady }
+            guard hosts.count <= 4 else { throw CodexObservationError.incompleteInventory }
+            if exactID != nil, hosts.count != 1 { throw CodexObservationError.ambiguousHost }
+            var encoded: [[String: Any]] = []
+            for host in hosts {
+                let inventory: CodexMetadataInventory
+                if let exactID {
+                    inventory = try await host.client.observeProviderSession(exactID: exactID)
+                } else {
+                    inventory = try await host.client.observeProviderSessions()
+                }
+                guard sessionAPICodexHostIsCurrent(host), inventory.hostID == host.hostID else {
+                    throw CodexObservationError.hostChanged
+                }
+                for thread in inventory.threads {
+                    let binding = sessionAPICodexBinding(exactID: thread.id)
+                    let worker = thread.worker(
+                        hostID: host.hostID,
+                        loadedOnHost: inventory.loadedThreadIDs.contains(thread.id),
+                        binding: binding, observedAt: inventory.observedAt
+                    )
+                    guard let object = sessionAPIWorkerLineageObject(worker) else {
+                        throw CodexObservationError.invalidMetadata
+                    }
+                    encoded.append(object)
+                }
+            }
+            guard hosts.allSatisfy(sessionAPICodexHostIsCurrent) else {
+                throw CodexObservationError.hostChanged
+            }
+            var result: [String: Any] = [
+                "provider": "codex",
+                "host_scopes": hosts.map(\.hostID),
+                "host_count": hosts.count,
+                "identity_scope": "providerHostID plus exact providerSessionID; repeated session IDs across hosts are separate observations",
+                "capacity_effect": "none; no host/task/turn creation, writer adoption or execution reservation",
+                "authority": "metadata from existing ready Conduit hosts; nonarchived state DB inventory only, without rollout repair; host-loaded status is not global execution, per-turn model, writer authority or objective acceptance",
+                "field_qualification": "UNKNOWN; availability is conditional on an existing ready host and supported metadata protocol",
+            ]
+            if exactID != nil {
+                guard encoded.count == 1 else { throw CodexObservationError.invalidMetadata }
+                result["worker"] = encoded[0]
+            } else {
+                result["workers"] = encoded
+                result["count"] = encoded.count
+            }
+            return result
+        } catch {
+            return [
+                "error": (error as? CodexObservationError)?.localizedDescription
+                    ?? CodexObservationError.invalidMetadata.localizedDescription,
+                "provider": "codex", "observation_state": "UNKNOWN",
+                "authority": "bounded metadata observation unavailable; no partial result, host start, resume, adoption or turn attempted",
+            ]
+        }
+    }
+
+    private func sessionAPICodexBinding(exactID: String) -> ProviderObservationBinding? {
+        let matches = sessionAPICodexReadyHosts().filter { $0.client.threadID == exactID }
+        guard matches.count == 1,
+              let taskID = matches[0].runtime.descriptor.taskSessionID,
+              taskSessions.contains(where: { $0.id == taskID })
+        else { return nil }
+        return ProviderObservationBinding(
+            conduitTaskID: taskID.rawValue.uuidString,
+            runtimeAttemptID: matches[0].runtime.runtimeAttemptID.rawValue.uuidString
+        )
     }
 
     /// One read-only reconstruction path over the authorities already owned by

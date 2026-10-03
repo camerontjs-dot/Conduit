@@ -92,16 +92,16 @@
     "CODEX-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/CodexAppServerClient.swift",
-        "sha256": "bb70c445990b9050c23ed8ad9b3bb3e42a69c7f499b39ea4d2775a0db011063f"
+        "sha256": "18b469e8e40ef9e07dfb3e699da340f022e9e1d631745ff7fe587ca10d87de3a"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "D070 candidate source custody only; historical provider runtime receipts are unchanged. New Codex metadata field qualification UNKNOWN.",
       "identity": {
         "path": "Sources/Conduit/CodexAppServerClient.swift"
       },
       "kind": "source_test",
-      "limitation": "Current adapter captures active turn ID and requires exact thread and turn IDs for interrupt.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "limitation": "Codex metadata observation uses an existing ready host and a separate response namespace; generic RPC authority, real provider behavior and independent qualification remain outside this source inspection.",
+      "observed_at_utc": "2026-10-03T11:59:39.867229+00:00",
       "procedure_id": "codex-app-server-adapter-source-v1"
     },
     "CODEX-FIX-TEST": {
@@ -205,16 +205,16 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "984b152671d566f81c5812d2fb43da4de997de886d2ce8401a6bec02604e8162"
+        "sha256": "3fd56985f02bc3856e42c084f6d4a253bb82d82726c6efc1d7e719f2fcdbbe8b"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "current candidate source snapshot; not a provider runtime observation",
+      "freshness": "D070 candidate source custody only; historical provider runtime receipts are unchanged. New Codex metadata field qualification UNKNOWN.",
       "identity": {
         "path": "Sources/Conduit/AppModel.swift"
       },
       "kind": "source_test",
-      "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior.",
-      "observed_at_utc": "2026-09-29T17:13:22Z",
+      "limitation": "OpenCode remains the only adoption implementation. Codex metadata list/read is a conditional existing-host candidate path; real-provider field support, mounted HTTP and independent qualification UNKNOWN.",
+      "observed_at_utc": "2026-10-03T11:59:39.867473+00:00",
       "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
     },
     "CONFORMANCE-HARNESS": {
@@ -528,16 +528,16 @@
     "TEST-ENTRYPOINT": {
       "artifact": {
         "path": "scripts/test.sh",
-        "sha256": "b422a270f7e333a6f87341aa5d1f4bc43ab9f656273a43437176b70382c629cb"
+        "sha256": "9232e412fbed16cb69e714307a924778feb05b0cf2eada3b17af119d7795ab86"
       },
       "authority": "Repository-native full suite entrypoint, including conduit-selftest, provider-conformance contract tests, and Swift XCTest",
-      "freshness": "current candidate source snapshot",
+      "freshness": "D070 owner-test entrypoint source custody only; retained real-provider outcomes are unchanged.",
       "identity": {
         "path": "scripts/test.sh"
       },
       "kind": "procedure_source",
       "limitation": "This entrypoint does not exercise real installed adapters; direct runtime receipts are separate.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-03T12:05:12.848932+00:00",
       "procedure_id": "conduit-full-suite-entrypoint-v1"
     }
   },
@@ -682,7 +682,7 @@
             "evidence_refs": [
               "CONDUIT-API-SCOPE"
             ],
-            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "note": "Conduit has no provider-session observation route for this runtime. OpenCode persistence and the separate conditional Codex metadata candidate do not grant another provider implementation; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
             "status": "unsupported"
           },
           "provider": {
@@ -915,7 +915,7 @@
             "evidence_refs": [
               "CONDUIT-API-SCOPE"
             ],
-            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "note": "Conduit has no provider-session observation route for this runtime. OpenCode persistence and the separate conditional Codex metadata candidate do not grant another provider implementation; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
             "status": "unsupported"
           },
           "provider": {
@@ -1156,7 +1156,7 @@
             "evidence_refs": [
               "CONDUIT-API-SCOPE"
             ],
-            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "note": "Conduit has no provider-session observation route for this runtime. OpenCode persistence and the separate conditional Codex metadata candidate do not grant another provider implementation; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
             "status": "unsupported"
           },
           "provider": {
@@ -1404,7 +1404,7 @@
             "evidence_refs": [
               "CONDUIT-API-SCOPE"
             ],
-            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "note": "Conduit has no provider-session observation route for this runtime. OpenCode persistence and the separate conditional Codex metadata candidate do not grant another provider implementation; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
             "status": "unsupported"
           },
           "provider": {
@@ -1658,7 +1658,7 @@
             "evidence_refs": [
               "CONDUIT-API-SCOPE"
             ],
-            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "note": "Conduit has no provider-session observation route for this runtime. OpenCode persistence and the separate conditional Codex metadata candidate do not grant another provider implementation; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
             "status": "unsupported"
           },
           "provider": {
@@ -2153,7 +2153,7 @@
             "evidence_refs": [
               "CONDUIT-API-SCOPE"
             ],
-            "note": "The current Conduit provider-session inventory endpoint is explicitly scoped to OpenCode; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
+            "note": "Conduit has no provider-session observation route for this runtime. OpenCode persistence and the separate conditional Codex metadata candidate do not grant another provider implementation; this is an adapter/API boundary, not a claim that the provider itself lacks discovery.",
             "status": "unsupported"
           },
           "provider": {

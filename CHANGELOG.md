@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Codex provider observation can list bounded nonarchived session metadata and
+  read one exact inventory identity through an existing ready Conduit host.
+  Listing disables rollout repair; reads exclude turns and withhold preview,
+  title and rollout path. Host-loaded status and configured or persisted model
+  metadata remain separate from writer authority, turn execution and acceptance.
+  Missing or ambiguous hosts and incomplete metadata return UNKNOWN (#53, #49).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps

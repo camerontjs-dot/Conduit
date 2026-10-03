@@ -2054,3 +2054,58 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+
+---
+
+## D070: Codex session metadata is observed through an existing ready host
+
+**Status:** Proposed / T0 (2026-10-03; #53 Slice 2 owned by #49). This
+reservation is candidate lineage, not an accepted architecture or qualification.
+
+**Context:** #53 explicitly adopts Codex external session discovery and read
+after the OpenCode implementation. The installed 0.154.0 schema provides
+`thread/list`, `thread/loaded/list` and `thread/read`. Ordinary listing can
+repair rollout metadata. Session model metadata is configured or latest
+persisted, not per-turn execution telemetry. Existing reply mapping can turn a
+metadata read into a driving-thread effect.
+
+**Proposal:**
+
+1. Observe only an already-ready Conduit-owned host. Never start a host, resume
+   or adopt a thread, send a turn, change authentication/defaults, or reserve
+   execution capacity merely to observe. Use `useStateDbOnly: true` and
+   `includeTurns: false`. Keep host-loaded status scoped to that exact host.
+2. Keep observation request IDs in a separate string namespace. Responses,
+   errors, replay, expiry and requests misusing this namespace must not enter
+   the driving mapper. This local namespace does not qualify generic RPC error
+   authority or replace the separate #114/#128 lineage.
+3. Project allowlisted session metadata into the existing WorkerLineage model.
+   Withhold preview, title, rollout path and turns. Exact current task binding
+   does not establish origin, writer authority, model execution, entitlement,
+   process liveness, verification or objective acceptance.
+4. Inventory covers nonarchived metadata, at most four 64-item pages per host.
+   A metadata request has a two-second bound and an inventory/read has a
+   twelve-second bound; timeout/cancellation affect only that request. Reject
+   malformed or repeated identities, cursor cycles and incomplete inventory.
+   Exact read requires full inventory membership and one ready host; no alias,
+   prefix, implicit host selection or partial success is returned.
+5. Suspend only the existing Codex metadata read callback. Preserve the
+   listener, write/auth/readiness gates and legacy synchronous dispatch/error
+   capture. Shared-principal repair (#47), mounting/isolation (#87), writer
+   adoption, archived history and a new discovery host remain separate work.
+
+**Binds:** The proposed #53 Codex metadata candidate, if accepted.
+**Tier:** T0 proposal.
+**Check:** Core XCTest/selftest and maintained-client native owned fake stdio
+fixtures exercise the candidate boundary. They do not enforce acceptance of
+this proposal or establish real-provider, mounted HTTP or independent support.
+**Escape:** Return UNKNOWN/refusal for unavailable or ambiguous hosts, changed
+host identity, unsupported protocol, incomplete metadata or missing authority.
+Preserve failed candidate/fixture evidence and use an identified successor.
+
+**Qualification boundary:** Installed schema is protocol authority; fake
+processes are Conduit behavior evidence. Real-provider field behavior, #87
+mounted AppModel/HTTP acceptance and fresh independent qualification are
+UNKNOWN/NOT_RUN until their separate prerequisites and authority are available.
+No merge, release or operator installation follows from owner fixture PASS.

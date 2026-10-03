@@ -125,6 +125,24 @@ It is deliberately a personal daily driver before it becomes an orchestration pl
 - Project-scoped work-session logs and MainFrame receipts remain a separate
   evidence stream; Conduit does not import receipts into task history
 
+## Codex metadata observation
+
+`conduit_list_provider_sessions` and `conduit_observe_worker` accept `codex`
+through an existing ready Conduit app-server host. They never start a host,
+resume a thread, send a turn, adopt a writer or reserve execution capacity.
+Inventory covers nonarchived state database metadata, up to four 64-item pages
+per host. Listing disables rollout repair. Exact reads require inventory
+membership and one ready host; missing, ambiguous or incomplete observations
+return UNKNOWN rather than a partial result. Multiple inventory hosts retain
+separate host scopes.
+
+Reads use `includeTurns: false`. Preview, title, rollout path and turns are
+withheld. Loaded status describes the observed host; configured or latest
+persisted model metadata does not establish per-turn execution, entitlement,
+writer authority, verification or objective acceptance. Native fake-server
+fixtures verify the Conduit boundary. Real-provider field support, mounted
+Session API behavior and independent qualification remain separate gates.
+
 ## Requirements
 
 - macOS 13 or newer

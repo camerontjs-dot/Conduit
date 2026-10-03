@@ -312,8 +312,17 @@ public final class CodexAppServerStreamPump: @unchecked Sendable {
         switch message {
         case .response(let id, let result):
             guard enqueue(.response(id: id, result: result)) else { return }
+            // Metadata replies must never become driving-thread effects. The
+            // namespace remains observational even after timeout or replay.
+            if CodexObservationRPC.isObservationReply(id) { return }
         case .error(let id, let message):
             guard enqueue(.error(id: id, message: message)) else { return }
+            if CodexObservationRPC.isObservationReply(id) { return }
+        case .request(let id, _, _) where CodexObservationRPC.isObservationReply(id):
+            // A server request cannot use Conduit's query namespace to acquire
+            // approval authority. Refuse the query without applying the mapper.
+            _ = enqueue(.error(id: id, message: "Invalid Codex metadata reply envelope."))
+            return
         case .notification, .request:
             break
         }

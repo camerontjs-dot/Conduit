@@ -180,13 +180,13 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_list_provider_sessions",
-            "Read provider-native session inventory without creating or adopting a Conduit task. This is observation only: it does not send input, resume or interrupt a turn, acquire writer authority, or consume a live execution slot. OpenCode persistence is provider-observed state, not proof of a live OS process; unsupported bindings remain UNKNOWN.",
+            "Read provider-native session inventory without creating or adopting a Conduit task. OpenCode reads persistence. Codex reads bounded nonarchived metadata through existing ready Conduit hosts only, with rollout repair disabled; no host is started. Loaded status is scoped to each observed host. This observation sends no input, resumes no thread, acquires no writer authority and consumes no execution slot. Unsupported or unavailable facts remain UNKNOWN.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "provider": [
                     "type": "string",
-                    "enum": ["opencode"],
-                    "description": "Provider observation implementation. Wave 1 supports opencode only.",
+                    "enum": ["opencode", "codex"],
+                    "description": "Read-only observation implementation. Codex requires an existing ready host; field qualification is separate.",
                 ],
             ],
             required: ["provider"]
@@ -203,13 +203,13 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_observe_worker",
-            "Read one exact provider session into WorkerLineage, with separately stamped provider-persisted activity and exact-binding Slice 6A process reconciliation where available. Contradictory or stale authorities remain explicit; observation never adopts or controls the session, starts a turn, cleans processes, or promotes provider completion into objective acceptance. Missing facts remain UNKNOWN.",
+            "Read one exact provider session into WorkerLineage. OpenCode includes separately stamped persistence and exact-binding process reconciliation where available. Codex requires exactly one ready host and exact inventory membership, reads metadata with includeTurns false, and withholds preview, title, rollout path and turns. Session model metadata is configured or latest persisted, never per-turn execution telemetry. Observation never adopts, controls, starts or accepts work. Missing facts remain UNKNOWN.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "provider": [
                     "type": "string",
-                    "enum": ["opencode"],
-                    "description": "Provider observation implementation. Wave 1 supports opencode only.",
+                    "enum": ["opencode", "codex"],
+                    "description": "Read-only observation implementation. Codex requires exactly one ready host and an exact inventory identity.",
                 ],
                 "provider_session_id": property(
                     "string",

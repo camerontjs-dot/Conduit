@@ -57,7 +57,7 @@ final class ConduitSessionAPIServer {
     private let token: String
     private let allowWrites: Bool
     private var readiness: ConduitSessionAPIReadiness = .bootstrapping
-    private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
+    private let handle: (ConduitSessionCommand, ConduitSessionCaller) async -> [String: Any]
     private nonisolated static let maximumHeaderBytes = 16_384
     private nonisolated static let maximumBodyBytes = 1_048_576
     private nonisolated static let readTimeoutSeconds: Int = 2
@@ -74,7 +74,7 @@ final class ConduitSessionAPIServer {
     init(
         token: String,
         allowWrites: Bool = false,
-        handle: @escaping (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
+        handle: @escaping (ConduitSessionCommand, ConduitSessionCaller) async -> [String: Any]
     ) {
         self.token = token
         self.allowWrites = allowWrites
@@ -178,7 +178,7 @@ final class ConduitSessionAPIServer {
     ) {
         switch Self.readRequest(from: client) {
         case .request(let request):
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 defer {
                     close(client)
                     finished()
@@ -190,7 +190,7 @@ final class ConduitSessionAPIServer {
                     )
                     return
                 }
-                Self.send(self.response(for: request), to: client)
+                Self.send(await self.response(for: request), to: client)
             }
         case .rejected(let status, let body):
             Self.send(Self.http(status, body: body), to: client)
@@ -314,7 +314,7 @@ final class ConduitSessionAPIServer {
             ?? UUID().uuidString.lowercased()
     }
 
-    private func response(for request: Data) -> Data {
+    private func response(for request: Data) async -> Data {
         let text = String(decoding: request, as: UTF8.self)
         let headerEnd = text.range(of: "\r\n\r\n")?.upperBound
             ?? text.range(of: "\n\n")?.upperBound
@@ -356,7 +356,7 @@ final class ConduitSessionAPIServer {
         guard let payload = CodexJSON.parseLine(body) else {
             return Self.http(400, body: "{\"error\":\"invalid json\"}\n")
         }
-        let reply = mcpReply(payload)
+        let reply = await mcpReply(payload)
         guard let data = try? JSONSerialization.data(withJSONObject: reply),
               let json = String(data: data, encoding: .utf8)
         else {
@@ -365,7 +365,7 @@ final class ConduitSessionAPIServer {
         return Self.http(200, body: json + "\n")
     }
 
-    private func mcpReply(_ payload: CodexJSON) -> [String: Any] {
+    private func mcpReply(_ payload: CodexJSON) async -> [String: Any] {
         let id: Any = {
             switch payload["id"] {
             case .string(let value): return value
@@ -408,7 +408,7 @@ final class ConduitSessionAPIServer {
         case "tools/call":
             let name = payload["params"]?["name"]?.stringValue ?? ""
             let args = payload["params"]?["arguments"] ?? .object([:])
-            let result = callTool(name: name, arguments: args)
+            let result = await callTool(name: name, arguments: args)
             return ["jsonrpc": "2.0", "id": id, "result": result]
         default:
             return [
@@ -426,7 +426,7 @@ final class ConduitSessionAPIServer {
         return nil
     }
 
-    private func callTool(name: String, arguments: CodexJSON) -> [String: Any] {
+    private func callTool(name: String, arguments: CodexJSON) async -> [String: Any] {
         let command: ConduitSessionCommand?
         switch name {
         case "conduit_list_projects":
@@ -594,12 +594,12 @@ final class ConduitSessionAPIServer {
                 ]],
             ]
         }
-        let payload = handle(
+        // Capture the existing caller before suspension; this does not change
+        // the listener's existing authentication or shared-principal policy.
+        let caller = ConduitSessionCaller(identity: peerIdentity, observedAt: peerObservedAt)
+        let payload = await handle(
             command,
-            ConduitSessionCaller(
-                identity: peerIdentity,
-                observedAt: peerObservedAt
-            )
+            caller
         )
         let text = (try? String(
             data: JSONSerialization.data(withJSONObject: payload),
