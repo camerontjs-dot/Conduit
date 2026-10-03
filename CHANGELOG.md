@@ -39,6 +39,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   for Conduit's actual checks, exact candidate identities and negative evidence.
 
 ### Added
+- A pure Next Move candidate contract with editable proposal text, consulted
+  source/rule identities, explicit support and unmet obligations, and stale-state
+  assessment. New-work suggestions stage the existing orchestration proposal;
+  this schema does not send prompts, choose routes or launch workers.
+
+### Added
 
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
