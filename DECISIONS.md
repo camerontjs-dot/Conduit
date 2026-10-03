@@ -2065,3 +2065,57 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-077: OpenCode boundary tracing preserves local and provider authority
+
+**Status:** Proposed / T0 (2026-10-03; #76 source slice)
+
+**Context:** The frozen target-four comparison in [#76](https://github.com/camerontjs-dot/Conduit/issues/76#issuecomment-5851111055)
+supported a bounded Conduit control-path difference. Its next adopted action
+requires observations between local delivery, the HTTP prompt response and a
+provider busy report. The existing `isTurnActive` flag is set before the
+asynchronous request begins and cannot identify that boundary.
+
+**Decision:** Keep the existing runtime behavior and add an in-process trace
+bound to the declared task (or explicit UNKNOWN), runtime and runtime attempt.
+Each local delivery has a recorder-issued UUID carried through Task scheduling,
+Task entry, the call to Foundation transport and its response or thrown error.
+This UUID is local callback custody; it never becomes provider turn identity.
+An HTTP response records only the observed status and local return time.
+
+SSE reports require one exact bound provider session across all supplied
+identity fields. Stop or rebind invalidates old stream and request callbacks.
+Message snapshots, assistant completion reports and tool-part reports retain
+only exact kind-tagged identifier digests and finite metadata. Reports have no
+provider sequence or direct request join, so replay freshness, provider turn
+identity and local request correlation remain UNKNOWN. A busy report therefore
+does not establish current execution-slot occupancy.
+
+Retain at most 256 records, 32 local requests and 128 UTF-8 bytes per validated
+provider identifier. Refused inputs and lost records have bounded counters.
+Use per-process monotonic observation time; it provides no ordering between
+processes. Export no prompt, output, path, URL, model, auth or error detail.
+Snapshots are diagnostic representations, not authenticated receipts.
+
+**Binds:** This proposed OpenCode diagnostic trace and its consumers.
+**Tier:** T0 for architectural adoption; ordinary source checks exercise the
+implemented boundary.
+**Check:** `OpenCodeBoundaryTraceTests`, `OpenCodeBoundaryTransportTests`,
+matching `ConduitSelfTest` controls and separately recorded local source
+fixtures. Full app, independent and real-provider qualification remain separate.
+**Escape:** Missing identity, stale custody, unsupported events and bounded
+retention loss remain explicit; diagnostic refusal never blocks a product send.
+
+**Consequences:** A later separately frozen target-four experiment can compare
+local boundaries without deriving provider execution from delivery, HTTP 2xx,
+completion, process exit or PTY quietness. This source slice identifies no
+historical fourth-turn cause and does not reconcile the frozen #74 cleanup
+failure or promote #85. The trace adds no persistence store, API, listener,
+capacity policy, provider route or production installation.
+
+**Reconsideration trigger:** Stronger provider-turn, freshness or request
+correlation claims require a separately observed provider authority and a new
+qualified boundary. Any real-provider experiment retains its own isolation,
+independent-oracle and spending gates.

@@ -269,6 +269,11 @@ final class OpenCodeHTTPClient: ObservableObject {
     private var activityIndexByID: [String: Int] = [:]
     private var sseTask: Task<Void, Never>?
     private var stopped = false
+    private var boundaryTrace: OpenCodeBoundaryTrace
+
+    /// Local diagnostic metadata only. This snapshot grants no provider-turn,
+    /// task-completion, verification or objective-acceptance authority.
+    var boundaryTraceSnapshot: OpenCodeBoundaryTrace.Snapshot { boundaryTrace.snapshot }
 
     /// Exact observed host identity when the lease record carries one.
     var lifecycleProviderHostIdentifier: String? {
@@ -281,10 +286,14 @@ final class OpenCodeHTTPClient: ObservableObject {
         OpenCodeServeLease.shared.willStopOwnedHostAfterReleasingOneLease()
     }
 
-    init(cwd: URL, model: String?, resumeSessionID: String? = nil) {
+    init(
+        cwd: URL, model: String?, resumeSessionID: String? = nil,
+        traceBinding: OpenCodeBoundaryTrace.Binding
+    ) {
         self.cwd = cwd
         self.model = model
         self.resumeSessionID = resumeSessionID
+        self.boundaryTrace = OpenCodeBoundaryTrace(binding: traceBinding)
     }
 
     func start(executable: String) async throws {
@@ -317,6 +326,7 @@ final class OpenCodeHTTPClient: ObservableObject {
             mapper.sessionID = sessionID
         }
         if let sessionID {
+            boundaryTrace.bindSession(sessionID)
             resumeProvenance = SessionResumeSemantics.classify(
                 requested: resumeSessionID,
                 started: sessionID,
@@ -330,6 +340,10 @@ final class OpenCodeHTTPClient: ObservableObject {
     }
 
     func sendTurn(text: String) throws {
+        let ticket = boundaryTrace.beginDelivery(
+            sessionID: sessionID,
+            ready: isReady && lease?.baseURL != nil
+        )
         guard isReady, let sessionID, let lease, let base = lease.baseURL else {
             throw ClientError.notReady
         }
@@ -349,15 +363,19 @@ final class OpenCodeHTTPClient: ObservableObject {
             providerID: split?.providerID,
             modelID: split?.modelID
         )
+        if let ticket { boundaryTrace.scheduled(ticket) }
         Task { [weak self] in
+            guard let self else { return }
+            if let ticket { self.boundaryTrace.entered(ticket) }
             do {
-                _ = try await self?.postJSON(
+                _ = try await self.postJSON(
                     OpenCodeHTTPContract.messageURL(base: base, sessionID: sessionID),
                     password: lease.password,
-                    body: body
+                    body: body,
+                    traceTicket: ticket
                 )
             } catch {
-                self?.emit(.failed(error.localizedDescription))
+                self.emit(.failed(error.localizedDescription))
             }
         }
     }
@@ -392,6 +410,7 @@ final class OpenCodeHTTPClient: ObservableObject {
     }
 
     func stop() {
+        boundaryTrace.stop()
         stopped = true
         sseTask?.cancel()
         sseTask = nil
@@ -426,6 +445,7 @@ final class OpenCodeHTTPClient: ObservableObject {
 
     private func startSSE(base: URL, password: String) {
         sseTask?.cancel()
+        let traceEpoch = boundaryTrace.streamEpoch
         sseTask = Task { [weak self] in
             var request = URLRequest(url: OpenCodeHTTPContract.eventURL(base: base))
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
@@ -443,7 +463,7 @@ final class OpenCodeHTTPClient: ObservableObject {
                     }
                     guard let json else { continue }
                     await MainActor.run {
-                        self?.handleEvent(json)
+                        self?.handleEvent(json, traceEpoch: traceEpoch)
                     }
                 }
             } catch {
@@ -455,7 +475,8 @@ final class OpenCodeHTTPClient: ObservableObject {
         }
     }
 
-    private func handleEvent(_ json: CodexJSON) {
+    private func handleEvent(_ json: CodexJSON, traceEpoch: UUID) {
+        boundaryTrace.observe(json, streamEpoch: traceEpoch)
         if let sessionID,
            let activity = OpenCodeConversationActivityExtractor.activity(
                 from: json,
@@ -506,7 +527,8 @@ final class OpenCodeHTTPClient: ObservableObject {
     private func postJSON(
         _ url: URL,
         password: String,
-        body: [String: Any]
+        body: [String: Any],
+        traceTicket: OpenCodeBoundaryTrace.Ticket? = nil
     ) async throws -> CodexJSON {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -514,7 +536,18 @@ final class OpenCodeHTTPClient: ObservableObject {
         request.timeoutInterval = 60
         OpenCodeServeLease.applyAuth(&request, password: password)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await OpenCodeBoundaryTransport.data(
+            for: request,
+            onStart: {
+                if let traceTicket { self.boundaryTrace.requestStarted(traceTicket) }
+            },
+            onResponse: { status in
+                if let traceTicket { self.boundaryTrace.response(traceTicket, statusCode: status) }
+            },
+            onFailure: {
+                if let traceTicket { self.boundaryTrace.transportFailed(traceTicket) }
+            }
+        )
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let snippet = String(data: data, encoding: .utf8) ?? ""
             throw ClientError.protocolError("OpenCode HTTP \(http.statusCode): \(snippet.prefix(240))")

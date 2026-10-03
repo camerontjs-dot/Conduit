@@ -7838,7 +7838,12 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             let client = OpenCodeHTTPClient(
                 cwd: cwd,
                 model: model,
-                resumeSessionID: resumeSessionID
+                resumeSessionID: resumeSessionID,
+                traceBinding: OpenCodeBoundaryTrace.Binding(
+                    taskSessionID: descriptor.taskSessionID?.rawValue,
+                    runtimeID: id,
+                    runtimeAttemptID: runtimeAttemptID.rawValue
+                )
             )
             wireStructured(client)
             openCode = client

@@ -3748,6 +3748,65 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - OpenCode content-free boundary trace
+
+let traceBinding = OpenCodeBoundaryTrace.Binding(
+    taskSessionID: UUID(), runtimeID: UUID(), runtimeAttemptID: UUID()
+)
+var openCodeTrace = OpenCodeBoundaryTrace(binding: traceBinding, now: 0)
+openCodeTrace.bindSession("ses_owned", now: 1)
+check("OpenCode trace keeps declared runtime identity", openCodeTrace.snapshot.binding == traceBinding)
+check("OpenCode trace refuses non-ready delivery",
+      openCodeTrace.beginDelivery(sessionID: "ses_owned", ready: false, now: 2) == nil)
+let deliveryTicket = openCodeTrace.beginDelivery(sessionID: "ses_owned", ready: true, now: 3)!
+openCodeTrace.scheduled(deliveryTicket, now: 4)
+openCodeTrace.entered(deliveryTicket, now: 5)
+openCodeTrace.requestStarted(deliveryTicket, now: 6)
+openCodeTrace.response(deliveryTicket, statusCode: 204, now: 7)
+check("OpenCode trace measures separate local scheduling and request stages",
+      openCodeTrace.snapshot.records.suffix(5).map(\.kind)
+        == [.localDelivery, .taskScheduled, .taskEntered, .httpRequestStarted, .httpResponse])
+check("OpenCode HTTP response retains local delivery ID",
+      openCodeTrace.snapshot.records.last?.localDeliveryID == deliveryTicket.localDeliveryID)
+check("OpenCode HTTP 2xx does not imply provider state",
+      openCodeTrace.snapshot.records.last?.providerState == .unknown)
+check("OpenCode local delivery never becomes provider turn",
+      openCodeTrace.snapshot.records.last?.providerTurnIdentity == .unknown)
+let busyReport: CodexJSON = .object([
+    "type": .string("session.status"), "properties": .object([
+        "sessionID": .string("ses_owned"), "status": .object(["type": .string("busy")])
+    ])
+])
+let traceEpoch = openCodeTrace.streamEpoch
+openCodeTrace.observe(busyReport, streamEpoch: traceEpoch, now: 8)
+check("OpenCode trace records matching provider busy report",
+      openCodeTrace.snapshot.records.last?.kind == .sessionBusyReported)
+check("OpenCode SSE is not attributed to latest request",
+      openCodeTrace.snapshot.records.last?.localRequestCorrelation == .unknown)
+check("OpenCode busy report preserves unknown freshness",
+      openCodeTrace.snapshot.records.last?.providerObservationFreshness == .unknown)
+openCodeTrace.observe(.object(["type": .string("session.status"), "properties": .object([
+    "sessionID": .null, "status": .object(["type": .string("busy")])
+])]), streamEpoch: traceEpoch, now: 9)
+check("OpenCode malformed session cannot mint busy report",
+      openCodeTrace.snapshot.records.last?.kind == .eventRefused)
+openCodeTrace.stop(now: 10)
+openCodeTrace.bindSession("ses_owned", now: 11)
+openCodeTrace.observe(busyReport, streamEpoch: traceEpoch, now: 12)
+check("OpenCode replay from old stream epoch refuses", openCodeTrace.snapshot.records.last?.reason == .staleEpoch)
+openCodeTrace.response(deliveryTicket, statusCode: 200, now: 13)
+check("OpenCode stale response refuses", openCodeTrace.snapshot.records.last?.reason == .staleEpoch)
+check("OpenCode provider identifier is bounded",
+      OpenCodeBoundaryTrace.ProviderIdentifier.observing("ses_" + String(repeating: "a", count: 125), kind: .session) == nil)
+check("OpenCode provider identifier is kind-specific",
+      OpenCodeBoundaryTrace.ProviderIdentifier.observing("msg_owned", kind: .session) == nil)
+var boundedTrace = OpenCodeBoundaryTrace(binding: traceBinding, recordLimit: 2, requestLimit: 1, now: 0)
+boundedTrace.bindSession("ses_owned", now: 1)
+_ = boundedTrace.beginDelivery(sessionID: "ses_owned", ready: true, now: 2)
+_ = boundedTrace.beginDelivery(sessionID: "ses_owned", ready: true, now: 3)
+check("OpenCode retained trace discloses record loss", boundedTrace.snapshot.records.count == 2 && boundedTrace.snapshot.droppedRecordCount > 0)
+check("OpenCode trace capacity does not fabricate request", boundedTrace.snapshot.untrackedDeliveryCount == 1)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

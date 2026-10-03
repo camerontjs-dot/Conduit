@@ -40,6 +40,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The OpenCode HTTP adapter keeps a bounded, content-free timing trace for
+  local prompt delivery, asynchronous dispatch, HTTP return and exact-session
+  provider reports. The in-process snapshot separates local request custody
+  from provider turn identity and leaves report freshness UNKNOWN. It changes
+  no model, endpoint, credentials, capacity or completion semantics (#76,
+  proposed D-077).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps
