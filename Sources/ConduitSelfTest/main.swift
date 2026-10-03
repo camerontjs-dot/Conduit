@@ -3748,6 +3748,79 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Next Move derived proposal contract
+
+let nextMoveInput = NextMoveInputStateIdentity(
+    projectID: "fixture-project", taskIdentity: "task-1", snapshotIdentity: "events-1",
+    contextManifestIdentity: "manifest-1"
+)
+let nextMoveBasis = NextMoveBasis(
+    source: AgentContextItem(
+        id: "acceptance", title: "Acceptance obligation", kind: .issue,
+        authority: .issue, sourceReference: "issue:fixture-56",
+        revisionIdentity: "issue-revision-1", freshness: .current
+    ),
+    inclusionReasons: [ContextInclusionReason(.requiredContract, detail: "Inspect evidence before acceptance.")]
+)
+let nextMove = NextMoveCandidate(
+    kind: .prompt, proposedText: "Inspect the exact receipt before continuing.",
+    reason: "Acceptance evidence has not been inspected.", basis: [nextMoveBasis],
+    support: .supported, obligations: [], generatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+    inputState: nextMoveInput
+)
+check("Next Move is an editable same-thread draft", nextMove.reviewSurface == .composerDraft)
+check("Next Move is reviewable only against its supplied current identity",
+      nextMove.assess(currentInputState: nextMoveInput).disposition == .reviewable)
+check("Next Move missing current state remains UNKNOWN",
+      nextMove.assess(currentInputState: nil).disposition == .unknown)
+check("Next Move changed snapshot invalidates the suggestion",
+      nextMove.assess(currentInputState: NextMoveInputStateIdentity(
+        projectID: "fixture-project", taskIdentity: "task-1", snapshotIdentity: "events-2",
+        contextManifestIdentity: "manifest-1"
+      )).disposition == .stale)
+let editedNextMove = nextMove.editingProposedText("Ask for a separately identified verification receipt.")
+check("Next Move edit changes only proposal revision, not source derivation",
+      editedNextMove.revisionIdentity != nextMove.revisionIdentity
+        && editedNextMove.inputState == nextMove.inputState
+        && editedNextMove.generatedAt == nextMove.generatedAt
+        && editedNextMove.basis == nextMove.basis)
+do {
+    let bytes = try nextMove.canonicalData()
+    let replay = try NextMoveCandidate.decodeCanonicalData(bytes)
+    check("Next Move canonical roundtrip retains ordered evidence", replay == nextMove)
+    let replayBytes = try replay.canonicalData()
+    check("Next Move canonical replay bytes are stable", replayBytes == bytes)
+    var object = try JSONSerialization.jsonObject(with: bytes) as! [String: Any]
+    object["autoSend"] = true
+    let hostile = try JSONSerialization.data(withJSONObject: object)
+    check("Next Move decoder rejects an auto-send grant",
+          (try? NextMoveCandidate.decodeCanonicalData(hostile)) == nil)
+} catch {
+    check("Next Move canonical fixture encodes", false)
+}
+let blockedNextMove = NextMoveCandidate(
+    kind: .verify, proposedText: "Prepare qualification.", reason: "Evidence is required.",
+    basis: [nextMoveBasis], support: .unknown,
+    obligations: [
+        NextMoveObligation(id: "receipt", description: "Missing receipt", state: .missing),
+        NextMoveObligation(id: "oracle", description: "Independence UNKNOWN", state: .unknown)
+    ], generatedAt: Date(timeIntervalSince1970: 1_800_000_000), inputState: nextMoveInput
+)
+let blockedNextMoveAssessment = blockedNextMove.assess(currentInputState: nextMoveInput)
+check("Next Move hard block preserves UNKNOWN support and obligations",
+      blockedNextMoveAssessment.disposition == .blocked
+        && blockedNextMoveAssessment.support == .unknown
+        && blockedNextMoveAssessment.obligations.contains(where: { $0.state == .unknown }))
+let unstagedNextMove = NextMoveCandidate(
+    kind: .handoff, proposedText: "Stage a review worker.", reason: "A separate role is needed.",
+    basis: [nextMoveBasis], support: .supported, obligations: [],
+    generatedAt: Date(timeIntervalSince1970: 1_800_000_000), inputState: nextMoveInput
+)
+check("Next Move handoff cannot bypass normal proposal policy",
+      unstagedNextMove.requiresOrchestrationPolicy
+        && unstagedNextMove.reviewSurface == .orchestrationProposal
+        && unstagedNextMove.assess(currentInputState: nextMoveInput).disposition == .invalid)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

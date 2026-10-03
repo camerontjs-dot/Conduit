@@ -1,0 +1,72 @@
+{
+  "schema": "nextmove-candidate-sanitized-owner-evidence-v1",
+  "evidence_layer": "OWNER_ONLY_INHERITED_IMPLEMENTATION_CONTEXT",
+  "authority": {
+    "owner_issue": 56,
+    "train_issue": 60,
+    "adoption_comment": 5781073008,
+    "decision": "D-069 Proposed/T0"
+  },
+  "base": {
+    "head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+    "tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010"
+  },
+  "bounded_claim": "Pure editable derived-proposal schema, deterministic assessment and raw fixture replay; no execution authority",
+  "preserved_failures": [
+    {
+      "kind": "MISSING_ADOPTED_TYPE_ON_EXACT_MAIN",
+      "receipt_sha256": "5723daf2ec2b4783d22d1a5d75ceec47fc0ca078d8f24e9976ad6cc29eb4d4ad"
+    },
+    {
+      "kind": "SOURCE_PHASE1_BLANK_DECLARED_IDENTITY_COUNTEREXAMPLES",
+      "passed_checks": 53,
+      "failed_checks": 5,
+      "receipt_sha256": "9e13c998b5df79268aec9fb519b34be014c16a7cd43bbcacbaa877d3286f0f8d",
+      "frozen_oracle_sha256": "c28c8115e807e35541b4d9d614d0523c507674c6b532852522315c2f591f01b0",
+      "preserved_source_manifest_sha256": "a307d044a659d2e1dd92b75833cdbaa4871c954073cda33db41a5108413d4dd1"
+    },
+    {
+      "kind": "NESTED_SWIFTPM_MANIFEST_SANDBOX_EPERM_BEFORE_TESTS",
+      "log_sha256": "04b18e0540a039756b6e50f20a7166272ec27ad80071c008aee6f0877998655d"
+    }
+  ],
+  "successor_raw_pressure": {
+    "cases": 57,
+    "checks": 58,
+    "passed": 58,
+    "failed": 0,
+    "receipt_sha256": "35f4572a9e055a4864ec3f34beb51b48e6f0c8dd77dcef9d3ad63893be488cd9",
+    "unchanged_inputs_expectations_and_extra_checks": true,
+    "control_set_sha256": "c3d23505c3d1ecde74fa1ffdd1bf4f5ce1ba34177c9fdbdabe683c0ba4ef236a",
+    "comparison_receipt_sha256": "b7919074b65999488dbee6163d7b9c594baefdccefc3ea6d870d2161ca1f6d3f",
+    "compatible_native_minimum_macos": "13.0",
+    "separate_process_complete_output_byte_replay": "PASS"
+  },
+  "repository_checks": {
+    "focused_xctest": {"tests": 21, "failures": 0},
+    "selftest": {"checks": 470, "failures": 0},
+    "python_contracts": {"tests": 10, "failures": 0},
+    "full_xctest": {"tests": 624, "explicit_installed_provider_skips": 3, "failures": 0},
+    "maintained_runner_log_sha256": "39cbb2b84397efc050048a73d1e72ed119a14af1c2030a2a426a9a482881cc56"
+  },
+  "isolated_package": {
+    "release_build": "PASS",
+    "maintained_package_script": "PASS",
+    "strict_deep_adhoc_signature": "PASS",
+    "binary_sha256": "9db59a021530978871b63d58ddec572f9ad76fa0eaca2979c2badf19f60b877b",
+    "cdhash": "ee2f0222ded37fe78bf17010a881d2f1f04f75d3",
+    "minimum_macos": "13.0",
+    "installed": false,
+    "launched": false,
+    "log_sha256": "302386148bb73a08e3ea40874fc2572ba13626f2f3ac7f0fff1ffe495d68582f"
+  },
+  "independent_qualification": "PENDING",
+  "not_run_or_not_claimed": [
+    "live state-feed authority",
+    "automatic useful suggestion generation",
+    "composer or mounted UI integration",
+    "route/send/approval/launch authority",
+    "provider entitlement and source truth",
+    "full mounted product and end-to-end supervisory acceptance"
+  ]
+}

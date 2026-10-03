@@ -5,6 +5,32 @@ These ADRs describe Conduit as a product. They are intended to travel with the a
 Narrative companions: [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md), [`docs/DAILY_DRIVER_PASS.md`](docs/DAILY_DRIVER_PASS.md).  
 MainFrame-only coordination decisions live outside this tree.
 
+## D-069: Next Move suggestions are derived proposals with explicit state identity
+
+**Status:** Proposed (2026-10-03; T0 owner implementation boundary)
+
+**Context:** #56's Next Move addition, adopted by #60 comment 5781073008,
+requires an inspectable typed candidate before suggestion UI or live policy.
+An attractive prompt must not manufacture evidence, freshness or execution
+authority from provider completion or retrieved context.
+
+**Proposal:** Represent Next Move as editable text plus kind, explanation,
+existing source/rule provenance, explicit supported/unsupported/UNKNOWN,
+missing/blocked/UNKNOWN obligations, generation time and separate input-state
+identities. Compare against caller-supplied current state. New work carries an
+existing `OrchestrationProposal` for normal later policy/routing. Neither a
+candidate nor a reviewable assessment grants route, send, approval or launch.
+
+> **Binds:** owners proposing the Next Move schema and its later integrations
+> **Tier:** T0 (proposal and integration guidance)
+> **Check:** no acceptance enforcement; Core fixtures detect specified representation regressions
+> **Escape:** preserve UNKNOWN/stale/blocked inputs; obtain a separate qualified feed and policy/approval handoff before product execution
+
+**Evidence boundary:** Portable and owner native fixture checks can establish
+this representation. Independent qualification, live suggestion usefulness,
+composer integration and mounted supervisory journeys remain separate gates.
+See [the contract](docs/next-move-contract.md).
+
 ---
 
 ## D-001: MainFrame-specific personal app
