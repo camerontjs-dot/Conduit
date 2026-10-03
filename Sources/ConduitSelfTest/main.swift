@@ -3382,6 +3382,50 @@ do {
     )
 }
 
+// MARK: - Durable logical orchestration journal (#56)
+
+withTempDir { directory in
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+    func prunUUID(_ value: Int) -> UUID {
+        UUID(uuidString: String(format: "00000000-0000-4000-8000-%012x", value))!
+    }
+    let runID = OrchestrationRunID(rawValue: prunUUID(1))
+    let stepID = OrchestrationStepID(rawValue: prunUUID(2))
+    let at = Date(timeIntervalSince1970: 1_780_000_000)
+    let proposal = OrchestrationProposal(objective: "Record bounded logical work", projectID: "fixture",
+        suggestedAgent: "Shell", scopeAllowlist: ["notes.txt"], deliverables: ["receipt"],
+        verificationSteps: ["External verification"], risks: ["Provider state UNKNOWN"], nonGoals: ["No launch"])
+    let run = OrchestrationRun(id: runID, proposal: proposal, planVersion: "plan-v1", policyVersion: "policy-v1",
+        steps: [OrchestrationStep(id: stepID, runID: runID, objective: "One step", dependencies: [])])
+    let journal = OrchestrationRunJournal(directory: directory, runID: runID)
+    let creation = OrchestrationJournalCommand(id: prunUUID(10), runID: runID, expectedRevision: 0, action: .create(run))
+    _ = try journal.append(creation, eventID: prunUUID(11), recordedAt: at)
+    let recovered = try OrchestrationRunJournal(directory: directory, runID: runID).recover()
+    check("run recovery retains immutable logical IDs", recovered.snapshot.run.id == runID && recovered.snapshot.steps[0].step.id == stepID)
+    check("run proposal fingerprint reuses proposal identity", recovered.snapshot.run.proposalFingerprint == proposal.fingerprint)
+    check("logical recovery leaves verification and acceptance UNKNOWN", recovered.snapshot.verification == .unknown && recovered.snapshot.acceptance == .unknown)
+    let beforeRetry = try Data(contentsOf: journal.journalURL)
+    let retry = try journal.append(creation, eventID: prunUUID(99), recordedAt: at.addingTimeInterval(10))
+    check("logical command retry returns its original event", !retry.appended && retry.event.id == prunUUID(11))
+    let afterRetry = try Data(contentsOf: journal.journalURL)
+    check("logical retry does not duplicate journal bytes", afterRetry == beforeRetry)
+    let checkpointID = prunUUID(20)
+    _ = try journal.checkpoint(id: checkpointID, expectedRevision: 1)
+    let checkpointRecovery = try journal.recover(checkpointID: checkpointID)
+    check("logical checkpoint is verified against event source", checkpointRecovery.snapshot == recovered.snapshot && checkpointRecovery.validatedCheckpointID == checkpointID)
+    let providerEvidence = OrchestrationEvidenceReference(sourceID: "fixture:provider-completion", revision: "v1",
+        observation: SupervisionObservationStamp(authority: .providerObserved, freshness: .current, observedAt: .known(at)))
+    do {
+        _ = try journal.append(OrchestrationJournalCommand(id: prunUUID(30), runID: runID, expectedRevision: 1,
+            action: .acceptance(stepID: nil, value: .accepted, evidence: providerEvidence)), eventID: prunUUID(31), recordedAt: at)
+        check("provider completion cannot record external acceptance", false)
+    } catch {
+        check("provider completion cannot record external acceptance", error is OrchestrationJournalError)
+    }
+    let afterRefusal = try Data(contentsOf: journal.journalURL)
+    check("refused logical decision retains source bytes", afterRefusal == beforeRetry)
+}
+
 // MARK: - Provider orchestration state boundary (#53)
 
 let orchestrationObservation = SupervisionObservationStamp(

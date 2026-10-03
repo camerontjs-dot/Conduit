@@ -1,0 +1,213 @@
+{
+  "schema": "orchestration-run-sanitized-owner-evidence-v1",
+  "evidence_layer": "OWNER_ONLY_INHERITED_IMPLEMENTATION_CONTEXT",
+  "authority": {
+    "owner_issue": 56,
+    "train_issue": 60,
+    "run_step_adoption_comment": 5753484851,
+    "train_phase": "Wave 4 Phase A",
+    "decision": "D-071 Proposed/T0"
+  },
+  "base": {
+    "head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+    "tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010"
+  },
+  "candidate_identity_binding": "The enclosing Git head/tree and frozen PR receipt bind this index; no self-referential head is embedded.",
+  "bounded_claim": "Unmounted logical run/step records, exact append-only retries, strict replay and source-consistent immutable checkpoints in explicitly owned storage; no runtime authority",
+  "protected_policy_and_identity_sources_unchanged": true,
+  "preserved_observations": [
+    {
+      "kind": "EXACT_MAIN_SOURCE_TYPE_ABSENCE",
+      "receipt_sha256": "78a26e0e5c8acc5ea2f139f9ba0b2e5be0368aebc12d6dcf27bd6b586bc52e48",
+      "limited_predecessor_probe": "The first unlinked compiler probe was not by itself evidence of type absence from Core.",
+      "limited_predecessor_receipt_sha256": "1c34cdfddb3e561f10bf78ff39d1b900d156d6b0c690dd51b19937c49fa83749"
+    },
+    {
+      "kind": "PARTIAL_CORE_APPARATUS_DEPENDENCY_CLOSURE_ERRORS",
+      "receipts_sha256": [
+        "d31638b66f94ef407414069e754a5f873b2d90e4f2a2d917f966d27c22c7ea03",
+        "0ca9b8409b986bf04a29931fac93174ccdd6dfdd735071cd5d639f9d45759b16"
+      ],
+      "disposition": "Preserved apparatus failures; the complete dependency closure was subsequently compiled."
+    },
+    {
+      "kind": "SOURCE_PHASE1_AUTHORITY_AND_COMPLETION_COUNTEREXAMPLES",
+      "passed_checks": 65,
+      "failed_checks": 3,
+      "native_processes": 101,
+      "failed_controls": [
+        "provider-verification",
+        "provider-acceptance",
+        "completion-resurrection"
+      ],
+      "receipt_sha256": "419f5aecdcadbdb0426d8eefb3e5be65f9aacf95b6915d17e3ad551f7e394a22",
+      "frozen_oracle_sha256": "b79a6d24b7bd6a07d269f3bcefda472a2a41edfc5dc9230390b9f8ca744c4272",
+      "physical_source_binary_journals_and_traces": "RETAINED"
+    },
+    {
+      "kind": "NESTED_SWIFTPM_SANDBOX_EPERM_BEFORE_TESTS",
+      "receipt_sha256": "cfeacfe04385463eadef493ada714d6b8a22b9f2c402f05d7b963b747110f449"
+    },
+    {
+      "kind": "PUBLIC_PINNED_DEPENDENCY_DNS_DENIAL_BEFORE_TESTS",
+      "receipt_sha256": "c52bde871457c6f9dc0e16f337e7557ad45db9f8915eb3ecce19e2ee48ea5364"
+    },
+    {
+      "kind": "PACKAGE_IDENTITY_APPARATUS_V1_WHOLE_FILE_EQUALITY_FAILED",
+      "raw_release_sha256": "b9eacc300a704a40afea418868633114447453836e22f4a6a20d824488afeab9",
+      "packaged_sha256": "34bacf5f04ec9af5085d6de1157480b1d5e5ee0a10021bb1b6c0df208b05da9e",
+      "whole_file_equality": false,
+      "receipt_sha256": "c99dc72720f81b192b88af34b5882bdfc4886d19cc5beab804bdf51b6b887f13",
+      "disposition": "Original false equality retained; no artifact or source repair."
+    },
+    {
+      "kind": "PACKAGE_IDENTITY_APPARATUS_V2_SUPERBLOB_LENGTH_ASSUMPTION_FAILED",
+      "receipt_sha256": "25f600abe99b1d569879a615265eb200a92dcf9047df77c7894715141a5fea44",
+      "frozen_oracle_sha256": "598d148bd9cd5a815a46395e4658688775b51aca68552a4d1ebf9c22d3882b58",
+      "disposition": "Superblob length differs from signature-region size. Exact opaque suffix bytes are retained; no zero-padding or tail-semantics claim."
+    }
+  ],
+  "intermediate_repair": {
+    "checks": 68,
+    "passed": 68,
+    "failed": 0,
+    "native_processes": 101,
+    "receipt_sha256": "114e0fe162febc4c9ae44358d121ba21c92d4ff956a6fcd4b0a7773114e2cf57",
+    "unchanged_protocol_comparison_sha256": "fa978d452e0ada073eacac40cb0afd679dff6a557b30049d884c934b7423a7a8",
+    "physical_source_binary_journals_and_traces": "RETAINED"
+  },
+  "final_partial_core_owner_pressure": {
+    "compiled_complete_core_files": 15,
+    "binary_sha256": "375f9ede549e2d6ad02cfbc397e05cc279cd17b8683997d98ffd8fef41716cba",
+    "core_sources_sha256": {
+      "OrchestrationRun.swift": "c73076fe695cdc20ea6a32500cf4bec272d45daec31154b5ee9f5a28e8fe4834",
+      "OrchestrationRunJournal.swift": "e92770f319779b93482b3ad7addc33bc11230e50aac635629d0033ced6df270f"
+    },
+    "baseline": {
+      "checks": 68,
+      "passed": 68,
+      "failed": 0,
+      "native_processes": 101
+    },
+    "baseline_receipt_sha256": "a2ffe73529056cfdbc38099c595a991485272cce4fd220d0fa12e467ec5b4520",
+    "supplemental": {
+      "checks": 8,
+      "passed": 8,
+      "failed": 0,
+      "native_processes": 11
+    },
+    "supplemental_receipt_sha256": "13a5685b297348ec09087cf0cc9a12318cae94b4b22e69d6a35da1fec1622d6e",
+    "finite_fractional_dates": {
+      "checks": 10,
+      "passed": 10,
+      "failed": 0,
+      "native_processes": 20
+    },
+    "fractional_dates_receipt_sha256": "218608190522f6ec15a16802b924686f8b4827aae0cd2baf4e5608baeb10bdf9",
+    "distinct_process_recovery_and_committed_before_response_crash": "PASS",
+    "compatible_native_minimum_macos": "13.0",
+    "native_minimum_receipt_sha256": "957fa8869594e7e34f09571252536f44ffed5b14ac55ebc4bf5a1c01f8ed8d5f",
+    "full_native_module_or_package": false,
+    "independent": false
+  },
+  "source_custody_pre_native": {
+    "objects": 249,
+    "receipt_sha256": "7cb94fab09aaa0cd1bb7c5e8f39aa9e21b092f3ab1e171210ed89d841193fac0"
+  },
+  "static_checks": {
+    "python_contracts": {
+      "tests": 10,
+      "failures": 0
+    },
+    "contract_lint": "PASS_WITH_PRESERVED_HISTORICAL_ADVISORIES",
+    "repository_leak_scan": "PASS",
+    "diff_check": "PASS",
+    "receipt_sha256": "2f8551351876f2f12a929b10bb2b2fcbb049d7e2a135852013c8433ca37c9aa1"
+  },
+  "repository_checks": {
+    "focused_xctest": {
+      "tests": 37,
+      "failures": 0,
+      "receipt_sha256": "2e573884bd8a103a54c66800fc15dea5c20d1f661e93e5ba6c56606224383cb5"
+    },
+    "selftest": {
+      "checks": 468,
+      "failures": 0
+    },
+    "python_contracts": {
+      "tests": 10,
+      "failures": 0
+    },
+    "full_xctest": {
+      "tests": 640,
+      "explicit_installed_fixture_skips": 3,
+      "failures": 0
+    },
+    "explicit_skips": [
+      "testInstalledOpenCodeAuthorityJourneyWhenExplicitlyRequested",
+      "testInstalledOpenCodePersistenceWhenExplicitlyRequested",
+      "testLiveShellOpenCodeSessionCorrelationWhenIsolatedFixtureConfigured"
+    ],
+    "maintained_runner_receipt_sha256": "95aa3664f12813949391567570cfff9f5982450ca7a5abb5f8ae065af4e35070",
+    "maintained_runner_stdout_sha256": "64ce5c4ab0bc4cb3e429253c6927cad928901ddb9c4c43094ba7135584f305aa",
+    "maintained_runner_stderr_sha256": "d7c908c0539ae89f375c354f73320529f0442ca5a2af3f0870e038b0b40018e2",
+    "sources_unchanged": true
+  },
+  "independent_qualification": "PENDING",
+  "not_run_or_not_claimed": [
+    "authenticated evidence-reference or source truth",
+    "live freshness, task/runtime/provider lifecycle or entitlement",
+    "route/send/approval/launch or writer-lease authority",
+    "provider persistence or GUI restart",
+    "automatic scheduling, delegation or dynamic workflows",
+    "ancestor confinement or hostile same-user custody",
+    "atomic filesystem transactions, rollback or hard power-loss durability",
+    "installed operator build or mounted product journey",
+    "end-to-end supervisory verification or external acceptance"
+  ],
+  "isolated_package": {
+    "release_build": "PASS",
+    "maintained_package_script": "PASS",
+    "strict_native_raw_and_bundle_signatures": "PASS",
+    "raw_release_binary_sha256": "b9eacc300a704a40afea418868633114447453836e22f4a6a20d824488afeab9",
+    "packaged_binary_sha256": "34bacf5f04ec9af5085d6de1157480b1d5e5ee0a10021bb1b6c0df208b05da9e",
+    "raw_packaged_whole_file_equality": false,
+    "cdhash": "37d6fc4e1ad3c0cbad19f028929854424881af8e",
+    "minimum_macos": "13.0",
+    "sdk": "26.5",
+    "resource_files": 25,
+    "resource_bundles": {
+      "Conduit_Conduit.bundle": {
+        "exact_content": true,
+        "files": 23
+      },
+      "SwiftTerm_SwiftTerm.bundle": {
+        "exact_content": true,
+        "files": 1
+      }
+    },
+    "program_section_headers_and_contents_exact": 41,
+    "matched_code_directory_page_hashes": 8323,
+    "package_plist_and_resource_special_slots_exact": true,
+    "only_changed_pre_signature_fields": [
+      "LINKEDIT_vmsize",
+      "LINKEDIT_filesize",
+      "CODE_SIGNATURE_datasize"
+    ],
+    "opaque_signature_region_suffixes": {
+      "raw_bytes": 4,
+      "package_bytes": 9,
+      "exact_bytes_retained": true,
+      "semantics": "NOT_INFERRED"
+    },
+    "original_and_v2_apparatus_failures": "PRESERVED",
+    "v3_apparatus_role": "OWNER_POST_DIAGNOSIS_BOUNDARY_FROZEN_BEFORE_TRIAL",
+    "v3_oracle_sha256": "e4876a311635591bded4bb8a04abaa9ae63c016ae3782f118c68531371e5415c",
+    "v3_apparatus_sha256": "46c7809adc335e9ff3e5bee18264d3fa6db6a054ba6e3257aa4115486e36d71b",
+    "v3_identity_receipt_sha256": "2994f36b397d73b88057da65dc796e31fc6c2855765ecdce84604d075f3276cd",
+    "maintained_package_receipt_sha256": "ea9ba8950c0448dfafb760d7671a1b455c8dc709ba7d1940cc5f79a5f215dff8",
+    "installed": false,
+    "launched": false,
+    "general_normalization_or_authenticated_publisher_provenance": "NOT_CLAIMED"
+  }
+}
