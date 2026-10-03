@@ -25,6 +25,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- Local Operator receipt reads and checkpoints refuse nonregular, replaced or
+  nonprivate lock state without blocking or repairing it. The successor preserves
+  the frozen predecessor's malformed-FIFO failure and existing revision controls.
+
 ### Added
 
 - Local Operator helpers can record and read a bounded operation for an existing

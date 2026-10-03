@@ -664,12 +664,47 @@ public struct LocalOperatorRecordStore: Sendable {
         let fd = Darwin.open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { throw LocalOperatorError.unavailableStore }
         defer { Darwin.close(fd) }
-        let lockFlags = create ? O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC : O_RDONLY | O_NOFOLLOW | O_CLOEXEC
+        try validateDirectoryIdentity(fd: fd)
+        let lockFlags = (create ? O_RDWR | O_CREAT : O_RDONLY) | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC
         let lock = Darwin.openat(fd, ".writer.lock", lockFlags, 0o600)
         guard lock >= 0 else { throw LocalOperatorError.unavailableStore }
         defer { Darwin.close(lock) }
+        try validateLockEnvelope(directoryFD: fd, lockFD: lock)
         guard flock(lock, (create ? LOCK_EX : LOCK_SH) | LOCK_NB) == 0 else { throw LocalOperatorError.unavailableStore }
         defer { _ = flock(lock, LOCK_UN) }
-        return try body(fd)
+        try validateLockEnvelope(directoryFD: fd, lockFD: lock)
+        let result = try body(fd)
+        try validateLockEnvelope(directoryFD: fd, lockFD: lock)
+        return result
+    }
+
+    /// Locking an inode is useful only while it remains the private regular
+    /// lock named by this receipt directory. A FIFO must never block open,
+    /// and replacement/moved state must not be returned as this store.
+    /// This is an availability/identity check, not same-user authenticated custody.
+    func validateLockEnvelope(directoryFD: Int32, lockFD: Int32) throws {
+        try validateDirectoryIdentity(fd: directoryFD)
+        var lock = stat(); var namedLock = stat()
+        guard Darwin.fstat(lockFD, &lock) == 0,
+              Darwin.fstatat(directoryFD, ".writer.lock", &namedLock, AT_SYMLINK_NOFOLLOW) == 0,
+              lock.st_mode & S_IFMT == S_IFREG,
+              namedLock.st_mode & S_IFMT == S_IFREG,
+              lock.st_uid == geteuid(), namedLock.st_uid == lock.st_uid,
+              lock.st_nlink == 1, namedLock.st_nlink == 1,
+              lock.st_mode & 0o077 == 0, namedLock.st_mode & 0o077 == 0,
+              lock.st_dev == namedLock.st_dev, lock.st_ino == namedLock.st_ino
+        else { throw LocalOperatorError.unavailableStore }
+    }
+
+    private func validateDirectoryIdentity(fd: Int32) throws {
+        var root = stat(); var namedRoot = stat()
+        guard Darwin.fstat(fd, &root) == 0,
+              Darwin.lstat(directory.path, &namedRoot) == 0,
+              root.st_mode & S_IFMT == S_IFDIR,
+              namedRoot.st_mode & S_IFMT == S_IFDIR,
+              root.st_uid == geteuid(), namedRoot.st_uid == root.st_uid,
+              root.st_mode & 0o077 == 0, namedRoot.st_mode & 0o077 == 0,
+              root.st_dev == namedRoot.st_dev, root.st_ino == namedRoot.st_ino
+        else { throw LocalOperatorError.unavailableStore }
     }
 }

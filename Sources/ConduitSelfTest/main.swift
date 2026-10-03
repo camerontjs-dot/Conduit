@@ -4,6 +4,7 @@
 // CI still runs the full XCTest suite with Xcode.
 
 import ConduitCore
+import Darwin
 import Dispatch
 import Foundation
 
@@ -3861,6 +3862,29 @@ withTempDir { root in
     do { _ = try store.records(taskSessionID: boundary.taskSessionID, operationID: boundary.operationID) }
     catch { tamperRefused = true }
     check("Local Operator semantic tampering cannot hide physical file changes", tamperRefused)
+    let lockStore = LocalOperatorRecordStore(directory: root.appendingPathComponent("lock-controls"))
+    try lockStore.append(first, expectedRevision: nil)
+    let lockURL = lockStore.directory.appendingPathComponent(".writer.lock")
+    try FileManager.default.removeItem(at: lockURL)
+    let fifoCreated = Darwin.mkfifo(lockURL.path, 0o600) == 0
+    var fifoReadRefused = false; var fifoWriteRefused = false
+    if fifoCreated {
+        do { _ = try lockStore.records(taskSessionID: boundary.taskSessionID, operationID: boundary.operationID) }
+        catch LocalOperatorError.unavailableStore { fifoReadRefused = true }
+        do { try lockStore.append(first, expectedRevision: nil) }
+        catch LocalOperatorError.unavailableStore { fifoWriteRefused = true }
+    }
+    check("Local Operator FIFO lock refuses read and append without blocking", fifoCreated && fifoReadRefused && fifoWriteRefused)
+    var fifoState = stat()
+    check("Local Operator lock refusal leaves malformed evidence intact",
+          Darwin.lstat(lockURL.path, &fifoState) == 0 && fifoState.st_mode & S_IFMT == S_IFIFO)
+    try FileManager.default.removeItem(at: lockURL)
+    var missingLockRefused = false
+    do { _ = try lockStore.records(taskSessionID: boundary.taskSessionID, operationID: boundary.operationID) }
+    catch LocalOperatorError.unavailableStore { missingLockRefused = true }
+    check("Local Operator historical read cannot create a missing lock", missingLockRefused && !FileManager.default.fileExists(atPath: lockURL.path))
+    check("Local Operator healthy receipt survives malformed-lock refusal",
+          FileManager.default.fileExists(atPath: lockStore.directory.appendingPathComponent("\(boundary.taskSessionID.rawValue.uuidString).\(boundary.operationID.uuidString).000.json").path))
 }
 
 // MARK: - Summary

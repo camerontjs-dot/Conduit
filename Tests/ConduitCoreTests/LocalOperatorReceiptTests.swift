@@ -431,6 +431,153 @@ final class LocalOperatorReceiptTests: XCTestCase {
         }
     }
 
+    func testMalformedLockObjectsRefuseReadAndAppendWithoutRepair() throws {
+        for kind in ["fifo", "directory", "symlink", "hardlink", "public-permissions"] {
+            try temp { root in
+                let b = try boundary(root)
+                let r = LocalOperatorReceiptBuilder.begin(boundary: b, snapshot: try snapshot(b))
+                let store = LocalOperatorRecordStore(directory: root.appendingPathComponent("records"))
+                try store.append(r, expectedRevision: nil)
+                let record = store.directory.appendingPathComponent("\(b.taskSessionID.rawValue.uuidString).\(b.operationID.uuidString).000.json")
+                let bytes = try Data(contentsOf: record)
+                let lock = store.directory.appendingPathComponent(".writer.lock")
+                if kind == "hardlink" {
+                    XCTAssertEqual(Darwin.link(lock.path, root.appendingPathComponent("other-link").path), 0)
+                } else if kind == "public-permissions" {
+                    XCTAssertEqual(Darwin.chmod(lock.path, 0o644), 0)
+                } else {
+                    try FileManager.default.removeItem(at: lock)
+                    if kind == "fifo" { XCTAssertEqual(Darwin.mkfifo(lock.path, 0o600), 0) }
+                    if kind == "directory" {
+                        try FileManager.default.createDirectory(at: lock, withIntermediateDirectories: false)
+                    }
+                    if kind == "symlink" {
+                        try FileManager.default.createSymbolicLink(at: lock, withDestinationURL: record)
+                    }
+                }
+                var before = stat(); XCTAssertEqual(Darwin.lstat(lock.path, &before), 0)
+                let start = Date()
+                XCTAssertThrowsError(try store.records(taskSessionID: b.taskSessionID, operationID: b.operationID)) {
+                    XCTAssertEqual($0 as? LocalOperatorError, .unavailableStore, kind)
+                }
+                XCTAssertThrowsError(try store.append(r, expectedRevision: nil)) {
+                    XCTAssertEqual($0 as? LocalOperatorError, .unavailableStore, kind)
+                }
+                XCTAssertLessThan(Date().timeIntervalSince(start), 1, kind)
+                var after = stat(); XCTAssertEqual(Darwin.lstat(lock.path, &after), 0)
+                XCTAssertEqual(before.st_ino, after.st_ino, kind)
+                XCTAssertEqual(before.st_mode, after.st_mode, kind)
+                XCTAssertEqual(before.st_nlink, after.st_nlink, kind)
+                XCTAssertEqual(try Data(contentsOf: record), bytes, kind)
+            }
+        }
+    }
+
+    func testReadonlyMissingLockDoesNotCreateOrRepairIt() throws {
+        try temp { root in
+            let b = try boundary(root)
+            let directory = root.appendingPathComponent("empty-records")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700])
+            let store = LocalOperatorRecordStore(directory: directory)
+            XCTAssertThrowsError(try store.records(taskSessionID: b.taskSessionID, operationID: b.operationID)) {
+                XCTAssertEqual($0 as? LocalOperatorError, .unavailableStore)
+            }
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [])
+        }
+    }
+
+    func testLockContentionIsBoundedAndRecoveryPreservesRevisionRules() throws {
+        try temp { root in
+            let b = try boundary(root); let s = try snapshot(b)
+            let first = LocalOperatorReceiptBuilder.begin(boundary: b, snapshot: s)
+            let store = LocalOperatorRecordStore(directory: root.appendingPathComponent("records"))
+            try store.append(first, expectedRevision: nil)
+            let lock = Darwin.open(store.directory.appendingPathComponent(".writer.lock").path,
+                O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+            XCTAssertGreaterThanOrEqual(lock, 0); defer { Darwin.close(lock) }
+            XCTAssertEqual(flock(lock, LOCK_EX | LOCK_NB), 0)
+            XCTAssertThrowsError(try store.records(taskSessionID: b.taskSessionID, operationID: b.operationID))
+            XCTAssertThrowsError(try store.append(first, expectedRevision: nil))
+            XCTAssertEqual(flock(lock, LOCK_UN), 0)
+            XCTAssertEqual(try store.records(taskSessionID: b.taskSessionID, operationID: b.operationID), [first])
+            XCTAssertThrowsError(try store.append(first, expectedRevision: nil)) {
+                XCTAssertEqual($0 as? LocalOperatorError, .staleRevision)
+            }
+            let second = LocalOperatorReceiptBuilder.checkpoint(previous: first, snapshot: s, terminal: true)
+            try store.append(second, expectedRevision: 0)
+            XCTAssertEqual(try store.records(taskSessionID: b.taskSessionID, operationID: b.operationID), [first, second])
+        }
+    }
+
+    func testSharedReaderLockDoesNotBecomeWriterAuthority() throws {
+        try temp { root in
+            let b = try boundary(root); let r = LocalOperatorReceiptBuilder.begin(boundary: b, snapshot: try snapshot(b))
+            let store = LocalOperatorRecordStore(directory: root.appendingPathComponent("records"))
+            try store.append(r, expectedRevision: nil)
+            let lock = Darwin.open(store.directory.appendingPathComponent(".writer.lock").path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
+            XCTAssertGreaterThanOrEqual(lock, 0); defer { Darwin.close(lock) }
+            XCTAssertEqual(flock(lock, LOCK_SH | LOCK_NB), 0); defer { _ = flock(lock, LOCK_UN) }
+            XCTAssertEqual(try store.records(taskSessionID: b.taskSessionID, operationID: b.operationID), [r])
+            XCTAssertThrowsError(try store.append(r, expectedRevision: nil)) {
+                XCTAssertEqual($0 as? LocalOperatorError, .unavailableStore)
+            }
+        }
+    }
+
+    func testGroupAccessibleDirectoryRefusesWithoutChangingPermissions() throws {
+        try temp { root in
+            let b = try boundary(root); let r = LocalOperatorReceiptBuilder.begin(boundary: b, snapshot: try snapshot(b))
+            let store = LocalOperatorRecordStore(directory: root.appendingPathComponent("records"))
+            try store.append(r, expectedRevision: nil)
+            XCTAssertEqual(Darwin.chmod(store.directory.path, 0o750), 0)
+            XCTAssertThrowsError(try store.records(taskSessionID: b.taskSessionID, operationID: b.operationID))
+            XCTAssertThrowsError(try store.append(r, expectedRevision: nil))
+            var s = stat(); XCTAssertEqual(Darwin.lstat(store.directory.path, &s), 0)
+            XCTAssertEqual(s.st_mode & 0o777, 0o750)
+        }
+    }
+
+    func testHeldLockInodeReplacementIsRefused() throws {
+        try temp { root in
+            let b = try boundary(root); let r = LocalOperatorReceiptBuilder.begin(boundary: b, snapshot: try snapshot(b))
+            let store = LocalOperatorRecordStore(directory: root.appendingPathComponent("records"))
+            try store.append(r, expectedRevision: nil)
+            let fd = Darwin.open(store.directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            let lock = Darwin.openat(fd, ".writer.lock", O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+            XCTAssertGreaterThanOrEqual(fd, 0); XCTAssertGreaterThanOrEqual(lock, 0)
+            defer { Darwin.close(lock); Darwin.close(fd) }
+            XCTAssertEqual(flock(lock, LOCK_EX | LOCK_NB), 0); defer { _ = flock(lock, LOCK_UN) }
+            try store.validateLockEnvelope(directoryFD: fd, lockFD: lock)
+            let named = store.directory.appendingPathComponent(".writer.lock")
+            try FileManager.default.moveItem(at: named, to: store.directory.appendingPathComponent("old-lock"))
+            XCTAssertTrue(FileManager.default.createFile(atPath: named.path, contents: Data(), attributes: [.posixPermissions: 0o600]))
+            XCTAssertThrowsError(try store.validateLockEnvelope(directoryFD: fd, lockFD: lock)) {
+                XCTAssertEqual($0 as? LocalOperatorError, .unavailableStore)
+            }
+        }
+    }
+
+    func testOpenedDirectoryReplacementIsRefused() throws {
+        try temp { root in
+            let b = try boundary(root); let r = LocalOperatorReceiptBuilder.begin(boundary: b, snapshot: try snapshot(b))
+            let store = LocalOperatorRecordStore(directory: root.appendingPathComponent("records"))
+            try store.append(r, expectedRevision: nil)
+            let fd = Darwin.open(store.directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            let lock = Darwin.openat(fd, ".writer.lock", O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+            XCTAssertGreaterThanOrEqual(fd, 0); XCTAssertGreaterThanOrEqual(lock, 0)
+            defer { Darwin.close(lock); Darwin.close(fd) }
+            XCTAssertEqual(flock(lock, LOCK_EX | LOCK_NB), 0); defer { _ = flock(lock, LOCK_UN) }
+            try store.validateLockEnvelope(directoryFD: fd, lockFD: lock)
+            try FileManager.default.moveItem(at: store.directory, to: root.appendingPathComponent("moved-records"))
+            try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700])
+            XCTAssertThrowsError(try store.validateLockEnvelope(directoryFD: fd, lockFD: lock)) {
+                XCTAssertEqual($0 as? LocalOperatorError, .unavailableStore)
+            }
+        }
+    }
+
     func testSemanticTamperingCannotHideFileChangeOrGrantConsequentAuthority() throws {
         try temp { root in
             let b = try boundary(root, mode: .consequentLocalChange)

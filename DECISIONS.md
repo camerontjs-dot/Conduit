@@ -2061,6 +2061,12 @@ externally started tunnel untouched.
 
 **Status:** Proposed (2026-10-03; #51 maintained implementation candidate)
 
+**Successor evidence:** Frozen Draft #133 later failed a native malformed-FIFO
+lock control. The separately identified lock-reader successor preserves that
+failure and checks nonblocking regular lock and named directory/lock identity.
+Its boundary is in `docs/qualification/local-operator-lock-reader-successor-v1.md`;
+this does not accept D-066 or qualify the mounted runtime path.
+
 **Context:** #51 adopts a Local Operator V1 through the existing ChatGPT-facing
 Shell/task surface. Durable task logs and #70 already record Shell execution
 identity, process observation and bounded provider correlation. They do not

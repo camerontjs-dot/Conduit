@@ -71,13 +71,18 @@ executed checks and preserved failures are recorded in the associated Draft PR
 and machine receipt. Frozen failed source and attempts remain preserved in the
 programme evidence; a later pass does not rewrite their disposition.
 
-The latest owner run executed 486 selftests, 10 Python contract tests and 637
+The frozen predecessor [#133](https://github.com/camerontjs-dot/Conduit/pull/133)
+owner run executed 486 selftests, 10 Python contract tests and 637
 XCTest cases with no failures. Three existing installed/provider qualification
 cases were explicitly skipped; the 33 Local Operator cases ran. The maintained
 release build, uninstalled bundle signing/resource/minimum-OS checks and 486
 release selftests passed. A separate native owner writer and reader recovered
 the same two immutable records; torn, gapped and hidden-change copies were
 refused without repair. These are bounded owner mechanics and packaging checks.
+A subsequent FIFO lock control failed on that frozen candidate. The separately
+identified [lock-reader successor](local-operator-lock-reader-successor-v1.md)
+preserves this failure and has its own source and qualification gates; the
+predecessor's green checks do not qualify the successor.
 
 The earlier green 25-case Core run was followed by a failing semantic-tampering
 pressure check. A later identity check also failed when an operation UUID reused
