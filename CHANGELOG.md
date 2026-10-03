@@ -34,6 +34,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- ConduitCore now provides durable Work Group coordination references with
+  restart recovery, replay-safe mutations and stale-edit checks. A derived
+  member rail preserves unknown and ambiguous observations, and composer
+  descriptors name the exact group and target with deterministic warnings.
+  This is the WG1–WG3 foundation for later app composition; references grant
+  no task or provider runtime authority (#71).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps
