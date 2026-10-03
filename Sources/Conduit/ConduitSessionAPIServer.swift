@@ -503,6 +503,13 @@ final class ConduitSessionAPIServer {
             } else {
                 command = nil
             }
+        case "conduit_local_preflight", "conduit_local_status", "conduit_local_receipt", "conduit_local_changes",
+             "conduit_local_children", "conduit_local_begin", "conduit_local_checkpoint":
+            if case .object(let values) = arguments {
+                command = LocalOperatorToolParser.command(named: name, arguments: values)
+            } else {
+                command = nil
+            }
         case "conduit_query_mindgraph":
             let question = arguments["question"]?.stringValue ?? ""
             let scope = arguments["scope"]?.stringValue ?? ""
@@ -537,8 +544,10 @@ final class ConduitSessionAPIServer {
             }
         case "conduit_send_prompt":
             if let id = arguments["taskSessionID"]?.stringValue,
-               let text = arguments["text"]?.stringValue {
-                command = .sendPrompt(taskSessionID: id, text: text, origin: .chatgpt)
+               let text = arguments["text"]?.stringValue,
+               LocalOperatorToolParser.isValidOptionalOperationID(arguments["local_operation_id"]) {
+                command = .sendPrompt(taskSessionID: id, text: text, origin: .chatgpt,
+                                      localOperationID: arguments["local_operation_id"]?.stringValue)
             } else {
                 command = nil
             }
@@ -618,6 +627,8 @@ final class ConduitSessionAPIServer {
             "conduit_lifecycle_preflight",
             "conduit_lifecycle_operation",
             "conduit_process_tree",
+            "conduit_local_preflight", "conduit_local_status", "conduit_local_receipt", "conduit_local_changes",
+            "conduit_local_children", "conduit_local_begin", "conduit_local_checkpoint",
         ].contains(name)
         let isTypedAuthorityCollision =
             name == "conduit_adopt_provider_session"

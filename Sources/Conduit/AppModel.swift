@@ -4339,6 +4339,17 @@ final class AppModel: ObservableObject {
                 cursor: cursor,
                 limit: limit
             )
+        case .localPreflight(let rawID, let paths):
+            return sessionAPILocalPreflight(taskSessionID: rawID, paths: paths)
+        case .localRead(let rawID, let operationID, let section):
+            return sessionAPILocalRead(taskSessionID: rawID, operationID: operationID, section: section)
+        case .localBegin(let rawID, let operationID, let objective, let acceptance, let mode, let paths, let protectedPaths):
+            return sessionAPILocalBegin(taskSessionID: rawID, operationID: operationID,
+                objective: objective, acceptance: acceptance, mode: mode, paths: paths,
+                protectedPaths: protectedPaths, caller: caller)
+        case .localCheckpoint(let rawID, let operationID, let expectedRevision, let terminal):
+            return sessionAPILocalCheckpoint(taskSessionID: rawID, operationID: operationID,
+                expectedRevision: expectedRevision, terminal: terminal)
         case .queryMindGraph(let question, let scope):
             let askedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !askedQuestion.isEmpty else {
@@ -4400,12 +4411,13 @@ final class AppModel: ObservableObject {
             )
         case .reconcileTask(let rawID):
             return sessionAPIReconcileTask(taskSessionID: rawID, caller: caller)
-        case .sendPrompt(let rawID, let text, let origin):
+        case .sendPrompt(let rawID, let text, let origin, let localOperationID):
             return sessionAPISendPrompt(
                 taskSessionID: rawID,
                 text: text,
                 origin: origin,
-                caller: caller
+                caller: caller,
+                localOperationID: localOperationID
             )
         case .lifecyclePreflight(let rawID, let operation):
             return sessionAPILifecyclePreflight(
@@ -6331,7 +6343,8 @@ final class AppModel: ObservableObject {
         taskSessionID rawID: String,
         text: String,
         origin: ConduitSessionOrigin,
-        caller: ConduitSessionCaller
+        caller: ConduitSessionCaller,
+        localOperationID: String? = nil
     ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
@@ -6364,6 +6377,29 @@ final class AppModel: ObservableObject {
         // way; a queued PTY write is still tracked by the runtime's own depth.
         defer { admission.markPromptFinished(reservationID: reservationID) }
 
+        if let localOperationID {
+            do {
+                let (_, runtime) = try sessionAPILocalRuntime(taskSessionID: rawID)
+                let record = try sessionAPILocalRecord(taskID: taskID, operationID: localOperationID)
+                let log = TaskSessionEventLog(directory: taskSessionStore.directory, taskSessionID: taskID).read()
+                guard log.diagnostics.isEmpty else { throw LocalOperatorError.invalidRecord }
+                let telemetry = ShellTelemetryProjection.latest(taskSessionID: taskID, events: log.events)?.latestEvent
+                if let refusal = LocalOperatorReceiptBuilder.shellWorkingDirectoryRefusal(receipt: record, telemetry: telemetry) {
+                    return ["error": refusal, "local_operation_id": localOperationID, "delivered": false]
+                }
+                let current = try sessionAPILocalSnapshot(boundary: record.boundary, runtime: runtime)
+                if let refusal = LocalOperatorReceiptBuilder.deliveryRefusal(receipt: record, current: current,
+                    taskSessionID: taskID, runtimeAttemptID: runtime.runtimeAttemptID) {
+                    return ["error": refusal, "local_operation_id": localOperationID, "delivered": false]
+                }
+                // No reconnect, prompt record, selection or terminal write has
+                // happened before the exact operation preflight passes.
+                return sessionAPIDeliver(trimmed, to: runtime, origin: origin)
+            } catch {
+                return ["error": "Local Operator preflight unavailable: \(error)",
+                        "local_operation_id": localOperationID, "delivered": false]
+            }
+        }
         if sessionAPILiveRuntime(for: taskID) == nil {
             reconnectTask(taskID)
         }
@@ -6375,6 +6411,214 @@ final class AppModel: ObservableObject {
             ]
         }
         return sessionAPIDeliver(trimmed, to: runtime, origin: origin)
+    }
+
+    private var sessionAPILocalStore: LocalOperatorRecordStore {
+        LocalOperatorRecordStore(directory: taskSessionStore.directory.appendingPathComponent("local-operator"))
+    }
+
+    private func sessionAPILocalTaskID(_ rawID: String) -> TaskSessionID? {
+        guard let uuid = LocalOperatorToolParser.fullUUID(rawID),
+              !sessions.contains(where: { $0.descriptor.id == uuid || $0.runtimeAttemptID.rawValue == uuid }),
+              !taskSessions.contains(where: { sessionAPIRuntimeAttemptID(for: $0, live: nil)?.rawValue == uuid }) else { return nil }
+        return TaskSessionID(rawValue: uuid)
+    }
+
+    private func sessionAPILocalOperationID(_ rawID: String) -> UUID? {
+        guard let uuid = LocalOperatorToolParser.fullUUID(rawID),
+              !taskSessions.contains(where: { $0.id.rawValue == uuid || sessionAPIRuntimeAttemptID(for: $0, live: nil)?.rawValue == uuid }),
+              !sessions.contains(where: { $0.descriptor.id == uuid || $0.runtimeAttemptID.rawValue == uuid }) else { return nil }
+        return uuid
+    }
+
+    private func sessionAPILocalRuntime(taskSessionID rawID: String) throws -> (TaskSessionSnapshot, TerminalRuntime) {
+        guard let taskID = sessionAPILocalTaskID(rawID), let task = taskSessions.first(where: { $0.id == taskID }) else {
+            throw LocalOperatorError.invalidBoundary
+        }
+        let candidates = sessions.filter { $0.descriptor.taskSessionID == taskID && !$0.controller.lifecycle.isTerminal }
+        guard candidates.count == 1, let runtime = candidates.first, runtime.descriptor.agent.kind == .shell,
+              runtime.descriptor.recordsIdentity else { throw LocalOperatorError.invalidBoundary }
+        let historicalPath = task.metadata.workspace.projectPath ?? task.metadata.workspace.rootPath
+        guard URL(fileURLWithPath: historicalPath).resolvingSymlinksInPath().path
+                == runtime.descriptor.projectPath.resolvingSymlinksInPath().path else {
+            throw LocalOperatorError.invalidBoundary
+        }
+        return (task, runtime)
+    }
+
+    private func sessionAPILocalBoundary(task: TaskSessionSnapshot, runtime: TerminalRuntime, operationID: UUID,
+                                       objective: String, acceptance: String, mode: LocalOperatorAuthorityMode,
+                                       paths: [String], protectedPaths: [String]) throws -> LocalOperatorBoundary {
+        let cwd = runtime.descriptor.projectPath
+        guard let project = projects.first(where: { $0.path.resolvingSymlinksInPath().path == cwd.resolvingSymlinksInPath().path }) else {
+            throw LocalOperatorError.invalidBoundary
+        }
+        // Retain unrelated pre-existing dirty bytes where a bounded regular
+        // path is available. Large/nonregular dirty sets fail closed instead
+        // of silently claiming preservation from status flags alone.
+        var preexisting = Set<String>()
+        if let git = try? GitWorkspaceInspector(timeout: 2, maximumOutputBytes: 256_000).snapshot(startingAt: cwd) {
+            guard !git.statusWasTruncated else { throw LocalOperatorError.invalidBoundary }
+            let root = cwd.resolvingSymlinksInPath().path
+            let repo = URL(fileURLWithPath: git.repositoryRoot).resolvingSymlinksInPath()
+            for entry in git.status {
+                for path in [entry.path, entry.originalPath].compactMap({ $0 }) {
+                    let absolute = repo.appendingPathComponent(path).standardizedFileURL.path
+                    guard absolute.hasPrefix(root + "/") else { continue }
+                    let relative = String(absolute.dropFirst(root.count + 1))
+                    if !paths.contains(relative) { preexisting.insert(relative) }
+                }
+            }
+        }
+        return try LocalOperatorBoundary(taskSessionID: task.id, runtimeAttemptID: runtime.runtimeAttemptID,
+            operationID: operationID, projectSlug: project.slug, workingDirectory: cwd,
+            objective: objective, acceptanceCondition: acceptance, authorityMode: mode,
+            relativePaths: paths, protectedRelativePaths: protectedPaths,
+            preexistingDirtyRelativePaths: preexisting.sorted())
+    }
+
+    private func sessionAPILocalSnapshot(boundary: LocalOperatorBoundary, runtime: TerminalRuntime?) throws -> LocalOperatorSnapshot {
+        let log = TaskSessionEventLog(directory: taskSessionStore.directory, taskSessionID: boundary.taskSessionID).read()
+        guard log.diagnostics.isEmpty else { throw LocalOperatorError.invalidRecord }
+        let history = ShellTelemetryProjection.latest(taskSessionID: boundary.taskSessionID, events: log.events)
+        var processes = ProcessTreeObservation.unavailable(taskSessionID: boundary.taskSessionID.rawValue.uuidString,
+            runtimeAttemptID: .known(boundary.runtimeAttemptID.rawValue.uuidString), providerTurnID: .unknown,
+            reason: "No exact current Shell launcher observation is available.")
+        if let history, history.runtimeAttemptID == boundary.runtimeAttemptID.rawValue.uuidString,
+           history.processObservation?.launcher.value?.pid == history.latestEvent.shellPID,
+           history.processObservation?.launcher.value?.startIdentity.value?.startTime.value != nil,
+           runtime?.controller.observedDirectPTYProcessID == nil
+                || runtime?.controller.observedDirectPTYProcessID == history.latestEvent.shellPID {
+            processes = MacOSProcessTreeObserver.observe(rootPID: history.latestEvent.shellPID,
+                taskSessionID: boundary.taskSessionID.rawValue.uuidString,
+                runtimeAttemptID: boundary.runtimeAttemptID.rawValue.uuidString,
+                rootOwnership: .taskCreated, prior: history.processObservation)
+        }
+        return try LocalOperatorInspector().snapshot(boundary: boundary, processes: processes)
+    }
+
+    private func sessionAPILocalRecord(taskID: TaskSessionID, operationID: String) throws -> LocalOperatorReceipt {
+        guard let operation = sessionAPILocalOperationID(operationID),
+              let record = try sessionAPILocalStore.records(taskSessionID: taskID, operationID: operation).last else {
+            throw LocalOperatorError.invalidRecord
+        }
+        return record
+    }
+
+    private func sessionAPILocalPreflight(taskSessionID: String, paths: [String]) -> [String: Any] {
+        do {
+            let (task, runtime) = try sessionAPILocalRuntime(taskSessionID: taskSessionID)
+            let boundary = try sessionAPILocalBoundary(task: task, runtime: runtime, operationID: UUID(),
+                objective: "Read-only workspace preflight", acceptance: "Observe the nominated scope",
+                mode: .observe, paths: paths, protectedPaths: [])
+            let snapshot = try sessionAPILocalSnapshot(boundary: boundary, runtime: runtime)
+            guard let object = sessionAPIJSONObject(snapshot), let scope = sessionAPIJSONObject(boundary) else {
+                throw LocalOperatorError.invalidRecord
+            }
+            return ["taskSessionID": taskSessionID, "preflight": object, "proposed_boundary": scope,
+                    "persisted": false, "authority": "Read-only observation; no operation created or write authority granted."]
+        } catch { return ["error": "Local preflight unavailable: \(error)"] }
+    }
+
+    private func sessionAPILocalBegin(taskSessionID: String, operationID: String, objective: String,
+                                     acceptance: String, mode: LocalOperatorAuthorityMode, paths: [String],
+                                     protectedPaths: [String], caller: ConduitSessionCaller) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else { return ["error": "write tools are disabled"] }
+        do {
+            let (task, runtime) = try sessionAPILocalRuntime(taskSessionID: taskSessionID)
+            guard let operation = sessionAPILocalOperationID(operationID) else { throw LocalOperatorError.invalidBoundary }
+            if FileManager.default.fileExists(atPath: sessionAPILocalStore.directory.path) {
+                let existing = try sessionAPILocalStore.records(taskSessionID: task.id, operationID: operation)
+                if let first = existing.first {
+                    let b = first.boundary
+                    guard b.taskSessionID == task.id, b.runtimeAttemptID == runtime.runtimeAttemptID,
+                          URL(fileURLWithPath: b.workingDirectory).resolvingSymlinksInPath().path
+                            == runtime.descriptor.projectPath.resolvingSymlinksInPath().path,
+                          b.objective == objective, b.acceptanceCondition == acceptance, b.authorityMode == mode,
+                          b.relativePaths == paths.sorted(), b.declaredProtectedRelativePaths == protectedPaths.sorted() else {
+                        throw LocalOperatorError.invalidBoundary
+                    }
+                    return sessionAPILocalReceiptPayload(existing.last!, section: .receipt, replay: true)
+                }
+            }
+            let boundary = try sessionAPILocalBoundary(task: task, runtime: runtime, operationID: operation,
+                objective: objective, acceptance: acceptance, mode: mode, paths: paths, protectedPaths: protectedPaths)
+            let snapshot = try sessionAPILocalSnapshot(boundary: boundary, runtime: runtime)
+            let record = LocalOperatorReceiptBuilder.begin(boundary: boundary, snapshot: snapshot,
+                authorization: .init(localWriteGateObserved: settings.enableSessionAPIWrites,
+                                     nominalCallerIdentity: caller.identity))
+            try sessionAPILocalStore.append(record, expectedRevision: nil)
+            return sessionAPILocalReceiptPayload(record, section: .receipt)
+        } catch { return ["error": "Local operation was not created: \(error)"] }
+    }
+
+    private func sessionAPILocalCheckpoint(taskSessionID: String, operationID: String,
+                                          expectedRevision: Int, terminal: Bool) -> [String: Any] {
+        guard settings.enableSessionAPIWrites else { return ["error": "write tools are disabled"] }
+        do {
+            guard let taskID = sessionAPILocalTaskID(taskSessionID) else { throw LocalOperatorError.invalidBoundary }
+            let previous = try sessionAPILocalRecord(taskID: taskID, operationID: operationID)
+            guard previous.revision == expectedRevision, previous.disposition == .continuing else {
+                throw LocalOperatorError.staleRevision
+            }
+            let candidates = sessions.filter { $0.descriptor.taskSessionID == taskID && !$0.controller.lifecycle.isTerminal }
+            guard candidates.count <= 1 else { throw LocalOperatorError.invalidBoundary }
+            let runtime = candidates.first
+            if let runtime {
+                guard runtime.descriptor.agent.kind == .shell, runtime.runtimeAttemptID == previous.boundary.runtimeAttemptID,
+                      runtime.descriptor.projectPath.resolvingSymlinksInPath().path == previous.observation.canonicalWorkingDirectory else {
+                    throw LocalOperatorError.invalidBoundary
+                }
+            }
+            let snapshot = try sessionAPILocalSnapshot(boundary: previous.boundary, runtime: runtime)
+            let events = TaskSessionEventLog(directory: taskSessionStore.directory, taskSessionID: taskID).read()
+            guard events.diagnostics.isEmpty else { throw LocalOperatorError.invalidRecord }
+            let commands = events.events.compactMap { event -> LocalOperatorCommandObservation? in
+                guard event.hasValidAuthority, event.recordedAt >= previous.preflight.observedAt,
+                      case .shellTelemetryRecorded(let telemetry) = event.kind,
+                      telemetry.runtimeAttemptID == previous.boundary.runtimeAttemptID.rawValue.uuidString else { return nil }
+                return LocalOperatorCommandObservation(telemetry)
+            }
+            // Reuse the maintained Fleet/#70 exact correlation. The receipt
+            // retains its historical observation, never a new writer claim.
+            let fleet = sessionAPIFleetSnapshot(taskCursor: nil, providerCursor: nil, limit: 200)
+            let links = try LocalOperatorFleetLinkReader.read(JSONSerialization.data(withJSONObject: fleet),
+                taskSessionID: taskID, runtimeAttemptID: previous.boundary.runtimeAttemptID)
+            let record = LocalOperatorReceiptBuilder.checkpoint(previous: previous, snapshot: snapshot,
+                commands: commands, childProviderLinks: links, terminal: terminal)
+            try sessionAPILocalStore.append(record, expectedRevision: expectedRevision)
+            return sessionAPILocalReceiptPayload(record, section: .receipt)
+        } catch { return ["error": "Local checkpoint was not recorded: \(error)"] }
+    }
+
+    private func sessionAPILocalRead(taskSessionID: String, operationID: String,
+                                   section: LocalOperatorReadSection) -> [String: Any] {
+        do {
+            guard let taskID = sessionAPILocalTaskID(taskSessionID) else { throw LocalOperatorError.invalidBoundary }
+            return sessionAPILocalReceiptPayload(try sessionAPILocalRecord(taskID: taskID, operationID: operationID), section: section)
+        } catch { return ["error": "Durable Local Operator record unavailable: \(error)"] }
+    }
+
+    private func sessionAPILocalReceiptPayload(_ record: LocalOperatorReceipt,
+                                              section: LocalOperatorReadSection, replay: Bool = false) -> [String: Any] {
+        guard let object = sessionAPIJSONObject(record) else { return ["error": "Local record could not be encoded"] }
+        var payload: [String: Any] = ["taskSessionID": record.boundary.taskSessionID.rawValue.uuidString,
+            "operation_id": record.boundary.operationID.uuidString, "revision": record.revision,
+            "recorded_at": object["recordedAt"] ?? "", "disposition": record.disposition.rawValue,
+            "requested_mode": record.boundary.authorityMode.rawValue,
+            "effective_authority": record.authorization.effectiveAuthority(for: record.boundary.authorityMode),
+            "acceptance": record.acceptance, "replay": replay,
+            "authority": "Historical durable observation; no fresh runtime/provider liveness or objective acceptance is inferred."]
+        switch section {
+        case .status: payload["diagnostics"] = record.diagnostics
+        case .receipt: payload["receipt"] = object
+        case .changes: payload["changes"] = object["changes"]
+            payload["repository_before"] = (object["preflight"] as? [String: Any])?["repository"]
+            payload["repository_after"] = (object["observation"] as? [String: Any])?["repository"]
+        case .children: payload["processes"] = (object["observation"] as? [String: Any])?["processes"]
+            payload["child_provider_links"] = object["childProviderLinks"]
+        }
+        return payload
     }
 
     private func sessionAPIDeliver(

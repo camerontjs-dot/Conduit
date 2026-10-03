@@ -25,7 +25,21 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- Local Operator receipt reads and checkpoints refuse nonregular, replaced or
+  nonprivate lock state without blocking or repairing it. The successor preserves
+  the frozen predecessor's malformed-FIFO failure and existing revision controls.
+
 ### Added
+
+- Local Operator helpers can record and read a bounded operation for an existing
+  Shell task: declared objective and acceptance, requested mode, observed local
+  write gate, file digests, repository checkpoints, exact process observations
+  and existing Fleet child links. Supplying its operation UUID to
+  `conduit_send_prompt` checks that boundary before delivery. Consequent changes
+  require an operator decision; a receipt does not grant authority, sandbox a
+  Shell command or establish objective acceptance.
 
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a

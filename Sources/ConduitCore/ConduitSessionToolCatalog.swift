@@ -274,6 +274,19 @@ public enum ConduitSessionToolCatalog {
             outputSchema: sessionEventsOutputSchema
         ),
         tool(
+            "conduit_local_preflight",
+            "Read a bounded file, repository and exact Shell-process preflight for an existing Shell task. Paths are relative regular files, at most 64 and 1 MiB each; missing and unavailable remain distinct. No operation is created, no Shell input is sent, and no authority is granted.",
+            annotations: localReadOnlyAnnotations,
+            properties: [
+                "taskSessionID": property("string", "Existing durable Shell task UUID."),
+                "relative_paths": localPathList("Explicit files to observe, relative to the task's working directory."),
+            ], required: ["taskSessionID", "relative_paths"]
+        ),
+        localReadTool("status", "Read the last durable local-operation disposition and diagnostics. This historical read does not refresh runtime or provider liveness and does not establish objective acceptance."),
+        localReadTool("receipt", "Read the last durable local-operation receipt, including requested mode, observed local write gate, exact task/attempt, preflight, file digests, Shell command observations and bounded child links. Mode is not a grant; acceptance remains NOT_ESTABLISHED."),
+        localReadTool("changes", "Read observed created, changed and deleted file paths with before/after digests and repository state for one durable local operation. Authorship remains UNKNOWN; unavailable files and protected-file conflicts remain explicit."),
+        localReadTool("children", "Read the last durable exact Shell process observation and the existing Fleet/#70 provider correlations retained by one local operation. One bounded Fleet page is not exhaustive; a correlation grants no provider writer or lifecycle authority."),
+        tool(
             "conduit_query_mindgraph",
             "Semantic search over the operator's local MindGraph index. scope selects knowledge or projects. Results are ranked nominations, not evidence; not_citable documents remain separate from results.",
             annotations: localReadOnlyAnnotations,
@@ -290,6 +303,31 @@ public enum ConduitSessionToolCatalog {
     ]
 
     private static let writeTools: [[String: Any]] = [
+        tool(
+            "conduit_local_begin",
+            "Persist a bounded local-operation preflight for an existing exact Shell task/attempt. Requires the existing local Session API write gate. Repeating the same operation UUID and explicit boundary returns its immutable receipt. Requested OBSERVE or BOUNDED_WRITE is not an operator grant or Shell sandbox; CONSEQUENT_LOCAL_CHANGE always requires an operator decision and cannot deliver input through this helper. Unrelated pre-existing dirty files are added to the protected scope where bounded observation is possible.",
+            annotations: nonDestructiveStateChangingAnnotations,
+            properties: [
+                "taskSessionID": property("string", "Existing durable Shell task UUID."),
+                "operation_id": property("string", "Caller-chosen stable UUID; keep it for retry and durable readback."),
+                "objective": property("string", "Concrete bounded objective, at most 2048 UTF-8 bytes."),
+                "acceptance_condition": property("string", "Acceptance still requiring evidence, at most 2048 UTF-8 bytes."),
+                "mode": ["type": "string", "enum": LocalOperatorAuthorityMode.allCases.map(\.rawValue)],
+                "relative_paths": localPathList("Explicit nominated regular files, relative to the task working directory."),
+                "protected_relative_paths": localPathList("Optional explicitly protected regular files, relative to the task working directory.", allowEmpty: true),
+            ], required: ["taskSessionID", "operation_id", "objective", "acceptance_condition", "mode", "relative_paths"]
+        ),
+        tool(
+            "conduit_local_checkpoint",
+            "Append one observation to an existing continuing local operation at its exact expected revision. This records bounded files/repository/processes and authenticated Shell telemetry without running a command or changing provider authority. Protected or OBSERVE mutations block further helper delivery. terminal only closes observation; command exit and terminal never establish objective acceptance. Stale, partial and corrupt history are refused without repair.",
+            annotations: nonDestructiveStateChangingAnnotations,
+            properties: [
+                "taskSessionID": property("string", "Durable Shell task UUID bound by the operation."),
+                "operation_id": property("string", "Exact UUID from conduit_local_begin."),
+                "expected_revision": ["type": "integer", "minimum": 0, "maximum": 127],
+                "terminal": property("boolean", "Close this observation after recording it; default false. This is not acceptance."),
+            ], required: ["taskSessionID", "operation_id", "expected_revision"]
+        ),
         tool(
             "conduit_adopt_provider_session",
             "Explicitly claim Conduit writer/controller authority for one existing provider session. This does not create, resume, replace, prompt, interrupt, or otherwise mutate the provider session. A competing controller is returned as writer_collision and the original session identity/history remain authoritative. controller_id is an opaque Conduit supervisory identity, not an authentication credential. This authority is separate from any #57 workspace/worktree writer lease. External writer ownership remains UNKNOWN unless independently observed.",
@@ -325,11 +363,12 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_send_prompt",
-            "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. Read the later response with conduit_session_events; this call is not agent completion. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. Read the later response with conduit_session_events; this call is not agent completion. With local_operation_id, an exact continuing BOUNDED_WRITE Shell operation must pass a fresh file/repository/process/cwd check before delivery; other modes are refused. This is a preflight boundary, not a command sandbox or atomic check plus command. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: nonDestructiveStateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or conduit_list_sessions."),
                 "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it. If the runtime is still starting, Conduit holds this prompt and delivers it on ready rather than refusing it."),
+                "local_operation_id": property("string", "Optional exact operation UUID from conduit_local_begin. A malformed supplied value is refused, never ignored."),
             ],
             required: ["taskSessionID", "text"]
         ),
@@ -383,6 +422,18 @@ public enum ConduitSessionToolCatalog {
             required: ["taskSessionID"]
         ),
     ]
+
+    private static func localPathList(_ description: String, allowEmpty: Bool = false) -> [String: Any] {
+        ["type": "array", "items": ["type": "string"], "minItems": allowEmpty ? 0 : 1,
+         "maxItems": 64, "uniqueItems": true, "description": description]
+    }
+
+    private static func localReadTool(_ section: String, _ description: String) -> [String: Any] {
+        tool("conduit_local_" + section, description, annotations: localReadOnlyAnnotations,
+            properties: ["taskSessionID": property("string", "Durable Shell task UUID."),
+                         "operation_id": property("string", "Exact UUID from conduit_local_begin.")],
+            required: ["taskSessionID", "operation_id"])
+    }
 
     private static func tool(
         _ name: String,

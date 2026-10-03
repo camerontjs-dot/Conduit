@@ -205,7 +205,7 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "984b152671d566f81c5812d2fb43da4de997de886d2ce8401a6bec02604e8162"
+        "sha256": "83f046931a050b731f6e5e4a12065289e9630dbad5488616cc11f3fc5094a757"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
@@ -213,8 +213,8 @@
         "path": "Sources/Conduit/AppModel.swift"
       },
       "kind": "source_test",
-      "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior.",
-      "observed_at_utc": "2026-09-29T17:13:22Z",
+      "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior. Source pin renewed for the #51 bounded local-operation receipt integration only; the existing OpenCode-only inventory/adoption branches were read again. Provider runtime, capacity and historical qualification claims are unchanged. A further #51 source-only renewal covers full task/operation identity guards; provider inventory/adoption and runtime outcomes remain unchanged.",
+      "observed_at_utc": "2026-10-03T02:22:48.474453+00:00",
       "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
     },
     "CONFORMANCE-HARNESS": {
