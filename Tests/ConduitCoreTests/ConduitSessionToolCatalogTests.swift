@@ -2,6 +2,35 @@ import XCTest
 @testable import ConduitCore
 
 final class ConduitSessionToolCatalogTests: XCTestCase {
+    func testEveryToolCarriesExactlyOneCurrentCatalogueMarker() {
+        let marker = "[Conduit MCP catalog \(ConduitSessionToolCatalog.catalogIdentity)]"
+        for tool in ConduitSessionToolCatalog.tools() {
+            let description = tool["description"] as? String ?? ""
+            XCTAssertTrue(description.hasSuffix(marker))
+            XCTAssertEqual(description.components(separatedBy: "[Conduit MCP catalog ").count, 2)
+        }
+    }
+
+    func testRuntimeMetadataUsesTheSameCatalogueAndPreservesHandlerEvidence() {
+        let metadata = ConduitSessionToolCatalog.runtimeContractMetadata
+        XCTAssertEqual(metadata["catalog_identity"] as? String, ConduitSessionToolCatalog.catalogIdentity)
+        XCTAssertEqual(metadata["server_version"] as? String, ConduitSessionToolCatalog.serverVersion)
+        XCTAssertEqual(metadata["tool_names"] as? [String],
+                       ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
+        XCTAssertEqual(metadata["write_tool_names"] as? [String], ConduitSessionToolCatalog.writeToolNames)
+        XCTAssertEqual(metadata["create_task_objective_delivery"] as? String,
+                       "delivered=no-resend;queued=no-resend;failed=resend-required")
+        let payload = ConduitSessionToolCatalog.annotatingRuntimeResult([
+            "error": "fixture_refusal", "objective_delivery": "queued", "accepted": false,
+            "mcp_contract": ["catalog_identity": "stale"],
+        ])
+        XCTAssertEqual(payload["error"] as? String, "fixture_refusal")
+        XCTAssertEqual(payload["objective_delivery"] as? String, "queued")
+        XCTAssertEqual(payload["accepted"] as? Bool, false)
+        XCTAssertEqual((payload["mcp_contract"] as? [String: Any])?["catalog_identity"] as? String,
+                       ConduitSessionToolCatalog.catalogIdentity)
+    }
+
     func testPublishedCatalogIncludesEveryLifecycleToolExactlyOnce() {
         let names = ConduitSessionToolCatalog.tools()
             .compactMap { $0["name"] as? String }

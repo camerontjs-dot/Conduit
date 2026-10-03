@@ -2605,6 +2605,76 @@ check(
 )
 
 
+// MARK: - MCP catalogue and shared listener caller context
+
+do {
+    let firstStamp = Date(timeIntervalSince1970: 100)
+    let secondStamp = Date(timeIntervalSince1970: 200)
+    let first = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: " fixture-a/1 ", observedAt: firstStamp)
+    let rotated = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-b/2", observedAt: secondStamp)
+    check("shared bearer stays the same principal across audit labels",
+          first.identity == "session-api-shared-bearer-v1" && rotated.identity == first.identity)
+    check("initialize labels and observations remain separately inspectable",
+          first.clientInfo == "fixture-a/1" && rotated.clientInfo == "fixture-b/2"
+            && first.observedAt == firstStamp && rotated.observedAt == secondStamp)
+    for label: String? in [nil, "", " \n\t "] {
+        check("missing or blank initialize metadata stays unidentified",
+              ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: label, observedAt: firstStamp) == .unidentified)
+    }
+    let writes: [ConduitSessionCommand] = [
+        .adoptProviderSession(provider: "fixture", providerSessionID: "session", controllerID: "controller"),
+        .createTask(agent: "Shell", projectSlug: "fixture", objective: "", idempotencyKey: nil),
+        .reconcileTask(taskSessionID: "task"),
+        .sendPrompt(taskSessionID: "task", text: "fixture", origin: .chatgpt),
+        .lifecycleOperation(taskSessionID: "task", operation: .abortTurn),
+        .interrupt(taskSessionID: "task"), .closeSession(taskSessionID: "task"),
+    ]
+    let reads: [ConduitSessionCommand] = [
+        .listProjects, .listSessions(cursor: nil, limit: nil), .listAdapters,
+        .listProviderSessions(provider: "fixture"),
+        .fleetSnapshot(taskCursor: nil, providerCursor: nil, limit: nil),
+        .observeWorker(provider: "fixture", providerSessionID: "session"),
+        .sessionStatus(taskSessionID: "task"), .processTree(taskSessionID: "task"),
+        .sessionEvents(taskSessionID: "task", cursor: nil, limit: nil),
+        .queryMindGraph(question: "fixture", scope: "projects"),
+        .lifecyclePreflight(taskSessionID: "task", operation: .abortTurn),
+    ]
+    check("all seven current writes require initialized caller context",
+          writes.count == ConduitSessionToolCatalog.writeToolNames.count && writes.allSatisfy {
+              ConduitSessionAPI.isWrite($0)
+                && !ConduitSessionAPI.callerContextAllows($0, caller: .unidentified)
+                && !ConduitSessionAPI.callerContextAllows($0, caller: ConduitSessionCaller(identity: " \n ", observedAt: nil))
+                && ConduitSessionAPI.callerContextAllows($0, caller: first)
+          })
+    check("all eleven current reads retain uninitialized access",
+          reads.count == ConduitSessionToolCatalog.readToolNames.count && reads.allSatisfy {
+              !ConduitSessionAPI.isWrite($0) && ConduitSessionAPI.callerContextAllows($0, caller: .unidentified)
+          })
+    let tools = ConduitSessionToolCatalog.tools()
+    let marker = "[Conduit MCP catalog \(ConduitSessionToolCatalog.catalogIdentity)]"
+    check("current eighteen tools carry one exact catalogue marker",
+          tools.count == 18 && tools.allSatisfy {
+              let description = $0["description"] as? String ?? ""
+              return description.hasSuffix(marker) && description.components(separatedBy: "[Conduit MCP catalog ").count == 2
+          })
+    let metadata = ConduitSessionToolCatalog.runtimeContractMetadata
+    check("runtime contract binds the catalogue identity and complete footprint",
+          metadata["catalog_identity"] as? String == ConduitSessionToolCatalog.catalogIdentity
+            && metadata["server_version"] as? String == ConduitSessionToolCatalog.serverVersion
+            && metadata["tool_names"] as? [String] == ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames
+            && metadata["write_tool_names"] as? [String] == ConduitSessionToolCatalog.writeToolNames
+            && metadata["create_task_objective_delivery"] as? String == "delivered=no-resend;queued=no-resend;failed=resend-required")
+    let annotated = ConduitSessionToolCatalog.annotatingRuntimeResult([
+        "error": "fixture_refusal", "objective_delivery": "queued", "accepted": false,
+        "mcp_contract": ["catalog_identity": "stale"],
+    ])
+    check("contract annotation preserves refusal and delivery without granting acceptance",
+          annotated["error"] as? String == "fixture_refusal"
+            && annotated["objective_delivery"] as? String == "queued"
+            && annotated["accepted"] as? Bool == false
+            && (annotated["mcp_contract"] as? [String: Any])?["catalog_identity"] as? String == ConduitSessionToolCatalog.catalogIdentity)
+}
+
 // MARK: - MCP admission boundary
 //
 // This boundary had no call sites and no tests before 2026-08-20; it is what
@@ -2864,6 +2934,68 @@ do {
             "rate budget is tracked per caller identity",
             create(controller, caller: "conduit-preflight/1.0").outcome == .admitted
         )
+    }
+
+    // The generic controller still supports distinct authenticated callers.
+    // This listener's factory must compose with those actual buckets as one.
+    do {
+        let controller = MCPAdmissionController(policy: policy(perCallerCreateLimit: 1))
+        let first = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-a/1", observedAt: now)
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-b/2", observedAt: now.addingTimeInterval(1))
+        let reservation = create(controller, caller: first.identity).reservationID!
+        check("shared caller create reservation can be cancelled", controller.cancelCreate(reservationID: reservation))
+        check("audit label rotation cannot refill the shared create budget",
+              create(controller, caller: rotated.identity).code == .callerCreateRateLimited
+                && controller.stateSnapshot().pendingCreateReservationCount == 0)
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(perCallerWriteLimit: 1))
+        let first = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-a/1", observedAt: now)
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-b/2", observedAt: now.addingTimeInterval(3_600))
+        check("shared caller first write consumes its budget",
+              controller.admitWrite(callerIdentity: first.identity, resources: sampledResources(), now: now).code == .admitted)
+        check("audit label and audit time cannot refill the shared write budget",
+              controller.admitWrite(callerIdentity: rotated.identity, resources: sampledResources(), now: now).code == .callerWriteRateLimited)
+        let uninitialized = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: nil, observedAt: now)
+        check("factory without initialize is refused by actual admission",
+              controller.admitWrite(callerIdentity: uninitialized.identity, resources: sampledResources(), now: now).code == .callerIdentityRequired)
+        let drainedAt = now.addingTimeInterval(61)
+        check("shared write budget drains through the actual rate window",
+              controller.admitWrite(callerIdentity: rotated.identity, resources: sampledResources(observedAt: drainedAt), now: drainedAt).code == .admitted)
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(perCallerWriteLimit: 1))
+        let first = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-a/1", observedAt: now)
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-b/2", observedAt: now)
+        let reservation = create(controller, caller: first.identity).reservationID!
+        _ = controller.cancelCreate(reservationID: reservation)
+        check("shared caller create still consumes the same total write budget",
+              controller.admitWrite(callerIdentity: rotated.identity, resources: sampledResources(), now: now).code == .callerWriteRateLimited)
+    }
+    do {
+        let controller = MCPAdmissionController(policy: policy(perCallerCreateLimit: 1, perCallerWriteLimit: 1))
+        let firstCaller = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-a/1", observedAt: now)
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-b/2", observedAt: now)
+        let identity = MCPCreateDedupeIdentity(idempotencyKey: "fixture-retry", requestFingerprint:
+            MCPCreateDedupeIdentity.fingerprint(canonicalComponents: ["conduit_create_task", "Shell", "fixture", "objective-digest"]))
+        let first = create(controller, caller: firstCaller.identity, dedupe: identity)
+        let pending = create(controller, caller: rotated.identity, dedupe: identity)
+        check("rotated audit label preserves saturated pending idempotency",
+              pending.code == .duplicatePending && !pending.shouldExecute)
+        let task = TaskSessionID()
+        controller.commitCreate(reservationID: first.reservationID!, taskSessionID: task)
+        let completed = create(controller, caller: rotated.identity, dedupe: identity)
+        check("rotated audit label returns the original committed task without execution",
+              completed.code == .duplicateCompleted && completed.taskSessionID == task
+                && completed.isRequestSatisfied && !completed.shouldExecute)
+        let conflict = MCPCreateDedupeIdentity(idempotencyKey: "fixture-retry", requestFingerprint:
+            MCPCreateDedupeIdentity.fingerprint(canonicalComponents: ["changed-request"]))
+        check("rotated audit label preserves idempotency conflict refusal",
+              create(controller, caller: rotated.identity, dedupe: conflict).code == .idempotencyConflict)
+        check("deduplicated retries cannot refill shared create budget or add reservations",
+              create(controller, caller: rotated.identity).code == .callerCreateRateLimited
+                && controller.stateSnapshot().pendingCreateReservationCount == 0
+                && controller.stateSnapshot().liveTaskSessionIDs == [task])
     }
 
     // --- idempotency -------------------------------------------------------

@@ -245,6 +245,90 @@ final class MCPAdmissionTests: XCTestCase {
         )
     }
 
+    func testSharedBearerClientInfoRotationDoesNotRefillCreateBudget() throws {
+        let controller = MCPAdmissionController(policy: policy(perCallerCreateLimit: 1))
+        let first = ConduitSessionCaller.authenticatedBySharedBearer(
+            clientInfo: "fixture-a/1", observedAt: now
+        )
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(
+            clientInfo: "fixture-b/2", observedAt: now.addingTimeInterval(1)
+        )
+        let reservation = try XCTUnwrap(create(controller, caller: first.identity).reservationID)
+        XCTAssertTrue(controller.cancelCreate(reservationID: reservation))
+        XCTAssertEqual(create(controller, caller: rotated.identity).code, .callerCreateRateLimited)
+        XCTAssertEqual(controller.stateSnapshot().pendingCreateReservationCount, 0)
+    }
+
+    func testSharedBearerClientInfoAndAuditTimeDoNotRefillWriteBudget() {
+        let controller = MCPAdmissionController(policy: policy(perCallerWriteLimit: 1))
+        let first = ConduitSessionCaller.authenticatedBySharedBearer(
+            clientInfo: "fixture-a/1", observedAt: now
+        )
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(
+            clientInfo: "fixture-b/2", observedAt: now.addingTimeInterval(3_600)
+        )
+        XCTAssertEqual(controller.admitWrite(
+            callerIdentity: first.identity, resources: sampledResources(), now: now
+        ).code, .admitted)
+        XCTAssertEqual(controller.admitWrite(
+            callerIdentity: rotated.identity, resources: sampledResources(), now: now
+        ).code, .callerWriteRateLimited)
+        let uninitialized = ConduitSessionCaller.authenticatedBySharedBearer(
+            clientInfo: nil, observedAt: now
+        )
+        XCTAssertEqual(controller.admitWrite(
+            callerIdentity: uninitialized.identity, resources: sampledResources(), now: now
+        ).code, .callerIdentityRequired)
+        let drainedAt = now.addingTimeInterval(61)
+        XCTAssertEqual(controller.admitWrite(
+            callerIdentity: rotated.identity,
+            resources: sampledResources(observedAt: drainedAt), now: drainedAt
+        ).code, .admitted)
+    }
+
+    func testSharedBearerCreateStillConsumesTheSameWriteBudget() throws {
+        let controller = MCPAdmissionController(policy: policy(perCallerWriteLimit: 1))
+        let first = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-a/1", observedAt: now)
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-b/2", observedAt: now)
+        let reservation = try XCTUnwrap(create(controller, caller: first.identity).reservationID)
+        XCTAssertTrue(controller.cancelCreate(reservationID: reservation))
+        XCTAssertEqual(controller.admitWrite(
+            callerIdentity: rotated.identity, resources: sampledResources(), now: now
+        ).code, .callerWriteRateLimited)
+    }
+
+    func testSharedBearerRotationPreservesSaturatedIdempotencyAndConflict() throws {
+        let controller = MCPAdmissionController(policy: policy(perCallerCreateLimit: 1, perCallerWriteLimit: 1))
+        let firstCaller = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-a/1", observedAt: now)
+        let rotated = ConduitSessionCaller.authenticatedBySharedBearer(clientInfo: "fixture-b/2", observedAt: now)
+        let identity = MCPCreateDedupeIdentity(
+            idempotencyKey: "fixture-retry",
+            requestFingerprint: MCPCreateDedupeIdentity.fingerprint(
+                canonicalComponents: ["conduit_create_task", "Shell", "fixture", "objective-digest"]
+            )
+        )
+        let first = create(controller, caller: firstCaller.identity, dedupe: identity)
+        let reservation = try XCTUnwrap(first.reservationID)
+        let pending = create(controller, caller: rotated.identity, dedupe: identity)
+        XCTAssertEqual(pending.code, .duplicatePending)
+        XCTAssertFalse(pending.shouldExecute)
+        let task = TaskSessionID()
+        controller.commitCreate(reservationID: reservation, taskSessionID: task)
+        let completed = create(controller, caller: rotated.identity, dedupe: identity)
+        XCTAssertEqual(completed.code, .duplicateCompleted)
+        XCTAssertEqual(completed.taskSessionID, task)
+        XCTAssertTrue(completed.isRequestSatisfied)
+        XCTAssertFalse(completed.shouldExecute)
+        let conflicting = MCPCreateDedupeIdentity(
+            idempotencyKey: "fixture-retry",
+            requestFingerprint: MCPCreateDedupeIdentity.fingerprint(canonicalComponents: ["changed-request"])
+        )
+        XCTAssertEqual(create(controller, caller: rotated.identity, dedupe: conflicting).code, .idempotencyConflict)
+        XCTAssertEqual(create(controller, caller: rotated.identity).code, .callerCreateRateLimited)
+        XCTAssertEqual(controller.stateSnapshot().pendingCreateReservationCount, 0)
+        XCTAssertEqual(controller.stateSnapshot().liveTaskSessionIDs, [task])
+    }
+
     // MARK: - Idempotency
 
     func testIdempotentCreateDeduplicatesAndDetectsConflict() throws {

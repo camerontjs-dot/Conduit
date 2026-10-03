@@ -63,11 +63,11 @@ final class ConduitSessionAPIServer {
     private nonisolated static let readTimeoutSeconds: Int = 2
     private nonisolated static let busyResponseDrainMicroseconds: Int32 = 50_000
 
-    /// `clientInfo` from the most recent `initialize` on this listener.
+    /// Audit label from the most recent valid `initialize` on this listener.
     ///
     /// MCP `2024-11-05` over HTTP has no per-request session id, and this
-    /// listener closes every connection, so there is nothing else to key a
-    /// caller on. Writes fail closed until an `initialize` has been seen.
+    /// listener closes every connection. Labels do not identify separate
+    /// authenticated clients. Writes fail closed until a valid initialize.
     private var peerIdentity: String?
     private var peerObservedAt: Date?
 
@@ -394,7 +394,10 @@ final class ConduitSessionAPIServer {
                 "result": [
                     "protocolVersion": "2024-11-05",
                     "capabilities": ["tools": [String: Any]()],
-                    "serverInfo": ["name": "conduit-session", "version": "1.2"],
+                    "serverInfo": [
+                        "name": "conduit-session",
+                        "version": ConduitSessionToolCatalog.serverVersion,
+                    ],
                 ],
             ]
         case "ping":
@@ -580,26 +583,35 @@ final class ConduitSessionAPIServer {
             command = nil
         }
         guard let command else {
-            return [
-                "isError": true,
-                "content": [["type": "text", "text": "Unknown or incomplete tool: \(name)"]],
-            ]
+            return toolResult(
+                ["error": "Unknown or incomplete tool: \(name)"],
+                name: name
+            )
         }
         if ConduitSessionAPI.isWrite(command) && !allowWrites {
-            return [
-                "isError": true,
-                "content": [[
-                    "type": "text",
-                    "text": "Write tools are disabled. Enable Session API writes in Conduit Settings.",
-                ]],
-            ]
+            return toolResult([
+                "error": "Write tools are disabled. Enable Session API writes in Conduit Settings.",
+                "code": MCPAdmissionDecisionCode.writesDisabled.rawValue,
+            ], name: name)
         }
-        let payload = handle(
-            command,
-            ConduitSessionCaller(
-                identity: peerIdentity,
-                observedAt: peerObservedAt
-            )
+        let caller = ConduitSessionCaller.authenticatedBySharedBearer(
+            clientInfo: peerIdentity,
+            observedAt: peerObservedAt
+        )
+        guard ConduitSessionAPI.callerContextAllows(command, caller: caller) else {
+            // This common recognized-write prerequisite includes provider
+            // adoption without adding adoption budgets or writer/lease policy.
+            return toolResult([
+                "error": "Caller identity is unavailable; MCP writes fail closed. Initialize with clientInfo first.",
+                "code": MCPAdmissionDecisionCode.callerIdentityRequired.rawValue,
+            ], name: name)
+        }
+        return toolResult(handle(command, caller), name: name)
+    }
+
+    private func toolResult(_ handlerPayload: [String: Any], name: String) -> [String: Any] {
+        let payload = ConduitSessionToolCatalog.annotatingRuntimeResult(
+            handlerPayload
         )
         let text = (try? String(
             data: JSONSerialization.data(withJSONObject: payload),
