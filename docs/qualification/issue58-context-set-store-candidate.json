@@ -1,0 +1,161 @@
+{
+  "advancement_readiness": "PENDING_GATES",
+  "authority": "exact candidate identity; owner evidence remains separate from acceptance",
+  "base_commit": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "candidate_id": "conduit-context-set58-owner-20261003-v1",
+  "component_versions": {
+    "context_manifest_compiler": "context-compiler-core-v1",
+    "ledger_schema": 1,
+    "minimum_macOS_target": 13
+  },
+  "excluded_scope": [
+    "AppModel/RootView/SessionAPI mounting",
+    "dynamic source resolution",
+    "context send or actual worker-turn binding",
+    "retrieval quality or whole Context Compiler qualification",
+    "installed app/provider behavior",
+    "same-UID lock-ignoring tamper authenticity",
+    "release or production installation"
+  ],
+  "explicit_nonclaims": [
+    "source/reference authenticity",
+    "provider/task/turn/verification/objective acceptance equivalence",
+    "source qualified by its implementer as independent",
+    "all durable #58 stages complete"
+  ],
+  "external_concurrent_inputs": [
+    "#51 owns AppModel writer integration in a separate lane",
+    "#87 isolated operator state root remains separate",
+    "#54 Source Workbench runs in a separate owner lane"
+  ],
+  "gates_at_freeze": {
+    "AppModel_operator_composition": "NOT_RUN; separate qualified isolated-root and owning writer integration prerequisite",
+    "fresh_independent_acceptance": "NOT_RUN; private-source launch authority pending",
+    "full_maintained_native": "QUEUED serialized owner build slot",
+    "uninstalled_package": "QUEUED serialized owner build slot"
+  },
+  "governing_issues": [
+    "https://github.com/camerontjs-dot/Conduit/issues/58",
+    "https://github.com/camerontjs-dot/Conduit/issues/60"
+  ],
+  "implementation_layer": "inherited owner context; not independent",
+  "included_scope": [
+    "explicit-directory maintained Core lifecycle for operator Context Set definitions",
+    "reuse existing fixed-reference/provenance representation",
+    "declarative unresolved dynamic rules",
+    "append-only exact-parent create/revise/retire and whole-ledger recovery",
+    "cooperating writers and bounded named-inode/private-state custody controls",
+    "XCTest/selftest parity and existing manifest integration checks"
+  ],
+  "lifecycle_scope": "workbench",
+  "lifecycle_state": "frozen",
+  "manifest_commit_binding": "metadata commit that adds this manifest; exact final head/tree recorded in publication receipt and PR",
+  "owner_evidence": {
+    "leak_scan": {
+      "history_commits": 696,
+      "log_sha256": "82711fe9b62901bf46bade23e73732da59fa8de3c23b3460b926938bd50422f8",
+      "status": "PASS"
+    },
+    "moved_ledger": {
+      "checks": 3,
+      "native_commands": 4,
+      "receipt_sha256": "ad8ffa6e3c729833ed7d5936a459e5a59597c122050ea1cb451fb80e7d0ca21f",
+      "status": "OWNER_PASS"
+    },
+    "preserved_prior_receipts": [
+      {
+        "component_source_sha256": {
+          "Sources/ConduitCore/AgentContext.swift": "2a2bcda871e779f27e6c69a1110193961dbe39aa0021d09710ef27c1c1992efc",
+          "Sources/ConduitCore/AgentContextSnapshotStore.swift": "e76df30802b8569b485ac65ac3876ad27621dae255e54da11d1e2202c30f38b8",
+          "Sources/ConduitCore/ContextCompiler.swift": "5602e945f6e463d91412aa5ba46731fe82fdcc83438d85ac6d6cb19b33648359"
+        },
+        "receipt": "context-set58-baseline-receipt-v1.json",
+        "sha256": "1d8a0016bbde6ce088adc563dfd36e8d975280b5c56db80409bbd1a67a8587e0",
+        "status": "BASELINE_UNSUPPORTED_EDITABLE_SET"
+      },
+      {
+        "receipt": "context-set58-missing-revision-receipt-v1.json",
+        "sha256": "44ee639d7fd81d3b32dc5b896b9e9cb7bca1888229d0b66bba53e19840c4ec76",
+        "source_sha256": null,
+        "status": "OWNER_FAIL_REFUSAL_MUTATED_ABSENT_STORE"
+      },
+      {
+        "receipt": "context-set58-replacement-receipt-v1.json",
+        "sha256": "3958d8425d5cb324499aeac2777c0bb48c644291d5f5442a34b6e2be2e0ad3e3",
+        "source_sha256": "f71df2a41df2ee2d229ac501d82999574ce4726df3e96257663d27ef123ce477",
+        "status": "OWNER_FAIL_WRITER_ACCEPTED_MOVED_LEDGER"
+      },
+      {
+        "receipt": "context-set58-world-writable-receipt-v1.json",
+        "sha256": "0f677b2cb7aed4c373ff6543629f8054439cb3de555e62f8adb0ce762552830e",
+        "source_sha256": null,
+        "status": "OWNER_FAIL_ACCEPTED_NONPRIVATE_DIRECTORY"
+      },
+      {
+        "receipt": "context-set58-owner-standalone-compile-v1.json",
+        "sha256": "2150f7654c19445c4501118553849bda1745ba069012d71b60ab5eb9268e379f",
+        "source_sha256": null,
+        "status": "OWNER_STANDALONE_COMPILE_FAIL"
+      },
+      {
+        "receipt": "context-set58-owner-setup-failure-v1.json",
+        "sha256": "f4d33f2914675a9feeaf2dce280f59f2c7dd9d9e8db61a0d97bc3e112d3f587d",
+        "source_sha256": null,
+        "status": "NOT_RUN_ENOSPC_DEPENDENCY_PREPARATION"
+      }
+    ],
+    "provider_conformance_contract": {
+      "log_sha256": "b16c2d37f8720077a281358023a1ae49c385415ecb8a4149a4a55f0a91241625",
+      "provider_called": false,
+      "status": "PASS",
+      "tests": 10
+    },
+    "standalone_native_core": {
+      "controls": 42,
+      "native_commands": 66,
+      "receipt_sha256": "c5f3c600cbf37f38eaade793184697cc57b1ef1222e74618fa37622aaf481dd2",
+      "status": "OWNER_CORE_PASS"
+    }
+  },
+  "owner_surface": "Conduit #58 and #60 Phase A",
+  "privacy": "public-safe",
+  "project": "camerontjs-dot/Conduit",
+  "protected_inventory": [
+    {
+      "path": "Sources/ConduitCore/ContextCompiler.swift",
+      "sha256": "5602e945f6e463d91412aa5ba46731fe82fdcc83438d85ac6d6cb19b33648359"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ContextCompilerTests.swift",
+      "sha256": "87f40ce93e01b2084a99df598bbc00effcb3b599a458402e3c441d9fdc8f07de"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentContextSnapshotStore.swift",
+      "sha256": "e76df30802b8569b485ac65ac3876ad27621dae255e54da11d1e2202c30f38b8"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/AgentContextSnapshotStoreTests.swift",
+      "sha256": "671d4a68ff1cfded730975e8af898ee19af12d3ab17c26feeff58dceb7a7e279"
+    }
+  ],
+  "schema": "conduit-context-set-owner-candidate/v1",
+  "source_commit": "075ad85cde831750e4aabb461a7887868c93d208",
+  "source_inventory": [
+    {
+      "path": "Sources/ConduitCore/ContextSetStore.swift",
+      "sha256": "71742c6249bfc89b6033902987a12140a3159deb574efc69162ae17c38d0c6ea"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ContextSetStoreTests.swift",
+      "sha256": "52c2dc72d8f2f5aa2d96e207a7f45f05291ecbb59b7f38e471d9b6a21eb520e8"
+    },
+    {
+      "path": "Sources/ConduitSelfTest/main.swift",
+      "sha256": "730573b882abefebc0697d96c61dad9394d35adac91f54e790a7be6d9711753a"
+    }
+  ],
+  "source_tree": "4bf27cb0740d22f67b9c2258e3b70a7030210634",
+  "structural_type": "manifest",
+  "update_rule": "immutable after metadata freeze; repair in separately identified successor"
+}
