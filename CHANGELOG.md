@@ -1,5 +1,8 @@
 # Changelog
 
+- Reject duplicate decoded JSON members in operations identity envelopes before
+  exposing nominations, including repeated identical and escaped-equivalent names.
+
 All notable product changes to Conduit are recorded here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
@@ -24,6 +27,31 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 ---
 
 ## [Unreleased]
+
+### Fixed
+
+- The operations source-map successor requires the paired engine to compare
+  the complete stored source projection with its producer declaration. Native
+  integration controls invoke that real engine and reject a genuine projects
+  hash substituted into operations, including zero-result requests. The frozen
+  #112 BLOCK remains preserved; installed adoption and independent qualification
+  are separate.
+
+- Operations nominations require an explicit producer-bound database identity,
+  including when a query returns no rows. A projects or unidentified empty
+  database fails before text projection. The Query Station and Session API use
+  MindGraph's versioned identity envelope; knowledge/projects retain their
+  existing query contract. This successor requires the matching MainFrame
+  producer and MindGraph contract candidates before independent qualification.
+
+### Added
+
+- The query station shows the stored index identity and retrieval warnings for
+  nominated sources, and refuses operations results from a different index.
+
+- MindGraph `operations` scope for standing operational coordination. Query
+  nominations retain stored index/source identity and warnings; a missing or
+  misidentified operations index fails without substituting projects.
 
 ### Changed
 

@@ -161,7 +161,7 @@ struct MindGraphQueryView: View {
                     .font(.system(size: 28))
                     .foregroundStyle(palette.faint)
                 Text(lastQueryLabel == nil
-                    ? "Query knowledge or project context"
+                    ? "Query knowledge, project or operations context"
                     : "No hits for that query")
                     .font(.callout)
                     .foregroundStyle(palette.dim)
@@ -218,6 +218,9 @@ struct MindGraphQueryView: View {
                 .textSelection(.enabled)
             HStack(spacing: 8) {
                 Text("trust: \(hit.trustProfile)")
+                if let indexID = hit.indexID {
+                    Text("index: \(indexID)")
+                }
                 if let score = hit.rrfScore {
                     Text(String(format: "rrf %.3f", score))
                 }
@@ -247,6 +250,11 @@ struct MindGraphQueryView: View {
             }
             .font(.caption2)
             .foregroundStyle(palette.faint)
+            ForEach(hit.warnings, id: \.self) { warning in
+                Text(warning)
+                    .font(.caption2)
+                    .foregroundStyle(palette.dim)
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -260,7 +268,7 @@ struct MindGraphQueryView: View {
 
     private var footer: some View {
         HStack {
-            Text("Uses ~/.mindgraph indexes via bin/mindgraph. Knowledge and Projects stay separate. Results are nominations, not verified claims.")
+            Text("Uses ~/.mindgraph indexes via bin/mindgraph. Knowledge, Projects and Operations stay separate. Results are nominations, not verified claims.")
                 .font(.caption2)
                 .foregroundStyle(palette.faint)
             Spacer()

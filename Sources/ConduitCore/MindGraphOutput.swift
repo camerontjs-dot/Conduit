@@ -26,9 +26,9 @@ public enum MindGraphOutput {
     /// Fields worth forwarding to an external orchestrator.
     ///
     /// Deliberately an allowlist, not a denylist. MindGraph rows carry
-    /// retrieval mechanics a caller cannot act on (rank, distance, chunk
-    /// index, content hash, index and namespace ids) and, more importantly,
-    /// `source_root`, which is an absolute path on this machine. A denylist
+    /// retrieval mechanics and `source_root`, which is an absolute path on
+    /// this machine. Logical index/source identity is retained separately from
+    /// the selected scope alias so clients can inspect the nominated file. A denylist
     /// would forward the next path-bearing field somebody adds upstream.
     ///
     /// `provenance_warning`, `query_scope_warning`, `trust_profile`, and
@@ -36,6 +36,13 @@ public enum MindGraphOutput {
     /// dropping them would make results look more confident than they are.
     public static let forwardedFields: [String] = [
         "path",
+        "display_path",
+        "source_path",
+        "doc_id",
+        "chunk_index",
+        "index_id",
+        "namespace",
+        "content_hash",
         "title",
         "chunk_text",
         "rrf_score",
