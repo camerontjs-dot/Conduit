@@ -194,7 +194,7 @@ final class AppModel: ObservableObject {
     /// Persists under `conduit.inspectorPresented`.
     @Published var isContextInspectorPresented: Bool = AppModel.loadPersistedInspectorPresented() {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 isContextInspectorPresented,
                 forKey: Self.inspectorPresentedStorageKey
             )
@@ -226,18 +226,18 @@ final class AppModel: ObservableObject {
         }
     /// When false, density changes re-apply card show/expand defaults.
     @Published private(set) var inspectorCardsCustomized: Bool =
-        UserDefaults.standard.bool(forKey: AppModel.inspectorCardsCustomizedKey)
+        ConduitPreferences.current.bool(forKey: AppModel.inspectorCardsCustomizedKey)
 
     /// Optional multi-agent peek shelf (not a permanent OPERATORS strip).
     /// Density supplies the default until the operator customizes.
     @Published private(set) var operatorPeekCustomized: Bool =
-        UserDefaults.standard.bool(forKey: AppModel.operatorPeekCustomizedKey)
+        ConduitPreferences.current.bool(forKey: AppModel.operatorPeekCustomizedKey)
     @Published var operatorPeekEnabledStored: Bool =
-        UserDefaults.standard.object(forKey: AppModel.operatorPeekEnabledKey) as? Bool
+        ConduitPreferences.current.object(forKey: AppModel.operatorPeekEnabledKey) as? Bool
             ?? false
     {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 operatorPeekEnabledStored,
                 forKey: Self.operatorPeekEnabledKey
             )
@@ -253,16 +253,16 @@ final class AppModel: ObservableObject {
     }
 
     @Published private(set) var companionScaleCustomized: Bool =
-        UserDefaults.standard.bool(forKey: AppModel.companionScaleCustomizedKey)
+        ConduitPreferences.current.bool(forKey: AppModel.companionScaleCustomizedKey)
     @Published var companionScaleStored: CompanionScale =
         CompanionScale(
-            rawValue: UserDefaults.standard.string(
+            rawValue: ConduitPreferences.current.string(
                 forKey: AppModel.companionScaleKey
             ) ?? ""
         ) ?? .standard
     {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 companionScaleStored.rawValue,
                 forKey: Self.companionScaleKey
             )
@@ -272,11 +272,11 @@ final class AppModel: ObservableObject {
 
     /// Selected-companion shelf under the selected rail row (Balanced/Operator).
     @Published var companionShelfEnabled: Bool =
-        UserDefaults.standard.object(forKey: AppModel.companionShelfEnabledKey) as? Bool
+        ConduitPreferences.current.object(forKey: AppModel.companionShelfEnabledKey) as? Bool
             ?? true
     {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 companionShelfEnabled,
                 forKey: Self.companionShelfEnabledKey
             )
@@ -286,11 +286,11 @@ final class AppModel: ObservableObject {
 
     /// When true, known-profile rows (not only selected) show a tiny sprite.
     @Published var railSpritesForAllRows: Bool =
-        UserDefaults.standard.object(forKey: AppModel.railSpritesForAllRowsKey) as? Bool
+        ConduitPreferences.current.object(forKey: AppModel.railSpritesForAllRowsKey) as? Bool
             ?? false
     {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 railSpritesForAllRows,
                 forKey: Self.railSpritesForAllRowsKey
             )
@@ -300,11 +300,11 @@ final class AppModel: ObservableObject {
 
     /// Chrome juiciness for real operator actions (select/send/inspector).
     @Published var juicyFeedbackEnabled: Bool =
-        UserDefaults.standard.object(forKey: AppModel.juicyFeedbackEnabledKey) as? Bool
+        ConduitPreferences.current.object(forKey: AppModel.juicyFeedbackEnabledKey) as? Bool
             ?? true
     {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 juicyFeedbackEnabled,
                 forKey: Self.juicyFeedbackEnabledKey
             )
@@ -314,11 +314,11 @@ final class AppModel: ObservableObject {
 
     /// Calm activity cue on companions only while output is observed active.
     @Published var outputActivePulseEnabled: Bool =
-        UserDefaults.standard.object(forKey: AppModel.outputActivePulseEnabledKey) as? Bool
+        ConduitPreferences.current.object(forKey: AppModel.outputActivePulseEnabledKey) as? Bool
             ?? true
     {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 outputActivePulseEnabled,
                 forKey: Self.outputActivePulseEnabledKey
             )
@@ -328,11 +328,11 @@ final class AppModel: ObservableObject {
 
     /// Conversation header companion strip (optional).
     @Published var companionChromeEnabled: Bool =
-        UserDefaults.standard.object(forKey: AppModel.companionChromeEnabledKey) as? Bool
+        ConduitPreferences.current.object(forKey: AppModel.companionChromeEnabledKey) as? Bool
             ?? true
     {
         didSet {
-            UserDefaults.standard.set(
+            ConduitPreferences.current.set(
                 companionChromeEnabled,
                 forKey: Self.companionChromeEnabledKey
             )
@@ -403,7 +403,7 @@ final class AppModel: ObservableObject {
     /// A healthy tunnel started outside Conduit is observed but never killed.
     @Published private(set) var chatGPTTunnelState: ChatGPTTunnelRuntimeState = .stopped
     @Published private(set) var chatGPTTunnelDesiredRunning =
-        UserDefaults.standard.bool(forKey: AppModel.chatGPTTunnelEnabledKey)
+        ConduitPreferences.current.bool(forKey: AppModel.chatGPTTunnelEnabledKey)
     private var chatGPTTunnelProcess: Process?
     private var chatGPTTunnelLogHandle: FileHandle?
     private var applicationTerminationObserver: NSObjectProtocol?
@@ -412,6 +412,9 @@ final class AppModel: ObservableObject {
     /// infer writer authority, task completion, or objective acceptance.
     private var sessionAPIProcessTreeBaselines: [TaskSessionID: ProcessTreeObservation] = [:]
     private var sessionAPIProcessTreeReconciliations: [TaskSessionID: ProcessTreeReconciliation] = [:]
+    /// Tokens for a bounded continuation of an already-authorized stop. These
+    /// are in memory only; startup/replay never resumes destructive cleanup.
+    private var sessionAPIPendingCleanupOperations: [TaskSessionID: UUID] = [:]
 
     var chatgptTunnelID: String? {
         let url = AdapterThreadStore.defaultDirectory()
@@ -450,7 +453,7 @@ final class AppModel: ObservableObject {
     /// Missing or invalid stored values become and persist as Focused.
     @Published var density: Density = AppModel.loadPersistedDensity() {
         didSet {
-            UserDefaults.standard.set(density.rawValue, forKey: Self.densityStorageKey)
+            ConduitPreferences.current.set(density.rawValue, forKey: Self.densityStorageKey)
             if !inspectorCardsCustomized {
                 applyInspectorCardDefaults(for: density)
             }
@@ -486,13 +489,13 @@ final class AppModel: ObservableObject {
         operatorPeekEnabledStored = enabled
         if !operatorPeekCustomized {
             operatorPeekCustomized = true
-            UserDefaults.standard.set(true, forKey: Self.operatorPeekCustomizedKey)
+            ConduitPreferences.current.set(true, forKey: Self.operatorPeekCustomizedKey)
         }
     }
 
     func resetOperatorPeekToDensityDefault() {
         operatorPeekCustomized = false
-        UserDefaults.standard.set(false, forKey: Self.operatorPeekCustomizedKey)
+        ConduitPreferences.current.set(false, forKey: Self.operatorPeekCustomizedKey)
         operatorPeekEnabledStored = OperatorPeekPolicy.defaultEnabled(for: density)
     }
 
@@ -500,14 +503,14 @@ final class AppModel: ObservableObject {
         companionScaleStored = scale
         if !companionScaleCustomized {
             companionScaleCustomized = true
-            UserDefaults.standard.set(true, forKey: Self.companionScaleCustomizedKey)
+            ConduitPreferences.current.set(true, forKey: Self.companionScaleCustomizedKey)
             refreshTaskSidebarProjection()
         }
     }
 
     func resetCompanionScaleToDensityDefault() {
         companionScaleCustomized = false
-        UserDefaults.standard.set(false, forKey: Self.companionScaleCustomizedKey)
+        ConduitPreferences.current.set(false, forKey: Self.companionScaleCustomizedKey)
         companionScaleStored = CompanionScale.defaultFor(density: density)
         refreshTaskSidebarProjection()
     }
@@ -529,7 +532,10 @@ final class AppModel: ObservableObject {
     }
 
     let speech = SpeechTranscriber()
-    private let store = SettingsStore()
+    private let store = SettingsStore(
+        directory: ConduitInstanceConfiguration.current.stateDirectory,
+        allowRootAutodetection: !ConduitInstanceConfiguration.current.isQualification
+    )
     private let scanner = MainframeScanner()
     private let inboxWriter = InboxWriter()
     private let contextBuilder = ContextBundleBuilder()
@@ -542,15 +548,11 @@ final class AppModel: ObservableObject {
     /// current writes toggle, and seeded additively from the runtimes Conduit
     /// is actually hosting so a relaunch cannot forget occupied capacity.
     private var mcpAdmission: MCPAdmissionController?
-    private let worklogDirectory = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".conduit/worklog", isDirectory: true)
+    private let worklogDirectory = ConduitInstanceConfiguration.current.stateURL("worklog", isDirectory: true)
     private let taskSessionStore = TaskSessionEventStore(
-        directory: FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".conduit/task-sessions", isDirectory: true)
+        directory: ConduitInstanceConfiguration.current.stateURL("task-sessions", isDirectory: true)
     )
-    private let conversationDirectory = FileManager.default
-        .homeDirectoryForCurrentUser
-        .appendingPathComponent(".conduit/conversations", isDirectory: true)
+    private let conversationDirectory = ConduitInstanceConfiguration.current.stateURL("conversations", isDirectory: true)
     private lazy var conversationPersistence =
         ConversationPersistenceCoordinator(directory: conversationDirectory)
     /// Deduplicates content-free Recent-order facts across immutable revisions
@@ -584,10 +586,10 @@ final class AppModel: ObservableObject {
 
     /// Load density from UserDefaults; rewrite Focused when missing or invalid.
     private static func loadPersistedDensity() -> Density {
-        let raw = UserDefaults.standard.string(forKey: densityStorageKey)
+        let raw = ConduitPreferences.current.string(forKey: densityStorageKey)
         let resolved = Density.resolved(fromStored: raw)
         if raw != resolved.rawValue {
-            UserDefaults.standard.set(resolved.rawValue, forKey: densityStorageKey)
+            ConduitPreferences.current.set(resolved.rawValue, forKey: densityStorageKey)
         }
         return resolved
     }
@@ -595,7 +597,7 @@ final class AppModel: ObservableObject {
     /// Focused is the product default, so a fresh workspace protects the
     /// Conversation reading surface until the operator asks for Inspector.
     private static func loadPersistedInspectorPresented() -> Bool {
-        let defaults = UserDefaults.standard
+        let defaults = ConduitPreferences.current
         guard defaults.object(forKey: inspectorPresentedStorageKey) != nil else {
             return false
         }
@@ -603,7 +605,7 @@ final class AppModel: ObservableObject {
     }
 
     private static func loadInspectorCardMap(key: String) -> [InspectorCard: Bool] {
-        let defaults = UserDefaults.standard
+        let defaults = ConduitPreferences.current
         guard let data = defaults.data(forKey: key),
               let raw = try? JSONDecoder().decode([String: Bool].self, from: data)
         else {
@@ -632,7 +634,7 @@ final class AppModel: ObservableObject {
             raw[card.rawValue] = value
         }
         if let data = try? JSONEncoder().encode(raw) {
-            UserDefaults.standard.set(data, forKey: key)
+            ConduitPreferences.current.set(data, forKey: key)
         }
     }
 
@@ -685,25 +687,25 @@ final class AppModel: ObservableObject {
 
     func resetInspectorCardsToDensityDefaults() {
         inspectorCardsCustomized = false
-        UserDefaults.standard.set(false, forKey: Self.inspectorCardsCustomizedKey)
+        ConduitPreferences.current.set(false, forKey: Self.inspectorCardsCustomizedKey)
         applyInspectorCardDefaults(for: density)
     }
 
     private func markInspectorCardsCustomized() {
         guard !inspectorCardsCustomized else { return }
         inspectorCardsCustomized = true
-        UserDefaults.standard.set(true, forKey: Self.inspectorCardsCustomizedKey)
+        ConduitPreferences.current.set(true, forKey: Self.inspectorCardsCustomizedKey)
     }
 
     private static func loadUUIDSet(key: String) -> Set<UUID> {
-        guard let raw = UserDefaults.standard.array(forKey: key) as? [String] else {
+        guard let raw = ConduitPreferences.current.array(forKey: key) as? [String] else {
             return []
         }
         return Set(raw.compactMap(UUID.init(uuidString:)))
     }
 
     private static func persistUUIDSet(_ set: Set<UUID>, key: String) {
-        UserDefaults.standard.set(set.map(\.uuidString).sorted(), forKey: key)
+        ConduitPreferences.current.set(set.map(\.uuidString).sorted(), forKey: key)
     }
 
     private func applyInspectorCardDefaults(for density: Density) {
@@ -910,7 +912,7 @@ final class AppModel: ObservableObject {
     /// Last explicit New Task scope. It is navigation preference only, never
     /// project authority, and falls back to the scanned MainFrame root.
     var newTaskDefaultProjectID: String? {
-        let stored = UserDefaults.standard.string(forKey: Self.newTaskScopeStorageKey)
+        let stored = ConduitPreferences.current.string(forKey: Self.newTaskScopeStorageKey)
         if let stored, projects.contains(where: { $0.id == stored }) {
             return stored
         }
@@ -1000,6 +1002,10 @@ final class AppModel: ObservableObject {
     /// Refreshes a model menu from the installed CLI. This is intentionally
     /// lazy so Conduit does not turn startup into a provider/network probe.
     func refreshModelCatalog(for agent: AgentProfile) {
+        guard !ConduitInstanceConfiguration.current.isQualification else {
+            errorMessage = "Installed-provider model discovery is disabled for qualification instances."
+            return
+        }
         guard !modelCatalogRefreshingAgentIDs.contains(agent.id) else { return }
         modelCatalogRefreshingAgentIDs.insert(agent.id)
         let agentID = agent.id
@@ -1294,6 +1300,10 @@ final class AppModel: ObservableObject {
 
     /// Pull Claude OAuth, Codex app-server, and OpenCode DB account usage.
     func refreshAccountUsage() {
+        guard !ConduitInstanceConfiguration.current.isQualification else {
+            accountUsageError = "Account usage probes are disabled for qualification instances."
+            return
+        }
         guard !accountUsageRefreshing else { return }
         accountUsageRefreshing = true
         accountUsageError = nil
@@ -1392,15 +1402,34 @@ final class AppModel: ObservableObject {
         hasBootstrapped = true
         statusMessage = "Loading Conduit configuration…"
 
-        Task.detached(priority: .utility) {
-            EnvironmentResolver.shared.prewarm()
+        if !ConduitInstanceConfiguration.current.isQualification {
+            Task.detached(priority: .utility) {
+                EnvironmentResolver.shared.prewarm()
+            }
         }
         let taskStore = taskSessionStore
         let taskLoad = await BlockingWork.run(qos: .utility) {
             taskStore.load()
         }
         applyTaskSessionLoad(taskLoad)
-        settings = SettingsStore.loadSnapshot()
+        let instance = ConduitInstanceConfiguration.current
+        settings = SettingsStore.loadSnapshot(
+            directory: instance.stateDirectory,
+            allowRootAutodetection: !instance.isQualification
+        )
+        if instance.isQualification {
+            if let root = settings.mainframeRoot {
+                guard instance.containsOwnedURL(root),
+                      let resolved = try? ConduitInstanceConfiguration.canonicalPOSIXPath(root.path) else {
+                    fputs("Conduit qualification refused external MainFrame root.\n", stderr)
+                    exit(78)
+                }
+                settings.mainframeRoot = URL(fileURLWithPath: resolved, isDirectory: true)
+            }
+            // Never restore a copied security bookmark or adopt shared tmux.
+            settings.mainframeRootBookmark = nil
+            settings.restoreSessions = false
+        }
         showContext = settings.showContextByDefault
 
         // Bring the loopback control plane up before workspace restoration.
@@ -1445,6 +1474,11 @@ final class AppModel: ObservableObject {
             selectedProjectID = nil
             return false
         }
+        guard ConduitInstanceConfiguration.current.containsOwnedURL(root) else {
+            projects = []
+            errorMessage = "Qualification cannot scan an external MainFrame root."
+            return false
+        }
         guard !isScanningProjects else { return false }
         isScanningProjects = true
         defer { isScanningProjects = false }
@@ -1483,14 +1517,18 @@ final class AppModel: ObservableObject {
     private func completeBootstrapAfterProjectScan() async {
         completedUsage = usageLog?.readRecords() ?? []
         recoverInterruptedWorkSessions()
-        await refreshDiscoveredSessions()
+        if !ConduitInstanceConfiguration.current.isQualification {
+            await refreshDiscoveredSessions()
+        }
 
         // Project identity and durable-session reconciliation are established.
         // Account/resource refreshes are informational and must not delay the
         // control plane becoming ready for supervised work.
         setSessionAPIReadiness(.ready)
-        Task { await refreshHealth() }
-        Task { await refreshResources() }
+        if !ConduitInstanceConfiguration.current.isQualification {
+            Task { await refreshHealth() }
+            Task { await refreshResources() }
+        }
     }
 
     func refreshProjects() {
@@ -1526,6 +1564,10 @@ final class AppModel: ObservableObject {
         panel.allowsMultipleSelection = false
         panel.directoryURL = settings.mainframeRoot
         if panel.runModal() == .OK, let url = panel.url {
+            guard ConduitInstanceConfiguration.current.containsOwnedURL(url) else {
+                errorMessage = "Qualification MainFrame roots must remain inside the owned qualification root."
+                return
+            }
             endScopedRootAccess()
             do {
                 let bookmark = try url.bookmarkData(
@@ -1573,6 +1615,13 @@ final class AppModel: ObservableObject {
     }
 
     private func activateSavedRootAccess() -> Bool {
+        let instance = ConduitInstanceConfiguration.current
+        if instance.isQualification {
+            guard let root = settings.mainframeRoot else { return true }
+            // Bootstrap has already refused external roots and discarded copied
+            // bookmarks. This process may scan only its directly readable fixture.
+            return instance.containsOwnedURL(root) && rootIsDirectlyReadable(root)
+        }
         guard let bookmark = settings.mainframeRootBookmark else {
             return settings.mainframeRoot == nil
         }
@@ -1976,7 +2025,7 @@ final class AppModel: ObservableObject {
             return nil
         }
         selectProject(scannedProject)
-        UserDefaults.standard.set(scannedProject.id, forKey: Self.newTaskScopeStorageKey)
+        ConduitPreferences.current.set(scannedProject.id, forKey: Self.newTaskScopeStorageKey)
         beginWorkSessionIfNeeded(scannedProject)
         let instance = nextInstanceNumber(for: agent, in: scannedProject)
         let taskSessionID = requestedTaskSessionID ?? TaskSessionID()
@@ -2784,6 +2833,10 @@ final class AppModel: ObservableObject {
     /// Refreshes the list of durable tmux sessions. Discovery is read-only —
     /// it never creates, kills, or renames anything.
     func refreshDiscoveredSessions() async {
+        guard !ConduitInstanceConfiguration.current.isQualification else {
+            discoveryNote = "Shared tmux discovery is disabled for qualification instances."
+            return
+        }
         guard let tmux = EnvironmentResolver.shared.resolve("tmux") else {
             discoveryNote = "tmux was not found on PATH, so no durable sessions could be listed."
             taskReconnectabilityObservation = .failed(observedAt: Date())
@@ -3604,7 +3657,7 @@ final class AppModel: ObservableObject {
     func attachContextBundle() {
         guard !contextPreview.isEmpty else { return }
         do {
-            let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".conduit/bundles", isDirectory: true)
+            let directory = ConduitInstanceConfiguration.current.stateURL("bundles", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -3817,6 +3870,10 @@ final class AppModel: ObservableObject {
     // MARK: - Health and resources
 
     func refreshHealth() async {
+        guard !ConduitInstanceConfiguration.current.isQualification else {
+            errorMessage = "Installed-provider health probes are disabled for qualification instances."
+            return
+        }
         healthResults = await healthChecker.check(
             agents: settings.agents.filter(\.enabled),
             mainframeRoot: settings.mainframeRoot
@@ -3824,10 +3881,18 @@ final class AppModel: ObservableObject {
     }
 
     func refreshResources() async {
+        guard !ConduitInstanceConfiguration.current.isQualification else {
+            errorMessage = "Operator resource inventory is disabled for qualification instances."
+            return
+        }
         resourceSnapshot = await resourceService.snapshot()
     }
 
     func unloadOllamaModels() async {
+        guard !ConduitInstanceConfiguration.current.isQualification else {
+            errorMessage = "Operator model unloading is disabled for qualification instances."
+            return
+        }
         let failures = await resourceService.unloadOllamaModels(resourceSnapshot.ollamaModels)
         if failures.isEmpty {
             statusMessage = "Requested unload for all detected Ollama models."
@@ -3946,7 +4011,8 @@ final class AppModel: ObservableObject {
         rebuildMCPAdmission()
         let server = ConduitSessionAPIServer(
             token: token,
-            allowWrites: settings.enableSessionAPIWrites
+            allowWrites: settings.enableSessionAPIWrites,
+            port: ConduitInstanceConfiguration.current.sessionAPIPort
         ) { [weak self] command, caller in
             self?.sessionAPIPayload(command, caller: caller)
                 ?? ["error": "Conduit is not ready."]
@@ -3956,7 +4022,7 @@ final class AppModel: ObservableObject {
             server.setReadiness(sessionAPIReadiness)
             sessionAPIServer = server
             sessionAPIAddress =
-                "http://127.0.0.1:\(ConduitSessionAPI.loopbackPort)\(ConduitSessionAPI.loopbackPath)"
+                "http://127.0.0.1:\(ConduitInstanceConfiguration.current.sessionAPIPort)\(ConduitSessionAPI.loopbackPath)"
             statusMessage = "Session API listening on \(sessionAPIAddress ?? "")."
         } catch {
             errorMessage = "Session API failed to start: \(error.localizedDescription)"
@@ -3970,6 +4036,9 @@ final class AppModel: ObservableObject {
     }
 
     private var chatGPTTunnelProfileURL: URL {
+        if ConduitInstanceConfiguration.current.isQualification {
+            return ConduitInstanceConfiguration.current.stateURL("disabled-tunnel-profile.yaml")
+        }
         let environment = ProcessInfo.processInfo.environment
         let root: URL
         if let configured = environment["TUNNEL_CLIENT_PROFILE_DIR"],
@@ -4179,7 +4248,7 @@ final class AppModel: ObservableObject {
 
     func setChatGPTTunnelEnabled(_ enabled: Bool) {
         chatGPTTunnelDesiredRunning = enabled
-        UserDefaults.standard.set(enabled, forKey: Self.chatGPTTunnelEnabledKey)
+        ConduitPreferences.current.set(enabled, forKey: Self.chatGPTTunnelEnabledKey)
         Task { await syncChatGPTTunnel() }
     }
 
@@ -4188,6 +4257,10 @@ final class AppModel: ObservableObject {
     }
 
     private func syncChatGPTTunnel() async {
+        guard !ConduitInstanceConfiguration.current.isQualification else {
+            chatGPTTunnelState = .blocked(["Automatic tunnel control is disabled for qualification instances"])
+            return
+        }
         let ownsRunningProcess = chatGPTTunnelProcess?.isRunning == true
         let ready = await chatGPTTunnelReady()
         let action = ChatGPTTunnelControlPolicy.action(
@@ -6692,12 +6765,12 @@ final class AppModel: ObservableObject {
             "lifecycle_mutation": "none",
         ]
         if let baseline {
-            let reconciliation = ProcessTreeReconciler.reconcile(
-                before: baseline,
-                after: observation,
-                requestedOperation: sessionAPIProcessTreeReconciliations[taskID]?
-                    .requestedOperation ?? .unknown
-            )
+            let reconciliation: ProcessTreeReconciliation
+            if let previous = sessionAPIProcessTreeReconciliations[taskID] {
+                reconciliation = ProcessTreeReconciler.reobserve(previous: previous, after: observation)
+            } else {
+                reconciliation = ProcessTreeReconciler.reconcile(before: baseline, after: observation)
+            }
             sessionAPIProcessTreeReconciliations[taskID] = reconciliation
             payload["reconciliation"] = sessionAPIJSONObject(reconciliation) as Any
             payload["postcondition"] = reconciliation.postcondition.rawValue
@@ -6730,6 +6803,216 @@ final class AppModel: ObservableObject {
         )
         sessionAPIProcessTreeReconciliations[taskID] = reconciliation
         return reconciliation
+    }
+
+    private func sessionAPICleanupOwnedResidualDescendants(
+        taskID: TaskSessionID,
+        runtime: TerminalRuntime,
+        preflight: LifecyclePreflight,
+        reconciliation: ProcessTreeReconciliation,
+        allowDeferral: Bool = true
+    ) -> ProcessTreeReconciliation {
+        let plan = ProcessTreeCleanupPlanner.plan(
+            declaredTargets: preflight.cleanupEligibleDescendants,
+            reconciliation: reconciliation
+        )
+        var current = reconciliation
+
+        func cleanupReceipt(
+            disposition: ProcessTreeCleanupDisposition,
+            targets: [ProcessTreeCleanupTarget] = [],
+            signalResults: [ProcessTreeCleanupSignalResult] = [],
+            evidence: [String],
+            reobserved: Bool
+        ) -> ProcessTreeCleanupReceipt {
+            ProcessTreeCleanupReceipt(
+                disposition: disposition,
+                targetedPIDs: targets.map(\.pid),
+                targetingBasis: .known(evidence),
+                targets: targets.isEmpty ? nil : targets,
+                signalResults: signalResults.isEmpty ? nil : signalResults,
+                reobservedAfterCleanup: .known(reobserved)
+            )
+        }
+
+        switch plan.disposition {
+        case .notAuthorizedYet:
+            current.cleanup = cleanupReceipt(
+                disposition: .notAttempted,
+                evidence: [plan.reason, "explicit stop intent may be reobserved for at most 2s; no descendant signal is authorized while the parent is live"],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            if allowDeferral, let binding = plan.binding,
+               binding.taskSessionID == taskID.rawValue.uuidString,
+               binding.runtimeAttemptID == runtime.runtimeAttemptID.rawValue.uuidString {
+                sessionAPIDeferOwnedResidualCleanup(taskID: taskID, runtime: runtime,
+                    preflight: preflight, reconciliation: current, binding: binding)
+            }
+            return current
+        case .notRequired:
+            current.cleanup = cleanupReceipt(
+                disposition: .notRequired,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .refusedUnknownOwnership:
+            current.cleanup = cleanupReceipt(
+                disposition: .refusedUnknownOwnership,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .refusedUnsafeTarget:
+            current.cleanup = cleanupReceipt(
+                disposition: .refusedUnsafeTarget,
+                evidence: [plan.reason],
+                reobserved: false
+            )
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        case .eligible:
+            break
+        }
+
+        guard let binding = plan.binding,
+              binding.taskSessionID == taskID.rawValue.uuidString,
+              binding.runtimeAttemptID == runtime.runtimeAttemptID.rawValue.uuidString else {
+            current.cleanup = cleanupReceipt(disposition: .refusedUnsafeTarget,
+                evidence: ["cleanup plan does not match the current task/runtime attempt"], reobserved: false)
+            sessionAPIProcessTreeReconciliations[taskID] = current
+            return current
+        }
+        let launcherStarted = binding.launcherStartIdentity.startTime.value
+            .map { String($0.timeIntervalSince1970) } ?? "unknown"
+        var evidence = [plan.reason,
+            "task_session_id=\(binding.taskSessionID);runtime_attempt_id=\(binding.runtimeAttemptID);launcher_pid=\(binding.launcherPID);launcher_start_time=\(launcherStarted)"]
+        var signalResults: [ProcessTreeCleanupSignalResult] = []
+        var signalFailed = false
+        var unsafeTarget = false
+        for target in plan.targets {
+            let started = target.startIdentity.startTime.value
+                .map { String($0.timeIntervalSince1970) } ?? "unknown"
+            let result = MacOSProcessTreeObserver.signalCleanupTarget(target, binding: binding, authorization: plan)
+            signalResults.append(result)
+            var row =
+                "pid=\(target.pid);start_time=\(started);"
+                + "basis=\(target.ownershipBasis.rawValue);"
+                + "signal=\(result.signalName);"
+                + "result=\(result.disposition.rawValue)"
+            if let code = result.errorCode.value {
+                row += ";errno=\(code)"
+            }
+            evidence.append(row)
+            switch result.disposition {
+            case .signalFailed:
+                signalFailed = true
+            case .identityMismatch, .identityUnverifiable, .unsafeTarget:
+                unsafeTarget = true
+            case .signalRequested, .alreadyExited:
+                break
+            }
+        }
+
+        let afterCleanup = sessionAPIObserveProcessTree(
+            taskID: taskID,
+            runtime: runtime,
+            prior: reconciliation.after
+        )
+        var final = ProcessTreeReconciler.reconcile(
+            before: reconciliation.before,
+            after: afterCleanup,
+            requestedOperation: .known(.stopProviderHost)
+        )
+        evidence.append(
+            "reobserved_owned_residual_pids="
+                + final.ownedResidualDescendants.map {
+                    String($0.pid)
+                }.joined(separator: ",")
+        )
+        evidence.append(
+            "reobserved_unknown_residual_pids="
+                + final.unknownOwnershipResidualDescendants.map {
+                    String($0.pid)
+                }.joined(separator: ",")
+        )
+
+        let disposition: ProcessTreeCleanupDisposition
+        if signalFailed {
+            disposition = .signalFailed
+        } else if unsafeTarget {
+            disposition = .refusedUnsafeTarget
+        } else if !final.unknownOwnershipResidualDescendants.isEmpty {
+            disposition = .refusedUnknownOwnership
+        } else if final.ownedResidualDescendants.isEmpty {
+            disposition = .completed
+        } else {
+            disposition = .incompleteResidual
+        }
+
+        final.cleanup = cleanupReceipt(
+            disposition: disposition,
+            targets: plan.targets,
+            signalResults: signalResults,
+            evidence: evidence,
+            reobserved: true
+        )
+        sessionAPIProcessTreeReconciliations[taskID] = final
+        return final
+    }
+
+    private func sessionAPIDeferOwnedResidualCleanup(
+        taskID: TaskSessionID,
+        runtime: TerminalRuntime,
+        preflight: LifecyclePreflight,
+        reconciliation: ProcessTreeReconciliation,
+        binding: ProcessTreeCleanupBinding
+    ) {
+        guard sessionAPIPendingCleanupOperations[taskID] == nil else { return }
+        let operationID = UUID()
+        sessionAPIPendingCleanupOperations[taskID] = operationID
+        Task { @MainActor [weak self] in
+            var latest = reconciliation
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            for _ in 0..<40 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                guard !Task.isCancelled, let self,
+                      self.sessionAPIPendingCleanupOperations[taskID] == operationID else { return }
+                if ContinuousClock.now >= deadline { break }
+                if let replacement = self.sessionAPILiveRuntime(for: taskID),
+                   replacement.runtimeAttemptID != runtime.runtimeAttemptID {
+                    latest.cleanup = .deferred(reason: "cleanup continuation refused because the task has a different current runtime attempt; no descendant signal requested")
+                    latest.cleanup.disposition = .refusedUnsafeTarget
+                    self.sessionAPIProcessTreeReconciliations[taskID] = latest
+                    self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+                    return
+                }
+                let observed = self.sessionAPIObserveProcessTree(taskID: taskID, runtime: runtime, prior: latest.after)
+                let refreshed = ProcessTreeReconciler.reconcile(before: reconciliation.before,
+                    after: observed, requestedOperation: .known(.stopProviderHost))
+                guard ProcessTreeCleanupBinding.capture(observed) == binding else {
+                    var refused = refreshed
+                    refused.cleanup = .deferred(reason: "cleanup continuation refused because exact task/runtime/launcher scope could not be reobserved; no descendant signal requested")
+                    refused.cleanup.disposition = .refusedUnsafeTarget
+                    self.sessionAPIProcessTreeReconciliations[taskID] = refused
+                    self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+                    return
+                }
+                latest = refreshed
+                if observed.launcher.value?.liveness == .live { continue }
+                self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+                _ = self.sessionAPICleanupOwnedResidualDescendants(taskID: taskID, runtime: runtime,
+                    preflight: preflight, reconciliation: refreshed, allowDeferral: false)
+                return
+            }
+            guard let self, self.sessionAPIPendingCleanupOperations[taskID] == operationID else { return }
+            latest.cleanup = .deferred(reason: "bounded 2s parent-exit observation expired; descendant cleanup was not attempted and no descendant signal requested")
+            self.sessionAPIProcessTreeReconciliations[taskID] = latest
+            self.sessionAPIPendingCleanupOperations.removeValue(forKey: taskID)
+        }
     }
 
     private func sessionAPILifecyclePlan(
@@ -6884,11 +7167,17 @@ final class AppModel: ObservableObject {
                 mcpAdmission?.markTaskEnded(taskID)
             }
             let runtimeEnded = endSession(runtime)
-            let processTreeReconciliation = sessionAPIReconcileProcessTree(
+            var processTreeReconciliation = sessionAPIReconcileProcessTree(
                 taskID: taskID,
                 runtime: runtime,
                 before: preActionProcessTree,
                 operation: operation
+            )
+            processTreeReconciliation = sessionAPICleanupOwnedResidualDescendants(
+                taskID: taskID,
+                runtime: runtime,
+                preflight: preflight,
+                reconciliation: processTreeReconciliation
             )
             var payload: [String: Any] = [
                 "taskSessionID": rawID,
@@ -6914,24 +7203,24 @@ final class AppModel: ObservableObject {
                     payload["stop_signal"] = "SIGTERM"
                     payload["escalation"] = "SIGKILL after 1s only if the same exact PTY child remains unobserved"
                     payload["authority"] =
-                        "Conduit signaled only the exact SwiftTerm-owned direct PTY child and has not yet observed process exit. The task remains live and execution capacity remains occupied until the existing waitpid-backed callback reports termination; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit requested stop for the exact SwiftTerm-owned direct PTY child and has not yet received waitpid-backed exit confirmation. The task remains live and execution capacity remains occupied until that callback reports termination. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .awaitingExistingExit:
                     payload["stop"] = "awaiting_existing_exit"
                     payload["authority"] =
-                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into an exit fact; capacity remains occupied until the waitpid-backed callback reports termination."
+                        "The exact SwiftTerm-owned PTY PID was already absent at the signal boundary or already awaiting its process callback. Conduit has not promoted that into a waitpid-backed exit fact; capacity remains occupied until the callback reports termination. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .signalFailed(_, let code):
                     payload["executed"] = false
                     payload["stop"] = "signal_failed"
                     payload["errno"] = Int(code)
                     payload["error"] = "direct PTY signal request failed; runtime remains live"
                     payload["authority"] =
-                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 case .unavailable, .notRequested:
                     payload["executed"] = false
                     payload["stop"] = "unavailable"
                     payload["error"] = "no live direct PTY process identity was available to signal"
                     payload["authority"] =
-                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied; descendants are not inspected or signaled and objective acceptance is not established."
+                        "Conduit did not establish a successful direct PTY stop request. The task remains live and execution capacity remains occupied. Process-tree reconciliation and any bounded owned-descendant cleanup are reported in process_tree_reconciliation; objective acceptance is not established."
                 }
                 payload["completion"] = "pending_process_observation"
             } else if !runtimeEnded {

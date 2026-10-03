@@ -517,8 +517,8 @@ final class ThemeStore: ObservableObject {
     static let storageKey = "conduit.palette"
     static let surfaceFinishStorageKey = "conduit.surfaceFinish"
 
-    @AppStorage(ThemeStore.storageKey) private var storedRaw: String = PaletteID.productDefault.rawValue
-    @AppStorage(ThemeStore.surfaceFinishStorageKey) private var storedFinishRaw: String =
+    @AppStorage(ThemeStore.storageKey, store: ConduitPreferences.current) private var storedRaw: String = PaletteID.productDefault.rawValue
+    @AppStorage(ThemeStore.surfaceFinishStorageKey, store: ConduitPreferences.current) private var storedFinishRaw: String =
         SurfaceFinish.productDefault.rawValue
 
     /// Currently selected palette. Invalid stored strings resolve as Harbor.

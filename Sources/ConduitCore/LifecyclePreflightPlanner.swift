@@ -524,6 +524,10 @@ public enum LifecyclePreflightPlanner {
             exactResumeHandle: resumeHandle(snapshot),
             expectedProcessScope: expectedProcessScope,
             knownDescendantPIDs: knownDescendantPIDs(snapshot),
+            cleanupEligibleDescendants: cleanupEligibleDescendants(
+                operation: operation,
+                snapshot: snapshot
+            ),
             sideEffects: sideEffects,
             unsupportedConsequences: unsupported,
             unknownConsequences: unknown,
@@ -545,6 +549,55 @@ public enum LifecyclePreflightPlanner {
             return .known(tmux)
         }
         return .unknown
+    }
+
+    private static func cleanupEligibleDescendants(
+        operation: LifecycleOperation,
+        snapshot: LifecycleRuntimeSnapshot
+    ) -> OrchestrationValue<[ProcessTreeCleanupTarget]> {
+        guard operation == .stopProviderHost else {
+            return .known([])
+        }
+        guard let processTree = snapshot.processTree.value else {
+            return .unknown
+        }
+        guard processTree.coverage == .complete else {
+            return .unknown
+        }
+        guard let launcher = processTree.launcher.value else {
+            return .unknown
+        }
+        guard launcher.ownership == .taskCreated else {
+            return .known([])
+        }
+        guard let binding = ProcessTreeCleanupBinding.capture(processTree),
+              binding.taskSessionID == snapshot.taskSessionID,
+              binding.runtimeAttemptID == snapshot.runtimeAttemptID.value else {
+            return .unknown
+        }
+
+        guard Set(processTree.descendants.map(\.pid)).count == processTree.descendants.count else { return .unknown }
+        var targets: [ProcessTreeCleanupTarget] = []
+        for node in processTree.descendants where node.liveness == .live {
+            guard node.ownership == .taskCreated else { continue }
+            guard ProcessTreeCleanupPlanner.isStrongDescendantBasis(
+                node.ownershipBasis
+            ),
+            let startIdentity = node.startIdentity.value,
+            startIdentity.startTime.value != nil
+            else {
+                return .unknown
+            }
+            targets.append(
+                ProcessTreeCleanupTarget(
+                    pid: node.pid,
+                    startIdentity: startIdentity,
+                    ownershipBasis: node.ownershipBasis,
+                    binding: binding
+                )
+            )
+        }
+        return .known(targets.sorted { $0.pid < $1.pid })
     }
 
     private static func knownDescendantPIDs(

@@ -79,6 +79,136 @@ final class LifecyclePreflightPlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.knownDescendantPIDs.value, [701])
+        XCTAssertEqual(
+            plan.cleanupEligibleDescendants.value?.map(\.pid),
+            [701]
+        )
+        XCTAssertEqual(
+            plan.cleanupEligibleDescendants.value?.first?.startIdentity,
+            child.startIdentity.value
+        )
+    }
+
+    func testCleanupPreflightExcludesPreExistingAndUnknownDescendants() {
+        let stamp = SupervisionObservationStamp(
+            authority: .processObserved,
+            freshness: .current,
+            observedAt: .known(now)
+        )
+        func node(
+            pid: Int32,
+            ownership: ProcessOwnership,
+            basis: ProcessOwnershipBasis,
+            startOffset: TimeInterval
+        ) -> ProcessNodeObservation {
+            ProcessNodeObservation(
+                pid: pid,
+                parentPID: .known(700),
+                processGroupID: .known(700),
+                startIdentity: .known(
+                    ProcessStartIdentity(
+                        startTime: .known(now.addingTimeInterval(startOffset))
+                    )
+                ),
+                commandName: .known("fixture"),
+                ownership: ownership,
+                ownershipBasis: basis,
+                liveness: .live,
+                observation: stamp
+            )
+        }
+        let launcher = node(
+            pid: 700,
+            ownership: .taskCreated,
+            basis: .launcherIdentity,
+            startOffset: -20
+        )
+        let owned = node(
+            pid: 701,
+            ownership: .taskCreated,
+            basis: .descendantObservedAfterLauncher,
+            startOffset: -10
+        )
+        let preExisting = node(
+            pid: 702,
+            ownership: .preExisting,
+            basis: .preExistingObservation,
+            startOffset: -30
+        )
+        let unknown = node(
+            pid: 703,
+            ownership: .unknown,
+            basis: .notEstablished,
+            startOffset: -5
+        )
+        let tree = ProcessTreeObservation(
+            taskSessionID: "task-fixture",
+            runtimeAttemptID: .known("attempt-fixture"),
+            providerTurnID: .unknown,
+            launcher: .known(launcher),
+            descendants: [owned, preExisting, unknown],
+            coverage: .complete,
+            observation: stamp
+        )
+        let plan = LifecyclePreflightPlanner.preflight(
+            operation: .stopProviderHost,
+            snapshot: snapshot(kind: .directPTY, processTree: .known(tree))
+        )
+
+        XCTAssertEqual(plan.knownDescendantPIDs.value, [701, 702, 703])
+        XCTAssertEqual(
+            plan.cleanupEligibleDescendants.value?.map(\.pid),
+            [701]
+        )
+    }
+
+    func testCleanupPreflightDoesNotGrantScopeUnderUnownedRoot() {
+        let stamp = SupervisionObservationStamp(
+            authority: .processObserved,
+            freshness: .current,
+            observedAt: .known(now)
+        )
+        let root = ProcessNodeObservation(
+            pid: 700,
+            parentPID: .known(1),
+            processGroupID: .known(700),
+            startIdentity: .known(
+                ProcessStartIdentity(startTime: .known(now.addingTimeInterval(-20)))
+            ),
+            commandName: .known("shared-provider-host"),
+            ownership: .unknown,
+            ownershipBasis: .notEstablished,
+            liveness: .live,
+            observation: stamp
+        )
+        let child = ProcessNodeObservation(
+            pid: 701,
+            parentPID: .known(700),
+            processGroupID: .known(700),
+            startIdentity: .known(
+                ProcessStartIdentity(startTime: .known(now.addingTimeInterval(-10)))
+            ),
+            commandName: .known("provider-child"),
+            ownership: .unknown,
+            ownershipBasis: .notEstablished,
+            liveness: .live,
+            observation: stamp
+        )
+        let tree = ProcessTreeObservation(
+            taskSessionID: "task-fixture",
+            runtimeAttemptID: .known("attempt-fixture"),
+            providerTurnID: .unknown,
+            launcher: .known(root),
+            descendants: [child],
+            coverage: .complete,
+            observation: stamp
+        )
+        let plan = LifecyclePreflightPlanner.preflight(
+            operation: .stopProviderHost,
+            snapshot: snapshot(kind: .codexAppServer, processTree: .known(tree))
+        )
+
+        XCTAssertEqual(plan.cleanupEligibleDescendants.value ?? [], [])
     }
 
     func testOpenCodeLastOwnedLeaseStopReportsHostStopAndProviderResume() {

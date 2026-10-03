@@ -1201,6 +1201,7 @@ public actor SettingsStore {
     private let fileManager: FileManager
     public let directory: URL
     public let file: URL
+    private let allowRootAutodetection: Bool
 
     public init(
         fileManager: FileManager = .default,
@@ -1209,10 +1210,18 @@ public actor SettingsStore {
         self.fileManager = fileManager
         self.directory = home.appendingPathComponent(".conduit", isDirectory: true)
         self.file = directory.appendingPathComponent("config.json")
+        self.allowRootAutodetection = true
+    }
+
+    public init(directory: URL, allowRootAutodetection: Bool) {
+        self.fileManager = .default
+        self.directory = directory
+        self.file = directory.appendingPathComponent("config.json")
+        self.allowRootAutodetection = allowRootAutodetection
     }
 
     public func load() -> ConduitSettings {
-        Self.loadSnapshot(file: file)
+        Self.loadSnapshot(directory: directory, allowRootAutodetection: allowRootAutodetection)
     }
 
     /// A tiny synchronous snapshot read for app startup. Writes remain
@@ -1224,10 +1233,17 @@ public actor SettingsStore {
         loadSnapshot(file: home.appendingPathComponent(".conduit/config.json"))
     }
 
-    private nonisolated static func loadSnapshot(file: URL) -> ConduitSettings {
+    public nonisolated static func loadSnapshot(
+        directory: URL,
+        allowRootAutodetection: Bool
+    ) -> ConduitSettings {
+        loadSnapshot(file: directory.appendingPathComponent("config.json"), allowRootAutodetection: allowRootAutodetection)
+    }
+
+    private nonisolated static func loadSnapshot(file: URL, allowRootAutodetection: Bool = true) -> ConduitSettings {
         guard let data = try? Data(contentsOf: file),
               let settings = try? JSONDecoder().decode(ConduitSettings.self, from: data) else {
-            return ConduitSettings(mainframeRoot: MainframeScanner.autodetect())
+            return ConduitSettings(mainframeRoot: allowRootAutodetection ? MainframeScanner.autodetect() : nil)
         }
         return settings
     }

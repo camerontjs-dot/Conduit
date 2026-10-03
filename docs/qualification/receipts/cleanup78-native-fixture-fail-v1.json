@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "role": "native-owner-control-failure",
+  "disposition": "FAIL_FIXTURE_ORPHAN_NOT_ESTABLISHED",
+  "predecessor": "a887d7dd59625df958e6f5a29460f731d2a0b7cf",
+  "focused_checks": "38 XCTest PASS before native fixture",
+  "observed": "Foundation Process.terminate parent shutdown coincided with both launcher and sleep child exiting before cleanup. No eligible plan and no product signal were issued. Unrelated owned decoy remained alive until exact teardown.",
+  "inference": "Foundation termination may affect child process group; a single-PID Darwin.kill launcher fixture is required to establish an actual orphan.",
+  "product_cleanup_qualification": "NOT_RUN_NO_LIVE_ORPHAN",
+  "source_sha256": {
+    "Sources/Conduit/AppModel.swift": "a666bce6a0d6e050b9c823fb96ea02341cd27a9279d6c63d25d8ed8676ba3a3e",
+    "Sources/ConduitCore/LifecyclePreflightPlanner.swift": "2238967d0a27588eec48f2577e135c85f2ce53d66d361f058848d16215214b94",
+    "Sources/ConduitCore/ProcessTreeCleanup.swift": "7879ac024b3417098d4bcf6c1b249b4bf212d738eaa5a2e3f00244878d9ea843",
+    "Sources/ConduitCore/ProcessTreeObserver.swift": "d711fdb07790a7e6006a48d407a7a6f81b6de7aad22af76aae93cce87d3c03a3",
+    "Sources/ConduitCore/ProcessTreeReconciliation.swift": "e09ca76b56d9e14235f308f706fbfa44edb2473c1ba589c6ce146b10386c18f8",
+    "Sources/ConduitCore/ProviderOrchestrationState.swift": "0ff87054925e29e61d12ae03968ab50ab45b04ef356922f124680c8f8e7a27c8",
+    "Sources/ConduitSelfTest/main.swift": "a3f9548a9c1f0d77c990cf6e54c970d311bc74770ed5334da7719ab71c18def1",
+    "Tests/ConduitCoreTests/ProcessTreeCleanupTests.swift": "f8981a7eafe8da328438e9be093ab17d566749ab2a84b2143c8f567d77eb9b2b",
+    "Tests/ConduitCoreTests/ProcessTreeCleanupNativeOwnerTests.swift": "f341c3637f103b60489fe41cbf947690a09f53d69ab3d71f1dbf3fc480033aff"
+  },
+  "receipts": {
+    "cleanup78-binding-focused-sealed-plan.log": "75f3bdf31e3f7ec22cb826f8e79d6766f7d843eef774b53e8b68f7bd98f961d4",
+    "cleanup78-binding-native-core-v1.log": "e0c6fe97443967fd3ccdc6a24d24209c7d64b3a28cfa34deb3650709c7dc8039",
+    "cleanup78-binding-native-core-v1.json": "08d352ca75de679dd10fdef39e826b4b14cf63d6b01af292979e4b95c5baeda8"
+  }
+}

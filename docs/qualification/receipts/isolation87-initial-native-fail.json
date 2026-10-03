@@ -1,0 +1,16 @@
+{
+  "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "debug_binary_sha256": "a5e859a47159d264f4168f0d00fb19c6870bd27998f2d08f52f04c22153ae13b",
+  "disposition": "OWNER_NATIVE_FAIL_PRECREATED_ROOT_CANONICAL_ALIAS",
+  "downstream": "NOT_RUN native API/list/read/write-off/lease/port-collision/sentinel aggregate",
+  "observed": "Fresh root creation/preferences PASS; foreign root and operator-port refusal PASS; an existing marked canonical POSIX temporary root was refused before the API token/listener. Foundation standardizedFileURL/resolvingSymlinksInPath changed the existing private temporary prefix to its tmp display alias, while POSIX realpath retained the private prefix.",
+  "positive_suite": "466 selfchecks,10 Python,609 XCTest/3 skipped, release build and strict codesign PASS; those do not override the native falsifier.",
+  "schema_version": 1,
+  "source_files_sha256": {
+    "Sources/Conduit/AppModel.swift": "cd9892938647909780f03b96c946853a79c30a77a25f1bb7da50cda94b1f868f",
+    "Sources/Conduit/ConduitSessionAPIServer.swift": "d6d13590f179aa216352dc1cef4af4176e1ae55403c937c96da561289a5c9a5b",
+    "Sources/ConduitCore/ConduitInstanceConfiguration.swift": "5ac8f47285e36d3fd0f1d7dd55b2d2bab0929e7f70524e9b3ae90595ba95b464",
+    "Sources/ConduitCore/QualificationPreferences.swift": "138fa3902a951708082fbfef59636c20449f2754b8e518e5e95cba8b27579f2a"
+  },
+  "successor": "Use a separately committed POSIX canonical-path successor and add explicit same-root reopen regression. No port/range fallback or operator-state reuse is allowed."
+}

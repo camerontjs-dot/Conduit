@@ -10,9 +10,7 @@ import UniformTypeIdentifiers
 /// The append-only JSONL stays the durable source. Human-readable export is a
 /// derived projection and is written only after the operator chooses a target.
 enum ConversationTranscriptActions {
-    static let conversationDirectory = FileManager.default
-        .homeDirectoryForCurrentUser
-        .appendingPathComponent(".conduit/conversations", isDirectory: true)
+    static let conversationDirectory = ConduitInstanceConfiguration.current.stateURL("conversations", isDirectory: true)
 
     static func copy(_ text: String) {
         let board = NSPasteboard.general

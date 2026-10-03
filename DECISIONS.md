@@ -2054,3 +2054,96 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+
+## D-062: Qualification launches own an explicit state root and listener
+
+**Status:** Proposed — source successor to frozen #91/#92 under #87.
+
+**Decision:** Qualification is an explicit process mode selected by the paired
+`CONDUIT_QUALIFICATION_ROOT` and `CONDUIT_SESSION_API_PORT` variables. A port-only
+launch is refused. The root must be canonical and separate from operator state;
+only new/empty roots or roots with the exact typed qualification marker are opened.
+Canonical identity uses POSIX realpath rather than Foundation display aliases,
+including when an existing marked root is reopened.
+Linked, foreign or nonregular state is refused, and a process-lifetime lease
+prevents two app processes from writing the same root. The port is limited to
+18750–18849. Invalid configuration and occupied ports never fall back to 8750.
+
+Conduit settings, UI preferences, task/conversation logs, adapter thread records,
+worklog, attachments, context bundles/snapshots and API token are rooted there.
+Qualification preferences use a file-backed UserDefaults interface, so SwiftUI
+AppStorage and AppModel share one private store. HOME and CODEX_HOME remain
+unchanged. This is Conduit state ownership, not provider authentication isolation.
+
+Qualification startup does not autodetect MainFrame, restore copied security
+bookmarks, list shared tmux sessions, invoke provider health/account probes or
+observe/start/adopt the operator tunnel. An explicitly configured fixture
+MainFrame root must be inside the qualification root. Later worker execution
+still needs its own exact provider/session/cost authority; setting these two
+variables does not authorize a real provider turn.
+
+**Context:** Frozen #91 provided a distinct-port seam at its own older source.
+#92 preserved its stale current-source evidence failure and assembled an
+unpublished mechanical child. Current maintained main still used 8750 and
+operator-default preferences/state paths. A new maintained candidate is required
+for actual AppModel/status/events acceptance without operator contamination.
+The historical D-058 port decision on #91 remains evidence lineage, not a current
+main acceptance claim. The first maintained owner candidate, cc531dbcda2e, failed
+the actual-app pre-created-root check and is preserved. This POSIX successor
+uses a separate branch and new receipts; that failure is not relabeled. The
+POSIX predecessor da336dbe8fbb then failed the actual owned-fixture readiness
+check: it listened but returned mainframe_authorization_required. The bootstrap
+successor activates only a directly readable owned fixture, without resolving a
+copied bookmark; the ordinary security-bookmark path remains unchanged.
+
+**Acceptance:** Portable configuration/path/ownership/preferences controls,
+actual isolated app/listener negative controls and repository-native tests/build
+are implementation-owner evidence. Fresh independent qualification is separate.
+No operator installation, release, account/credential change or hosted connection
+is part of this decision. Ordinary app defaults remain compatible.
+
+
+## D-063: Descendant cleanup binds the stop to task, attempt and launcher
+
+**Status:** Proposed — maintained #78 successor to frozen #84; #123 is an
+unmerged owned-state instrumentation dependency, not inherited qualification.
+
+**Decision:** The existing explicit stop_provider_host operation may clean only
+predeclared descendants whose task, runtime attempt, launcher PID/start identity,
+ancestry and own PID/start identity remain established on both sides of the
+stop. Prior snapshots from a different or unknown scope cannot grant ownership.
+Legacy unbound cleanup records stay readable and confer no new signal authority.
+UNKNOWN, pre-existing, partial, duplicate or stale identities are refused.
+Descendants receive single-PID SIGTERM only, with a fresh mutation-boundary
+identity check; no group signal or descendant SIGKILL escalation is introduced.
+
+Pending parent termination and descendant cleanup are separate states. A
+maintained candidate must either complete its predeclared orphan boundary after
+observed parent exit or record an explicit bounded refusal/residual result.
+An already-authorized stop may retain its exact in-memory scope for at most 2s
+of monotonic parent-exit observation. Duplicate requests do not create a second
+continuation, runtime replacement or ambiguous observations refuse it, and
+startup/replay never resumes destructive cleanup. A read refreshes topology
+while preserving the last operation receipt only within its exact binding.
+Task/capacity release, provider completion and objective acceptance are not
+inferred from descendant exit. Exact side effects remain in typed receipts.
+
+**Context:** Frozen #84 supplied a Core orphan cleanup path and an AppModel
+pending/no-descendant authority receipt at old objects. The initial maintained
+source transfer reproduced a pure-planner defect: changing task, runtime or
+launcher scope still produced eligible targets. That failed object and its
+red receipt are preserved before repair; no live destructive case followed it.
+The first native orphan fixture terminated both parent and child, so that
+fixture failure is also preserved. A subsequent single-PID control established
+the orphan and passed Core controls, then actual AppModel pressure falsified an
+immediate-only implementation: a delayed parent exit leaked its owned orphan
+and a read erased the stop receipt. That failed object is preserved before this
+bounded continuation successor. Native owner pressure includes a SIGTERM-ignoring
+child (incomplete residue) and a post-stop undeclared child (all targets refused).
+
+**Acceptance:** Current repository-native checks and exact disposable native
+orphan/control/pending-stop runs are owner evidence. Independent qualification
+and executed hosted CI are separate promotion gates. Operator/provider sessions,
+accounts, authentication, model defaults, installation and release remain outside
+this decision. No historical receipt PID becomes current signal authority.

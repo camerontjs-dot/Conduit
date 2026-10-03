@@ -1,0 +1,143 @@
+{
+  "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "boundaries": {
+    "API_write_gate_enabled": false,
+    "CODEX_HOME_reassigned": false,
+    "HOME_reassigned": false,
+    "all_owned_app_processes_exited": true,
+    "no_release_or_install": true,
+    "real_provider_turns": 0,
+    "reserved_native_ports": [
+      18841,
+      18842,
+      18843,
+      18844
+    ],
+    "sentinel_provider_tmux_tunnel_command_invocations": 0
+  },
+  "checks": [
+    {
+      "name": "fresh root does not adopt default settings or tasks",
+      "observed_at_utc": "2026-10-02T16:46:28.159918+00:00",
+      "passed": true
+    },
+    {
+      "name": "marked root restart preserves private preferences",
+      "observed_at_utc": "2026-10-02T16:46:28.754061+00:00",
+      "passed": true
+    },
+    {
+      "name": "foreign state fails closed before startup",
+      "observed_at_utc": "2026-10-02T16:46:28.861311+00:00",
+      "passed": true
+    },
+    {
+      "name": "operator port override fails closed without creating state",
+      "observed_at_utc": "2026-10-02T16:46:28.956433+00:00",
+      "passed": true
+    },
+    {
+      "name": "external MainFrame fixture fails before listener startup",
+      "observed_at_utc": "2026-10-02T16:46:29.272959+00:00",
+      "passed": true
+    },
+    {
+      "name": "owned listener binds selected reserved port",
+      "observed_at_utc": "2026-10-02T16:46:29.650965+00:00",
+      "passed": true
+    },
+    {
+      "name": "MCP read exposes no operator tasks",
+      "observed_at_utc": "2026-10-02T16:46:29.683760+00:00",
+      "passed": true
+    },
+    {
+      "name": "write gate stays off and creates no task",
+      "observed_at_utc": "2026-10-02T16:46:29.706433+00:00",
+      "passed": true
+    },
+    {
+      "name": "second app cannot acquire same state root",
+      "observed_at_utc": "2026-10-02T16:46:29.804622+00:00",
+      "passed": true
+    },
+    {
+      "name": "occupied reserved port does not fall back",
+      "observed_at_utc": "2026-10-02T16:46:30.718137+00:00",
+      "passed": true
+    },
+    {
+      "name": "startup never invokes provider/tmux/tunnel commands",
+      "observed_at_utc": "2026-10-02T16:46:30.744797+00:00",
+      "passed": true
+    },
+    {
+      "name": "all qualification app processes exited",
+      "observed_at_utc": "2026-10-02T16:46:30.769626+00:00",
+      "passed": true
+    }
+  ],
+  "classification": "IMPLEMENTATION_OWNER_EVIDENCE_NOT_INDEPENDENT_QUALIFICATION",
+  "native_debug_binary_sha256": "04896d62582d50ccea4d1a3db736286046d695aee47896054c87ea869c2cd32a",
+  "native_debug_bundle": "task-owned ad hoc signed bundle with distinct qualification bundle ID; no install",
+  "predecessor_disposition": "TERMINAL_OWNER_NATIVE_FAIL_PRECREATED_ROOT_CANONICAL_ALIAS",
+  "predecessor_head": "cc531dbcda2ec6b192b419cfec4b34e5e7a05020",
+  "preserved_negative_evidence": [
+    "initial maintained app candidate failed pre-created-root startup",
+    "POSIX reopen red-before regression",
+    "boolean marker numeric-coercion red-before regression",
+    "focused fixtures used Foundation display aliases; corrected with task-owned POSIX fixture parent",
+    "conformance source pin stale-hash failure preserved and only reviewed source_test claims renewed",
+    "native POSIX collection stopped after seven passing controls because the owner decoder assumed plain MCP error text was JSON; no source change for collector repair"
+  ],
+  "private_receipt_sha256": {
+    "isolation87-native-owner-posix-collection-successor.json": "f472541b6cae99d169677b492a064867cbf83f3268886b02858e67c56264d298",
+    "isolation87-native-owner-posix-collection-successor.log": "b939c66faf6ba724247ee1aecc47d466fdcd5c7f44ec935ff8f1300b4480d5be",
+    "isolation87-native-owner-posix-disposition.json": "cc182d5ae745bb5d07697a09d8d8560dcca28673859798cef6e81dcbf08571e0",
+    "isolation87-native-owner.json": "61f6c6312176f19a704ce8fb4cf0177d73ff244db65433180f709a66f4e87215",
+    "isolation87-posix-build.log": "79b3dcdf05f7f62cd07a9f8604bf74b670fcb2b2b49f89930986f59f3dbad66d",
+    "isolation87-posix-fixture-successor-red.log": "73208a147499608f987f4a3126bfdbe1de25e4949fc1cc83b1b15ef3f94a1021",
+    "isolation87-posix-focused-pass.log": "601b8f286d77a0d5b9c700bb2b720dd3b79475432d023109ad791acdafe310df",
+    "isolation87-posix-full.log": "cf738928fff7f59bd4a073958fc4fa3f2a0662adbdf3bcb50eb24371684cc5aa",
+    "isolation87-reopen-red.log": "f78647f8ce57fa06bb6b80ca420b5681b2cf737cf09546cc7625b5dc45b5a348"
+  },
+  "release_binary_sha256": "9ac9dc50b59fe2e1abd67e78b81a916b197f9e66441c97d4c9fef951762f0933",
+  "repository_native_checks": {
+    "python": {
+      "failed": 0,
+      "passed": 10
+    },
+    "release_build": "PASS",
+    "selftest": {
+      "failed": 0,
+      "passed": 468
+    },
+    "strict_codesign": "PASS",
+    "xctest": {
+      "executed": 611,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "schema_version": 1,
+  "skipped_boundaries": [
+    "live Gemini ACP installed runtime",
+    "installed OpenCode persistence",
+    "live Shell/OpenCode correlation"
+  ],
+  "source_files_sha256": {
+    "Sources/Conduit/AppModel.swift": "1f375d24561512ace753699d161ab0bc295fc34efc9085e10d9705cb994a747b",
+    "Sources/Conduit/ConduitSessionAPIServer.swift": "d6d13590f179aa216352dc1cef4af4176e1ae55403c937c96da561289a5c9a5b",
+    "Sources/ConduitCore/ConduitInstanceConfiguration.swift": "a3db78cad0e043be2f9dbf9af768f725f98084d0ab9072defc651bc3ba9bb717",
+    "Sources/ConduitCore/QualificationPreferences.swift": "138fa3902a951708082fbfef59636c20449f2754b8e518e5e95cba8b27579f2a"
+  },
+  "successor_branch": "fix/issue87-owned-state-posix-successor-20261002",
+  "unknown": [
+    "Independent qualification",
+    "Current-main composition with other unmerged repairs",
+    "HTTP write enabled task launch/status/events authority",
+    "Real provider/account/session/hosted behaviour",
+    "Installed/operator release acceptance"
+  ]
+}

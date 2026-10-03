@@ -4,8 +4,9 @@ import Foundation
 
 /// macOS process observation for the provider-neutral Core read model.
 ///
-/// This observer is deliberately read-only. It uses libproc snapshots and
-/// `kill(pid, 0)` probes only; it never signals a process. The caller must
+/// Observation uses libproc snapshots and `kill(pid, 0)` probes only. The
+/// separate package cleanup entry validates a complete declared binding before
+/// a single-PID SIGTERM; observation never grants signal authority. The caller must
 /// explicitly supply whether the selected root has task-specific ownership
 /// evidence. A root PID used only for observation defaults to UNKNOWN and
 /// cannot grant ownership to descendants from topology or timing alone. PPID
@@ -127,6 +128,14 @@ public enum MacOSProcessTreeObserver {
             observedAt: .known(observedAt)
         )
 
+        if let prior, taskSessionID.isEmpty || runtimeAttempt.value == nil
+            || prior.taskSessionID != taskSessionID || prior.runtimeAttemptID != runtimeAttempt
+            || prior.launcher.value?.pid != rootPID {
+            return .unavailable(taskSessionID: taskSessionID, runtimeAttemptID: runtimeAttempt,
+                                providerTurnID: providerTurn,
+                                reason: "prior snapshot task/runtime/launcher scope does not match this observation",
+                                observedAt: observedAt)
+        }
         guard rootPID > 0 else {
             return .unavailable(
                 taskSessionID: taskSessionID,
@@ -542,6 +551,78 @@ public enum MacOSProcessTreeObserver {
             ownershipBasis: .notEstablished,
             liveness: .unknown,
             observation: observation
+        )
+    }
+
+    package static func signalCleanupTarget(
+        _ target: ProcessTreeCleanupTarget,
+        binding: ProcessTreeCleanupBinding,
+        authorization: ProcessTreeCleanupPlan? = nil
+    ) -> ProcessTreeCleanupSignalResult {
+        guard let authorization, authorization.disposition == .eligible,
+              authorization.binding == binding, authorization.targets.contains(target),
+              binding.isComplete, target.binding == binding,
+              target.pid > 1, target.pid != binding.launcherPID,
+              ProcessTreeCleanupPlanner.isStrongDescendantBasis(
+                target.ownershipBasis
+              ),
+              let expectedStart = target.startIdentity.startTime.value
+        else {
+            return ProcessTreeCleanupSignalResult(
+                target: target,
+                disposition: .unsafeTarget
+            )
+        }
+
+        guard let current = readProcess(pid_t(target.pid)) else {
+            switch probe(pid_t(target.pid)) {
+            case .exited:
+                return ProcessTreeCleanupSignalResult(
+                    target: target,
+                    disposition: .alreadyExited
+                )
+            case .live, .unknown:
+                return ProcessTreeCleanupSignalResult(
+                    target: target,
+                    disposition: .identityUnverifiable
+                )
+            }
+        }
+        guard current.startTime == expectedStart else {
+            return ProcessTreeCleanupSignalResult(
+                target: target,
+                disposition: .identityMismatch
+            )
+        }
+
+        errno = 0
+        guard kill(pid_t(target.pid), SIGTERM) == 0 else {
+            let code = Int32(errno)
+            if code == ESRCH {
+                return ProcessTreeCleanupSignalResult(
+                    target: target,
+                    disposition: .alreadyExited
+                )
+            }
+            return ProcessTreeCleanupSignalResult(
+                target: target,
+                disposition: .signalFailed,
+                errorCode: .known(code)
+            )
+        }
+
+        for _ in 0..<20 {
+            usleep(10_000)
+            guard let observed = readProcess(pid_t(target.pid)) else {
+                break
+            }
+            if observed.startTime != expectedStart {
+                break
+            }
+        }
+        return ProcessTreeCleanupSignalResult(
+            target: target,
+            disposition: .signalRequested
         )
     }
 

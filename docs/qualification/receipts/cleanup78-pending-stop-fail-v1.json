@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "disposition": "TERMINAL_OWNER_NATIVE_FAIL_PENDING_STOP_ORPHAN",
+  "role": "implementation_owner",
+  "predecessor_head": "446ea99db93ce42e864aef54fa66beda21d9d857",
+  "predecessor_tree": "4883d25ddc4aa574909e639ef70dff900d66b3ad",
+  "observed": "Explicit direct-PTY stop returned pending_process_observation while the exact owned parent was live. After 1.5s the parent had exited and its exact predeclared child was still live, reparented to PID1. AppModel never resumed cleanup, and process-tree status replaced the typed stop receipt with the old Slice6A not_attempted default.",
+  "failed_control": "delayed owned orphan is cleaned by product",
+  "source_sha256": {
+    "Sources/Conduit/AppModel.swift": "a666bce6a0d6e050b9c823fb96ea02341cd27a9279d6c63d25d8ed8676ba3a3e",
+    "Sources/ConduitCore/ProcessTreeCleanup.swift": "7879ac024b3417098d4bcf6c1b249b4bf212d738eaa5a2e3f00244878d9ea843",
+    "Sources/ConduitCore/ProcessTreeObserver.swift": "24d346fe0becd9f80246560a00f476058468c342abba1e8e4122e0cfc1891b29"
+  },
+  "bounded_core_owner": "PASS exact single-PID orphan/decoy and wrong task/runtime/launcher/old-start controls; not sufficient for AppModel pending stop",
+  "app_controls": [
+    {
+      "name": "owned fixture reaches READY",
+      "passed": true
+    },
+    {
+      "name": "task starts exactly the owned fixture",
+      "passed": true
+    },
+    {
+      "name": "initial direct-PTY stop is pending exact parent exit",
+      "passed": true
+    },
+    {
+      "name": "delayed owned orphan is cleaned by product",
+      "passed": false
+    }
+  ],
+  "teardown": [
+    {
+      "original": {
+        "pid": 78035,
+        "sec": 1790963758,
+        "usec": 151019,
+        "ppid": 78034,
+        "pgid": 78035
+      },
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 78034,
+        "sec": 1790963758,
+        "usec": 108509,
+        "ppid": 78031,
+        "pgid": 78034
+      },
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 78031,
+        "sec": 1790963757,
+        "usec": 264493,
+        "ppid": 78024,
+        "pgid": 78024
+      },
+      "current": null
+    },
+    {
+      "original": {
+        "pid": 78030,
+        "sec": 1790963757,
+        "usec": 237249,
+        "ppid": 78024,
+        "pgid": 78024
+      },
+      "current": null
+    }
+  ],
+  "provider_calls": 0,
+  "HOME_reassigned": false,
+  "CODEX_HOME_reassigned": false,
+  "independent_qualification": "NOT_RUN",
+  "full_native": "481 selfchecks PASS; 11 Python cases ran with2failures on3stale source pins; XCTest NOT_RUN by script stop",
+  "receipts": {
+    "cleanup78-app-pending-stop-v1.py": "4165fa75fff42b24106dda1114cf7b4da4799f089c7b10bf51bb47bf3046696b",
+    "cleanup78-app-pending-stop-v1.log": "405425ba705b2da9c3ec30589b3d7890af9545124b19fbdf1dd28361e74ec116",
+    "cleanup78-app-pending-stop-v1.json": "2e39b0b305ad61682bab3fdbd8568151039f3be56555ee59c265d37450d1f265",
+    "cleanup78-binding-native-core-v3.json": "2897bf1f809021b87ba2f8e03c5317a1028d45b7e7f16c06f4923d1af15c098e",
+    "cleanup78-binding-native-core-v3.log": "130869c0acf5b3894f337fc440d7e790ba54d0d0316dc423c5cef4b7c32ec8dd",
+    "cleanup78-full-native-prepins-v1.log": "be5b6d6d39f630a9fbfd75c531fc006cacf69c3ddfd306c59c5b52b0267de900"
+  }
+}
