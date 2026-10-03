@@ -3108,7 +3108,20 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func sendComposer() {
+    func sendComposer(expectedTarget: OperatorInputSelection) {
+        guard workspace == .sessions,
+              expectedTarget == composerInputSelection else {
+            errorMessage = "The send target changed. Re-select the intended task before sending. Your draft has been kept."
+            return
+        }
+        if let target = expectedTarget.activeRuntime,
+           !OperatorInputGate.permits(
+               target, selection: composerInputSelection,
+               liveTargets: liveOperatorInputTargets
+           ) {
+            errorMessage = "The send target is stale or ambiguous. Re-select the intended task before sending. Your draft has been kept."
+            return
+        }
         let assembled = PromptAssembler.assemble(
             text: composerText,
             attachments: attachments
@@ -3357,18 +3370,59 @@ final class AppModel: ObservableObject {
         }
     }
 
+    var composerInputSelection: OperatorInputSelection {
+        OperatorInputSelection(
+            projectPath: selectedProject?.id,
+            taskSessionID: selectedTaskSessionID,
+            activeRuntime: activeSessionForSelectedProject.map(operatorInputTarget)
+        )
+    }
+
+    private func operatorInputTarget(_ runtime: TerminalRuntime) -> OperatorInputTarget {
+        OperatorInputTarget(
+            taskSessionID: runtime.descriptor.taskSessionID,
+            runtimeID: runtime.id,
+            runtimeAttemptID: runtime.runtimeAttemptID,
+            projectPath: runtime.descriptor.projectPath.path
+        )
+    }
+
+    private var liveOperatorInputTargets: [OperatorInputTarget] {
+        sessions.filter { !$0.controller.lifecycle.isTerminal }.map(operatorInputTarget)
+    }
+
+    func canInjectConversationControl(into runtime: TerminalRuntime) -> Bool {
+        guard workspace == .sessions,
+              runtime.controller.lifecycle == .running,
+              sessions.contains(where: { $0 === runtime }) else { return false }
+        return OperatorInputGate.permits(
+            operatorInputTarget(runtime), selection: composerInputSelection,
+            liveTargets: liveOperatorInputTargets
+        )
+    }
+
     /// Sends a menu choice or control key into the live PTY without treating it
     /// as Raw direct input, so Conversation capture can continue.
+    @discardableResult
     func injectConversationControl(
         text: String? = nil,
         key: TerminalControlKey? = nil,
         submit: Bool = false,
-        into runtime: TerminalRuntime
-    ) {
+        into runtime: TerminalRuntime,
+        expectedRevision: OperatorConversationInputRevision
+    ) -> Bool {
+        guard canInjectConversationControl(into: runtime) else {
+            errorMessage = "The control target changed or is unavailable. Re-select the intended task before sending input."
+            return false
+        }
+        guard expectedRevision.matches(runtime.operatorInputRevision) else {
+            errorMessage = "The displayed menu changed. Use its current controls before sending input."
+            return false
+        }
         if let key {
             runtime.controller.injectControlKey(key)
             statusMessage = "Sent \(key.label) to \(runtime.descriptor.agent.name)."
-            return
+            return true
         }
         if let text {
             runtime.controller.injectControlInput(text, submit: submit)
@@ -3378,7 +3432,9 @@ final class AppModel: ObservableObject {
             statusMessage = submit
                 ? "Sent “\(shown)” + Enter to \(runtime.descriptor.agent.name)."
                 : "Sent “\(shown)” to \(runtime.descriptor.agent.name)."
+            return true
         }
+        return false
     }
 
     func pasteImage() {
@@ -7096,6 +7152,10 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     @Published private(set) var openCode: OpenCodeHTTPClient?
     @Published private(set) var streamJSON: StreamJSONClient?
     @Published var pendingStructuredApproval: (id: String, summary: String)?
+
+    var operatorInputRevision: OperatorConversationInputRevision {
+        OperatorConversationInputRevision.latest(in: presentationEvents)
+    }
 
     var usesAppServer: Bool { appServer != nil }
     var usesStructuredHost: Bool {

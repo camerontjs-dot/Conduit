@@ -12,6 +12,7 @@ struct ComposerTextView: NSViewRepresentable {
     var textColor: NSColor
     var backgroundColor: NSColor
     var insertionPointColor: NSColor
+    var controlIdentifier: String? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -49,6 +50,7 @@ struct ComposerTextView: NSViewRepresentable {
         textView.textColor = textColor
         textView.insertionPointColor = insertionPointColor
         textView.string = text
+        textView.setAccessibilityIdentifier(controlIdentifier)
 
         scroll.documentView = textView
         context.coordinator.textView = textView
@@ -66,6 +68,7 @@ struct ComposerTextView: NSViewRepresentable {
         textView.backgroundColor = backgroundColor
         textView.textColor = textColor
         textView.insertionPointColor = insertionPointColor
+        textView.setAccessibilityIdentifier(controlIdentifier)
         if textView.string != text {
             let selected = textView.selectedRanges
             textView.string = text

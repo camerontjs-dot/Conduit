@@ -456,6 +456,7 @@ struct TaskSidebarView: View {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(taskAccessibilityLabel(row, isSelected: isSelected))
+            .accessibilityIdentifier(OperatorControlIdentifier.task(row.id))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityHint(
                 row.availability.kind == .reconnectable
