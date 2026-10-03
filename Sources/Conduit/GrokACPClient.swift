@@ -84,6 +84,7 @@ final class GrokACPClient: ObservableObject {
     }
 
     static func environmentFromDotEnv(relativePath: String) -> [String: String] {
+        guard !ConduitInstanceConfiguration.current.isQualification else { return [:] }
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(relativePath)
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {

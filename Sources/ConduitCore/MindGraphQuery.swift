@@ -109,7 +109,10 @@ public enum MindGraphQuerySupport {
     public static func mindgraphHome(
         fileManager: FileManager = .default
     ) -> URL {
-        fileManager.homeDirectoryForCurrentUser
+        if ConduitInstanceConfiguration.current.isQualification {
+            return ConduitInstanceConfiguration.current.stateURL("mindgraph", isDirectory: true)
+        }
+        return fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent(".mindgraph", isDirectory: true)
     }
 
@@ -133,6 +136,7 @@ public enum MindGraphQuerySupport {
                 return candidate
             }
         }
+        guard !ConduitInstanceConfiguration.current.isQualification else { return nil }
         // Fallbacks when root is unset or binary not marked executable yet.
         let pathEnv = ProcessInfo.processInfo.environment["PATH"] ?? ""
         for dir in pathEnv.split(separator: ":") {

@@ -57,6 +57,7 @@ final class ConduitSessionAPIServer {
     private let token: String
     private let allowWrites: Bool
     private var readiness: ConduitSessionAPIReadiness = .bootstrapping
+    private let port: Int
     private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     private nonisolated static let maximumHeaderBytes = 16_384
     private nonisolated static let maximumBodyBytes = 1_048_576
@@ -74,10 +75,12 @@ final class ConduitSessionAPIServer {
     init(
         token: String,
         allowWrites: Bool = false,
+        port: Int = ConduitSessionAPI.loopbackPort,
         handle: @escaping (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     ) {
         self.token = token
         self.allowWrites = allowWrites
+        self.port = port
         self.handle = handle
     }
 
@@ -86,6 +89,9 @@ final class ConduitSessionAPIServer {
     }
 
     func start() throws {
+        guard port == ConduitSessionAPI.loopbackPort || ConduitInstanceConfiguration.qualificationPorts.contains(port) else {
+            throw ConduitInstanceConfiguration.ConfigurationError("Session API port is outside ordinary/qualification authority.")
+        }
         stop()
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else {
@@ -112,7 +118,7 @@ final class ConduitSessionAPIServer {
         var addr = sockaddr_in()
         addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = in_port_t(UInt16(ConduitSessionAPI.loopbackPort).bigEndian)
+        addr.sin_port = in_port_t(UInt16(port).bigEndian)
         addr.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
         let bound = withUnsafePointer(to: &addr) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
@@ -124,7 +130,7 @@ final class ConduitSessionAPIServer {
             throw NSError(
                 domain: "Conduit.SessionAPI",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Could not bind 127.0.0.1:\(ConduitSessionAPI.loopbackPort)."]
+                userInfo: [NSLocalizedDescriptionKey: "Could not bind 127.0.0.1:\(port)."]
             )
         }
         listenerState.start(listeningOn: fd)

@@ -3748,6 +3748,35 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Owned qualification configuration
+
+let ordinaryInstance = try? ConduitInstanceConfiguration.resolve(environment: [:], home: URL(fileURLWithPath: "/fixture-home"))
+check("ordinary instance keeps operator defaults", ordinaryInstance?.sessionAPIPort == 8750 && ordinaryInstance?.stateDirectory.path == "/fixture-home/.conduit" && ordinaryInstance?.isQualification == false)
+let ownedInstance = try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "/owned-qualification-fixture", "CONDUIT_SESSION_API_PORT": "18849"], home: URL(fileURLWithPath: "/fixture-home"))
+check("qualification requires an explicit paired owned root and reserved port", ownedInstance?.sessionAPIPort == 18849 && ownedInstance?.isQualification == true)
+check("port-only qualification is refused", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_SESSION_API_PORT": "18750"])) == nil)
+check("qualification cannot fall back to operator port", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "/owned-qualification-fixture", "CONDUIT_SESSION_API_PORT": "8750"])) == nil)
+check("relative qualification state is refused", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "relative", "CONDUIT_SESSION_API_PORT": "18750"])) == nil)
+check("operator state cannot become qualification state", (try? ConduitInstanceConfiguration.resolve(environment: ["CONDUIT_QUALIFICATION_ROOT": "/fixture-home/.conduit", "CONDUIT_SESSION_API_PORT": "18750"], home: URL(fileURLWithPath: "/fixture-home"))) == nil)
+
+// Canonical owned path identity remains stable after creating the marker.
+do {
+    let parent = try ConduitInstanceConfiguration.canonicalPOSIXPath(ProcessInfo.processInfo.environment["CONDUIT_TEST_TMPDIR"] ?? FileManager.default.temporaryDirectory.path)
+    let root = URL(fileURLWithPath: parent).appendingPathComponent("conduit-owned-" + UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let environment = ["CONDUIT_QUALIFICATION_ROOT": root.path, "CONDUIT_SESSION_API_PORT": "18750"]
+    let first = try ConduitInstanceConfiguration.resolve(environment: environment)
+    try first.prepareQualificationStateRoot()
+    let reopened = try ConduitInstanceConfiguration.resolve(environment: environment)
+    try reopened.prepareQualificationStateRoot()
+    check("canonical marked qualification root can be reopened", reopened.stateDirectory.path == root.path)
+    let boolMarker = try JSONSerialization.data(withJSONObject: ["schema_version": true, "kind": "conduit_qualification", "root": root.path])
+    try boolMarker.write(to: first.stateURL(ConduitInstanceConfiguration.rootMarkerName))
+    check("boolean marker schema is not numeric authority", (try? first.prepareQualificationStateRoot()) == nil)
+} catch {
+    check("canonical owned-root preparation executes", false)
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

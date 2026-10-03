@@ -1,0 +1,16 @@
+{
+  "classification": "RECEIPT_LABEL_CORRECTION_SOURCE_IDENTICAL",
+  "corrected_skip_names": [
+    "installed OpenCode authority journey (CONDUIT_OPENCODE_AUTHORITY_QUALIFICATION not enabled)",
+    "installed OpenCode persistence (CONDUIT_OPENCODE_QUALIFICATION not enabled)",
+    "live Shell/OpenCode correlation (no qualification-owned fixture)"
+  ],
+  "frozen_predecessor_head": "f744e0598460c762f3e916cfd98c17084967403a",
+  "frozen_predecessor_tree": "6d8e65ede097a9db7d8d9f4ebeb3328ae08deb14",
+  "independent_qualification": "NOT_RUN",
+  "preserved_historical_label_defect": "isolation87-posix-owner-native-v1.json has the same incorrect Gemini label; its immutable original remains as historical evidence. The underlying raw POSIX/full and bootstrap/full traces both show the three OpenCode boundary skips.",
+  "schema_version": 1,
+  "source_native_evidence_head": "f744e0598460c762f3e916cfd98c17084967403a",
+  "unchanged": "All Sources/Tests source hashes, native results, source-review conformance matrix, artifact hashes and dispositions",
+  "written_at_utc": "2026-10-02T17:09:13.333274+00:00"
+}

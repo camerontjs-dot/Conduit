@@ -29,9 +29,12 @@ public struct AgentContextSnapshotStore: @unchecked Sendable {
     }
 
     public static func defaultDirectory(
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL? = nil
     ) -> URL {
-        home.appendingPathComponent(".conduit/context-snapshots", isDirectory: true)
+        if let home {
+            return home.appendingPathComponent(".conduit/context-snapshots", isDirectory: true)
+        }
+        return ConduitInstanceConfiguration.current.stateURL("context-snapshots", isDirectory: true)
     }
 
     @discardableResult
