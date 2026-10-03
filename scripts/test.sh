@@ -24,6 +24,9 @@ if [[ -d "$XCODE_DEVELOPER" ]]; then
     echo
     echo "==> swift test (DEVELOPER_DIR=$XCODE_DEVELOPER)"
     DEVELOPER_DIR="$XCODE_DEVELOPER" swift test "$@"
+    echo
+    echo "==> Codex metadata native owner fixture (fake stdio only)"
+    DEVELOPER_DIR="$XCODE_DEVELOPER" "$ROOT/scripts/test-codex-metadata.sh"
 else
     echo
     echo "==> swift test SKIPPED" >&2

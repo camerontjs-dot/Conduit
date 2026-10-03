@@ -1,0 +1,1356 @@
+{
+  "schema_version": 1,
+  "receipt_type": "codex_metadata_discovery_owner_receipt",
+  "recorded_at_utc": "2026-10-03T12:47:28.576648+00:00",
+  "disposition": "OWNER_COMPONENT_NATIVE_PACKAGE_PASS_INDEPENDENT_AND_FIELD_QUALIFICATION_PENDING",
+  "independent": false,
+  "authority_issues": [
+    53,
+    49,
+    60,
+    87
+  ],
+  "proposal": "D070 remains Proposed / T0",
+  "main_base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+  "main_base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+  "tested_source_head": "20d02b09c14d4cb075632d56284192ea59b67c24",
+  "tested_source_tree": "149127567afddd04ee6605a924b3e1f3abfd3e3d",
+  "source_lineage": [
+    {
+      "head": "c54f76037a82fb93122950ba8db412fd8e8fba6b",
+      "tree": "6c2666a63fbb5182f96c303e6591523e4f694451",
+      "disposition": "FAIL_NATIVE_DESCRIPTION_CONTRACT_3_ASSERTIONS",
+      "receipt": {
+        "file": "codex53-owner-full-native-v1.json",
+        "sha256": "e72bd3e5104537b77e0dc00a0134199f7b17d9f01a6016b37e2905fb71da66ce"
+      },
+      "log": {
+        "file": "codex53-owner-full-native-v1.log",
+        "sha256": "4ce8a8a9f98b9ac616ce38aeac95fe52b3f696d2d1a45cebed5c478ffd868029"
+      },
+      "successor": "a3aa0126f915b576a4a33b2ce3946e94e30f228d"
+    },
+    {
+      "head": "a3aa0126f915b576a4a33b2ce3946e94e30f228d",
+      "tree": "fcdc9eb4f830304bb0eee9ba69e9cae224fb4bff",
+      "disposition": "OWNER_COMPONENT_PASS_THEN_FALSIFIED_CANONICAL_HOST_AXIS",
+      "earlier_pass": {
+        "file": "codex53-owner-full-native-v2.json",
+        "sha256": "5ebab12e7fd6c086fdedbb424cec8fa703086b43cf5366a1b43c9b2b6ef790a1"
+      },
+      "pressure_failure": {
+        "file": "codex53-host-axis-pressure-receipt-v1.json",
+        "sha256": "07c8d4b6114c89f64b5764f92e3f0e5c77308380bd3e6e7ce3485a3d327fcb8a"
+      },
+      "oracle": {
+        "file": "codex53-host-axis-pressure-oracle-v1.json",
+        "sha256": "a0733094fff1e1618b698397f3128c34f865e03025647bf1b40eeb078ec7c6fa"
+      },
+      "successor": "20d02b09c14d4cb075632d56284192ea59b67c24"
+    },
+    {
+      "head": "20d02b09c14d4cb075632d56284192ea59b67c24",
+      "tree": "149127567afddd04ee6605a924b3e1f3abfd3e3d",
+      "disposition": "LATEST_OWNER_COMPONENT_NATIVE_PACKAGE_PASS"
+    }
+  ],
+  "decision": "Keep Draft. Component owner evidence advances #53 Slice 2 Codex metadata discovery. Whole Slice 2 field acceptance and whole provider orchestration are not established.",
+  "acceptance_boundary": "Metadata-only inventory and exact read through existing ready Conduit Codex app-server hosts; no observation-driven host/process/task/turn/input/slot creation. Complete bounded nonarchived stateDB-only inventory, includeTurns false, exact identity, separate query-host provenance, scoped expiry/cancellation, and preserved driving mappings.",
+  "protected_axes": [
+    "Conduit task ID",
+    "runtime attempt ID",
+    "query request ID",
+    "observation host ID",
+    "canonical worker host ID",
+    "provider thread ID",
+    "provider turn ID",
+    "writer authority",
+    "verification",
+    "objective acceptance"
+  ],
+  "limits": {
+    "inventory": "At most four ready hosts; each complete inventory at most four 64-item pages. No partial success after malformed, duplicate, cyclic or incomplete metadata.",
+    "exact_read": "One ready host and exact full current inventory membership; no prefix/alias or implicit multi-host selection. Exact returned ID/family/creation and nonregressing updatedAt required.",
+    "model": "Configured or latest persisted metadata only; per-turn execution and entitlement UNKNOWN.",
+    "host": "Query host is provider-specific observation_host_id. Canonical worker providerHostID is known only when that exact thread appeared in that host loaded list. All host-loaded observations are time- and host-scoped.",
+    "privacy": "Preview, title, rollout path, turn content and arbitrary provider payload withheld. Fixed sanitized errors do not echo rejected metadata or provider error text.",
+    "rpc": "Only conduit.observation.v1/ string namespace bypasses driving mapper. This does not certify generic numeric RPC authority, unrelated notifications or malformed unclassifiable transport.",
+    "authority": "Observation grants no writer, adoption, lifecycle or objective acceptance authority."
+  },
+  "static_protocol_authority": {
+    "provider_cli_version": "codex-cli 0.154.0",
+    "execution": "Only installed version and generate-json-schema; no real host or provider call",
+    "schema_files": [
+      {
+        "name": "ThreadListParams.json",
+        "sha256": "bf5abcb5363c177f8d6b60e6193c76ad8807d6452b67a73ee2f1d77dfe427ac9"
+      },
+      {
+        "name": "ThreadListResponse.json",
+        "sha256": "4bb627dd0db9ab52a3b94a88a8e9c2e27870da9fed2dda505ab0085d708524a3"
+      },
+      {
+        "name": "ThreadLoadedListParams.json",
+        "sha256": "42c2d124ab2b2998d84f0126daae2d32b0bf9c5a7ea7266e3a0814e5e37cf00d"
+      },
+      {
+        "name": "ThreadLoadedListResponse.json",
+        "sha256": "1ea02c4710083e552b2a3a89b931b9049d5bf05b7db46278b8352cf9fd80cd52"
+      },
+      {
+        "name": "ThreadReadParams.json",
+        "sha256": "dfe040c6ac71d30795b8be3f3ff232e66f362a37f883b491e5d1ea367f470db4"
+      },
+      {
+        "name": "ThreadReadResponse.json",
+        "sha256": "d2616b2f1ea2ebcc07b7d9fae6b221a70adeb907413d790da39613650dea07ec"
+      }
+    ]
+  },
+  "owner_checks": {
+    "full_native": {
+      "command": "scripts/test.sh",
+      "receipt": {
+        "file": "codex53-owner-full-native-host-successor-v1.json",
+        "sha256": "4ec1a3ca413857752ff26ff77e253c8f6ba89ec65ce7286bba9b67c45d107045"
+      },
+      "log": {
+        "file": "codex53-owner-full-native-host-successor-v1.log",
+        "sha256": "723832759080bc5fed5e00ea5bad6b374cda67c19b56187af5c9c067816591f3"
+      },
+      "selftest_pass": 476,
+      "selftest_failed": 0,
+      "python_contract_tests_pass": 10,
+      "xctest_reported": 616,
+      "xctest_real_provider_optin_skipped": 3,
+      "xctest_non_skipped": 613,
+      "xctest_failed": 0,
+      "new_metadata_xctest_methods": 13
+    },
+    "maintained_client_native_fake_stdio": {
+      "command": "scripts/test-codex-metadata.sh",
+      "packet": {
+        "file": "codex53-native-owner-packet-host-successor-v1.json",
+        "sha256": "23f115cdb33912004694f6d66a8055a1e91cdfff708d6d85adaddda3c62428d4"
+      },
+      "fixture_receipt_sha256": "353b01619de90e2e6ef4f913bfdcc1f8fd4d77a325ea1cc6084d79c93fe4d183",
+      "native_binary_sha256": "1d0c0248065e2ad252e2b7948d0ea3a78aaf4a22cc713f60b71dc1bda07f5da1",
+      "scenario_count": 18,
+      "scenarios": [
+        {
+          "name": "no-host",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": null
+        },
+        {
+          "name": "healthy",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "unknown-id",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "duplicate",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "cursor-cycle",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "page-bound",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "malformed",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "loaded-duplicate",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "loaded-malformed",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "unexpected-turns",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "wrong-read",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "stale-read",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "rpc-error",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "wrong-envelope",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "timeout-control",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "cancel",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        },
+        {
+          "name": "host-stop",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": false
+        },
+        {
+          "name": "capacity",
+          "disposition": "PASS",
+          "unchanged_driving_state_claim": true
+        }
+      ],
+      "process_teardown": "17 separately owned fake provider PIDs observed gone; no-host created zero processes.",
+      "setup_boundary": "Fake initialize/thread/start/turn/start creates synthetic driving state in a qualification-owned stdio fixture, with no model invocation or cost. Observation phase permits only metadata verbs; timeout-control also sends one fake rate-limit read to discriminate driving request preservation. host-stop explicitly stops its owned fake host and tests hostChanged refusal; it does not claim unchanged driving state."
+    },
+    "release_package": {
+      "command": "scripts/build-app.sh",
+      "receipt": {
+        "file": "codex53-owner-release-package-host-successor-v1.json",
+        "sha256": "17a06dfc106b4bbf596339b0bced59bba23a286716ca257641b251ddfc9a2caa"
+      },
+      "log": {
+        "file": "codex53-owner-release-package-host-successor-v1.log",
+        "sha256": "f5639b0ec8b40164740aa3cd6f27388ed938099ca057ebeb85f6207a1e8d69ef"
+      },
+      "inspection": {
+        "file": "codex53-package-inspection-host-successor-v1.json",
+        "sha256": "c3c627685ec4fb905f2155e01c461030f6636eb7ac8cab938d3a56aa7ec42a70"
+      },
+      "strict_deep_signature_exit": 0,
+      "minimum_macos": "13.0",
+      "sprite_assets_byte_equal": 23,
+      "icon_byte_equal": true,
+      "swiftterm_shader_present": true,
+      "app_executable_sha256": "c33668c8be3fe13c2019b3ebb9033e18e3d5bd43ce99f6e96c746b7901c6c273",
+      "installed_launched_released": false
+    },
+    "release_selftest": {
+      "pass": 476,
+      "failed": 0,
+      "receipt": {
+        "file": "codex53-owner-release-selftest-host-successor-v1.json",
+        "sha256": "0676c8fdc624092c1ef907d740bcabcdc9287d5fbb96ae302c0e6020ef1e78d6"
+      },
+      "log": {
+        "file": "codex53-owner-release-selftest-host-successor-v1.log",
+        "sha256": "0f169ec5f96142c7287cfefed3890bbc6457dd63cfeabe3ef203781cace95976"
+      }
+    },
+    "namespace_regression": {
+      "initial_apparatus": "v1 first-batch inspection was APPARATUS_INVALID; all bytes preserved.",
+      "correction": {
+        "file": "codex53-red-before-apparatus-correction-v1.json",
+        "sha256": "16ad951f75e7cada7eada372cf47cf09633298dec5c0bc5121eaeec96fc7a177"
+      },
+      "frozen_v2_oracle": {
+        "file": "codex53-red-before-oracle-v2.json",
+        "sha256": "1d8a154d80f4514888c915e2539fe032d421b9b940ebef0b8ec017b9a9554501"
+      },
+      "exact_main_red_before": {
+        "file": "codex53-red-before-receipt-v2.json",
+        "sha256": "a895aba7f84659cc743b2aeca2d7b2ebde6247224b12e9bcfe59758c69cc20b2"
+      },
+      "latest_successor_replay": {
+        "file": "codex53-red-before-receipt-v3.json",
+        "sha256": "7ce5ba0ac13d277a0a2f9feaa71388113cc5f7fb0db6fa31d304069ab38f9515"
+      },
+      "latest_run_log_sha256": "fc96384ab94b73b1f49710b173ecde1e6689f61135c1a352a395b2ef626c3fac",
+      "latest_binary_sha256": "d2d527c1235d20f233418274216073656eab6120e5a31dd009f3f9c78562f493",
+      "disposition": "PASS_OWNER_NAMESPACE_REPLAY"
+    },
+    "host_axis_pressure": {
+      "frozen_oracle": {
+        "file": "codex53-host-axis-pressure-oracle-v1.json",
+        "sha256": "a0733094fff1e1618b698397f3128c34f865e03025647bf1b40eeb078ec7c6fa"
+      },
+      "first_failed_candidate": {
+        "file": "codex53-host-axis-pressure-receipt-v1.json",
+        "sha256": "07c8d4b6114c89f64b5764f92e3f0e5c77308380bd3e6e7ce3485a3d327fcb8a"
+      },
+      "latest_successor_replay": {
+        "file": "codex53-host-axis-pressure-receipt-v2.json",
+        "sha256": "60651b8696ed1a8aaccd4549343c89d9e5a03ded29f20b472b3cc376c8554c41"
+      },
+      "latest_run_log_sha256": "dba8d667722e3fe0be951176b2f3c71e3980d6c302d87391b2e5eb2cdd15d01c",
+      "latest_binary_sha256": "37215c6786105375c9c76130b8dd067462630791ee9aa8c85cd8548cbd5ac7a8",
+      "disposition": "PASS_OWNER_HOST_AXIS_REPLAY",
+      "first_failure_downstream": "NOT_RUN; successor is a separately identified source checkpoint."
+    }
+  },
+  "preserved_negative_and_deviation": {
+    "first_native_sandbox_refusal": {
+      "file": "codex53-owner-focused-native-v1.json",
+      "sha256": "bee7eb77d206890d09eed27adf25c1d0b6a5b8ae9495cb96459259906c77adce"
+    },
+    "refusal_scope": "SwiftPM sandbox_apply operation not permitted before tests. Owner native scoped execution subsequently approved; this did not authorize a private-source external qualifier.",
+    "source_custody_refusal": {
+      "file": "codex53-conformance-source-custody-before-v1.json",
+      "sha256": "f49729d2a40610a13ff1457de6e96b66dafdfbb0de3e114c17945870ca2df9f4"
+    },
+    "source_custody_renewals": [
+      {
+        "file": "codex53-conformance-source-custody-renewal-v1.json",
+        "sha256": "a45182d53769ac41d7f5075e049e3abc1465f0758ae7da1e1d5789fb01a5cfbc"
+      },
+      {
+        "file": "codex53-conformance-entrypoint-renewal-v1.json",
+        "sha256": "466278502db715c573e1aa15476cd80635fc098518724976083465a69220c2b5"
+      },
+      {
+        "file": "codex53-host-axis-source-custody-renewal-v1.json",
+        "sha256": "7c94188bd41f2bae9558ce8fcf10725be77a7bdd1ff7785ca199217ae6609fab"
+      }
+    ],
+    "source_custody_limit": "Source hash custody renewed without promoting historical provider outcomes or consuming #114/#128 evidence. New conditional Codex discovery field support remains UNKNOWN."
+  },
+  "environment": {
+    "os": "macOS 27.0",
+    "toolchain": "Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)\nTarget: arm64-apple-macosx28.0",
+    "native_toolchain_selection": "Xcode.app",
+    "standalone_target": "arm64-apple-macosx13.0",
+    "dependency_changes": false,
+    "dependency_input_receipt": {
+      "file": "codex53-dependency-inputs-v1.json",
+      "sha256": "4e4bdf179ff3bbf5684a237453908b3714c8a69ed57196a71f3fa4b3fa00776e"
+    },
+    "build_jobs": 2,
+    "cache_scope": "Dedicated owner temporary build state; HOME and CODEX_HOME unchanged. No operator session, credentials, auth, defaults, quotas or provider routes altered."
+  },
+  "inference": {
+    "appmodel_api_composition": "Source and full native compilation connect bounded async metadata read to the existing callback. No mounted app or HTTP server was exercised; runtime behavior requires #87 isolation."
+  },
+  "unknown_or_not_run": {
+    "fresh_independent_qualification": "PENDING_AUTHORITY; inherited owner context is not independent; private-source external CLI permission remains unavailable.",
+    "real_provider_external_thread_list_read": "UNKNOWN; installed schema and fake native wire are not field support.",
+    "mounted_appmodel_session_api_http": "NOT_RUN; #87-owned isolation/qualification required.",
+    "generic_rpc_error_authority_114_128": "NOT_CLAIMED; frozen lineage remains separate.",
+    "provider_adoption_resume_writer_or_archived_discovery": "OUT_OF_SCOPE",
+    "installed_operator_app": "NOT_RUN",
+    "production_installation_release": "NOT_RUN",
+    "hosted_ci": "NOT_RUN at this source receipt; exact final-head CI belongs to the later PR receipt."
+  },
+  "tested_source_inventory": [
+    {
+      "path": "Sources/Conduit/AccountUsageService.swift",
+      "sha256": "12f1afd31f1ddf781c74d4cc4c5af412d9bcd00f21ccd04d4189d6dfb904fd3b"
+    },
+    {
+      "path": "Sources/Conduit/ActionExplainer.swift",
+      "sha256": "bc2f75119c0f02b5c125d0b467d884237ecb0954ed3757bf8be7796b2d08d695"
+    },
+    {
+      "path": "Sources/Conduit/AgentModelCatalogService.swift",
+      "sha256": "cb748ee24451920547d835d5990d44bb192011a7d50fc9e488605c11ea106998"
+    },
+    {
+      "path": "Sources/Conduit/AgentModelControls.swift",
+      "sha256": "137b7b2e2e4dee66dd91b30ac569b7fdbbbfc9fe5567bfbd8e5700d697f28ed7"
+    },
+    {
+      "path": "Sources/Conduit/AgentSpriteView.swift",
+      "sha256": "bf3c4ea3e8f72a888dc20bf9d7469ecb81fc22eaa1052205ad345670fa2348f4"
+    },
+    {
+      "path": "Sources/Conduit/AgentUsageView.swift",
+      "sha256": "6d6f0bf9dee3050b4041902e447275e1b8d0189ac89ada45c3fb250d6587024a"
+    },
+    {
+      "path": "Sources/Conduit/AppModel.swift",
+      "sha256": "c1bbec42d8f4bb115bb7cdec310cc31a59bcdafb700f963aef0041d4e3844015"
+    },
+    {
+      "path": "Sources/Conduit/CodexAppServerClient.swift",
+      "sha256": "18b469e8e40ef9e07dfb3e699da340f022e9e1d631745ff7fe587ca10d87de3a"
+    },
+    {
+      "path": "Sources/Conduit/ComposerTextView.swift",
+      "sha256": "da519f28deaeea528ec874f447d761e8720610e76396ffa1f56568bffb99e5b1"
+    },
+    {
+      "path": "Sources/Conduit/ComposerView.swift",
+      "sha256": "7400d3778f8563fd1db92a633d6382b5ee577409889e6f22ad2a4ad74b6fb64f"
+    },
+    {
+      "path": "Sources/Conduit/ConduitApp.swift",
+      "sha256": "4539e33fd350abbc88af08ce60d605c004fd0eab5ff3b7081f577d31d821c376"
+    },
+    {
+      "path": "Sources/Conduit/ConduitResourceSensors.swift",
+      "sha256": "66ff3196bb887f5c54a3b4df9d708d68f9f496843908033d7d639f1e7f124f06"
+    },
+    {
+      "path": "Sources/Conduit/ConduitSessionAPIServer.swift",
+      "sha256": "0df5f3997c598bf8b23f8ef171699c541cee1bdc5fe6485cf8456c96d8c3227e"
+    },
+    {
+      "path": "Sources/Conduit/ConduitSheetHeader.swift",
+      "sha256": "ef26b920bb1bb9bffd25751db82437812a731220a2e0ec9e80107c131b14ffb1"
+    },
+    {
+      "path": "Sources/Conduit/ContextHandoffView.swift",
+      "sha256": "d83c27163a4293754c075b0b66b49f51a2beb1e0ccd0676545bff4079da8b3ff"
+    },
+    {
+      "path": "Sources/Conduit/ContextIDEBridge.swift",
+      "sha256": "2242fbf30d2ee30a49075bfcc700c7974472443ec2a538c68d94b2b0cef1d16e"
+    },
+    {
+      "path": "Sources/Conduit/ContextStackView.swift",
+      "sha256": "7e47475cc333a2304dc18b83240b0bbddd66d21d84db2221e3c6e039913fe770"
+    },
+    {
+      "path": "Sources/Conduit/ConversationPersistenceCoordinator.swift",
+      "sha256": "d072a535d64966f43b0aabd4b50c0bcfac8bbd1e1b41f7e0bd653ee2cd974ed0"
+    },
+    {
+      "path": "Sources/Conduit/ConversationTranscriptActions.swift",
+      "sha256": "8b028b6f99b46cbaf8ee80b0f7b11d61d10e8aa11b7b056d550f1d6836adaef8"
+    },
+    {
+      "path": "Sources/Conduit/ConversationView.swift",
+      "sha256": "73520369088492d77d5b5eb1995d3caf42da02424570b41c1ebf2cf56417fe77"
+    },
+    {
+      "path": "Sources/Conduit/EnhancementServices.swift",
+      "sha256": "289478ea10c94f66d76e6f348caa30a41b0f07bffad544774fcc81d3d9669cc4"
+    },
+    {
+      "path": "Sources/Conduit/EnhancementViews.swift",
+      "sha256": "e47dd76e868ed8da942e37127123164347193f6c51b4aa586058845ca69224d1"
+    },
+    {
+      "path": "Sources/Conduit/FocusBoardService.swift",
+      "sha256": "90a612a31709db2c5df221f5bc4da011a3403c7c7af1abf941acce7d9669c50b"
+    },
+    {
+      "path": "Sources/Conduit/FocusBoardView.swift",
+      "sha256": "34a5099fb7251991ee58283a303e326eee80187d557bdf9fdd9bddbff35e0728"
+    },
+    {
+      "path": "Sources/Conduit/GrokACPClient.swift",
+      "sha256": "be5a39358df68c6311637ad2dae09bfac083c37044ffcb18982c3d2914f8994f"
+    },
+    {
+      "path": "Sources/Conduit/InspectorView.swift",
+      "sha256": "8773a58e88b92b0066ce1c0c95bce2db6d71118eeb2748bdcbae8a0efb257dfc"
+    },
+    {
+      "path": "Sources/Conduit/LocalOllamaPlanner.swift",
+      "sha256": "7858a26d324a3e09b6f1e07e51fe9700a25eb5ca97ada1539bfd25f2d526128b"
+    },
+    {
+      "path": "Sources/Conduit/MainframeExplorerWorkspaceView.swift",
+      "sha256": "1afdbc6cb56044229dde481ecf634cb37bb986cd1362c3214f36464b6e99d833"
+    },
+    {
+      "path": "Sources/Conduit/MainframeKnowledgeSurfaces.swift",
+      "sha256": "2672d9896e5917846b9c6bf0a8cb20392fefc33c98ec6c4674d321c51c99fe9d"
+    },
+    {
+      "path": "Sources/Conduit/MainframeMarkdownEditingSession.swift",
+      "sha256": "38d70ab8bf19132ab46d913b1bc045cfe08b0cf4f9212da9fd95e929b7055840"
+    },
+    {
+      "path": "Sources/Conduit/MainframeMarkdownReaderView.swift",
+      "sha256": "0b54946cf4a6b7b68ffbcaa25834708e87456bfbcebce422db244371f32ec392"
+    },
+    {
+      "path": "Sources/Conduit/MainframeObservedTaskBridge.swift",
+      "sha256": "ba24d599cbd7321e9f70d03f32761731f330503d4a7388292401e6f214915dcf"
+    },
+    {
+      "path": "Sources/Conduit/MainframePixelGlyph.swift",
+      "sha256": "7d88200e4e34840d0ab5c6283cb169c18695823cba8e655107715d1c32319400"
+    },
+    {
+      "path": "Sources/Conduit/MainframeSourceEditingSession.swift",
+      "sha256": "60e6ec37a215c9a969a80a9dc56e94badcc32925d4294bef85c992454e2582d7"
+    },
+    {
+      "path": "Sources/Conduit/MainframeSourceWorkbenchView.swift",
+      "sha256": "5ce28424531b4495c411e7c3925047a060ccf31c715b48bdc4d8fe3aa8706661"
+    },
+    {
+      "path": "Sources/Conduit/MindGraphQueryView.swift",
+      "sha256": "347e0f801e6a99eb953373381e3011dbadc791428547761122a6a6213fa1e76f"
+    },
+    {
+      "path": "Sources/Conduit/NewTaskView.swift",
+      "sha256": "f18f3c3899d0cd79a366e9843b4061da5fb8e5de3a5ad94f845af159b5417b7b"
+    },
+    {
+      "path": "Sources/Conduit/OpenCodeConversationActivityView.swift",
+      "sha256": "cbc953237b51dade4555285598dd8f024d34c775304f4740ddcd295a9ba864ea"
+    },
+    {
+      "path": "Sources/Conduit/OpenCodeHTTPClient.swift",
+      "sha256": "cddd5d926526d9705dbe9cf237bd3ce1471e146ddb4eddd51fcc0bed32b7fac0"
+    },
+    {
+      "path": "Sources/Conduit/OrchestrateWorkspaceView.swift",
+      "sha256": "08b6098ea6f703b63f14d17009b9d57f2c4457f54f318ff0d6ff29666c90fd02"
+    },
+    {
+      "path": "Sources/Conduit/ProjectScopeBrowser.swift",
+      "sha256": "6f2df6301b2515df4ea461be37f1e380e48854e3f67ef2e06591e3d0e06901d8"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/README.md",
+      "sha256": "4a0dc3dbf78fe8e8d22f8c7addd25e7348c3c28146d25c04f5f7fb70c6f34b54"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/SHA256SUMS",
+      "sha256": "fd8bbfb7e6ede737fb747721d0a58c0662886137dd4ddb363c285bba4a73ad2f"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/claude/clipboard.png",
+      "sha256": "982f6a99d92018f415d18d1acb22593ed2094c306016c02946ae771cd9ddffe6"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/claude/magnifying-glass.png",
+      "sha256": "f78050f26e49400ef54f097f2a87be65eaeb205a21cd0958735ecb68b802211c"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/claude/pointing-warning.png",
+      "sha256": "1cb456863e57b846c3ca29a78d1dfa367fd54fed27e8b270f07a4812d35e8d4e"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/claude/shrug.png",
+      "sha256": "062bfae99659a8f879863e7695b752ebcb4d49d000c31c475fcab619d00ca8a2"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/claude/skeptical.png",
+      "sha256": "311f90b41185489aab671059f56ffd915df20301f1c90d9ec6383e4542a4f66a"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/claude/sleeping-coffee.png",
+      "sha256": "d842ce1aa2d27f965764fd3354d2410a4afb1c7608f28a7780c6d4a8b947b7c3"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/codex/clipboard.png",
+      "sha256": "76de5849caa4febfcdb706a9c0db7a83d12891c56a710881fb27ad783730c797"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/codex/magnifying-glass.png",
+      "sha256": "6473fbdc111de6abafb71a379cbc72a2fcb95efc94b5fac548472c9e489cf38c"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/codex/pointing-warning.png",
+      "sha256": "822bc9e07cb93bb12741773e67543e8ce43731821dd4c56518f2a90599ec41cb"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/codex/shrug.png",
+      "sha256": "a9aa558cf336ae2147b6c74c951faca3cd5444a601e2b491d299c907f82f2b09"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/codex/skeptical.png",
+      "sha256": "950162c4f5d835557e1f4df886de64adb8f3d958892dfbe0f4896e3026defdc7"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/codex/sleeping-coffee.png",
+      "sha256": "3e33cf18e6e6294a74ed3cb630970de5c7b0675b0d8241532355b754091c2e8c"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/README.md",
+      "sha256": "bfa45311f47496024b9d4c85ba3957f6e1a1a7b333ff320d3ef06d0753bac038"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/antigravity/master.png",
+      "sha256": "d100b897b28311a41456354c2b7270973a2614fb136751407aa75ee4a98aeb61"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/claude/master.png",
+      "sha256": "d89802f79501c63b421050f47e57876c58c136585fda4c8ceb29c07cf66748f5"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/codex/master.png",
+      "sha256": "fabe19ae975bb5b7a1dd22b3b700319174816b4c612ba760efdd6a9d3ea8cc78"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/gemini-cli/master.png",
+      "sha256": "b09a345c3ce9d73696258f4e26da052774112a75b843f9ae8ad8b3c6dd4a86a8"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/grok/master.png",
+      "sha256": "498d6bff4e18105c3b50de112bae572834841b3f9e9d59dacf07dd33e48b1df7"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/local-shell/master.png",
+      "sha256": "c3954244cb666d9f74528ef0d649fb0db1236730b9b7f4359b1058955fefeb03"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/ollama/master.png",
+      "sha256": "b2077adc702aaa9b96b9acdfe601947683ea59b61e36a10c7eef09efafa9dc8d"
+    },
+    {
+      "path": "Sources/Conduit/Resources/AgentSprites/masters/opencode/master.png",
+      "sha256": "72c050dff4d2514a8530dfd4dc5c6d49b0fc905c829b1ca4c4d94d089e407931"
+    },
+    {
+      "path": "Sources/Conduit/Resources/Conduit.icns",
+      "sha256": "d9b0ca16f45e9a749f244b75f71f034d871e1d45165d942faa31d1da1d8cfff6"
+    },
+    {
+      "path": "Sources/Conduit/Resources/Info.plist",
+      "sha256": "21c0a42674fa2f06fbb5d328aefd30ebd66ca3d18a1129abe5840f82642bf648"
+    },
+    {
+      "path": "Sources/Conduit/ResumeSessionsView.swift",
+      "sha256": "b28486e707b2c74d45884b648cb2f52d791fc2964b3d6bc6d1e6fffc13a597a7"
+    },
+    {
+      "path": "Sources/Conduit/RootView.swift",
+      "sha256": "7209157895c6f8cfbfcc5c317f9a1951bec06e227a05f0b9b9cb945e5b309037"
+    },
+    {
+      "path": "Sources/Conduit/Services.swift",
+      "sha256": "679d6413f5237060174daa9f246772aae0403f2322548aec2a861e148af38954"
+    },
+    {
+      "path": "Sources/Conduit/SessionSurface.swift",
+      "sha256": "b96e83a101298a184bff0a52f98fd88730a9c82738a0962da2f9185c8afd4792"
+    },
+    {
+      "path": "Sources/Conduit/SettingsView.swift",
+      "sha256": "b79b49acd7b603322a9fdadd015be39268e4edf8dd628c0dc9b3458feb48b8b1"
+    },
+    {
+      "path": "Sources/Conduit/StreamJSONClient.swift",
+      "sha256": "105a7a46a2da10733b4808959ae91c089d6029972a344007fd82b5466bef81d2"
+    },
+    {
+      "path": "Sources/Conduit/TaskSidebarModel.swift",
+      "sha256": "5d75478ecedf9c01206d71a6ad814be09311c003720ef43d5544320efd0b60cc"
+    },
+    {
+      "path": "Sources/Conduit/TaskSidebarView.swift",
+      "sha256": "6458215e1fb760947c6b119f1dad85d6fe0b0fe17d653a09cb930a84b59acf1c"
+    },
+    {
+      "path": "Sources/Conduit/TerminalBackend.swift",
+      "sha256": "3e3b3b80756847e9766b6a28eba0aa5a609c0dacd054c18755a704922ad1c4ea"
+    },
+    {
+      "path": "Sources/Conduit/Theme.swift",
+      "sha256": "42db3e4b5fdb8c3fcbe7968d7c002c3260d1f3ae72301cc9cf5e706464a10d32"
+    },
+    {
+      "path": "Sources/Conduit/WorkspaceViews.swift",
+      "sha256": "94cdd05925e48b511795048fcf5624b49f3a242ac15bcb0ae917283d76512e39"
+    },
+    {
+      "path": "Sources/ConduitCore/ACPProtocol.swift",
+      "sha256": "496ca6fdae99d5735d38a61fd00dc5fc22d1d0ec6ca4d90cecf40b42834591af"
+    },
+    {
+      "path": "Sources/ConduitCore/AccountUsage.swift",
+      "sha256": "2b6f8c9fc903f540bd14919cec7cfc0b82a124d2b5f2dbb21d7f94ea85e942e6"
+    },
+    {
+      "path": "Sources/ConduitCore/AdapterThreadStore.swift",
+      "sha256": "38157c92a49158b5852500fe764d774e2ee98061fae74820fe8932500fc647d3"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentContext.swift",
+      "sha256": "2a2bcda871e779f27e6c69a1110193961dbe39aa0021d09710ef27c1c1992efc"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentContextPresentation.swift",
+      "sha256": "ec43d6ec3ea9de205a7e4148f3d5f6f7144bbc9c0302a0eee556f15be45aa284"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentContextSnapshotStore.swift",
+      "sha256": "e76df30802b8569b485ac65ac3876ad27621dae255e54da11d1e2202c30f38b8"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentMidSessionModel.swift",
+      "sha256": "a98358a2b38e57159a7070a41d5dc3c1fb20d6bd81fdaedf7619056e776e80c4"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentModel.swift",
+      "sha256": "01ae37ac556415d963ad353585f5a48df68b54a60bbb4d41c98dac43239cf214"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentPermissionMode.swift",
+      "sha256": "c77755aa3ebddfc6f4a8523e0a74ddda0733fdc9f2a62b87e9714499ef0b17c8"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentSessionBackend.swift",
+      "sha256": "2fe30fdb24227fff95d690a4d4685770c7832b2d57fa6b0f140c013c84c3c046"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentSlashCatalog.swift",
+      "sha256": "3e0d85c2734186259449f5ab8eda4c5144bdd8ff52dddb2d3b0a8e187887f237"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentSpriteCatalog.swift",
+      "sha256": "9309c5334c777e9e0d7067a8065685bb329daa37ae8c293b35a8f060f67eeea0"
+    },
+    {
+      "path": "Sources/ConduitCore/AgentUsage.swift",
+      "sha256": "d43c95d14188d78d9df8d49c842232dfeb5e09d847a5e73cecaef47b4171bcdf"
+    },
+    {
+      "path": "Sources/ConduitCore/ChatGPTTunnelControl.swift",
+      "sha256": "869181888feba4e6022cae8954df5bf875f9b25f6da2df857724e8371484ba37"
+    },
+    {
+      "path": "Sources/ConduitCore/CodexAppServerProtocol.swift",
+      "sha256": "18b661335b7a911e4eda2d33fa5147e2fcb7cbb38d15f78d00e96a52ac63f9b7"
+    },
+    {
+      "path": "Sources/ConduitCore/CodexAppServerStreamPump.swift",
+      "sha256": "31ce0d422a7acd00cfc3b40c33106476284f837e565a1c63b4d72c8da4ed8ca7"
+    },
+    {
+      "path": "Sources/ConduitCore/CodexObservationRPC.swift",
+      "sha256": "d542f64854a704e4f6341d195d149f3b129a62f3496c2ca906c2da23da1b63e4"
+    },
+    {
+      "path": "Sources/ConduitCore/CodexProviderObservation.swift",
+      "sha256": "d8d9bf26de1a82a76e62180b227b6c7c8ce8986d439cb98cc2704aca3305ab39"
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitCore.swift",
+      "sha256": "877eba7c538db00261fb0e186e5fcdec272f7d62e6977f582f41d091757448b9"
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitFleetSnapshot.swift",
+      "sha256": "5ba43fe21bf98d8b0da999b7dbceae0365d03d5383586093cb7a362a4a8cdc66"
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitSafety.swift",
+      "sha256": "99a6bafc7d8852e0ee99fbfee77ee3c152be90830b6fdfa85c73917ba2f60c9a"
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitSessionAPI.swift",
+      "sha256": "3ae00ae119e2f5b4593750bf128c76dbfbda73ebf1ea0177b4f621bac3e5d190"
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitSessionEvents.swift",
+      "sha256": "6ac0b8c300e1bed0f52f66a92903b14f0d38852be0669a267b26d8e7f78cfec3"
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitSessionList.swift",
+      "sha256": "ce2aa749b40a918bd65c40915d4bc0804959468f28667c46cee3ff1c9eded8f4"
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitSessionToolCatalog.swift",
+      "sha256": "996fb32aae3f43fba1f4b898a2331bf0d191a96e447d11a1339f6ff7a6ddd89d"
+    },
+    {
+      "path": "Sources/ConduitCore/ContextCompiler.swift",
+      "sha256": "5602e945f6e463d91412aa5ba46731fe82fdcc83438d85ac6d6cb19b33648359"
+    },
+    {
+      "path": "Sources/ConduitCore/ConversationCaptureMerge.swift",
+      "sha256": "65e02eab74367ef4b939cacbd73f057eb3581fbab657f623ad80c1a33c08aeaf"
+    },
+    {
+      "path": "Sources/ConduitCore/ConversationEventLog.swift",
+      "sha256": "6d4781343ebbca645b50e04deecf433a50f124ee09948ccb51c9e07b018547a7"
+    },
+    {
+      "path": "Sources/ConduitCore/ConversationRetention.swift",
+      "sha256": "bf0e7bf343f930a82ad99d8cc89e4ebadbf2fb5c860e4fa4115640370679a9bf"
+    },
+    {
+      "path": "Sources/ConduitCore/ConversationRootShell.swift",
+      "sha256": "c7f23a350f462ebdc79df63ed73ae18fe88eccba2be6ca2bbfbd4d891c8ce270"
+    },
+    {
+      "path": "Sources/ConduitCore/ConversationTranscript.swift",
+      "sha256": "bdf8a68228fb7024a3d7c8f57838dae0c9d8f0a6fb2312e342e413aa3fc3d1a2"
+    },
+    {
+      "path": "Sources/ConduitCore/CreateTaskPrecondition.swift",
+      "sha256": "1f0dc858e76fa188c50ec75232449926b9f5052e3c0f6c8cddb3899ffe59beed"
+    },
+    {
+      "path": "Sources/ConduitCore/Density.swift",
+      "sha256": "5f0ac95cd3926253c57ef1b13bed36b5009678604d52853b75dc337145680494"
+    },
+    {
+      "path": "Sources/ConduitCore/DiscoveredSession.swift",
+      "sha256": "b5f754814df59803f5e629bbd504cc7c01d31ccf57680dc1d6fb55b069104306"
+    },
+    {
+      "path": "Sources/ConduitCore/Enhancements.swift",
+      "sha256": "d56c5b53cac378f421f3541ed2a34728e98fa801cfef35a7776e0f30cd8b551a"
+    },
+    {
+      "path": "Sources/ConduitCore/FocusBoard.swift",
+      "sha256": "8f0202e49a96b9eb642963cd5589572909ec7cb69fb4bf42d005a3f38fd5aaf2"
+    },
+    {
+      "path": "Sources/ConduitCore/GitReview.swift",
+      "sha256": "f09d62b347d27349ad82202263bc171c94ecb9933979357f67836528a32be1ee"
+    },
+    {
+      "path": "Sources/ConduitCore/GitWorkspaceContentIdentity.swift",
+      "sha256": "86968cb622150cf5727ff9d495691e8b5b78120250ce8b90cb9036c2a54d60df"
+    },
+    {
+      "path": "Sources/ConduitCore/GitWorkspaceInspector.swift",
+      "sha256": "a7ccb6b893f9c8dcbb6e3cbe3e60db499f10958dbba11894df233a5fb08cdd8a"
+    },
+    {
+      "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift",
+      "sha256": "4113d7c4c1ae9f2dbe6c52d3449841507918de6a4e539c1d62d5cc721caca4fb"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeAttention.swift",
+      "sha256": "31dad48b0db831bc56f3a61cb0026f8c533ea34e312040d97c0330197d774d4f"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeChecklist.swift",
+      "sha256": "4cdc31df68d08dd289a38979d352bdccc0d856b0e06d462fbb2a089d8d53a75d"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeContentIndex.swift",
+      "sha256": "ab65d594bbb041348a0e7b7596c9f6de6f18bd65ddbf6d7952118430fc862d5b"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeEvidenceTrail.swift",
+      "sha256": "ce66beece1e1adac19ef0eb62188da5cbf153b075c407685696d5b2f5fa43142"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeExplorer.swift",
+      "sha256": "31bb03ea8987d0c05c35c3532efaec861ab3f5e448dc6c143708efb344a75622"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeExplorerPresentation.swift",
+      "sha256": "411935078b4ad4781525b4a3c05d59ea0583b99408d5c22c9cec32d447ce067f"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeGraphBuilder.swift",
+      "sha256": "94d40234ca45c2c73e70bbb8edd5c46c904dcca996362e6581035874c82a4117"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeGraphLayout.swift",
+      "sha256": "0539f720a533c45dc203959a9705e0b3bc203f65389212b9bc062bafa9ef110e"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeGraphPresentation.swift",
+      "sha256": "455389742d396c83fe82aa8f9d927d2f47b252914b4058c884c9f0182a9025d9"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeGraphQuery.swift",
+      "sha256": "3b0a438b0469ccbcd9a823bb2184f2479ab3a0c18cbadef8ea8bdd5f196e56fd"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeGraphTypes.swift",
+      "sha256": "1d41781a036bab8879aa2f8ec2b71bdec97c4d681f7a974bf5ef29aeb6f78b6b"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeLifecycle.swift",
+      "sha256": "136a5da705b378f290e078e0a67e65669389b804703b29945824ba04dc680a9d"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeLinks.swift",
+      "sha256": "dd4827beeae49a5a72d6c27829d8fb3f6d4af70e11f7d6ba5181c12f1b7d578d"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeMarkdownParser.swift",
+      "sha256": "8e077fe1dcbaee6074e38d8c3287133478a6e411b2d7ec1ca0d4c95daceb00a0"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeMarkdownTypes.swift",
+      "sha256": "1add051a4c18a3a80c01cc64ab6bb7219285b1476de6b894aa5f83022da0d1f6"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeSearch.swift",
+      "sha256": "5686acc70b3ac8f33a341b3fed68c23b91f7198ed6c8d19b834c536719212df9"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeSourceWorkbench.swift",
+      "sha256": "c9cd3da95655733e54a496287fff806d9112b14e0c455d16ab2a442ac1abc265"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeTextEditing.swift",
+      "sha256": "5583258b79faebd27f5e1150c700fa0e82633439222dd3f4b8c819a27c1f63aa"
+    },
+    {
+      "path": "Sources/ConduitCore/MainframeWorkstationCore.swift",
+      "sha256": "2df0ae47f0488583bc7115780b477273e0f6b0bb2986c00850bcc9df8a012aac"
+    },
+    {
+      "path": "Sources/ConduitCore/MindGraphOutput.swift",
+      "sha256": "9dd7381af7be643527a7a4f5949f97c980a996d818951f6dc8e568708b65a4c7"
+    },
+    {
+      "path": "Sources/ConduitCore/MindGraphQuery.swift",
+      "sha256": "a15baa087263c517aa3d6177c5b7db8c3817d011ff55ce0b288cc0871a20fd26"
+    },
+    {
+      "path": "Sources/ConduitCore/ObjectiveDelivery.swift",
+      "sha256": "3ffce9e5ebcde8bebe8ea6629411ecdc7d6c31ab6163b50808e71d305b76821b"
+    },
+    {
+      "path": "Sources/ConduitCore/OpenCodeConversationActivity.swift",
+      "sha256": "d67b86c364a5bfb80f7076ca0a9ff69f1125fb8ea4ff07cb46b079a568dfe8db"
+    },
+    {
+      "path": "Sources/ConduitCore/OpenCodeHTTPProtocol.swift",
+      "sha256": "863bceda97b4635fc20b2b8384b0f256bad65f5591b3abef0d82546bf3b9e394"
+    },
+    {
+      "path": "Sources/ConduitCore/OpenCodeSQLiteObservationTransport.swift",
+      "sha256": "96578236488b6f513184f4b06268d4233a879af112cb80e3e0c542eac8c1acdc"
+    },
+    {
+      "path": "Sources/ConduitCore/OrchestrationPlanner.swift",
+      "sha256": "9e4b6fa792f81e90fc3d1e6f66dbd80180d80d33448e87a6ea0e5d54e054e63b"
+    },
+    {
+      "path": "Sources/ConduitCore/OrchestrationPolicy.swift",
+      "sha256": "19ab4e799d9b19daeb7c5222076fc37571c3178239c6bdb611ad80fea0a34810"
+    },
+    {
+      "path": "Sources/ConduitCore/OrchestrationProposal.swift",
+      "sha256": "dc07511c5c2b2f8ed975901425672a2534caaa0a3ca032e0a8d279c164eb9460"
+    },
+    {
+      "path": "Sources/ConduitCore/PaletteSpec.swift",
+      "sha256": "ed8913cdc5d9b6b4e8bd734d2a553872646a8166b25c5b54702dca6315aee079"
+    },
+    {
+      "path": "Sources/ConduitCore/ProcessTreeObserver.swift",
+      "sha256": "d58c52552b0527c5d471fcb4697bf0c38ea7d807caef147ea22c09c6e6ff5cfb"
+    },
+    {
+      "path": "Sources/ConduitCore/ProcessTreeReconciliation.swift",
+      "sha256": "2c45475a8b20f989a181c43f2d56eedeaf3cef34abbc21762e46fc919421bbff"
+    },
+    {
+      "path": "Sources/ConduitCore/ProjectNavigation.swift",
+      "sha256": "dec12d8a1ab38a1956e12204df1457822a6a3751ff05add89191c5f7aadab928"
+    },
+    {
+      "path": "Sources/ConduitCore/ProviderOrchestrationState.swift",
+      "sha256": "f419f62a52edbdc527309c34b554215c172af515ed30d9859b3ad10316e53c1f"
+    },
+    {
+      "path": "Sources/ConduitCore/ProviderSessionAuthority.swift",
+      "sha256": "7b47a464c3465dea7b36d6ca9c7f968ca7cd54fe8debe7ca41d8a27195a5c752"
+    },
+    {
+      "path": "Sources/ConduitCore/ProviderSessionObservation.swift",
+      "sha256": "98055b2413159167fe4cc8afda6e8a9da5074abd827f2d62d40d8e52fdfe566b"
+    },
+    {
+      "path": "Sources/ConduitCore/RawDerivedOutput.swift",
+      "sha256": "d003e41d3023c8d7917838eca838039c495188e8b9614787679190a9c95104d4"
+    },
+    {
+      "path": "Sources/ConduitCore/SessionAPITransportSecurity.swift",
+      "sha256": "e909d2b331726801229b2bc40c0e8ea93c6a937929df7619f84109f4bee92262"
+    },
+    {
+      "path": "Sources/ConduitCore/SessionCatalog.swift",
+      "sha256": "3843e8b72481bba3d6ae7a5388a4d72fc3a1e4b0af80305de899d61cbda2522f"
+    },
+    {
+      "path": "Sources/ConduitCore/SessionCloseSemantics.swift",
+      "sha256": "82c4a5a438c2c7cea7bbb9ff108a0bccb7c1400e890f3f67315614550915de7e"
+    },
+    {
+      "path": "Sources/ConduitCore/SessionPresentation.swift",
+      "sha256": "d6dce04e932db03f477c64a01c4a1c72b847be6cf527248d236b33592596997f"
+    },
+    {
+      "path": "Sources/ConduitCore/SessionResumeSemantics.swift",
+      "sha256": "e6df2af1c2f0993d0b251168f34929996e6ea7d37eda9721d4f26145b54b0670"
+    },
+    {
+      "path": "Sources/ConduitCore/SessionRuntime.swift",
+      "sha256": "f58dc5e8bc3b30dbb4ca804e15f18f3f96670f1c141a5ae3551901bd05bd7aa3"
+    },
+    {
+      "path": "Sources/ConduitCore/ShellProviderCorrelation.swift",
+      "sha256": "cbadb179f0e1bd077e3dce78bbf16119da761cceee5c46914d48cd6d20e9bbdc"
+    },
+    {
+      "path": "Sources/ConduitCore/ShellTelemetryProjection.swift",
+      "sha256": "400a93d66d86d35eb9d34ea16d7fef87b84d06962671103d6d1ea07f140f2edf"
+    },
+    {
+      "path": "Sources/ConduitCore/ShellTelemetrySocketServer.swift",
+      "sha256": "03db9822e8ed5e9739ff3a840fbed42f5e4e0bbf42a1f68331ac9b8ff8520546"
+    },
+    {
+      "path": "Sources/ConduitCore/ShellTelemetryZshProfile.swift",
+      "sha256": "26d20d9bfe02f9ef3d05c70a6f15911a4d4cf654a2845a23f6236859fa3b7ff9"
+    },
+    {
+      "path": "Sources/ConduitCore/StreamJSONProtocol.swift",
+      "sha256": "3227bdefff31b7c0c39abede478e946ddbb5b3f4fe39e58ac24d8e2825797c69"
+    },
+    {
+      "path": "Sources/ConduitCore/StructuredAdapter.swift",
+      "sha256": "c117c5a2dc43230fd9d7c06bd69ee16d58e06614982d277dff24abb1672fb5a5"
+    },
+    {
+      "path": "Sources/ConduitCore/StructuredPromptHold.swift",
+      "sha256": "c81e71ccc1dfe659222615702d8ff2baf420dc94bb81954e95da25c508f3950c"
+    },
+    {
+      "path": "Sources/ConduitCore/TaskSession.swift",
+      "sha256": "956655d7c09eee4119667afbfbe084dc3beb52648e1e2b61a60b15db3dc99e31"
+    },
+    {
+      "path": "Sources/ConduitCore/TaskSessionEventLog.swift",
+      "sha256": "ce4b05d097665361a7c8fc0d21babe48535118cf7598218e8a6a7d4a2118d75e"
+    },
+    {
+      "path": "Sources/ConduitCore/TerminalMenuParser.swift",
+      "sha256": "f4f4091563113fac72ca4d45b33ce735062579b982f9a16413e5653ec75e9eae"
+    },
+    {
+      "path": "Sources/ConduitCore/TmuxSessionPresence.swift",
+      "sha256": "cecc259ec1d81a2f4cae493828a1cfdf44d7070f8e01130690b54842532540cd"
+    },
+    {
+      "path": "Sources/ConduitCore/WorkSessionEvents.swift",
+      "sha256": "96406f6b1640118630a60964afb67d74e5102f64ecc841112001a0240ffcfbe1"
+    },
+    {
+      "path": "Sources/ConduitCore/WorkbenchChrome.swift",
+      "sha256": "d444eccbbf3630a6c1e084ec073c89e49a3f14e62d906b09b4131faa5f074fa7"
+    },
+    {
+      "path": "Sources/ConduitCore/WorkspaceGeometry.swift",
+      "sha256": "306bfca4783fe83089d08857f02e76f021fa6025d2fbe0e28d4731539ed6ac70"
+    },
+    {
+      "path": "Sources/ConduitSelfTest/main.swift",
+      "sha256": "54ac4b8c48a0d7735b9fdd8c4088713280083263de4c10d28524a6b350acc31d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/AdapterThreadStoreTests.swift",
+      "sha256": "80ef747f4683dcd4c6b62946bb8c3eab32055d6c039d0e5401f5ae4fd0fe228d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/AgentContextHandoffTests.swift",
+      "sha256": "0217881669a769f2fb5c5116b303175d5caeed659f1355875ff578dee487c3d6"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/AgentContextSnapshotStoreTests.swift",
+      "sha256": "671d4a68ff1cfded730975e8af898ee19af12d3ab17c26feeff58dceb7a7e279"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/AgentContextTests.swift",
+      "sha256": "64ead0a5b4ac7e08d13799fc52c8573c9790136ac8130777279b8342f8696d7b"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/AgentSpriteCatalogTests.swift",
+      "sha256": "be8ff51efc25eb26ffa890f6b01f2e394db19f16c4231ca1154e5030e67dee89"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ChatGPTTunnelControlTests.swift",
+      "sha256": "73e190fc3a04366d15db9436274152c03b5c6e908c5e02af4d7a34dc088a5f6d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift",
+      "sha256": "c16be21db8e6059662cd8cf337a5d80d63d03f6db7b6d272c85bc5eb8d154e15"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift",
+      "sha256": "74ca21e897ec80f984d79af12649e5dd611a3b2058afb87b2947bf7a398cef81"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/CodexProviderObservationTests.swift",
+      "sha256": "07f4f15c8e9254ec01fe47973d14909f9bac79a57ce81fcfed010e0bdc153a49"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConduitCoreTests.swift",
+      "sha256": "2c3522a0c314860d4ef61499d13ac3e3319a4cb3398ec07a80c4c58e79f3277a"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConduitFleetSnapshotTests.swift",
+      "sha256": "af4f361313f1f6e01eb71ff52e8f9bfa2c58bc6fe579df57ce8d9569682ab94d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConduitSessionEventsTests.swift",
+      "sha256": "7df7131a2269f1859bb7bf95ac5e60f2d13adc5630f68cf13e2945e7329f8739"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConduitSessionListTests.swift",
+      "sha256": "52645de755e3c12f0e183d893b69dee95440e94f9c64fc3a47c714cc1abdd5d3"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConduitSessionToolCatalogTests.swift",
+      "sha256": "e849cb3f7e3b9ac2e251a4c7529d545108eb7b227ba8fa80350ec4e3dd21a086"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConduitWorkspaceTests.swift",
+      "sha256": "9e0af4f9c798734f16d27122558cef346ec9e3cab7304554d292b27e053262c1"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ContextCompilerTests.swift",
+      "sha256": "87f40ce93e01b2084a99df598bbc00effcb3b599a458402e3c441d9fdc8f07de"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConversationEventLogTests.swift",
+      "sha256": "31d281209eb4f338d19b25678fb577027892595b0f5eab31a125554dbfad7a91"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConversationRetentionTests.swift",
+      "sha256": "7db92343665bd7bc28fd5fdd1ac2f5ab6f5eee0147436874bd1e3a1a2b790456"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConversationRootShellTests.swift",
+      "sha256": "b311a3ebde3a9002f8ba886aadab204d1f5ceb0588430e9e6f4c2c5447e9b422"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ConversationTranscriptTests.swift",
+      "sha256": "587104f954553fd837671148a7a0a4a7b6eb48fe02572e0a2c854aed64da3dec"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/CreateTaskPreconditionTests.swift",
+      "sha256": "a1126cb5f7c07a046ec6a6107b20f8bc0df2d1e3a29939d5ce759aab69d8cddd"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/EnhancementsTests.swift",
+      "sha256": "05b646b7968f88ec9143abab21c0b9c720d6b3eb0769d3ed1d3811494f096465"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/FocusBoardTests.swift",
+      "sha256": "060b0142ed09b88989b704844a1aaa51f950b22b16f70146aa9ba6309e040df7"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/GitWorkspaceInspectorTests.swift",
+      "sha256": "32d989423f3024f98f6bd351135399e5d01f62f1a88996f92573a93e7a88ecf6"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift",
+      "sha256": "41501c2466e809b2ff06792a4c0b4ddc3b2b8ae21e1f370f314a8ad6b8070307"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MCPAdmissionTests.swift",
+      "sha256": "c64b6e64ef0b5e1ebba646373b299f1fc1bab93bf91a89181411b61084090aa2"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeDocumentIndexTests.swift",
+      "sha256": "44f13a6e243712e19f65ad2d24bd437511a6163b61f5c240e9af12d36179bffb"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeExplorerPathAliasTests.swift",
+      "sha256": "5ca4d8afc8afb579959a556290e5e6fcf26ba239188e736e801ed4954b471e2a"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeExplorerPresentationTests.swift",
+      "sha256": "58c2cb768ee393c5a91c37b7f69f21e4814e6ceb298a02b4864ec59896500abd"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeExplorerTests.swift",
+      "sha256": "80fcb9b4283158cacf80281d69aca55abfa9926b44dd3e0475aef4ac617a7b64"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeGraphRelatedTests.swift",
+      "sha256": "d59a9965f94e37e13eb5d7ffc28995f625128565d69ff1fbb5116a715f6f4afb"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeGraphTests.swift",
+      "sha256": "22ff38bec1f2cb3bc5fcd9ca25191124b379dd05f9e7bfccaade70f3eeb2215b"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeLifecycleTests.swift",
+      "sha256": "12f14acb6ba974e95796748f123f5272028ff0f0950559732577ecab530260ce"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeSourceWorkbenchTests.swift",
+      "sha256": "ed95a0a1574d83344ab6831c12b679e53ba6bcf7415ec0b8ab8c91e0790280ac"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeTextEditingTests.swift",
+      "sha256": "3be718168d257a043198b87d69cc827fd47c201a3d42d0c4e40cf3da774f2213"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/MainframeWorkstationTests.swift",
+      "sha256": "a7a530d518dd18e25d06594359ef720a4021cb384191e8026c5d9e796cb4568d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ObjectiveDeliveryTests.swift",
+      "sha256": "3aa612f1ecf3665fec8bfefda88ad93f196a17d62bd0db9244407d5a17773256"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/OpenCodeConversationActivityTests.swift",
+      "sha256": "f618fae69b74927df3b7467811feff02cc73224c02fdb4de27c68b039f981290"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/OrchestrationProposalTests.swift",
+      "sha256": "3b0421c4ec4ad0a8071861601c063f32d06a6f7090a222334c8eadb3ae99f542"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ProcessTreeReconciliationTests.swift",
+      "sha256": "6d4600179a31e9075e0763277570944dc4806a0fcc118abd936e5c07ea410c0d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ProviderOrchestrationStateTests.swift",
+      "sha256": "389ef2ae0e8647ad7e5893298b1df1c9901245aeff5e42baddff6192da25e72d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ProviderRuntimeReconciliationTests.swift",
+      "sha256": "3da7afb20fe00b768294f07b06c65691f72cea72f1bde7e45df8329907dcb5f1"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ProviderSessionAuthorityTests.swift",
+      "sha256": "3a0f49aef7c27b11065c71811f1b6a1e3b89deedd582416eb8ad6c53df989c17"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ProviderSessionObservationTests.swift",
+      "sha256": "957c5d652f4c17455bc6e137f721dde2b85ed50402dd6246b56e3b8148aad856"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/RawDerivedOutputTests.swift",
+      "sha256": "f93afdacd568d4f6b81ee94407229c433769215bddb72dfd77f9e0373bae6ef8"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/SessionAPIReadinessTests.swift",
+      "sha256": "bc7e9e6480fc56e64b3242df3c94f63cf9e14cd893c139c6e1b58a43dd4de6c3"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/SessionAPITransportSecurityTests.swift",
+      "sha256": "4e83e6cda88c4bfe42258bbd06f9ba5dce7c03585bcb7d3302eeb050a47c237e"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/SessionCloseSemanticsTests.swift",
+      "sha256": "2b1a0dc27e6988a670dde5a2b40c90b27119b457de2fdcb6fa2ae76358323a73"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/SessionResumeSemanticsTests.swift",
+      "sha256": "abffe9168225c7fdb4e516e5888f69393d05e4ff0c988fe9b89561e5d18bdf91"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ShellTelemetrySocketServerTests.swift",
+      "sha256": "b6f722f1d47fbbf8bf70ae2c2bcd592548e3b4168a9bb0e50b52272512c98772"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/ShellTelemetryTests.swift",
+      "sha256": "a05d853be3c8818738860e0fe4c0c7e75d4efe6f28a810003dbec519d7da9d4c"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/StructuredAdapterTests.swift",
+      "sha256": "de95f897641533be8064f0129f90cc2afe8f0488f03a31d35bfde60abbedbd08"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/StructuredPromptHoldTests.swift",
+      "sha256": "1b55ec32cb792817088d163912c66e14614d8ab3e5c72f7b76f6f0bc589aab3a"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/StructuredTurnFailureTests.swift",
+      "sha256": "8d3cc8348165865bb54e0458c208380ca73d47509f59d8cde4cc51954d8fc6dc"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/TaskSessionEventLogTests.swift",
+      "sha256": "6b71abfc1db0e3c6af3b7263b2de468ed8d97f26bd5fce91e390b49a48dcd02d"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/TaskSessionTests.swift",
+      "sha256": "3a8f72a23de29a7f0c589a0700074f8e5161122b4babf955af3fc39bc42d35d2"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/TaskSessionTmuxBindingTests.swift",
+      "sha256": "dcdc4eaf683f4673e262c912fdd0e2cf599ee1aa3d63d207df7a3baa69502b88"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/TmuxSessionPresenceClassifierTests.swift",
+      "sha256": "b6b3d6ebee3eb38041658ceba527d0e7c8be8eb4cd2d0ecd272ce4d1f1bad3ea"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/WorkbenchChromeTests.swift",
+      "sha256": "7302039d6e40330d4e79148bd998a7b2f2a0b297d19e5151f415365aa0e1cc28"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/WorkspaceGeometryTests.swift",
+      "sha256": "ece51a43b04652bf6c0a4bf6cfa2271521a02b0630775d2723433227ea4d51dd"
+    },
+    {
+      "path": "Tests/Fixtures/codex-metadata-fake.py",
+      "sha256": "0277e425c3700ae75a78074710c239e6079139d5b1ebc647d69b089e4339d804"
+    },
+    {
+      "path": "Tests/Native/CodexMetadataOwnerHarness.swift",
+      "sha256": "a8f42124d550c249fbe6808c91dfb1f3cbd7c864f5d3e5fa27595a4a21ad913f"
+    },
+    {
+      "path": "Tests/test_provider_conformance.py",
+      "sha256": "94cb889dd293c2cbb039b29fb9dfb440e28544e971682a68e6f5d716c230551f"
+    },
+    {
+      "path": "scripts/build-app.sh",
+      "sha256": "537d3631cd5b794f8ea8d72718599944805076c321e34bba11397861b355f810"
+    },
+    {
+      "path": "scripts/canary-control-plane.py",
+      "sha256": "067869bf9c435a122adb07ec6a5958dc291b0c98e3ca47fdad74fc42f0abd69b"
+    },
+    {
+      "path": "scripts/chatgpt-tunnel",
+      "sha256": "6aa2732cecc370d869dc2030cc5d732d1661923cf75af35ede284fe09b2a7f73"
+    },
+    {
+      "path": "scripts/chatgpt-tunnel-status",
+      "sha256": "91156ad8b6857adf984728692c37789dabfc60f383e7f8ccf9165cd3c7f81221"
+    },
+    {
+      "path": "scripts/orchestrate-smoke.py",
+      "sha256": "3c06e8f719fa282ed948ebc9eea91d497bd0a9298f2ae7e09a9da6ba3330fbf7"
+    },
+    {
+      "path": "scripts/probe-obs1.py",
+      "sha256": "f87d9954d168f32c34b8f89a79bd6b95badb23350e67c1d2492edb2af9de0efe"
+    },
+    {
+      "path": "scripts/probe-provider-resume.py",
+      "sha256": "f7c9682e3dc603e444a97fdf0142e0665aa282e687a458a487b2936e96415e9a"
+    },
+    {
+      "path": "scripts/provider-conformance.py",
+      "sha256": "f98ce5e26111e68d8e76a7d24dbede9396b686799263f49684f67842cf08258f"
+    },
+    {
+      "path": "scripts/test-codex-metadata.sh",
+      "sha256": "bc1cee93e5e767c8cc99ecd474b6cdd3f384bc6997455fb4b96b059b1200802a"
+    },
+    {
+      "path": "scripts/test.sh",
+      "sha256": "9232e412fbed16cb69e714307a924778feb05b0cf2eada3b17af119d7795ab86"
+    },
+    {
+      "path": "scripts/verify-installed.sh",
+      "sha256": "8872d99b88861dbdefb9fb31ad2ba8d0f6df54a8e6106083e5c435e061d6a702"
+    }
+  ],
+  "receipt_commit_rule": "Subsequent commit may add only this receipt and its explanatory qualification note. Exact final head/tree and unchanged Sources/Tests/scripts inventory must be reconciled on PR/#53; this receipt does not self-certify its enclosing Git commit."
+}

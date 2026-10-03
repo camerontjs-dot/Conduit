@@ -33,6 +33,17 @@ jobs:
           name: conduit-swift-test-log
           path: /tmp/conduit-swift-test.log
           if-no-files-found: warn
+      - name: Codex metadata native owner fixture
+        run: ./scripts/test-codex-metadata.sh
+      - name: Upload Codex metadata owner diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-metadata-owner
+          path: .build/codex-metadata-owner-*/
+          # Only this owned fake-wire fixture path; no build/cache sweep.
+          include-hidden-files: true
+          if-no-files-found: error
       - name: Build release app
         id: build
         shell: bash

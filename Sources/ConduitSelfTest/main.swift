@@ -3748,6 +3748,110 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Codex metadata observation (D070 proposal; #53 Slice 2)
+
+let codexObservationID = CodexObservationRPC.identifier(hostGeneration: UUID())
+let codexObservationList = CodexObservationRPC.list(id: codexObservationID, cursor: nil)
+check("Codex metadata list explicitly disables rollout repair",
+      codexObservationList["params"]?["useStateDbOnly"] == .bool(true)
+        && codexObservationList["params"]?["archived"] == .bool(false))
+check("Codex metadata source selection includes app-server and subagents",
+      (codexObservationList["params"]?["sourceKinds"]?.jsonObject() as? [String])?.contains("appServer") == true
+        && (codexObservationList["params"]?["sourceKinds"]?.jsonObject() as? [String])?.contains("subAgent") == true)
+check("Codex metadata read explicitly excludes turns",
+      CodexObservationRPC.read(id: codexObservationID, threadID: "provider-full")["params"]?["includeTurns"] == .bool(false))
+check("Codex observation namespace remains separate from numeric driving IDs",
+      CodexObservationRPC.isObservationReply(.string(codexObservationID))
+        && !CodexObservationRPC.isObservationReply(.number(1)))
+let codexMetadata: CodexJSON = .object([
+    "id": .string("provider-full"), "sessionId": .string("family-distinct"),
+    "cwd": .string("/qualification-owned"), "createdAt": .number(100), "updatedAt": .number(200),
+    "cliVersion": .string("fixture"), "modelProvider": .string("fixture"),
+    "ephemeral": .bool(false), "model": .string("configured-only"), "source": .string("cli"),
+    "status": .object(["type": .string("notLoaded")]), "turns": .array([]),
+    "preview": .string("private-preview"), "name": .string("private-title"), "path": .string("private-rollout"),
+])
+if let parsed = try? CodexThreadMetadata.parse(codexMetadata) {
+    let worker = parsed.worker(hostID: "host-only", loadedOnHost: false, binding: nil, observedAt: Date())
+    let bytes = (try? JSONEncoder().encode(worker)) ?? Data()
+    let text = String(decoding: bytes, as: UTF8.self)
+    check("Codex metadata content is withheld from canonical projection",
+          !text.contains("private-preview") && !text.contains("private-title") && !text.contains("private-rollout"))
+    check("Codex session model never becomes a turn or acceptance",
+          worker.turns.isEmpty && worker.terminal.objectiveAcceptance == .unknown
+            && text.contains("configured_or_persisted_model") && text.contains("per-turn model and entitlement UNKNOWN"))
+    check("Codex host, thread, writer and task axes remain separate",
+          !worker.providerHostID.isKnown && text.contains("observation_host_id") && text.contains("host-only")
+            && worker.providerSessionID.value == "provider-full"
+            && !worker.conduitTaskID.isKnown && !worker.writerControllerID.isKnown && worker.origin == .unknown)
+    let bound = parsed.worker(hostID: "host-only", loadedOnHost: true,
+                             binding: ProviderObservationBinding(conduitTaskID: "task-only", runtimeAttemptID: "attempt-only"), observedAt: Date())
+    check("Codex exact task binding does not adopt or claim writer authority",
+          bound.conduitTaskID.value == "task-only" && bound.runtimeAttemptID.value == "attempt-only"
+            && bound.providerHostID.value == "host-only"
+            && bound.relationship == .discovered && !bound.writerControllerID.isKnown)
+} else { check("Codex valid metadata parses", false) }
+check("Codex read refuses shortened or wrong-axis identity",
+      (try? CodexThreadMetadata.parseRead(.object(["thread": codexMetadata]), exactID: "provider")) == nil
+        && (try? CodexThreadMetadata.parseRead(.object(["thread": codexMetadata]), exactID: "task-only")) == nil)
+if case .object(var content) = codexMetadata {
+    content["turns"] = .array([.object(["id": .string("unexpected-turn")])])
+    check("Codex includeTurns false boundary rejects unexpected turns", (try? CodexThreadMetadata.parse(.object(content))) == nil)
+    content["turns"] = .array([])
+    content["updatedAt"] = .number(1.5)
+    check("Codex malformed fractional metadata timestamp is refused", (try? CodexThreadMetadata.parse(.object(content))) == nil)
+}
+func codexMetadataSelfTestPage(_ id: String, cursor: String?) -> CodexJSON {
+    .object(["data": .array([.string(id)]), "nextCursor": cursor.map(CodexJSON.string) ?? .null])
+}
+func codexMetadataSelfTestID(_ json: CodexJSON) throws -> (String, String) {
+    guard let id = json.stringValue else { throw CodexObservationError.invalidMetadata }; return (id, id)
+}
+func codexMetadataSelfTestRefuses(_ body: () throws -> String?) -> Bool {
+    do { _ = try body(); return false } catch { return true }
+}
+do {
+    var pages = CodexMetadataPages<String>()
+    _ = try pages.append(codexMetadataSelfTestPage("one", cursor: "next"), parse: codexMetadataSelfTestID)
+    check("Codex duplicate metadata identity rejects the page without partial append",
+          codexMetadataSelfTestRefuses { try pages.append(codexMetadataSelfTestPage("one", cursor: nil), parse: codexMetadataSelfTestID) } && pages.elements == ["one"])
+    check("Codex repeated pagination cursor refuses partial inventory",
+          codexMetadataSelfTestRefuses { try pages.append(codexMetadataSelfTestPage("two", cursor: "next"), parse: codexMetadataSelfTestID) } && pages.elements == ["one"])
+    _ = try pages.append(codexMetadataSelfTestPage("two", cursor: nil), parse: codexMetadataSelfTestID)
+    check("Codex complete pagination preserves provider identity order", pages.elements == ["one", "two"])
+    var bounded = CodexMetadataPages<String>()
+    for index in 0..<3 { _ = try bounded.append(codexMetadataSelfTestPage("id-\(index)", cursor: "next-\(index)"), parse: codexMetadataSelfTestID) }
+    check("Codex page bound rejects a fifth page instead of returning partial inventory",
+          codexMetadataSelfTestRefuses { try bounded.append(codexMetadataSelfTestPage("four", cursor: "five"), parse: codexMetadataSelfTestID) } && bounded.elements.count == 3)
+} catch { check("Codex metadata page apparatus", false) }
+final class CodexMetadataSelfTestRecorder: @unchecked Sendable {
+    let lock = NSLock()
+    let marker = DispatchSemaphore(value: 0)
+    var values: [CodexAppServerDelivery] = []
+    func record(_ batch: [CodexAppServerDelivery]) {
+        lock.lock(); values.append(contentsOf: batch); lock.unlock()
+        if batch.contains(.effect(.turnCompleted(status: "metadata-marker"))) { marker.signal() }
+    }
+}
+let codexMetadataRecorder = CodexMetadataSelfTestRecorder()
+let codexMetadataPump = CodexAppServerStreamPump(
+    configuration: .init(deliveryCoalescingInterval: 0), deliveryQueue: DispatchQueue(label: "selftest.codex.metadata"),
+    onDelivery: { codexMetadataRecorder.record($0) }, onFailure: { _ in codexMetadataRecorder.marker.signal() }
+)
+codexMetadataPump.ingest(Data((
+    #"{"id":"conduit.observation.v1/expired/request","result":{"thread":{"id":"external"}}}"# + "\n"
+    + #"{"id":"conduit.observation.v1/expired/request","error":{"message":"private"}}"# + "\n"
+    + #"{"id":"conduit.observation.v1/expired/request","method":"item/commandExecution/requestApproval","params":{"command":"private"}}"# + "\n"
+    + #"{"method":"turn/completed","params":{"turn":{"status":"metadata-marker"}}}"# + "\n"
+).utf8))
+let codexMetadataMarker = codexMetadataRecorder.marker.wait(timeout: .now() + 2) == .success
+codexMetadataRecorder.lock.lock()
+let codexMetadataEffects = codexMetadataRecorder.values.filter { if case .effect = $0 { return true }; return false }
+codexMetadataRecorder.lock.unlock()
+check("Codex expired, repeated and error metadata replies cannot drive runtime effects",
+      codexMetadataMarker && codexMetadataEffects == [.effect(.turnCompleted(status: "metadata-marker"))])
+codexMetadataPump.cancel()
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

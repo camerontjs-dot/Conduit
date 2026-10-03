@@ -86,6 +86,11 @@ final class CodexAppServerClient: ObservableObject {
     private var streamGeneration: UUID?
     private var nextID = 1
     private var pendingResponses: [Int: CheckedContinuation<CodexJSON, Error>] = [:]
+    private struct PendingObservation {
+        let continuation: CheckedContinuation<CodexJSON, Error>
+        let timeout: Task<Void, Never>
+    }
+    private var pendingObservations: [String: PendingObservation] = [:]
     private let cwd: URL
     private let model: String?
     private let resumeThreadID: String?
@@ -362,6 +367,118 @@ final class CodexAppServerClient: ObservableObject {
         return try JSONSerialization.data(withJSONObject: payload)
     }
 
+    /// Existing host only. This accessor never starts, resumes or adopts a thread.
+    var metadataObservationHostID: String? {
+        guard isReady, let generation = streamGeneration,
+              let process, process.isRunning, stdinHandle != nil,
+              let host = lifecycleProviderHostIdentifier
+        else { return nil }
+        return "codex.app-server/\(generation.uuidString.lowercased())/\(host)"
+    }
+
+    func observeProviderSessions() async throws -> CodexMetadataInventory {
+        guard let hostID = metadataObservationHostID else { throw CodexObservationError.notReady }
+        return try await metadataInventory(hostID: hostID, deadline: Date().addingTimeInterval(CodexObservationRPC.inventoryTimeout))
+    }
+
+    func observeProviderSession(exactID: String) async throws -> CodexMetadataInventory {
+        guard CodexThreadMetadata.isExactIdentity(exactID) else { throw CodexObservationError.invalidMetadata }
+        guard let hostID = metadataObservationHostID else { throw CodexObservationError.notReady }
+        let deadline = Date().addingTimeInterval(CodexObservationRPC.inventoryTimeout)
+        let inventory = try await metadataInventory(hostID: hostID, deadline: deadline)
+        // Exact inventory membership, never a prefix or a task/runtime UUID alias.
+        guard let listed = inventory.threads.first(where: { $0.id == exactID }) else {
+            throw CodexObservationError.unknownSession
+        }
+        let result = try await metadataRequest(hostID: hostID, deadline: deadline) {
+            CodexObservationRPC.read(id: $0, threadID: exactID)
+        }
+        let read = try CodexThreadMetadata.parseRead(result, exactID: exactID)
+        guard read.createdAt == listed.createdAt, read.sessionFamilyID == listed.sessionFamilyID,
+              read.updatedAt >= listed.updatedAt else { throw CodexObservationError.staleMetadata }
+        return CodexMetadataInventory(
+            hostID: hostID, threads: [read], loadedThreadIDs: inventory.loadedThreadIDs, observedAt: Date()
+        )
+    }
+
+    private func metadataInventory(hostID: String, deadline: Date) async throws -> CodexMetadataInventory {
+        var threads = CodexMetadataPages<CodexThreadMetadata>()
+        var cursor: String?
+        repeat {
+            let result = try await metadataRequest(hostID: hostID, deadline: deadline) {
+                CodexObservationRPC.list(id: $0, cursor: cursor)
+            }
+            cursor = try threads.append(result) {
+                let thread = try CodexThreadMetadata.parse($0)
+                return (thread.id, thread)
+            }
+        } while cursor != nil
+        var loaded = CodexMetadataPages<String>()
+        cursor = nil
+        repeat {
+            let result = try await metadataRequest(hostID: hostID, deadline: deadline) {
+                CodexObservationRPC.loadedList(id: $0, cursor: cursor)
+            }
+            cursor = try loaded.append(result) {
+                guard let id = $0.stringValue, CodexThreadMetadata.isExactIdentity(id) else {
+                    throw CodexObservationError.invalidMetadata
+                }
+                return (id, id)
+            }
+        } while cursor != nil
+        guard metadataObservationHostID == hostID else { throw CodexObservationError.hostChanged }
+        return CodexMetadataInventory(
+            hostID: hostID, threads: threads.elements,
+            loadedThreadIDs: Set(loaded.elements), observedAt: Date()
+        )
+    }
+
+    private func metadataRequest(
+        hostID: String,
+        deadline: Date,
+        payload: (String) -> CodexJSON
+    ) async throws -> CodexJSON {
+        guard metadataObservationHostID == hostID, let generation = streamGeneration else {
+            throw CodexObservationError.hostChanged
+        }
+        guard !Task.isCancelled else { throw CodexObservationError.cancelled }
+        guard pendingObservations.count < CodexObservationRPC.maximumPendingRequests else {
+            throw CodexObservationError.tooManyRequests
+        }
+        let remaining = min(deadline.timeIntervalSinceNow, CodexObservationRPC.requestTimeout)
+        guard remaining > 0 else { throw CodexObservationError.timedOut }
+        let id = CodexObservationRPC.identifier(hostGeneration: generation)
+        let request = payload(id)
+        guard let dictionary = request.jsonObject() as? [String: Any] else {
+            throw CodexObservationError.invalidMetadata
+        }
+        let result = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CodexJSON, Error>) in
+                let timeout = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000)) }
+                    catch { return }
+                    self?.failObservation(id, error: .timedOut)
+                }
+                pendingObservations[id] = PendingObservation(continuation: continuation, timeout: timeout)
+                send(dictionary)
+            }
+        } onCancel: { [weak self] in
+            Task { @MainActor in self?.failObservation(id, error: .cancelled) }
+        }
+        guard metadataObservationHostID == hostID else { throw CodexObservationError.hostChanged }
+        return result
+    }
+
+    private func failObservation(_ id: String, error: CodexObservationError) {
+        guard let pending = pendingObservations.removeValue(forKey: id) else { return }
+        pending.timeout.cancel()
+        pending.continuation.resume(throwing: error)
+    }
+
+    private func failObservations() {
+        for id in Array(pendingObservations.keys) { failObservation(id, error: .hostChanged) }
+    }
+
     func stop() {
         stopProcesses()
         failPending("Codex app-server stopped.")
@@ -373,6 +490,7 @@ final class CodexAppServerClient: ObservableObject {
     }
 
     private func stopProcesses() {
+        failObservations()
         streamGeneration = nil
         stdoutHandle?.readabilityHandler = nil
         stderrHandle?.readabilityHandler = nil
@@ -402,6 +520,7 @@ final class CodexAppServerClient: ObservableObject {
         isTurnActive = false
         activeTurnID = nil
         failPending("Codex app-server exited.")
+        failObservations()
         onExited?()
     }
 
@@ -413,11 +532,24 @@ final class CodexAppServerClient: ObservableObject {
         for delivery in deliveries {
             switch delivery {
             case .response(let id, let result):
+                if case .string(let observationID) = id,
+                   CodexObservationRPC.isObservationReply(id) {
+                    if let pending = pendingObservations.removeValue(forKey: observationID) {
+                        pending.timeout.cancel()
+                        pending.continuation.resume(returning: result)
+                    }
+                    continue
+                }
                 if case .number(let number) = id,
                    let continuation = pendingResponses.removeValue(forKey: number) {
                     continuation.resume(returning: result)
                 }
             case .error(let id, let message):
+                if case .string(let observationID)? = id,
+                   CodexObservationRPC.isObservationReply(id) {
+                    failObservation(observationID, error: .providerRejected)
+                    continue
+                }
                 if case .number(let number)? = id,
                    let continuation = pendingResponses.removeValue(forKey: number) {
                     continuation.resume(throwing: ClientError.protocolError(message))
