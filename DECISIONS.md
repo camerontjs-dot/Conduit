@@ -2054,3 +2054,39 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-067: Explorer and Source Workbench share one buffer-exit owner
+
+**Status:** Proposed (2026-10-03; owner component evidence, Draft candidate)
+
+**Context:** Source Workbench owns a separate edit session from Explorer. The
+primary Explorer Quit guard did not register that session, and Done could not
+resolve a dirty source buffer. Native Close and application Quit need one
+pending decision boundary so competing exit requests cannot skip a buffer.
+
+**Proposal:** Extend the existing UI application delegate to register exact
+source editor, root, file, window and native close-owner identities. Done and
+native Close enter that owner through the same window delegate. Quit resolves
+retained Explorer first and each dirty source window separately. Save uses the
+existing exact-file writer; failed Save and Cancel keep the decision's buffer
+and disk authority intact. This owner has no runtime or provider teardown
+responsibility and introduces no alternate file store or autosave.
+
+A source registration retains both its editor and native close guard while
+dirty or while an exit decision is pending. Removing a representable cannot
+release only the Close guard and rely on a later Quit prompt to recover the
+window. An approved Close keeps the pending guard through native sheet
+teardown, then asks the exact window to close again. Clean window closure
+unregisters its retained native owner and forwards the prior delegate callback.
+
+**Binds:** The proposed Source Workbench and primary Explorer UI buffer-exit candidate; ordinary native Close, Done and application Quit only.
+**Tier:** T0 advisory for this Proposed architecture. The separate owner controls detect candidate failures; installed composition and independent acceptance remain unqualified.
+**Check:** No adopted architecture gate. Private `source-workbench54-native-green-v1.py` and `source-workbench54-native-detach-v2.py` controls record real buffer edits, native window/sheet identity, exact disk bytes, failed Save, serial and repeated requests, and actual guard removal. `scripts/test.sh` and `scripts/build-app.sh` have separate receipts.
+**Escape:** Missing or stale editor/window/context identity, an attached unrelated sheet, failed Save, or a pending decision refuses exit and preserves the buffer. A qualification environment that cannot maintain #87 isolation records BLOCKED; component PASS does not authorize an installed promotion.
+
+**Qualification boundary:** See
+[Source Workbench buffer-exit evidence](docs/qualification/source-workbench-buffer-exit.md).
+The candidate remains Proposed until fresh independent review and a qualified
+isolated mounted product journey establish their separate acceptance gates.

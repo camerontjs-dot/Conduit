@@ -38,8 +38,8 @@ private struct SourceGitEvidence: Sendable {
 /// conflict-aware exact-file boundary as Explorer's qualified Markdown editor.
 struct MainframeSourceWorkbenchView: View {
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var applicationDelegate: MainframeExplorerApplicationDelegate
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dismiss) private var dismiss
 
     let root: URL
     let file: URL
@@ -47,6 +47,7 @@ struct MainframeSourceWorkbenchView: View {
     let onPinContext: ((AgentContextItem) -> Void)?
 
     @StateObject private var editor = MainframeSourceEditingSession()
+    @StateObject private var closeController = MainframeSourceWorkbenchCloseController()
     @State private var mode: MainframeSourceWorkbenchMode = .inspect
     @State private var inspectorTab: MainframeSourceInspectorTab = .outline
     @State private var selectedLine = 1
@@ -143,6 +144,10 @@ struct MainframeSourceWorkbenchView: View {
         }
         .frame(minWidth: 1020, minHeight: 700)
         .background(palette.app)
+        .background(MainframeSourceWorkbenchCloseGuard(
+            editor: editor, root: root, file: file,
+            applicationDelegate: applicationDelegate, closeController: closeController
+        ).frame(width: 0, height: 0))
         .task(id: file.standardizedFileURL.path) {
             loadSource()
             await refreshGit()
@@ -193,14 +198,14 @@ struct MainframeSourceWorkbenchView: View {
             Text("line \(selectedLine) · \(lines.count) lines")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(palette.faint)
-            Button("Done") { dismiss() }
+            Button("Done") { closeController.requestClose() }
                 .buttonStyle(.bordered)
-                .disabled(editor.hasUnsavedChanges)
+                .accessibilityIdentifier("source-workbench.done")
                 .actionExplainer(
                     ActionExplainerSpec(
                         title: "Close Source Workbench",
                         summary: editor.hasUnsavedChanges
-                            ? "Save or discard the current edit before closing."
+                            ? "Choose Save, Discard or Cancel before closing this source buffer."
                             : "Close this source workbench.",
                         nonEffect: "Does not close or mutate the underlying Conduit task.",
                         target: relativePath,

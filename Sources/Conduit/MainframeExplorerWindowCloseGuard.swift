@@ -63,7 +63,10 @@ struct MainframeExplorerWindowCloseGuard: NSViewRepresentable {
         }
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
-            if applicationDelegate?.isDecidingTermination == true { return false }
+            if let applicationDelegate, let explorer {
+                guard applicationDelegate.windowShouldCloseExplorer(explorer, window: sender) else { return false }
+                return previousDelegate?.windowShouldClose?(sender) ?? true
+            }
             if let explorer, explorer.editor.hasUnsavedChanges {
                 let alert = NSAlert()
                 alert.messageText = "Unsaved Explorer changes"

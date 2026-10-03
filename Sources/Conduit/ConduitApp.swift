@@ -213,6 +213,7 @@ struct ConduitApp: App {
                         mainframeRoot: root
                     )
                 )
+                .environmentObject(explorerApplicationDelegate)
                 .environmentObject(themeStore)
             } else {
                 VStack(spacing: 10) {
