@@ -115,6 +115,8 @@ public struct CodexThreadMetadata: Equatable, Sendable {
             "ephemeral": .bool(ephemeral),
             "source_kind": .string(sourceKind),
             "loaded_on_observed_host": .bool(loadedOnHost),
+            "observation_host_id": .string(hostID),
+            "host_identity_authority": .string("Query-host provenance only; canonical worker host is UNKNOWN unless exact loaded-list membership was observed."),
             "host_reported_status": .string(hostReportedStatus),
             "status_scope": .string("Only the exact observed app-server host; not global execution or acceptance."),
             "model_authority": .string("Configured on the loaded session or latest persisted session model; per-turn model and entitlement UNKNOWN."),
@@ -128,7 +130,8 @@ public struct CodexThreadMetadata: Equatable, Sendable {
             conduitTaskID: binding.map { .known($0.conduitTaskID) } ?? .unknown,
             runtimeAttemptID: binding?.runtimeAttemptID.map { .known($0) } ?? .unknown,
             runtime: .known("codex"), adapter: .known("codex_app_server_metadata"),
-            providerHostID: .known(hostID), providerSessionID: .known(id), turns: [],
+            providerHostID: loadedOnHost ? .known(hostID) : .unknown,
+            providerSessionID: .known(id), turns: [],
             workspace: WorkerWorkspaceLineage(
                 projectSlug: .unknown, cwd: .known(cwd),
                 repositoryRoot: .unknown, worktree: .unknown

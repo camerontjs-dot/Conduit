@@ -2084,6 +2084,9 @@ metadata read into a driving-thread effect.
    Withhold preview, title, rollout path and turns. Exact current task binding
    does not establish origin, writer authority, model execution, entitlement,
    process liveness, verification or objective acceptance.
+   Retain the query host as provider-specific observation provenance. Canonical
+   worker-host identity stays UNKNOWN unless the exact loaded list establishes
+   that thread's membership in the observed host.
 4. Inventory covers nonarchived metadata, at most four 64-item pages per host.
    A metadata request has a two-second bound and an inventory/read has a
    twelve-second bound; timeout/cancellation affect only that request. Reject

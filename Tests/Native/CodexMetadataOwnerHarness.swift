@@ -93,11 +93,16 @@ struct CodexMetadataOwnerHarness {
                 let inventory = try await client.observeProviderSessions()
                 try require(inventory.hostID == hostID && inventory.threads.map(\.id) == [driverID, externalID], "inventory host/order changed")
                 try require(inventory.loadedThreadIDs == Set([driverID]), "loaded scope widened")
+                let loadedWorker = inventory.threads[0].worker(
+                    hostID: hostID, loadedOnHost: true, binding: nil, observedAt: inventory.observedAt
+                )
+                try require(loadedWorker.providerHostID.value == hostID, "exact loaded worker lost its observed host identity")
                 let read = try await client.observeProviderSession(exactID: externalID)
                 guard let thread = read.threads.first else { throw NativeFailure(message: "no external metadata") }
                 let worker = thread.worker(hostID: read.hostID, loadedOnHost: read.loadedThreadIDs.contains(thread.id), binding: nil, observedAt: read.observedAt)
                 let text = String(decoding: try JSONEncoder().encode(worker), as: UTF8.self)
                 try require(worker.turns.isEmpty && !worker.conduitTaskID.isKnown && !worker.writerControllerID.isKnown && worker.terminal.objectiveAcceptance == .unknown, "metadata gained consequential authority")
+                try require(!worker.providerHostID.isKnown && text.contains("observation_host_id"), "unloaded worker inherited query-host identity")
                 try require(!text.contains("fixture-private") && text.contains("configured_or_persisted_model"), "content leaked or model metadata misclassified")
                 try await Task.sleep(nanoseconds: 150_000_000)
             case "unknown-id":

@@ -3781,12 +3781,14 @@ if let parsed = try? CodexThreadMetadata.parse(codexMetadata) {
           worker.turns.isEmpty && worker.terminal.objectiveAcceptance == .unknown
             && text.contains("configured_or_persisted_model") && text.contains("per-turn model and entitlement UNKNOWN"))
     check("Codex host, thread, writer and task axes remain separate",
-          worker.providerHostID.value == "host-only" && worker.providerSessionID.value == "provider-full"
+          !worker.providerHostID.isKnown && text.contains("observation_host_id") && text.contains("host-only")
+            && worker.providerSessionID.value == "provider-full"
             && !worker.conduitTaskID.isKnown && !worker.writerControllerID.isKnown && worker.origin == .unknown)
     let bound = parsed.worker(hostID: "host-only", loadedOnHost: true,
                              binding: ProviderObservationBinding(conduitTaskID: "task-only", runtimeAttemptID: "attempt-only"), observedAt: Date())
     check("Codex exact task binding does not adopt or claim writer authority",
           bound.conduitTaskID.value == "task-only" && bound.runtimeAttemptID.value == "attempt-only"
+            && bound.providerHostID.value == "host-only"
             && bound.relationship == .discovered && !bound.writerControllerID.isKnown)
 } else { check("Codex valid metadata parses", false) }
 check("Codex read refuses shortened or wrong-axis identity",

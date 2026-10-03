@@ -4583,7 +4583,7 @@ final class AppModel: ObservableObject {
                 "provider": "codex",
                 "host_scopes": hosts.map(\.hostID),
                 "host_count": hosts.count,
-                "identity_scope": "providerHostID plus exact providerSessionID; repeated session IDs across hosts are separate observations",
+                "identity_scope": "providerSpecific observation_host_id plus exact providerSessionID; canonical worker host stays UNKNOWN without exact loaded-list membership",
                 "capacity_effect": "none; no host/task/turn creation, writer adoption or execution reservation",
                 "authority": "metadata from existing ready Conduit hosts; nonarchived state DB inventory only, without rollout repair; host-loaded status is not global execution, per-turn model, writer authority or objective acceptance",
                 "field_qualification": "UNKNOWN; availability is conditional on an existing ready host and supported metadata protocol",

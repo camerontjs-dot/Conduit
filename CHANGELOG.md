@@ -33,6 +33,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   title and rollout path. Host-loaded status and configured or persisted model
   metadata remain separate from writer authority, turn execution and acceptance.
   Missing or ambiguous hosts and incomplete metadata return UNKNOWN (#53, #49).
+  An answering host is observation provenance; unloaded threads retain UNKNOWN
+  canonical worker-host identity.
 
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a

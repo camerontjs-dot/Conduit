@@ -205,7 +205,7 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "3fd56985f02bc3856e42c084f6d4a253bb82d82726c6efc1d7e719f2fcdbbe8b"
+        "sha256": "c1bbec42d8f4bb115bb7cdec310cc31a59bcdafb700f963aef0041d4e3844015"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "D070 candidate source custody only; historical provider runtime receipts are unchanged. New Codex metadata field qualification UNKNOWN.",
@@ -214,7 +214,7 @@
       },
       "kind": "source_test",
       "limitation": "OpenCode remains the only adoption implementation. Codex metadata list/read is a conditional existing-host candidate path; real-provider field support, mounted HTTP and independent qualification UNKNOWN.",
-      "observed_at_utc": "2026-10-03T11:59:39.867473+00:00",
+      "observed_at_utc": "2026-10-03T12:26:38.919991+00:00",
       "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
     },
     "CONFORMANCE-HARNESS": {

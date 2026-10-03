@@ -136,6 +136,11 @@ membership and one ready host; missing, ambiguous or incomplete observations
 return UNKNOWN rather than a partial result. Multiple inventory hosts retain
 separate host scopes.
 
+The answering host is retained as observation provenance. A worker's canonical
+provider-host identity stays UNKNOWN unless that exact thread appeared in the
+observed host's loaded list; answering a persistence query does not host or own
+the observed thread.
+
 Reads use `includeTurns: false`. Preview, title, rollout path and turns are
 withheld. Loaded status describes the observed host; configured or latest
 persisted model metadata does not establish per-turn execution, entitlement,

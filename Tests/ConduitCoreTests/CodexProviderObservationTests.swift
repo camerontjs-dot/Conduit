@@ -24,7 +24,7 @@ final class CodexProviderObservationTests: XCTestCase {
         let thread = try CodexThreadMetadata.parse(metadata())
         let worker = thread.worker(hostID: "host-one", loadedOnHost: false, binding: nil, observedAt: Date())
         XCTAssertEqual(worker.providerSessionID.value, "provider-session-full")
-        XCTAssertEqual(worker.providerHostID.value, "host-one")
+        XCTAssertFalse(worker.providerHostID.isKnown)
         XCTAssertFalse(worker.conduitTaskID.isKnown)
         XCTAssertFalse(worker.runtimeAttemptID.isKnown)
         XCTAssertFalse(worker.writerControllerID.isKnown)
@@ -41,6 +41,8 @@ final class CodexProviderObservationTests: XCTestCase {
             XCTAssertFalse(text.contains(secret))
         }
         XCTAssertTrue(text.contains("configured_or_persisted_model"))
+        XCTAssertTrue(text.contains("observation_host_id"))
+        XCTAssertTrue(text.contains("host-one"))
         XCTAssertTrue(text.contains("per-turn model and entitlement UNKNOWN"))
     }
 
@@ -51,6 +53,7 @@ final class CodexProviderObservationTests: XCTestCase {
         XCTAssertEqual(worker.conduitTaskID.value, "task-axis")
         XCTAssertEqual(worker.runtimeAttemptID.value, "attempt-axis")
         XCTAssertEqual(worker.providerSessionID.value, "provider-session-full")
+        XCTAssertEqual(worker.providerHostID.value, "host-axis")
         XCTAssertEqual(worker.relationship, .discovered)
         XCTAssertFalse(worker.writerControllerID.isKnown)
         XCTAssertEqual(worker.origin, .unknown)
