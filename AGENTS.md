@@ -4,6 +4,11 @@
 
 Conduit is a personal native macOS interface for operating MainFrame projects through existing CLI agents. Keep the app useful before making it clever.
 
+> **Binds:** agents working in this Conduit repository.
+> **Tier:** T0, advisory repository instructions.
+> **Check:** none; this document does not enforce task authorization, source custody or qualification. Test, CI and machine receipts establish their separate evidence.
+> **Escape:** when an applicable check or authority is unavailable, record the exact NOT_RUN/BLOCKED prerequisite in the owning issue or PR and continue independent authorized work. Explicit session authority and applicable host contracts govern actions outside this repository.
+
 ## Non-negotiable boundaries
 
 1. MainFrame files remain the source of truth. Do not introduce a shadow project database.
@@ -26,13 +31,28 @@ Product history lives in **`CHANGELOG.md`** (Keep a Changelog style).
 
 ## Verification
 
-Run:
+Select the repository checks that apply to the change:
 
 ```bash
-./scripts/test.sh            # both suites; resolves the Xcode toolchain itself
+./scripts/test.sh            # selftest, repository contracts and XCTest; resolves Xcode
 ./scripts/build-app.sh
-./scripts/verify-installed.sh  # after installing: live canary against the real app
 ```
+
+Record the exact source/build identity, commands actually executed, results,
+skips, first failures and remaining UNKNOWNs. Documentation-only validation
+may consist of source/reference, diff and leak checks; name native or machine
+checks that were not run rather than imply they passed.
+
+Installed-app verification is a separate machine experiment:
+
+```bash
+./scripts/verify-installed.sh
+```
+
+Run it only when that exact installed app, state, listener, tasks and provider
+activity are covered by the session's explicit qualification authority. A
+source test or package build does not authorize installation, replacement of
+an operator app, use of unrelated sessions or a write-gate change.
 
 `scripts/test.sh` proves ConduitCore logic. It cannot prove the installed
 bundle drives a real runtime: the Session API, the adapters, and the PTY all
@@ -46,7 +66,8 @@ you just made, then runs the canary several times, because a single green run
 hides intermittent defects. It needs the operator's Session API write gate;
 that switch is never flipped for you.
 
-`scripts/test.sh` runs `conduit-selftest` and then `swift test`. Pass through
+`scripts/test.sh` runs `conduit-selftest`, the repository's Python contract
+checks and then `swift test`. Pass through
 args work, so `./scripts/test.sh --filter MCPAdmissionTests` narrows the XCTest
 run.
 
@@ -73,6 +94,16 @@ macOS CI is required for merges touching terminal, speech, AppKit, or packaging 
 
 Before ending a multi-step product session:
 
-1. `CHANGELOG.md` updated (or explicitly N/A for docs-only).  
-2. Outer `../log.md` entry if coordination state moved.  
-3. Handoff under `../plans/YYYY-MM-DD-session-handoff.md` (or update the latest active handoff).
+1. Update `CHANGELOG.md`, or record an explicit N/A for documentation-only work.
+2. Reconcile the owning GitHub issue or PR with exact base/head/tree, changes,
+   executed checks, negative evidence, remaining prerequisites and disposition.
+3. Keep substantial reusable qualification records under
+   `docs/qualification/` when suitable for repository publication. Private
+   machine receipts stay in the separately authorized local evidence location;
+   the owning issue or PR carries their bounded claims and receipt identities.
+
+This portable checkout does not require a sibling `../log.md` or `../plans/`
+and gives no authority to create or edit them. When a host workspace separately
+requires coordination, follow its applicable contract and actual project paths
+under the session's authorization. Do not infer those paths from this clone's
+parent directory.

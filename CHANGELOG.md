@@ -17,13 +17,20 @@ Dates are UTC calendar days of the nested workbench commit unless noted.
 | Removal of a capability | `Removed` |
 | Security-relevant fix | `Security` |
 
-Do **not** put private MainFrame project names, host paths, or personal career material here. Coordination detail lives in the outer project `log.md`. Product architecture decisions still get `DECISIONS.md` entries when boundaries change.
+Do **not** put private MainFrame project names, host paths, or personal career material here. Coordination detail belongs in the owning GitHub issue or PR and any separately authorized host project. Product architecture decisions still get `DECISIONS.md` entries when boundaries change.
 
-When finishing a session: update **Unreleased** (or cut a dated release block), then write/refresh the outer handoff under `plans/`.
+When finishing a session: update **Unreleased** (or cut a dated release block), then reconcile the owning issue or PR. Host handoffs follow the applicable host contract; this repository does not assume sibling coordination directories.
 
 ---
 
 ## [Unreleased]
+
+### Changed
+
+- Contributor instructions now distinguish native, package and separately
+  authorized installed qualification. Portable closeout uses the owning issue
+  or PR instead of assuming sibling coordination files. The PR template asks
+  for Conduit's actual checks, exact candidate identities and negative evidence.
 
 ### Added
 
