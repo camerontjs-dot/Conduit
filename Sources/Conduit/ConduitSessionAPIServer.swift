@@ -871,7 +871,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_query_mindgraph",
-            "description": "Semantic search over the operator's local MindGraph index. scope selects which index: knowledge searches the 10_knowledge notes, projects searches 30_projects working files. Returns ranked passage nominations, each with the repo-relative path, title, matched text, an rrf_score, and a citation_class. Documents that must not be cited — quarantined, retracted, superseded, or flagged as a fabricated citation — are returned separately under not_citable and never mixed into results, because ranking is trust-blind and such a document can outscore a real one. citation_counts reports the split. These are retrieval candidates for orienting yourself, not evidence that a claim is true, and never a substitute for reading the file.",
+            "description": "Semantic search over the operator's local MindGraph index. scope selects which index: knowledge searches the 10_knowledge notes, projects searches 30_projects working files, operations searches 40_operations coordination files. Returns ranked passage nominations, each with the repo-relative path, title, matched text, an rrf_score, and a citation_class. Documents that must not be cited — quarantined, retracted, superseded, or flagged as a fabricated citation — are returned separately under not_citable and never mixed into results, because ranking is trust-blind and such a document can outscore a real one. citation_counts reports the split. These are retrieval candidates for orienting yourself, not evidence that a claim is true, and never a substitute for reading the file.",
             "annotations": ConduitSessionAPIServer.localReadOnlyAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -882,8 +882,8 @@ final class ConduitSessionAPIServer {
                     ],
                     "scope": [
                         "type": "string",
-                        "enum": ["knowledge", "projects"],
-                        "description": "Which index to search: knowledge for the operator's 10_knowledge notes, projects for 30_projects working files. Required — there is no default, and the two indexes hold different material.",
+                        "enum": ["knowledge", "projects", "operations"],
+                        "description": "Which index to search: knowledge for the operator's 10_knowledge notes, projects for 30_projects working files, operations for 40_operations coordination. Required — there is no default, and the lifecycle indexes hold different material.",
                     ],
                 ],
                 "required": ["question", "scope"],

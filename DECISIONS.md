@@ -7,6 +7,24 @@ MainFrame-only coordination decisions live outside this tree.
 
 ---
 
+
+## 2026-10-02 — Preserve one interpretation of operations JSON identity
+
+The frozen source-map consumer accepted contradictory JSON identity members by
+selecting the first value. The engine selected the last value, so the same bytes
+could describe different corpora. Preserve that candidate and its failed control.
+
+The separate successor checks original operations envelope bytes for unique
+object members before interpreting the decoded dictionary. Repeated identical
+values, escaped-equivalent names, nested row members and envelope members are
+rejected before nominations are exposed. Valid envelopes, JSON string content
+and separate objects using the same member name remain compatible.
+
+This affects only the opt-in operations identity envelope. Knowledge/projects
+legacy arrays and Context Compiler admission remain unchanged. It establishes
+unambiguous representation, not source truth, current decisions or authenticated
+execution authority.
+
 ## D-001: MainFrame-specific personal app
 
 **Status:** Accepted  
@@ -2054,3 +2072,68 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+
+## D-061: Operations consumption requires database authority even without rows
+
+**Status:** Successor design; independent qualification pending (2026-09-30).
+
+**Evidence:** #110 BLOCK receipt 5913161920 returned successful empty operations
+nominations from a projects DB and an unidentified empty DB. The returned-row
+guard remained useful but could not establish database-wide authority.
+
+**Decision:** Operations requests require the explicit versioned MindGraph
+identity envelope in the Core boundary shared by AppModel and its tests, and in
+Query Station decoding. Validate stored `mainframe-operations`,
+`operations_status`, `operations`, `40_operations` and producer/map binding before
+projecting any text. Keep all returned-row identity guards. Empty arrays alone
+are rejected. A correctly identified no-hit index returns a valid empty set.
+
+**Owners and alternatives:** MainFrame validates and binds its corpus; MindGraph
+stores and exposes the binding from the queried DB; Conduit consumes it. Caller
+scope, filenames and external config do not establish identity. Rejecting all
+empty sets would obscure valid no-hit retrieval.
+
+**Limits:** Identity remains nomination authority. No implicit ContextSet,
+source verification, expansion/delivery or task/runtime/provider mutation is
+added. Knowledge/projects legacy consumption remains compatible. Independent
+qualification must use exact cross-repository pins and real selected sources.
+The predecessor D-060 numbering collision is retained for later reconciliation.
+
+## D-062: Source-map rejection belongs to the producer-bound engine snapshot
+
+**Status:** Bounded successor implementation; independent qualification pending
+(2026-10-02).
+
+The frozen #112 consumer accepted a valid projects source-map hash substituted
+into an operations binding while its separate database-map hash remained valid.
+That BLOCK is preserved. Conduit cannot reconstruct the selected producer's
+complete source corpus from a returned nomination set, particularly an empty set.
+
+The successor uses the paired MindGraph engine's independent full-map projection
+check before retrieval and retains Conduit's existing operations envelope and
+row guards. A native test invokes the real engine on a separately copied mutated
+database and checks rejection for both a no-hit query and a zero result budget.
+No Context Compiler, delivery, mutation authority, or installed configuration
+changes. Legacy knowledge/projects arrays keep their earlier compatibility;
+MainFrame's opt-in strict lifecycle CLI provides the three-scope checked route.
+
+## D-060: MindGraph operations is a distinct nomination scope
+
+**Status:** Accepted implementation boundary.
+
+MindGraph operations queries select `mainframe-operations.sqlite` with the
+`operations_status` trust label. The scope enum, Session API validation and MCP
+catalog expose `operations`; knowledge/projects keep their existing selections.
+The same CLI consumer function serves the app and integration qualification.
+
+A nomination retains `index_id`, namespace, document/source path and content
+hash separately from the selected scope alias. Absolute source roots remain
+local. Operations rows must carry the operations index/trust identity and a
+`40_operations` display path; mismatches and missing databases fail explicitly.
+Warnings and citation partitions remain visible. This adds no context admission,
+expansion redemption, ranking policy, or source-authority transfer.
+
+MainFrame owns manifest selection, index staging/promotion and shared-daemon
+configuration. Installing Conduit and refreshing an external client's catalog
+remain separate machine qualification. `20_live` stays directly inspected state.
