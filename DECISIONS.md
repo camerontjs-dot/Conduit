@@ -2054,3 +2054,38 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-072: Observe exact-file bytes before composing context candidates
+
+**Status:** Proposed (2026-10-03; #58/#60 Phase A owner candidate)
+
+**Context:** The maintained Context Set compiler supplies reasons, structural
+deduplication, manifests and hard-context budgets. Supplied file references do
+not themselves observe source bytes or bind an exact identity. An exact-file
+source stage can progress independently of the MainFrame session-entry adapter.
+
+**Proposal:** Use a read-only Core adapter for explicit objective, selected,
+pinned and contract file requests under one selected root. Observe bounded
+regular UTF-8 bytes through descriptor-anchored reads; record full-source SHA-256
+and exact excerpt identity separately. Refuse unsafe paths, symbolic links,
+observable mutation and incomplete selections. Preserve every unresolved
+request and refuse a complete Context Set handoff until the batch is complete.
+Compose with the existing compiler and snapshot representation without changing
+their bytes or authority model.
+
+**Consequences:** Exact source observations retain source authority, explicit
+reasons and pins while later freshness remains unknown. The slice supplies no
+Git identity, semantic authority, provider delivery, AppModel mount or whole
+Context Compiler acceptance. Other adopted source adapters remain actionable;
+MainFrame staged-entry consumption retains its upstream gate. Details and the
+bounded inventory are in [Exact-file context candidates](docs/context-exact-file-sources.md).
+
+> **Binds:** a proposal for the existing #58/#60 deterministic source stage.
+>
+> **Tier:** T0, proposed guidance.
+>
+> **Check:** source tests and owner pressure receipts check mechanics; independent qualification and governing acceptance remain separate.
+>
+> **Escape:** preserve incomplete/failed observations, keep promotion pending, and continue other dependency-valid adopted work.
