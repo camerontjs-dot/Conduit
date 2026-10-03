@@ -34,6 +34,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- ConduitCore adds a proposed source-derived global supervisory cursor over
+  decoded per-task event snapshots. It preserves compound identity and source
+  order, detects prefix mutation and conflicting retries, and exports bounded
+  content-free records with explicit unsupported facts. No app, HTTP or MCP
+  integration is included; provider completion, verification and acceptance
+  remain separate (#4, D-074 Proposed/T0).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps

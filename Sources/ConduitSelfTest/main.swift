@@ -3710,6 +3710,162 @@ check(
         && shellTelemetryProjection?.processObservation?.descendants.first?.liveness == .live
 )
 
+// MARK: - Source-derived global supervisory cursor (D-074 proposal)
+
+do {
+    let globalStoreID = UUID(uuidString: "99999999-9999-4999-8999-999999999999")!
+    let globalTaskA = TaskSessionID(rawValue: UUID(uuidString: "11111111-1111-4111-8111-111111111111")!)
+    let globalTaskB = TaskSessionID(rawValue: UUID(uuidString: "22222222-2222-4222-8222-222222222222")!)
+    let globalTaskC = TaskSessionID(rawValue: UUID(uuidString: "00000000-0000-4000-8000-000000000000")!)
+    let globalDate = Date(timeIntervalSinceReferenceDate: 42)
+    let globalCanary = "PRIVATE_CONTENT_CANARY_X7"
+    func globalEventID(_ number: Int) -> UUID {
+        UUID(uuidString: String(format: "aaaaaaaa-aaaa-4aaa-8aaa-%012x", number))!
+    }
+    func globalEvent(_ number: Int, _ task: TaskSessionID, _ kind: TaskSessionEventKind,
+                     at: Date? = nil) -> TaskSessionEvent {
+        TaskSessionEvent(id: globalEventID(number), taskSessionID: task,
+            occurredAt: at ?? globalDate, recordedAt: at ?? globalDate,
+            authority: .conduitRecorded, kind: kind)
+    }
+    func globalCreated(_ number: Int, _ task: TaskSessionID, title: String = "fixture") -> TaskSessionEvent {
+        globalEvent(number, task, .created(TaskSessionMetadata(
+            workspace: .root(.init(rootURL: URL(fileURLWithPath: "/fixture/workspace"))),
+            agentName: title, defaultTitle: title)))
+    }
+    func globalSource(_ task: TaskSessionID, _ events: [TaskSessionEvent],
+                      diagnostics: [TaskSessionEventLogDiagnostic] = []) -> TaskSupervisorySourceSnapshot {
+        .init(taskSessionID: task, readResult: .init(events: events, diagnostics: diagnostics))
+    }
+    let globalSources = [
+        globalSource(globalTaskA, [globalCreated(1, globalTaskA, title: globalCanary),
+            globalEvent(2, globalTaskA, .conversationActivityRecorded)]),
+        globalSource(globalTaskB, [globalCreated(3, globalTaskB),
+            globalEvent(4, globalTaskB, .conversationRetentionEnabled)]),
+    ]
+    func globalQuery(_ sources: [TaskSupervisorySourceSnapshot], cursor: String? = nil,
+                     limit: Int? = nil, storeID: UUID? = nil) -> TaskSupervisoryPageResult {
+        TaskSupervisoryHistory.page(snapshot: .init(storeID: storeID ?? globalStoreID, sources: sources),
+            cursor: cursor, limit: limit)
+    }
+    func globalPage(_ result: TaskSupervisoryPageResult) throws -> TaskSupervisoryPage {
+        guard result.status == .ready, result.issues.isEmpty, let page = result.page else {
+            throw NSError(domain: "ConduitSelfTest.GlobalCursor", code: 1)
+        }
+        return page
+    }
+
+    let globalFirst = try globalPage(globalQuery(globalSources, limit: 2))
+    let globalSecond = try globalPage(globalQuery(globalSources, cursor: globalFirst.nextCursor, limit: 2))
+    check("global cursor preserves per-task order through round-robin pages",
+        globalFirst.events.map(\.id.sourceEventID) == [globalEventID(1), globalEventID(3)]
+            && globalSecond.events.map(\.id.sourceEventID) == [globalEventID(2), globalEventID(4)]
+            && !globalSecond.hasMore)
+    let globalReversedBytes = try TaskSupervisoryHistory.canonicalData(globalQuery(Array(globalSources.reversed()), limit: 2))
+    let globalOriginalBytes = try TaskSupervisoryHistory.canonicalData(globalQuery(globalSources, limit: 2))
+    check("global cursor bytes do not depend on input source enumeration", globalOriginalBytes == globalReversedBytes)
+    let globalEnd = try globalPage(globalQuery(globalSources, cursor: globalSecond.nextCursor))
+    check("empty global continuation preserves its cursor", globalEnd.events.isEmpty && globalEnd.nextCursor == globalSecond.nextCursor)
+
+    let globalBackdated = globalEvent(5, globalTaskA, .conversationActivityRecorded,
+        at: Date(timeIntervalSinceReferenceDate: -1000))
+    let globalExtended = [
+        globalSource(globalTaskA, globalSources[0].events + [globalBackdated]), globalSources[1],
+        globalSource(globalTaskC, [globalCreated(6, globalTaskC)]),
+    ]
+    let globalLatePage = try globalPage(globalQuery(globalExtended, cursor: globalSecond.nextCursor))
+    check("global cursor resumes new earlier tasks and backdated source appends",
+        globalLatePage.events.map(\.id.sourceEventID) == [globalEventID(6), globalEventID(5)]
+            && globalLatePage.events.last?.sourceOrdinal == 2)
+    let globalConflict = globalQuery([
+        globalSource(globalTaskA, globalSources[0].events + [globalCreated(1, globalTaskA, title: "different")]),
+    ])
+    check("conflicting per-task event identity requires reconciliation",
+        globalConflict.status == .reconciliationRequired && globalConflict.page == nil
+            && globalConflict.issues.first?.reason == .conflictingEventID)
+    let globalCompound = try globalPage(globalQuery([
+        globalSource(globalTaskA, [globalCreated(1, globalTaskA)]),
+        globalSource(globalTaskB, [globalCreated(1, globalTaskB)]),
+    ]))
+    check("global event identity includes the owning task",
+        globalCompound.events[0].id != globalCompound.events[1].id
+            && globalCompound.events[0].id.sourceEventID == globalCompound.events[1].id.sourceEventID)
+    let globalDuplicate = try globalPage(globalQuery([
+        globalSource(globalTaskA, globalSources[0].events + [globalSources[0].events[0]]),
+    ]))
+    check("exact source duplicates retain their first global occurrence",
+        globalDuplicate.events.map(\.id.sourceEventID) == [globalEventID(1), globalEventID(2)])
+    let globalUnconsumedMutation = globalQuery([
+        globalSource(globalTaskA, [globalSources[0].events[0],
+            globalEvent(2, globalTaskA, .conversationActivityRecorded, at: Date(timeIntervalSinceReferenceDate: 99))]),
+        globalSources[1],
+    ], cursor: globalFirst.nextCursor)
+    check("global cursor binds even the previously observed unconsumed suffix",
+        globalUnconsumedMutation.status == .reconciliationRequired
+            && globalUnconsumedMutation.issues.first?.reason == .sourcePrefixChanged)
+    let globalDiagnostic = globalQuery([
+        globalSource(globalTaskA, [globalCreated(1, globalTaskA)], diagnostics: [
+            .init(kind: .malformedLine, fileURL: URL(fileURLWithPath: "/fixture/PRIVATE_PATH_CANARY"), detail: globalCanary),
+        ]),
+    ])
+    let globalDiagnosticText = String(decoding: try TaskSupervisoryHistory.canonicalData(globalDiagnostic), as: UTF8.self)
+    check("global read diagnostics block paging without exporting private detail",
+        globalDiagnostic.status == .reconciliationRequired && globalDiagnostic.page == nil
+            && globalDiagnostic.issues.first?.readDiagnosticKinds == [.malformedLine]
+            && !globalDiagnosticText.contains(globalCanary) && !globalDiagnosticText.contains("PRIVATE_PATH_CANARY"))
+    check("malformed or wrong-store global cursors cannot restart the query",
+        globalQuery(globalSources, cursor: "v1:2").status == .invalidCursor
+            && globalQuery(globalSources, cursor: globalSecond.nextCursor, storeID: UUID()).status == .invalidCursor)
+    let globalExportText = String(decoding: globalOriginalBytes, as: UTF8.self)
+    check("global export excludes content and keeps unsupported authorities explicit",
+        !globalExportText.contains(globalCanary) && !globalExportText.contains("/fixture/workspace")
+            && globalFirst.unsupportedFacts == TaskSupervisoryUnsupportedFact.allCases)
+    let globalHugeRecord = TaskSessionEvent(id: globalEventID(8), taskSessionID: globalTaskA,
+        occurredAt: globalDate, recordedAt: globalDate, authority: .operatorAsserted,
+        kind: .titleOverridden(String(repeating: "x", count: 65_536)))
+    let globalLimitResult = globalQuery([globalSource(globalTaskA, [globalCreated(1, globalTaskA), globalHugeRecord])])
+    check("global decoded source record budget is explicit", globalLimitResult.status == .limitExceeded
+        && globalLimitResult.issues.first?.reason == .sourceRecordBytes && globalLimitResult.page == nil)
+    let globalFractional = [globalCreated(1, globalTaskA),
+        globalEvent(2, globalTaskA, .conversationActivityRecorded, at: Date(timeIntervalSinceReferenceDate: 0.000001))]
+    let globalFractionalCursor = try globalPage(globalQuery([globalSource(globalTaskA, globalFractional)], limit: 1)).nextCursor
+    let globalFractionalMutation = globalQuery([globalSource(globalTaskA, [globalFractional[0],
+        globalEvent(2, globalTaskA, .conversationActivityRecorded, at: Date(timeIntervalSinceReferenceDate: 0.000002))])],
+        cursor: globalFractionalCursor)
+    check("global prefix identity retains fractional native date bits",
+        globalFractionalMutation.status == .reconciliationRequired
+            && globalFractionalMutation.issues.first?.reason == .sourcePrefixChanged)
+
+    withTempDir { directory in
+        let log = TaskSessionEventLog(directory: directory, taskSessionID: globalTaskA)
+        try log.append(globalCreated(1, globalTaskA))
+        let first = try globalPage(globalQuery([.init(taskSessionID: globalTaskA, readResult: log.read())]))
+        let cursorURL = directory.appendingPathComponent("supervisory-cursor.txt")
+        try Data(first.nextCursor.utf8).write(to: cursorURL)
+        try log.append(globalEvent(2, globalTaskA, .conversationActivityRecorded))
+        let reader = TaskSessionEventLog(directory: directory, taskSessionID: globalTaskA)
+        let before = try Data(contentsOf: reader.url)
+        let persistedCursor = String(decoding: try Data(contentsOf: cursorURL), as: UTF8.self)
+        let resumed = try globalPage(globalQuery([.init(taskSessionID: globalTaskA, readResult: reader.read())], cursor: persistedCursor))
+        let afterRead = try Data(contentsOf: reader.url)
+        check("a fresh task log reader resumes the persisted global cursor without writing",
+            resumed.events.map(\.id.sourceEventID) == [globalEventID(2)] && before == afterRead)
+        let handle = try FileHandle(forWritingTo: reader.url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("{\"schemaVersion\":1,".utf8))
+        try handle.close()
+        let tornBefore = try Data(contentsOf: reader.url)
+        let refused = globalQuery([.init(taskSessionID: globalTaskA, readResult: reader.read())], cursor: resumed.nextCursor)
+        let tornAfter = try Data(contentsOf: reader.url)
+        check("a physical partial source line refuses global continuation without healing",
+            refused.status == .reconciliationRequired && refused.page == nil
+                && refused.issues.first?.reason == .readDiagnostics && tornBefore == tornAfter)
+    }
+} catch {
+    failures.append("global supervisory cursor fixture error: \(error)")
+    print("FAIL global supervisory cursor fixture error: \(error)")
+}
+
 // MARK: - ChatGPT tunnel ownership
 
 let tunnelReady = ChatGPTTunnelPrerequisites(
