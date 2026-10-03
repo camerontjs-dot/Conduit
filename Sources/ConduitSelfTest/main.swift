@@ -4,6 +4,7 @@
 // CI still runs the full XCTest suite with Xcode.
 
 import ConduitCore
+import Darwin
 import Dispatch
 import Foundation
 
@@ -3747,6 +3748,164 @@ check(
         prerequisites: tunnelReady
     ) == .stopOwned
 )
+
+// MARK: - Exact-file context source adapter
+
+withTempDir { root in
+    let sourceClock = Date(timeIntervalSince1970: 1_700_000_000)
+    let sourceAdapter = ContextFileSourceAdapter()
+    func sourceRequest(
+        _ path: String, _ origin: ContextFileSourceOrigin = .selectedFile,
+        _ range: ClosedRange<Int>? = nil, _ expected: String? = nil
+    ) -> ContextFileSourceRequest {
+        .init(relativePath: path, origin: origin, lineRange: range, expectedContentDigest: expected)
+    }
+    func observeSources(
+        _ requests: [ContextFileSourceRequest], _ limits: ContextFileSourceLimits = .init()
+    ) -> ContextFileSourceBatch {
+        ContextFileSourceAdapter(limits: limits).observe(root: root, requests: requests, observedAt: sourceClock)
+    }
+    func writeSource(_ path: String, _ data: Data) throws {
+        let file = root.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: file)
+    }
+    func sourceHandoffRefused(_ batch: ContextFileSourceBatch) -> Bool {
+        do { _ = try batch.makeContextSet(id: "set", objective: "Exact sources"); return false }
+        catch ContextFileSourceHandoffError.incompleteObservation { return true }
+        catch { return false }
+    }
+    let abcDigest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    try writeSource("abc.txt", Data("abc".utf8))
+    let sourceBatch = observeSources([sourceRequest("abc.txt", .objective)])
+    check("exact context source binds physically read SHA256",
+          sourceBatch.isComplete && sourceBatch.observations[0].snapshot?.sourceContentDigest == abcDigest
+          && sourceBatch.observations[0].snapshot?.representedBytes == Data("abc".utf8))
+    check("exact context source preserves source authority and unknown later freshness",
+          sourceBatch.candidateEntries.first?.item.authority == .filesystemSource
+          && sourceBatch.candidateEntries.first?.item.freshness == .unknown
+          && sourceBatch.candidateEntries.first?.item.revisionIdentity == "sha256:\(abcDigest)"
+          && sourceBatch.observations[0].snapshot?.observedAt == sourceClock)
+    let requests = ContextFileSourceOrigin.allCases.map { sourceRequest("abc.txt", $0) }
+    let reasonBatch = observeSources(requests)
+    let reasonSet = try reasonBatch.makeContextSet(id: "reasons", objective: "Retain hard source")
+    check("exact context source reads once and unions every explicit reason",
+          reasonBatch.sourceByteBudgetUsed == 3 && reasonSet.entries.count == 1
+          && Set(reasonSet.entries[0].inclusionReasons.map(\.kind)) == [.objective, .operatorPin, .requiredContract, .explicitExpansion, .exactIdentity])
+    let sourceManifest = ContextManifestCompiler.compile(
+        contextSet: reasonSet, destination: .init(runtime: "fixture", capacityTokens: 0),
+        budget: .init(reservedOutputTokens: 0, reservedToolTokens: 0)
+    )
+    check("exact source pin remains pinned through hard budget conflict",
+          reasonSet.entries[0].item.isPinned && reasonSet.entries[0].disposition == .mandatory
+          && sourceManifest.budget.state == .hardContextExceedsCapacity)
+    for origin in ContextFileSourceOrigin.allCases {
+        let missing = observeSources([sourceRequest("abc.txt"), sourceRequest("missing", origin)])
+        check("exact source missing \(origin.rawValue) prevents partial handoff",
+              !missing.isComplete && sourceHandoffRefused(missing)
+              && missing.candidateEntries.count == 1 && missing.unresolvedRequests.map(\.origin) == [origin])
+    }
+    try writeSource("abc.txt", Data("xyz".utf8))
+    let changed = observeSources([sourceRequest("abc.txt")])
+    check("exact context source changed bytes change identity",
+          changed.candidateEntries.first?.item.id != sourceBatch.candidateEntries.first?.item.id)
+    let stale = observeSources([sourceRequest("abc.txt", .operatorPin, nil, abcDigest)])
+    check("exact context source stale expectation retains negative identity evidence",
+          stale.observations[0].failure?.code == .expectedIdentityMismatch
+          && stale.observations[0].observedSourceContentDigest == changed.observations[0].snapshot?.sourceContentDigest
+          && sourceHandoffRefused(stale))
+    try FileManager.default.removeItem(at: root.appendingPathComponent("abc.txt"))
+    let deleted = observeSources([sourceRequest("abc.txt", .requiredContract)])
+    check("exact context deleted contract remains unresolved",
+          deleted.observations[0].failure?.code == .missing && sourceHandoffRefused(deleted))
+    try writeSource("abc.txt", Data("abc".utf8))
+    let malformedIdentity = observeSources([sourceRequest("abc.txt", .objective, nil, "HEAD")])
+    check("exact context identity refuses a Git name as content digest",
+          malformedIdentity.observations[0].failure?.code == .invalidRequest
+          && malformedIdentity.sourceByteBudgetUsed == 0 && sourceHandoffRefused(malformedIdentity))
+    for path in ["/tmp/outside", "../sibling/file", "a/../abc.txt", "a//abc.txt", "", ".git/config", "dir/.DS_Store"] {
+        let unsafe = observeSources([sourceRequest(path, .operatorPin)])
+        check("exact context path refused \(path.debugDescription)",
+              unsafe.observations[0].failure?.code == .unsafePath && sourceHandoffRefused(unsafe))
+    }
+    try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("leaf-link"), withDestinationURL: root.appendingPathComponent("abc.txt"))
+    try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("parent-link"), withDestinationURL: root)
+    for path in ["leaf-link", "parent-link/abc.txt"] {
+        let link = observeSources([sourceRequest(path)])
+        check("exact context symlink refused \(path)", link.observations[0].failure?.code == .symbolicLink && sourceHandoffRefused(link))
+    }
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("directory"), withIntermediateDirectories: false)
+    let directory = observeSources([sourceRequest("directory")])
+    check("exact context directory is not a file", directory.observations[0].failure?.code == .notRegularFile)
+    check("exact context FIFO creation succeeds", mkfifo(root.appendingPathComponent("fifo").path, 0o600) == 0)
+    check("exact context FIFO is refused without blocking", observeSources([sourceRequest("fifo")]).observations[0].failure?.code == .notRegularFile)
+    try writeSource("binary", Data([255, 254, 0]))
+    let binary = observeSources([sourceRequest("binary")])
+    check("exact context invalid UTF8 preserves digest without candidate",
+          binary.observations[0].failure?.code == .nonUTF8
+          && binary.observations[0].observedSourceContentDigest != nil && binary.candidateEntries.isEmpty)
+    let oversized = observeSources([sourceRequest("abc.txt")], .init(maximumFileBytes: 2))
+    check("exact context oversized source never clips bytes", oversized.observations[0].failure?.code == .fileByteLimitExceeded && sourceHandoffRefused(oversized))
+    try writeSource("second.txt", Data("abcd".utf8))
+    let partial = observeSources([sourceRequest("abc.txt"), sourceRequest("second.txt")], .init(maximumFileBytes: 8, maximumTotalBytes: 6))
+    check("exact context total byte bound refuses partial handoff",
+          partial.observations.contains { $0.failure?.code == .totalByteLimitExceeded }
+          && partial.sourceByteBudgetUsed == 3 && sourceHandoffRefused(partial))
+    let requestLimit = observeSources([sourceRequest("abc.txt"), sourceRequest("second.txt")], .init(maximumRequests: 1))
+    check("exact context request bound is not a hidden prefix",
+          requestLimit.batchFailure?.code == .requestLimitExceeded && requestLimit.candidateEntries.isEmpty && sourceHandoffRefused(requestLimit))
+    check("exact context invalid byte limit is refused",
+          observeSources([sourceRequest("abc.txt")], .init(maximumFileBytes: 0)).batchFailure?.code == .invalidLimits)
+    try writeSource("lines", Data("α\r\nsame\nsame\n".utf8))
+    let excerpt = observeSources([sourceRequest("lines", .operatorPin, 1...2)])
+    check("exact context selected lines preserve UTF8 and CRLF bytes",
+          excerpt.observations[0].snapshot?.representedBytes == Data("α\r\nsame\n".utf8)
+          && excerpt.candidateEntries[0].item.lineRange == 1...2)
+    check("exact context excerpt digest differs from full source identity",
+          excerpt.observations[0].snapshot?.sourceContentDigest != excerpt.observations[0].snapshot?.representedContentDigest)
+    let missingLines = observeSources([sourceRequest("lines", .requiredContract, 3...5)])
+    check("exact context absent lines never silently clip", missingLines.observations[0].failure?.code == .invalidLineRange && sourceHandoffRefused(missingLines))
+    let equalRanges = try observeSources([sourceRequest("lines", .selectedFile, 2...2), sourceRequest("lines", .selectedFile, 3...3)])
+        .makeContextSet(id: "ranges", objective: "Keep ranges")
+    check("exact context repeated bytes retain distinct line ranges", equalRanges.entries.count == 2)
+    try writeSource("empty", Data())
+    check("exact context empty file has an explicit line", observeSources([sourceRequest("empty", .selectedFile, 1...1)]).isComplete)
+    check("exact context trailing LF has an empty final line", observeSources([sourceRequest("lines", .selectedFile, 4...4)]).observations[0].snapshot?.representedBytes == Data())
+    let bom = Data([239, 187, 191]) + Data("abc".utf8)
+    try writeSource("bom", bom)
+    check("exact context BOM identity retains actual disk bytes", observeSources([sourceRequest("bom")]).observations[0].snapshot?.representedBytes == bom)
+    try writeSource("left|right", Data("left".utf8))
+    try writeSource("left", Data("right".utf8))
+    let distinct = observeSources([sourceRequest("left|right"), sourceRequest("left")])
+    check("exact context delimiter names cannot collide", Set(distinct.candidateEntries.map { $0.item.id }).count == 2)
+    try writeSource("alias", Data("abc".utf8))
+    let aliases = try observeSources([sourceRequest("abc.txt", .objective), sourceRequest("alias", .operatorPin)])
+        .makeContextSet(id: "aliases", objective: "Retain paths")
+    check("exact context identical bytes preserve alias provenance",
+          aliases.entries.count == 1 && aliases.entries[0].duplicateSourceReferences.count == 1 && aliases.entries[0].item.isPinned)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let firstOrder = observeSources(requests)
+    let reverseOrder = observeSources(Array(requests.reversed()))
+    let firstBytes = try encoder.encode(firstOrder)
+    let reverseBytes = try encoder.encode(reverseOrder)
+    check("exact context request order is reproducible", firstBytes == reverseBytes)
+    let nomination = ContextSetEntry(item: .init(
+        id: "nomination", title: "Nomination", kind: .semanticNomination,
+        authority: .mindGraphNomination, sourceReference: sourceBatch.candidateEntries[0].item.sourceReference,
+        revisionIdentity: sourceBatch.candidateEntries[0].item.revisionIdentity
+    ), disposition: .nominated, representation: .full, contentDigest: abcDigest)
+    let authorities = ContextSet(id: "authority", objective: "Keep source distinct", entries: sourceBatch.candidateEntries + [nomination]).deduplicated()
+    check("exact context nomination does not inherit source authority", authorities.entries.count == 2
+          && authorities.entries.contains { $0.item.authority == .mindGraphNomination && $0.disposition == .nominated })
+    let malformedOrigin = Data("{\"relativePath\":\"abc.txt\",\"origin\":\"mindGraphNomination\"}".utf8)
+    let originRejected: Bool
+    do { _ = try JSONDecoder().decode(ContextFileSourceRequest.self, from: malformedOrigin); originRejected = false }
+    catch { originRejected = true }
+    check("exact context nomination origin is not read authorization", originRejected)
+    let nonFileRoot = sourceAdapter.observe(root: URL(string: "https://example.invalid/root")!, requests: [sourceRequest("abc.txt")], observedAt: sourceClock)
+    check("exact context non-file root is refused without network", nonFileRoot.batchFailure?.code == .unsafePath && sourceHandoffRefused(nonFileRoot))
+}
 
 // MARK: - Summary
 

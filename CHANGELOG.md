@@ -34,6 +34,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Core has an exact-file context candidate adapter for explicit objective,
+  selected, pinned and contract references. It binds bounded observed UTF-8
+  bytes to source and excerpt identities, preserves unresolved requests, and
+  refuses incomplete Context Set handoffs. App and runtime integration remain
+  separate programme stages.
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps
