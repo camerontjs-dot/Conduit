@@ -2054,3 +2054,44 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-071: Durable logical orchestration records above task/runtime authority
+
+**Status:** Proposed (T0); owner checks do not accept this architecture or qualify
+the full orchestration surface.
+
+**Context:** #60 Wave 4 Phase A adopts run/step schemas and normalized conditions
+and events before live launch composition. #56 distinguishes logical work from
+Fleet/provider identity and requires checkpoints separate from provider memory.
+The existing `OrchestrationRunState`/reducer is a proposal UI seam.
+
+**Proposal:** Preserve that seam and policy unchanged. Add an unmounted Core
+logical run/step schema and explicitly chosen private-directory journal. Retain
+existing proposal fingerprints, task/attempt types, observation stamps and
+independent verification/acceptance axes. Immutable plan/step identity survives
+worker replacement and process recovery. Exact command retries return their
+original event; conflicting identities, stale revisions and corrupt/partial
+history fail closed. Immutable checkpoints must match the event prefix and
+cannot replace its authority. Completion reports do not become verification or
+external acceptance and cannot be erased to resurrect a step.
+
+**Authority boundary:** #4 remains canonical task/runtime/turn and global
+supervisory-event authority. This journal records caller-supplied logical facts;
+it grants no route, approval, launch, worker lease or provider control. A declared
+receipt stamp and content hash are not authenticated evidence. Qualified live
+feeds, caller authority and a mounted supervisory loop remain separate work.
+
+**Consequences:** Bounded sequential plan fixtures and separate-process logical
+recovery can advance now. Dynamic workflows, fan-out execution, provider
+recovery, scheduling, automatic delegation and GUI/task lifetime extraction are
+not implemented by this slice. A failed write can preserve partial/new bytes;
+there is no automatic repair, rollback or deletion mechanism.
+
+> **Binds:** logical orchestration journal consumers if this proposal is adopted
+> **Tier:** T0 (proposal; finite implementation checks are not adoption or authentication)
+> **Check:** `OrchestrationRunJournalTests`, `conduit-selftest`, physical owner pressure and a fresh exact-candidate independent gate
+> **Escape:** return unavailable/UNKNOWN or a preserved terminal failure when identity, history, authority or environment cannot be established; obtain qualified feed/mounted evidence before live use
+
+Contract and limits: [`docs/orchestration-run-contract.md`](docs/orchestration-run-contract.md).

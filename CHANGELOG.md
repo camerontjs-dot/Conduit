@@ -27,6 +27,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Pure `OrchestrationRun` / `OrchestrationStep` records now preserve logical
+  proposal, plan and step identity above task/runtime references. An explicitly
+  chosen private directory can retain an append-only event journal and immutable
+  checkpoints, recover through a separate process, and refuse stale revisions,
+  conflicting retries, partial history and checkpoint substitution. These
+  unmounted Core records grant no execution authority; provider completion
+  remains separate from verification and external acceptance (#56, #60).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps
