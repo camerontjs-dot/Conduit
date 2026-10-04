@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "apparatus_id": "thread-recognition-mounted-apparatus-v2-20261004",
+  "work_class": "research_infrastructure",
+  "subject": {
+    "pr": 160,
+    "commit": "4c6298264d786b0b9cfda869053ba03a554d2158",
+    "tree": "c64bfef19736aa690c8e931905678a2f08301924"
+  },
+  "predecessor": {
+    "pr": 158,
+    "commit": "5c78d766ebe0440576d5e638441ed8a7c47aa1ba",
+    "tree": "8bb0b677cbf92859630bf9fa66e539c3ecc09fc4",
+    "disposition": "APPARATUS_FAIL",
+    "return_sha256": "b1e079589dc4ba0607aeab8e96496aa15a5cb7b951be7004c8a042f56a5caf84"
+  },
+  "allowed_input_mechanisms": [
+    "AXUIElement inspection and focus where writable",
+    "CGEvent mouse movement",
+    "CGEvent keyboard events",
+    "owned-window screenshot capture"
+  ],
+  "forbidden_mutations": [
+    "product source",
+    "tests or expected outcomes",
+    "global keyboard-navigation preferences",
+    "system privacy settings",
+    "provider settings",
+    "account state",
+    "operator Conduit state"
+  ],
+  "provider_turns_authorized": 0,
+  "installation_authorized": false,
+  "release_authorized": false,
+  "independence_claimed": false
+}
