@@ -1,0 +1,461 @@
+{
+  "schema": 1,
+  "status": "PREPARED_SOURCE_EXPOSED_NOT_EXECUTED",
+  "rows": [
+    {
+      "id": "RET-01",
+      "group": "retrieval_assembly",
+      "name": "Cross-index collision",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Two owned indexes with colliding document/chunk/hash and knowledge handle requested through projects"
+      ],
+      "observable_acceptance": [
+        "Consumer refuses before source exposure; no trust-label substitution for origin identity"
+      ],
+      "execution_boundary": "Native exact consumer/producer pair",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-02",
+      "group": "retrieval_assembly",
+      "name": "Same-trust different-index collision",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Two owned indexes share trust label but differ in exact index identity"
+      ],
+      "observable_acceptance": [
+        "Request binds original index; matching trust label cannot admit wrong index"
+      ],
+      "execution_boundary": "Native exact pair",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-03",
+      "group": "retrieval_assembly",
+      "name": "Defective producer response",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Preserved request handle plus internally consistent response for another handle, path, namespace or alias"
+      ],
+      "observable_acceptance": [
+        "Consumer checks actual requested handle and every required returned binding independently of upstream success"
+      ],
+      "execution_boundary": "Native consumer with declared response fixture",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-04",
+      "group": "retrieval_assembly",
+      "name": "Missing malformed stale binding",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Missing identity; malformed handle; stale content digest; zero-hit identity envelope"
+      ],
+      "observable_acceptance": [
+        "Malformed or missing required binding refuses; zero nominations still carry required database identity"
+      ],
+      "execution_boundary": "Native Core and producer CLI/MCP",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-05",
+      "group": "retrieval_assembly",
+      "name": "Positive exact expansion",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "One frozen compact nomination and explicit selected expansion through the same source pair"
+      ],
+      "observable_acceptance": [
+        "Exact preview and returned source bytes match fixture; no automatic expansion or authority promotion"
+      ],
+      "execution_boundary": "Native Core and producer CLI/MCP",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-06",
+      "group": "retrieval_assembly",
+      "name": "Authoritative catalog discovery",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Actual tools/list with write authorization disabled"
+      ],
+      "observable_acceptance": [
+        "Expansion appears exactly once with required scope/handle and read-only metadata; query description matches actual compact shape"
+      ],
+      "execution_boundary": "Isolated mounted Session API",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-07",
+      "group": "retrieval_assembly",
+      "name": "Preserved conformance gate",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Final AppModel bytes; unchanged provider-scope semantics; committed evidence pin"
+      ],
+      "observable_acceptance": [
+        "Maintained full scripts/test.sh and build pass applicable gates; no run-time auto-refresh or removed conformance check"
+      ],
+      "execution_boundary": "Native full repository and build",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-08",
+      "group": "retrieval_assembly",
+      "name": "Populated non-admission",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Actual populated context, manifest/handoff, prepared prompt, delivery state and controlled task; success/failure/repeated inspection"
+      ],
+      "observable_acceptance": [
+        "All declared protected identities and bytes unchanged; volatility exclusions frozen before run"
+      ],
+      "execution_boundary": "Mounted owned AppModel with controlled worker",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-09",
+      "group": "retrieval_assembly",
+      "name": "Observation sensitivity",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Separate explicit Add-to-Context canary from same populated baseline"
+      ],
+      "observable_acceptance": [
+        "Selected membership changes observably; provider input is not sent; new baseline established before non-admission controls"
+      ],
+      "execution_boundary": "Mounted owned AppModel",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "RET-10",
+      "group": "retrieval_assembly",
+      "name": "Producer identity stays distinct",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Exact #46 CLI/MCP identity-envelope and compact calls on owned fixtures"
+      ],
+      "observable_acceptance": [
+        "Caller scope, stored index, document trust and registration trust remain distinct; no default database fallback"
+      ],
+      "execution_boundary": "Exact #46 producer fixtures",
+      "source_authority": "https://github.com/camerontjs-dot/MindGraph/blob/11f6f8161dbf6cb78ebc1363a28948a4606fe6e0/src/mindgraph/mcp_server.py",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-01",
+      "group": "context_ui",
+      "name": "Definition revisions versus handoff snapshots",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "#132 fixed references, provenance and unresolved dynamic rules; save/revise/retire by exact revision"
+      ],
+      "observable_acceptance": [
+        "Definition edits preserve history; stale expected revision refuses; retirement cannot reuse identity; no preview-generated handoff receipt"
+      ],
+      "execution_boundary": "Core #132 then mounted caller composition",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/blob/74d16781776da8e9a1eed0dff7685802f8099284/Sources/ConduitCore/ContextSetStore.swift",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-02",
+      "group": "context_ui",
+      "name": "Explicit snapshot recording",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Read-only preview/copy then explicit handoff record with known date and bundle"
+      ],
+      "observable_acceptance": [
+        "Preview/copy does not write; explicit record persists the supplied bundle; record does not claim provider delivery"
+      ],
+      "execution_boundary": "Native snapshot store and mounted handoff",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContextSnapshotStore.swift",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-03",
+      "group": "context_ui",
+      "name": "Typed changed identity",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Same stable id with source a|b/revision c versus source a/revision b|c"
+      ],
+      "observable_acceptance": [
+        "New delta successor reports one changed item; no admission or send; legacy public fingerprint remains compatible"
+      ],
+      "execution_boundary": "New main-based delta successor native checks, then mounted composition",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContext.swift",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-04",
+      "group": "context_ui",
+      "name": "Duplicate-ID pressure",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Decodable bundle with two identical stable IDs, both equal and conflicting content variants"
+      ],
+      "observable_acceptance": [
+        "Preserve actual process outcome and input; do not silently select first/last or invent a duplicate policy"
+      ],
+      "execution_boundary": "Isolated Core diagnostic child; source hypothesis, not already reproduced runtime failure",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContext.swift",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-05",
+      "group": "context_ui",
+      "name": "Budget unknowns",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Missing destination capacity; missing reservations; selected item with missing estimate"
+      ],
+      "observable_acceptance": [
+        "Existing ContextBudgetAssessmentState preserves unknownDestinationCapacity/unknownReservation/unknownSelectedCost; UI must not present known partial sum as complete fit"
+      ],
+      "execution_boundary": "Core budget plus mounted Context UI",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/ContextCompiler.swift",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-06",
+      "group": "context_ui",
+      "name": "Mandatory budget conflict",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Mandatory source cost exceeds available capacity; nominations fit only by evicting a pin"
+      ],
+      "observable_acceptance": [
+        "Mandatory context remains protected; explicit conflict; nominations cannot silently displace hard context"
+      ],
+      "execution_boundary": "Core budget and compiler then UI",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-07",
+      "group": "context_ui",
+      "name": "Delta and debugger provenance",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Mixed source/receipt/nomination/agent output with stale/unknown freshness, duplicate reasons and explicit omissions"
+      ],
+      "observable_acceptance": [
+        "Inspection names kind, authority, representation, inclusion reason, identity, freshness, omissions and unresolved prerequisites without promoting nominations"
+      ],
+      "execution_boundary": "New mounted manifest/debugger caller",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-08",
+      "group": "context_ui",
+      "name": "Attachment destination and send boundary",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Two controlled task destinations; one selected Context Set; explicit Attach then separate send"
+      ],
+      "observable_acceptance": [
+        "Attach changes only chosen destination; precise manifest/member identities visible; send receipt matches actual submitted bytes only after explicit send"
+      ],
+      "execution_boundary": "Mounted owned task/runtime with qualified isolation",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CTX-09",
+      "group": "context_ui",
+      "name": "Assembled responsiveness baseline",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Frozen large fixture with exact counts/bytes; cold and warm sequence; rendering and compiler timings separated"
+      ],
+      "observable_acceptance": [
+        "Report median/p95/max, retained memory and failure counts; no invented performance PASS without predeclared target"
+      ],
+      "execution_boundary": "Local profiler on exact mounted composition",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CARD-01",
+      "group": "mindgraph_cards",
+      "name": "Navigation and inspection do not admit",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Card open/inspect for a nominated path with populated Context Set"
+      ],
+      "observable_acceptance": [
+        "Bounded filesystem resolution only; context/manifest/prepared prompt unchanged"
+      ],
+      "execution_boundary": "Mounted #142/#144/navigation composition",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/MindGraphQueryView.swift",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CARD-02",
+      "group": "mindgraph_cards",
+      "name": "Unavailable navigation reason",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Missing, stale, outside-root or otherwise unsafe nominated source"
+      ],
+      "observable_acceptance": [
+        "Action exposes precise unavailable/refusal reason; no fallback to unrelated same-basename file"
+      ],
+      "execution_boundary": "Mounted source navigator after E7 reconciliation",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CARD-03",
+      "group": "mindgraph_cards",
+      "name": "Scope/root/request change races",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Start request A, select another scope/root/query, then complete A and duplicate completion"
+      ],
+      "observable_acceptance": [
+        "Exact request ticket owns delivery; late/foreign/duplicate completion cannot populate new request; errors remain request-specific"
+      ],
+      "execution_boundary": "Exact #144 then explicit #142 shared-view composition",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/pull/144",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CARD-04",
+      "group": "mindgraph_cards",
+      "name": "Human-visible versus agent compact views",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Same exact nomination shown in card and returned through agent surface"
+      ],
+      "observable_acceptance": [
+        "Card may show rich inspection; agent compact output retains bounded exact preview; no generated summary or visibility becomes source truth"
+      ],
+      "execution_boundary": "Mounted query/card and consumer pair",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/88",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CARD-05",
+      "group": "mindgraph_cards",
+      "name": "Explicit Add targets exact source",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Select one nomination with exact identity; choose actual task context"
+      ],
+      "observable_acceptance": [
+        "Only explicit Add admits chosen representation after source validation; missing identity refuses; resulting authority remains declared"
+      ],
+      "execution_boundary": "Mounted Context compiler/source adapter",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CORP-01",
+      "group": "context_corpus_harness",
+      "name": "Mandatory-context coverage",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Predeclared mandatory item identities and compiled selected manifest"
+      ],
+      "observable_acceptance": [
+        "Report retained mandatory / declared mandatory; exact-item identity required; explicit refusal counted separately from successful coverage"
+      ],
+      "execution_boundary": "Frozen corpus and exact compiler adapter",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CORP-02",
+      "group": "context_corpus_harness",
+      "name": "Stale and authority confusion",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Explicit stale receipt, semantic nomination and agent-written PASS prose"
+      ],
+      "observable_acceptance": [
+        "Report stale admitted/selected counts and any promoted authority; the literal word PASS grants no authority"
+      ],
+      "execution_boundary": "Frozen corpus and exact adapters",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CORP-03",
+      "group": "context_corpus_harness",
+      "name": "Duplicate and irrelevant contribution",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Byte duplicates with different inclusion reasons; prelabelled irrelevant candidates"
+      ],
+      "observable_acceptance": [
+        "Report unique bytes, retained reason union and selected irrelevant bytes/count; no ranking labels inferred from model output"
+      ],
+      "execution_boundary": "Frozen corpus and exact compiler",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    },
+    {
+      "id": "CORP-04",
+      "group": "context_corpus_harness",
+      "name": "Comparable retrieval runs",
+      "input_class": "SYNTHETIC_CONTROL_SPEC",
+      "inputs": [
+        "Exact lexical/semantic/hybrid configs; corpus/chunk/model/index/source identities; same objectives and allowed context"
+      ],
+      "observable_acceptance": [
+        "Report mandatory coverage, relevant selected identities, irrelevant mass, freshness/authority errors, total bytes/tokens and cold/warm elapsed time; no quality conclusion from synthetic-only corpus"
+      ],
+      "execution_boundary": "Local corpus capture, apparatus freeze and explicitly admitted measurement",
+      "source_authority": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "execution_status": "NOT_RUN",
+      "oracle_aperture": "SOURCE_EXPOSED_PREPARATION_NOT_FRESH_INDEPENDENT_ORACLE"
+    }
+  ],
+  "counts": {
+    "retrieval_assembly": 10,
+    "context_ui": 9,
+    "mindgraph_cards": 5,
+    "context_corpus_harness": 4
+  },
+  "independence": "Do not place this implementation-aware packet in a fresh qualifier pre-freeze aperture. It can be used as separate regression/pressure material after the applicable oracle freeze."
+}

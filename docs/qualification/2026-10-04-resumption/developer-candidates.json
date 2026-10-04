@@ -1,0 +1,161 @@
+{
+  "schema": "conduit-developer-native-queue/v1",
+  "recorded_on": "2026-10-04",
+  "scope": "Four new unqualified source candidates. These are distinct from fresh123/128 and from a future combined product candidate. Native order may use dependency independence within recovered bounds.",
+  "candidates": [
+    {
+      "id": "150",
+      "pr": 150,
+      "name": "Context selected records",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/150",
+      "branch": "codex/issue58-selected-record-adapter-20261004",
+      "head": "09833f6a2631675d6b1cb9863229f10a821d1d5b",
+      "tree": "454afd8bc7a2c0e4ea2db1aaa35e7efc83b28b37",
+      "parent": "2f895fb471ce85c58f28065f23b7d7883ac8f0a0",
+      "base_branch": "codex/issue58-context-lexical-source-adapter-20261003",
+      "scope": "PARENT_148_STACK; no local D079 source included",
+      "test_suite": "ContextRecordSourceAdapterTests",
+      "authored_xctest_methods": 14,
+      "focused_entry": [
+        "./scripts/test.sh",
+        "--filter",
+        "ContextRecordSourceAdapterTests"
+      ],
+      "focused_entry_scope": "Maintained SelfTest and Python contracts plus selected XCTest. Inspect and record owned toolchain/cache/output selection first.",
+      "remaining_native_gates": [
+        "Swift compilation",
+        "focused owner regressions",
+        "applicable full maintained native tests",
+        "applicable first release/package/signature"
+      ],
+      "native_status": "NOT_RUN",
+      "fresh_independent_status": "NOT_RUN",
+      "mounted_status": "NOT_RUN",
+      "hosted_ci": {
+        "run_id": 37203447795,
+        "url": "https://github.com/camerontjs-dot/Conduit/actions/runs/37203447795",
+        "conclusion": "failure",
+        "job_id": 111439642317,
+        "steps_executed": 0,
+        "failure_cause": "UNKNOWN_IN_THIS_READ; check-run annotations unavailable through connector",
+        "classification": "ZERO_STEP_FAILURE_NOT_SOURCE_TEST_RESULT"
+      }
+    },
+    {
+      "id": "151",
+      "pr": 151,
+      "name": "Proposal budget arithmetic",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/151",
+      "branch": "codex/issue4-proposal-budget-overflow-20261004",
+      "head": "0ef7979f16ade58fc1146125b808876096510935",
+      "tree": "4a35035c040b1dd097e579edf04c195ba0c9e119",
+      "parent": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "base_branch": "main",
+      "scope": "MAIN_BASED; bounded validation repair",
+      "test_suite": "OrchestrationContextBudgetTests",
+      "authored_xctest_methods": 8,
+      "focused_entry": [
+        "./scripts/test.sh",
+        "--filter",
+        "OrchestrationContextBudgetTests"
+      ],
+      "focused_entry_scope": "Maintained SelfTest and Python contracts plus selected XCTest. Inspect and record owned toolchain/cache/output selection first.",
+      "remaining_native_gates": [
+        "Swift compilation",
+        "focused owner regressions",
+        "applicable full maintained native tests",
+        "applicable first release/package/signature"
+      ],
+      "native_status": "NOT_RUN",
+      "fresh_independent_status": "NOT_RUN",
+      "mounted_status": "NOT_RUN",
+      "hosted_ci": {
+        "run_id": 37203598389,
+        "url": "https://github.com/camerontjs-dot/Conduit/actions/runs/37203598389",
+        "conclusion": "failure",
+        "job_id": 111440088542,
+        "steps_executed": 0,
+        "failure_cause": "UNKNOWN_IN_THIS_READ; check-run annotations unavailable through connector",
+        "classification": "ZERO_STEP_FAILURE_NOT_SOURCE_TEST_RESULT"
+      }
+    },
+    {
+      "id": "152",
+      "pr": 152,
+      "name": "Retained thread recognition",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/152",
+      "branch": "codex/issue49-retained-thread-recognition-20261004",
+      "head": "1174384d69ee793f6fd0c4717ec455fcedc57121",
+      "tree": "208b771f1c9c50f25e7a1d2a6094363b1f921569",
+      "parent": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "base_branch": "main",
+      "scope": "MAIN_BASED; pure Core only, mounted UI open",
+      "test_suite": "ThreadRecognitionTests",
+      "authored_xctest_methods": 17,
+      "focused_entry": [
+        "./scripts/test.sh",
+        "--filter",
+        "ThreadRecognitionTests"
+      ],
+      "focused_entry_scope": "Maintained SelfTest and Python contracts plus selected XCTest. Inspect and record owned toolchain/cache/output selection first.",
+      "remaining_native_gates": [
+        "Swift compilation",
+        "focused owner regressions",
+        "applicable full maintained native tests",
+        "applicable first release/package/signature"
+      ],
+      "native_status": "NOT_RUN",
+      "fresh_independent_status": "NOT_RUN",
+      "mounted_status": "NOT_RUN",
+      "hosted_ci": {
+        "run_id": 37203750100,
+        "url": "https://github.com/camerontjs-dot/Conduit/actions/runs/37203750100",
+        "conclusion": "failure",
+        "job_id": 111440549449,
+        "steps_executed": 0,
+        "failure_cause": "UNKNOWN_IN_THIS_READ; check-run annotations unavailable through connector",
+        "classification": "ZERO_STEP_FAILURE_NOT_SOURCE_TEST_RESULT"
+      }
+    },
+    {
+      "id": "153",
+      "pr": 153,
+      "name": "Context delta identity",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/153",
+      "branch": "codex/issue58-context-delta-identity-20261004",
+      "head": "6cada810db1dff0bb0a6604bde4a9b80fc943802",
+      "tree": "000dade8747731afb1c5309ddb3be6eda51846b1",
+      "parent": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "base_branch": "main",
+      "scope": "MAIN_BASED; public fingerprint compatibility preserved",
+      "test_suite": "AgentContextIdentityDiffTests",
+      "authored_xctest_methods": 6,
+      "focused_entry": [
+        "./scripts/test.sh",
+        "--filter",
+        "AgentContextIdentityDiffTests"
+      ],
+      "focused_entry_scope": "Maintained SelfTest and Python contracts plus selected XCTest. Inspect and record owned toolchain/cache/output selection first.",
+      "remaining_native_gates": [
+        "Swift compilation",
+        "focused owner regressions",
+        "applicable full maintained native tests",
+        "applicable first release/package/signature"
+      ],
+      "native_status": "NOT_RUN",
+      "fresh_independent_status": "NOT_RUN",
+      "mounted_status": "NOT_RUN",
+      "hosted_ci": {
+        "run_id": 37203846827,
+        "url": "https://github.com/camerontjs-dot/Conduit/actions/runs/37203846827",
+        "conclusion": "failure",
+        "job_id": 111440835806,
+        "steps_executed": 0,
+        "failure_cause": "UNKNOWN_IN_THIS_READ; check-run annotations unavailable through connector",
+        "classification": "ZERO_STEP_FAILURE_NOT_SOURCE_TEST_RESULT"
+      }
+    }
+  ],
+  "composition_rule": "Do not combine these heads and report the result against an individual candidate. main.swift and CHANGELOG registration merges require a separately identified ChatGPT composition.",
+  "authored_xctest_methods": 45
+}

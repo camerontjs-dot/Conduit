@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "artifact_class": "SOURCE_EXPOSED_PREPARATION",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 8794,
+      "sha256": "c114de2f0ef690a3b65a3b5e282c2e9bd5bf11c355eae8a42fe00e9e908d871a"
+    },
+    {
+      "path": "source-inventory.json",
+      "bytes": 5513,
+      "sha256": "101adda6aae815ed9622c6335ae1920b69104e9449f56dea9e46f25d4c333bb0"
+    },
+    {
+      "path": "assembly-input-comparison.json",
+      "bytes": 2386,
+      "sha256": "907c888db797ef57cb41f3779c0b6a493bf7799d166861cd68f69829402f3c86"
+    },
+    {
+      "path": "acceptance-matrix.json",
+      "bytes": 21499,
+      "sha256": "5755795abb7bf0de3a01b0f79ee8b9bcf373753363150fd093bb54669d209a26"
+    },
+    {
+      "path": "corpus-seed.json",
+      "bytes": 14663,
+      "sha256": "842afbd74493db1e20f453c0ae68470d6026a4f88ca70bb99f93d0c1e6d138ef"
+    }
+  ],
+  "portable_consistency_checks": {
+    "json_parse": "PASS",
+    "unique_cases_and_group_counts": "PASS",
+    "all_product_executions_NOT_RUN": "PASS",
+    "kit_pin_comparison": "5 mismatches of7; assembler not invoked",
+    "corpus_and_synthetic_labels": "PASS",
+    "budget_state_spellings_match_inspected_source_enum": "PASS",
+    "source_refs_commit_blob_complete": "PASS",
+    "portable_path_scan": "PASS"
+  },
+  "product_test_execution": "NOT_RUN",
+  "native_execution": "NOT_RUN",
+  "retrieval_measurement": "NOT_RUN"
+}

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "classification": "IMPLEMENTATION_AWARE_SYNTHETIC_COUNTEREXAMPLE",
+  "subject_base": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "source_blob": "2761cd4d8d2808ad22ca6e7991b29001b502dc3a",
+  "before": {
+    "id": "retained",
+    "kind": "file",
+    "authority": "filesystemSource",
+    "lineRange": [
+      1,
+      2
+    ],
+    "freshness": {
+      "state": "current"
+    },
+    "sourceReference": "a|b",
+    "revisionIdentity": "c"
+  },
+  "after": {
+    "id": "retained",
+    "kind": "file",
+    "authority": "filesystemSource",
+    "lineRange": [
+      1,
+      2
+    ],
+    "freshness": {
+      "state": "current"
+    },
+    "sourceReference": "a",
+    "revisionIdentity": "b|c"
+  },
+  "legacy_fingerprint_before": "file|filesystemSource|a|b|c|1-2|current",
+  "legacy_fingerprint_after": "file|filesystemSource|a|b|c|1-2|current",
+  "expected_changed_item_ids": [
+    "retained"
+  ],
+  "python_calculation": "PASS",
+  "native_previous_candidate_run": "NOT_RUN",
+  "native_successor_run": "NOT_RUN",
+  "independent_oracle": "NO"
+}

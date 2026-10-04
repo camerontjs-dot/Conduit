@@ -1,0 +1,289 @@
+{
+  "schema": "conduit-local-qualification-recovery-manifest/v1",
+  "classification": "SOURCE_EXPOSED_COORDINATOR_RECOVERY_INDEX_NOT_FRESH_QUALIFICATION_ORACLE",
+  "repository": "camerontjs-dot/Conduit",
+  "known_local_search_root": {
+    "path": "30_projects/conduit/raw-materials/2026-10-02-programme-completion-run/",
+    "interpretation": "Known programme receipt root only. Do not assume every artifact below is present or infer an exact packet subdirectory.",
+    "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5976019156"
+  },
+  "prepared_packets": {
+    "status": "PREPARED_AND_REPORTED_RECOVERED; NOT_EXECUTED_IN_PRIOR_RUN",
+    "exact_packet_paths": "UNKNOWN",
+    "packet_sha256": "UNKNOWN",
+    "source_bundle_paths": "UNKNOWN",
+    "source_bundle_sha256": "UNKNOWN",
+    "historical_source_inventory_counts": {
+      "pr123": 149,
+      "pr128": 148
+    },
+    "count_boundary": "Counts of recorded recovered source files, not a full Git tree census or complete artifact custody assertion.",
+    "provenance_source_urls": [
+      "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5968740872",
+      "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5971136781",
+      "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5973087353"
+    ]
+  },
+  "candidates": [
+    {
+      "pr": 123,
+      "head": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+      "tree": "e022251b34654c9cfcbd93f36e13099b347d393b",
+      "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+      "committed_setup_doc": {
+        "path": "docs/qualification/owned-isolation.md",
+        "url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/owned-isolation.md",
+        "purpose": "Owned root/port convention, fixture containment, no HOME/CODEX_HOME reassignment, guarded startup; not a complete independent native driver"
+      },
+      "committed_owner_receipt": {
+        "path": "docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+        "url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+        "sha256": "9d6d4b6608e8608b17380655d09f1352d34604a40c67d9c43f864f4a620c6c54"
+      },
+      "committed_portable_tests": [
+        "Tests/ConduitCoreTests/ConduitInstanceConfigurationTests.swift",
+        "scripts/test.sh",
+        "scripts/build-app.sh"
+      ],
+      "recoverable_local_artifacts": [
+        {
+          "recorded_locator": "isolation87-bootstrap-build.log",
+          "sha256": "f845940c1db51a9be297c16611f051c121871704aa7d4cdf280628f14264e7e1",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_RESULT_OR_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "BASENAME_ONLY; enclosing local directory not specified by public receipt"
+        },
+        {
+          "recorded_locator": "isolation87-bootstrap-full.log",
+          "sha256": "765704208d7742bee2db09c8b5868692a51d14fafed6b8549044b7beb6bde545",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_RESULT_OR_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "BASENAME_ONLY; enclosing local directory not specified by public receipt"
+        },
+        {
+          "recorded_locator": "isolation87-native-owner-bootstrap-red-v5.json",
+          "sha256": "e3fea1de5fdecbedbbf2b2fc6b33f3b67b666701275ac37f400da80289e1b6ae",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_RESULT_OR_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "BASENAME_ONLY; enclosing local directory not specified by public receipt"
+        },
+        {
+          "recorded_locator": "isolation87-native-owner-bootstrap-red-v5.log",
+          "sha256": "0ac823fa64b36b6b7d2115cadf062430187d04e09a7d8aba611bf148c34d2831",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_RESULT_OR_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "BASENAME_ONLY; enclosing local directory not specified by public receipt"
+        },
+        {
+          "recorded_locator": "isolation87-native-owner-bootstrap-successor-v6.json",
+          "sha256": "1917dbd27d87b8d00223b06ce66f4d03c77ade89c0753eaa05c22cdefd0e5bd6",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_RESULT_OR_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "BASENAME_ONLY; enclosing local directory not specified by public receipt"
+        },
+        {
+          "recorded_locator": "isolation87-native-owner-bootstrap-successor.log",
+          "sha256": "ffcfcad0523e4875ca88e5aabbed0d113bb90d7b116f7877579abf18ac733980",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_RESULT_OR_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "BASENAME_ONLY; enclosing local directory not specified by public receipt"
+        },
+        {
+          "recorded_locator": "isolation87-native-owner-bootstrap-successor.py",
+          "sha256": "f67722065f3bab78415ed4463bebc0c34d51be0937a1edeaa06470a99a742a07",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_APPARATUS_SOURCE",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "BASENAME_ONLY; enclosing local directory not specified by public receipt"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "de15c1dc3519db988977bc4e37e3fba48328b2c01c8e010e8817cb86178946a9",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_DEBUG_BINARY",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "a6de22adb5341d1e55053092fd6cf29cd44222ac70d5d1f03080afbbd2a89234",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/9c9a61804eace635901d5e1c1eba46fe44b1c525/docs/qualification/receipts/isolation87-bootstrap-owner-native-v1.json",
+          "role": "OWNER_RELEASE_BINARY",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN"
+        }
+      ],
+      "known_missing_locator_information": [
+        "Exact local native app driver directory",
+        "Exact task-owned real-Xcode wrapper source, hash and invocation",
+        "Full prepared fresh qualification packet path and frozen permitted-input manifest",
+        "Exact original debug/release binary paths"
+      ],
+      "source_note": "No new product FAIL established in this read-only review. Existing owner/native evidence still does not establish process/cache/installed composition isolation independently."
+    },
+    {
+      "pr": 128,
+      "head": "587be4267f7ef7e3a9e40eacf07aab334dcb59f4",
+      "tree": "6ceb4705cbdb27429dc088dc925ed2dc368084d6",
+      "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+      "committed_current_freeze_doc": {
+        "path": "docs/qualification/issue114-explicit-thread-freeze.md",
+        "url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/issue114-explicit-thread-freeze.md"
+      },
+      "committed_owner_receipt": {
+        "path": "docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+        "url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+        "sha256": "5ae18a489a33a41d11b8c117b343dc58ed2978f06188f90478930516ecdeac2f"
+      },
+      "owner_source_head": "e401e486d955823f0ffebe07a7b2f7bfb8df984a",
+      "owner_source_tree": "b2cc2b2a2288137c0dacf84434cc765e6a75b88a",
+      "source_sha256": {
+        "Sources/Conduit/CodexAppServerClient.swift": "5832ec2047a7c2c7cfd4c7b0d75b22dd37e51315c6fc0f8199007d2122db8326",
+        "Sources/ConduitCore/CodexAppServerProtocol.swift": "32d0198cf78f4a6c47e821c727070e441a48ac43ee9a66dd223344968245b25f"
+      },
+      "committed_portable_tests": [
+        "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift",
+        "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift",
+        "Tests/ConduitCoreTests/CodexTerminalRejectionTests.swift",
+        "Tests/ConduitCoreTests/CodexTerminalReplayTests.swift",
+        "scripts/test.sh"
+      ],
+      "recoverable_local_artifacts": [
+        {
+          "recorded_locator": "114-response-native-v3/result.json",
+          "sha256": "589d4e9cad1a219bd11e63ce135c93b7d25cc55756669b0630d97b7a49bdba74",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_NATIVE_PRESSURE_RESULT",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "RELATIVE_PATH; enclosing local directory unknown",
+          "controls": 33
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "94cb788a47852cd9143adef84a8a908292a08958cf1217054d08c58923138333",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_TEARDOWN_RESULT",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN",
+          "paired_result": "114-response-native-v3/result.json"
+        },
+        {
+          "recorded_locator": "114-handshake-identity-pressure-green/result.json",
+          "sha256": "e777a67c7fc2d00f34d5aba0ea43b729743d9bba3ef40e753d75621edd2d3277",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_NATIVE_PRESSURE_RESULT",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "RELATIVE_PATH; enclosing local directory unknown",
+          "controls": 12
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "2f05e28af81ec3a79598ac1e2b05717ef27cba34d143416c4c2b28e99fdd0fa6",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_TEARDOWN_RESULT",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN",
+          "paired_result": "114-handshake-identity-pressure-green/result.json"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "c508e1ec98ea596a8d4b10db336e6c26815f5f6bee16748ce47f066f58d9b3f7",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_GATE_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN",
+          "gate": "focused_native"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "98d080b39eceb07ed7e4e971774dbee62b190378f145392639c66a7e225cf1f7",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_GATE_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN",
+          "gate": "repository_native_full"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "b1fbac66875ad7b65346631d299a602acb99d0dc7fda4b871defe25baa712b0a",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_GATE_RECEIPT",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN",
+          "gate": "repository_native_full"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "dfad406b7dd6e71205c6adb8d85babf27786db566f364ea0b13c6972e6bd7bda",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_GATE_LOG",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN",
+          "gate": "release_package_strict_signature"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "611876483490eb38cddd65c7fdef88a5eb668bb358c95a6a4f48c073665fb81f",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_GATE_RECEIPT",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN",
+          "gate": "release_package_strict_signature"
+        },
+        {
+          "recorded_locator": null,
+          "sha256": "041f4947726226db9b5789d2305c39e6c176c8ba87e3806247673f5b3471f876",
+          "provenance_source_url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+          "role": "OWNER_PRODUCT_SOURCE_INVENTORY",
+          "physical_custody_in_this_chat": "NOT_INSPECTED",
+          "exact_absolute_local_path": "UNKNOWN",
+          "locator_kind": "UNKNOWN"
+        }
+      ],
+      "known_missing_locator_information": [
+        "Exact enclosing root for native-pressure result paths",
+        "Actual-client33 and handshake12 harness source filenames, hashes and invocation details",
+        "Full prepared fresh qualification packet and source-inventory locators"
+      ],
+      "metadata_collision": {
+        "path": "CANDIDATE.json",
+        "url": "https://github.com/camerontjs-dot/Conduit/blob/587be4267f7ef7e3a9e40eacf07aab334dcb59f4/CANDIDATE.json",
+        "meaning": "Inherited older terminal-replay rc0 metadata; do not use its predecessor source/tree/counts as current128 identity. Keep it unchanged and select current freeze note+owner receipt explicitly in the external handoff."
+      },
+      "composition_boundary": "This exact candidate lacks #123 owned-state seam. Core/unchanged native-client offline qualification is distinct from a later separately frozen #123+#128 AppModel/HTTP composition."
+    }
+  ],
+  "recovery_rules": [
+    "Coordinator locates existing prepared packet and inventories/rechecks exact identities, source/raw files, hashes and actual commands before reuse.",
+    "Missing source harness, raw artifact, input inventory or freeze remains UNKNOWN or RECOVERY_BLOCKED. Do not invent a locator or reconstruct a missing old binary and call it historical custody.",
+    "Recover apparatus for reproducibility; the fresh qualifier independently selects/fixes its oracle from the permitted base/contract aperture before seeing candidate source, owner results or these source-exposed pressure hypotheses.",
+    "If recovered aperture contains outcome/prior-source exposure incompatible with the required independence, preserve it and prepare a new explicitly identified aperture rather than silently reusing it.",
+    "No native runtime, provider call, installation, remote qualifier or GitHub candidate mutation is authorized or executed by this manifest."
+  ]
+}

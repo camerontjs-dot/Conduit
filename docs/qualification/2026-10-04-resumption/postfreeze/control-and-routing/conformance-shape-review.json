@@ -1,0 +1,108 @@
+{
+  "schema": "conduit-static-conformance-review-v1",
+  "main": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "historical_matrix_observed_at": "2026-09-23T23:07:42Z",
+  "result": "MAINTAINED_STATIC_VALIDATOR_PASS",
+  "artifact_objects_base64_decoded_git_blob_verified": 29,
+  "runtimes": [
+    {
+      "runtime": "antigravity",
+      "capabilities": 13,
+      "provider": {
+        "unknown": 13
+      },
+      "conduit": {
+        "unknown": 9,
+        "unsupported": 3,
+        "supported": 1
+      }
+    },
+    {
+      "runtime": "claude",
+      "capabilities": 13,
+      "provider": {
+        "unavailable": 10,
+        "unknown": 3
+      },
+      "conduit": {
+        "unavailable": 8,
+        "unsupported": 3,
+        "unknown": 1,
+        "supported": 1
+      }
+    },
+    {
+      "runtime": "codex_app_server",
+      "capabilities": 13,
+      "provider": {
+        "supported": 10,
+        "unknown": 3
+      },
+      "conduit": {
+        "supported": 9,
+        "unknown": 2,
+        "unsupported": 2
+      }
+    },
+    {
+      "runtime": "gemini_acp",
+      "capabilities": 13,
+      "provider": {
+        "unknown": 11,
+        "supported": 2
+      },
+      "conduit": {
+        "unknown": 9,
+        "unsupported": 2,
+        "supported": 2
+      }
+    },
+    {
+      "runtime": "grok_acp",
+      "capabilities": 13,
+      "provider": {
+        "supported": 8,
+        "unknown": 5
+      },
+      "conduit": {
+        "supported": 8,
+        "unknown": 3,
+        "unsupported": 2
+      }
+    },
+    {
+      "runtime": "opencode",
+      "capabilities": 13,
+      "provider": {
+        "supported": 9,
+        "unknown": 4
+      },
+      "conduit": {
+        "supported": 11,
+        "unknown": 2
+      }
+    },
+    {
+      "runtime": "shell_fallback",
+      "capabilities": 13,
+      "provider": {
+        "unsupported": 10,
+        "supported": 2,
+        "unknown": 1
+      },
+      "conduit": {
+        "unsupported": 6,
+        "unknown": 4,
+        "supported": 3
+      }
+    }
+  ],
+  "capability_cells": 91,
+  "layer_outcomes": 182,
+  "current_native_provider_conformance": "NOT_RUN",
+  "scope": "Exact-main matrix completeness, outcome/reference validation and artifact SHA256 match using unmodified maintained validate-matrix command. Not independent acceptance or fresh installed-provider observation.",
+  "apparatus_notes": [
+    "Default Python and configured primary Python each lacked optional jsonschema import; both attempts stopped before validation.",
+    "Used repository-owned standard-library validator unchanged after fetching every referenced local artifact by exact main SHA; no package installation or source/schema repair."
+  ]
+}

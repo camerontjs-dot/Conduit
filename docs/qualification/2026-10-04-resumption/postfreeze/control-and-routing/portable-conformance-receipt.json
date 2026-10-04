@@ -1,0 +1,182 @@
+{
+  "command": [
+    "python",
+    "conduit_resume/routing-contract-audit/conformance-current/scripts/provider-conformance.py",
+    "validate-matrix",
+    "--matrix",
+    "conduit_resume/routing-contract-audit/main/docs/qualification/provider-conformance-v1.json"
+  ],
+  "exit_code": 0,
+  "stdout": "{\n  \"valid\": true,\n  \"errors\": []\n}\n",
+  "stderr": "",
+  "source_blob_custody_count": 29,
+  "interpretation": "Static maintained validator only. No provider or native experiment executed. It compares the historical matrix against exact current-main artifact bytes.",
+  "result": "PASS",
+  "native_provider_execution": "NOT_RUN",
+  "matrix_capability_cells": 91,
+  "provider_and_conduit_outcomes": 182,
+  "preserved_attempts": [
+    {
+      "python": "default",
+      "stage": "optional JSON-schema import",
+      "result": "APPARATUS_UNAVAILABLE",
+      "error": "ModuleNotFoundError: No module named jsonschema",
+      "validation_started": false
+    },
+    {
+      "python": "configured primary runtime",
+      "stage": "optional JSON-schema import",
+      "result": "APPARATUS_UNAVAILABLE",
+      "error": "ModuleNotFoundError: No module named jsonschema",
+      "validation_started": false
+    }
+  ],
+  "actual_validator": "Unmodified maintained scripts/provider-conformance.py validate-matrix",
+  "source_objects": [
+    {
+      "path": "Sources/Conduit/AppModel.swift",
+      "git_blob_sha": "d210945b059bd5e3352e7876dc4c1b446522acbc",
+      "sha256": "984b152671d566f81c5812d2fb43da4de997de886d2ce8401a6bec02604e8162"
+    },
+    {
+      "path": "Sources/Conduit/CodexAppServerClient.swift",
+      "git_blob_sha": "f89df0b48d33b4a7c1ce1212665489d38877f407",
+      "sha256": "bb70c445990b9050c23ed8ad9b3bb3e42a69c7f499b39ea4d2775a0db011063f"
+    },
+    {
+      "path": "Sources/Conduit/GrokACPClient.swift",
+      "git_blob_sha": "9c1477f95f04289f5c80c90241d1bb5a208c4efa",
+      "sha256": "be5a39358df68c6311637ad2dae09bfac083c37044ffcb18982c3d2914f8994f"
+    },
+    {
+      "path": "Sources/Conduit/OpenCodeHTTPClient.swift",
+      "git_blob_sha": "2225f82f2f9b6744fb6bbbb4fb62468bbb26950b",
+      "sha256": "cddd5d926526d9705dbe9cf237bd3ce1471e146ddb4eddd51fcc0bed32b7fac0"
+    },
+    {
+      "path": "Sources/Conduit/StreamJSONClient.swift",
+      "git_blob_sha": "03d4dec6d3c144d2fea262ffd79b0f761bfd265e",
+      "sha256": "105a7a46a2da10733b4808959ae91c089d6029972a344007fd82b5466bef81d2"
+    },
+    {
+      "path": "Sources/Conduit/TerminalBackend.swift",
+      "git_blob_sha": "d9da877b06b09db71aca51b122e4b12fc885b964",
+      "sha256": "3e3b3b80756847e9766b6a28eba0aa5a609c0dacd054c18755a704922ad1c4ea"
+    },
+    {
+      "path": "Sources/ConduitCore/ACPProtocol.swift",
+      "git_blob_sha": "394680aff836eb3e9d8bec69f5fdfb1ba99ecd7a",
+      "sha256": "496ca6fdae99d5735d38a61fd00dc5fc22d1d0ec6ca4d90cecf40b42834591af"
+    },
+    {
+      "path": "Sources/ConduitCore/CodexAppServerProtocol.swift",
+      "git_blob_sha": "d991735a5ac030d20b62f0348ed4d738e26ce2d1",
+      "sha256": "18b661335b7a911e4eda2d33fa5147e2fcb7cbb38d15f78d00e96a52ac63f9b7"
+    },
+    {
+      "path": "Sources/ConduitCore/LifecyclePreflightPlanner.swift",
+      "git_blob_sha": "6b39b263b0ccd126324c1cf1b7107d1b1a25371e",
+      "sha256": "4113d7c4c1ae9f2dbe6c52d3449841507918de6a4e539c1d62d5cc721caca4fb"
+    },
+    {
+      "path": "Sources/ConduitCore/StructuredAdapter.swift",
+      "git_blob_sha": "fcb16ee1136ac0adee287720969699289731d305",
+      "sha256": "c117c5a2dc43230fd9d7c06bd69ee16d58e06614982d277dff24abb1672fb5a5"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/CodexAppServerProtocolTests.swift",
+      "git_blob_sha": "668f9d97dc8fccec4aef5021286c47d451ffe16f",
+      "sha256": "c16be21db8e6059662cd8cf337a5d80d63d03f6db7b6d272c85bc5eb8d154e15"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/CodexAppServerStreamPumpTests.swift",
+      "git_blob_sha": "ebfe4e86b8cc5eb3d08fda1a0ea2a1ef8c913980",
+      "sha256": "74ca21e897ec80f984d79af12649e5dd611a3b2058afb87b2947bf7a398cef81"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/LifecyclePreflightPlannerTests.swift",
+      "git_blob_sha": "4e1f70193d1ec36427172af41e1558a4d2b0984b",
+      "sha256": "41501c2466e809b2ff06792a4c0b4ddc3b2b8ae21e1f370f314a8ad6b8070307"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/OpenCodeConversationActivityTests.swift",
+      "git_blob_sha": "f26c3f0cbfac442efdc88ca6841447ffc099bdec",
+      "sha256": "f618fae69b74927df3b7467811feff02cc73224c02fdb4de27c68b039f981290"
+    },
+    {
+      "path": "Tests/ConduitCoreTests/StructuredAdapterTests.swift",
+      "git_blob_sha": "a68476ffaf8da4ed97acfbb25740f6a1143dcf66",
+      "sha256": "de95f897641533be8064f0129f90cc2afe8f0488f03a31d35bfde60abbedbd08"
+    },
+    {
+      "path": "Tests/test_provider_conformance.py",
+      "git_blob_sha": "33246d8f03529dcabbfe911ea6cfa8d3fc6a4fff",
+      "sha256": "94cb889dd293c2cbb039b29fb9dfb440e28544e971682a68e6f5d716c230551f"
+    },
+    {
+      "path": "docs/qualification/provider-conformance-v1.schema.json",
+      "git_blob_sha": "456e10e9d4b088a12cb8008ff527f3aa6c997647",
+      "sha256": "612b6402db13c23793c30a48ab3975916e6fd4f0b89a44fde6ec7077a94fa3f1"
+    },
+    {
+      "path": "docs/qualification/receipts/codex-app-server-probe-v1-20260923T221922Z.json",
+      "git_blob_sha": "1f8af54012037b28ef6e056b8665c0d04bef8d3d",
+      "sha256": "d73cbf598aa7d2b99e8607975c06c1fb3a535f0e50f6c61ac898ad668fde1789"
+    },
+    {
+      "path": "docs/qualification/receipts/codex-app-server-probe-v1-20260923T222811Z.json",
+      "git_blob_sha": "5dc6c93af4f373cd3a4c14306bce684b7736b170",
+      "sha256": "b2ed0808948e2a2b3e0c6fc104f3162bd166143050c29440b0b19241084b478c"
+    },
+    {
+      "path": "docs/qualification/receipts/codex-protocol-tests-v1-20260923T231911Z.json",
+      "git_blob_sha": "59f3f2f9db393ebab4a4339fa7b89209f57f7185",
+      "sha256": "b0a766cda5f2fc42e223845dac56295ed0fcd2790314f1117f12c1d8ab0feaf4"
+    },
+    {
+      "path": "docs/qualification/receipts/gemini-acp-probe-v1-20260923T224805Z.json",
+      "git_blob_sha": "1c091b10393bd94d4994ec92f0681cf961044475",
+      "sha256": "307e774fec3007317f61ef4460b9a9ec77f7965e4530cac61b8363e2d61cbc9f"
+    },
+    {
+      "path": "docs/qualification/receipts/grok-acp-probe-v1-20260923T224011Z.json",
+      "git_blob_sha": "7332603061c680f662583c9ec13b8bd92e1df2cf",
+      "sha256": "1e8ae46a10a474dd1b21aedcab4f020da4a657a34367e8488ec2618d24bfc489"
+    },
+    {
+      "path": "docs/qualification/receipts/grok-acp-probe-v1-20260923T224242Z.json",
+      "git_blob_sha": "6aff68efc4ff9df3df75b4747188c649cd016a4c",
+      "sha256": "34b1f3e646cc870deaee83915585910287a625d7b9ff17fb3e5946253dd5541f"
+    },
+    {
+      "path": "docs/qualification/receipts/opencode-runtime-probe-v1-20260923T223213Z.json",
+      "git_blob_sha": "f43a0bf12e92d00df6df3686ca786d2a3832f19e",
+      "sha256": "f60f4d9ff9100afa0758e0f2b7da6e3b5d41ac69f643145a17c6ec5b03705e28"
+    },
+    {
+      "path": "docs/qualification/receipts/provider-inventory-v1-20260923T230005313303Z.json",
+      "git_blob_sha": "3e576228ef20f0a905da10886fa071f29c776ca4",
+      "sha256": "a5b984a4448020002c44e9eac2441607072a19ab530efc22d6d89fcef702a902"
+    },
+    {
+      "path": "docs/qualification/receipts/shell-process-probe-v1-20260923T224240Z.json",
+      "git_blob_sha": "0ef94d5ff912b6ec0e8a90882ca9d40bab9661f3",
+      "sha256": "507033df46d67b03fc88a30076cdcb5e499a6af86e5168bdf7bc82f9637fd831"
+    },
+    {
+      "path": "docs/qualification/shell-provider-correlation-live.json",
+      "git_blob_sha": "9b12dce956a21b445584767398f1567b721e9043",
+      "sha256": "8ff395209169f23a26f112c58f581d04ec7cf356941fc118cffcf20aa7dfc50f"
+    },
+    {
+      "path": "scripts/provider-conformance.py",
+      "git_blob_sha": "fa7851d397a0f289c88286ce8f48c828294b2f3a",
+      "sha256": "f98ce5e26111e68d8e76a7d24dbede9396b686799263f49684f67842cf08258f"
+    },
+    {
+      "path": "scripts/test.sh",
+      "git_blob_sha": "fbf8f27409d28ca96fc79f24bf2ee77c5028ca6e",
+      "sha256": "b422a270f7e333a6f87341aa5d1f4bc43ab9f656273a43437176b70382c629cb"
+    }
+  ]
+}

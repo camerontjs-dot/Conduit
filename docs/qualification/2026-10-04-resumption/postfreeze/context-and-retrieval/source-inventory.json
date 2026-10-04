@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "main": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "main_tree": "3308565e9fbc35f8541911cea9a38b4e1b251260",
+  "mindgraph_main": "8df9ae7fccdb742558950ef9bdedb96cc74df6d0",
+  "mindgraph_candidate46": "11f6f8161dbf6cb78ebc1363a28948a4606fe6e0",
+  "evidence_scope": "Read-only source review; no producer/native/product execution",
+  "entries": [
+    {
+      "repository": "Conduit",
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/AgentContext.swift",
+      "git_blob": "2761cd4d8d2808ad22ca6e7991b29001b502dc3a",
+      "review": "SOURCE_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContext.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/AgentContextPresentation.swift",
+      "git_blob": "3866f81fe1d7c73f38a81c01628ffab45bb82f05",
+      "review": "SOURCE_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContextPresentation.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/AgentContextSnapshotStore.swift",
+      "git_blob": "cf05e887e2979a30a2874432e56120812b793c30",
+      "review": "SOURCE_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContextSnapshotStore.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/ContextCompiler.swift",
+      "git_blob": "843bc359108c2f5b792bfa76bb10ae2e062813d1",
+      "review": "SOURCE_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/ContextCompiler.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/Conduit/ContextStackView.swift",
+      "git_blob": "823d3b585cd8cc73fd17721c83cc2198c5918daf",
+      "review": "SOURCE_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/ContextStackView.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/Conduit/ContextIDEBridge.swift",
+      "git_blob": "92b8febbbba0899bb358e821179db508bca3365c",
+      "review": "SOURCE_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/ContextIDEBridge.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/Conduit/MindGraphQueryView.swift",
+      "git_blob": "4c69efba3336f0540a44f0fadf20e7402b97fc28",
+      "review": "SOURCE_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/MindGraphQueryView.swift"
+    },
+    {
+      "repository": "MindGraph",
+      "commit": "11f6f8161dbf6cb78ebc1363a28948a4606fe6e0",
+      "path": "src/mindgraph/cli.py",
+      "git_blob": "d6442970e804fa99b00395ee0e9f3967028875cb",
+      "review": "SOURCE_READ_BOUNDED_TO_IDENTITY_QUERY_EXPANSION",
+      "url": "https://github.com/camerontjs-dot/MindGraph/blob/11f6f8161dbf6cb78ebc1363a28948a4606fe6e0/src/mindgraph/cli.py"
+    },
+    {
+      "repository": "MindGraph",
+      "commit": "11f6f8161dbf6cb78ebc1363a28948a4606fe6e0",
+      "path": "src/mindgraph/mcp_server.py",
+      "git_blob": "24ca612c034c0b56f15c0f26183383452dc16be8",
+      "review": "SOURCE_READ_BOUNDED_TO_IDENTITY_QUERY_EXPANSION",
+      "url": "https://github.com/camerontjs-dot/MindGraph/blob/11f6f8161dbf6cb78ebc1363a28948a4606fe6e0/src/mindgraph/mcp_server.py"
+    },
+    {
+      "repository": "MindGraph",
+      "commit": "11f6f8161dbf6cb78ebc1363a28948a4606fe6e0",
+      "path": "src/mindgraph/db.py",
+      "git_blob": "1e7ec3f78bb5a81d6743d3c16b75274ee378f775",
+      "review": "SOURCE_READ_BOUNDED_TO_IDENTITY_QUERY_EXPANSION",
+      "url": "https://github.com/camerontjs-dot/MindGraph/blob/11f6f8161dbf6cb78ebc1363a28948a4606fe6e0/src/mindgraph/db.py"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "74d16781776da8e9a1eed0dff7685802f8099284",
+      "path": "Sources/ConduitCore/ContextSetStore.swift",
+      "git_blob": null,
+      "review": "EXACT_PR_PATCH_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/74d16781776da8e9a1eed0dff7685802f8099284/Sources/ConduitCore/ContextSetStore.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "7800a10a5622242ce6653f24e0a5e5e3b73dec72",
+      "path": "Sources/Conduit/MindGraphQueryView.swift",
+      "git_blob": null,
+      "review": "EXACT_PR_PATCH_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/7800a10a5622242ce6653f24e0a5e5e3b73dec72/Sources/Conduit/MindGraphQueryView.swift"
+    },
+    {
+      "repository": "Conduit",
+      "commit": "6de5a8612584a1c667ce50a818fbadeefa2c5bb1",
+      "path": "Sources/Conduit/MindGraphQueryView.swift",
+      "git_blob": null,
+      "review": "EXACT_PR_PATCH_READ",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/6de5a8612584a1c667ce50a818fbadeefa2c5bb1/Sources/Conduit/MindGraphQueryView.swift"
+    }
+  ]
+}

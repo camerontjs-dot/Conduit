@@ -1,0 +1,21 @@
+test_additional_exact_locked_candidate_can_be_selected (test_frozen_source.FrozenSourcePreflightTests.test_additional_exact_locked_candidate_can_be_selected) ... ok
+test_assume_unchanged_does_not_hide_physical_edit (test_frozen_source.FrozenSourcePreflightTests.test_assume_unchanged_does_not_hide_physical_edit) ... ok
+test_clean_fixture_matches_and_records_completed_git_commands (test_frozen_source.FrozenSourcePreflightTests.test_clean_fixture_matches_and_records_completed_git_commands) ... ok
+test_executable_mode_checked_when_git_ignores_it (test_frozen_source.FrozenSourcePreflightTests.test_executable_mode_checked_when_git_ignores_it) ... ok
+test_existing_receipt_is_never_overwritten (test_frozen_source.FrozenSourcePreflightTests.test_existing_receipt_is_never_overwritten) ... ok
+test_fifo_replacement_is_blocked_without_reading_it (test_frozen_source.FrozenSourcePreflightTests.test_fifo_replacement_is_blocked_without_reading_it) ... ok
+test_nonzero_status_is_blocked_never_assumed_clean (test_frozen_source.FrozenSourcePreflightTests.test_nonzero_status_is_blocked_never_assumed_clean) ... ok
+test_output_inside_checkout_is_refused_before_write (test_frozen_source.FrozenSourcePreflightTests.test_output_inside_checkout_is_refused_before_write) ... ok
+test_submodule_entry_is_blocked (test_frozen_source.FrozenSourcePreflightTests.test_submodule_entry_is_blocked) ... ok
+test_symlink_bytes_are_compared_without_opening_target (test_frozen_source.FrozenSourcePreflightTests.test_symlink_bytes_are_compared_without_opening_target) ... ok
+test_timeout_is_blocked_with_incomplete_command_record (test_frozen_source.FrozenSourcePreflightTests.test_timeout_is_blocked_with_incomplete_command_record) ... ok
+test_tracked_non_utf8_newline_filename_matches (test_frozen_source.FrozenSourcePreflightTests.test_tracked_non_utf8_newline_filename_matches) ... ok
+test_unlisted_candidate_is_blocked_before_git (test_frozen_source.FrozenSourcePreflightTests.test_unlisted_candidate_is_blocked_before_git) ... ok
+test_untracked_nul_status_preserves_filename_bytes (test_frozen_source.FrozenSourcePreflightTests.test_untracked_nul_status_preserves_filename_bytes) ... ok
+test_wrong_head_is_mismatch_without_repair (test_frozen_source.FrozenSourcePreflightTests.test_wrong_head_is_mismatch_without_repair) ... ok
+test_wrong_tree_is_mismatch (test_frozen_source.FrozenSourcePreflightTests.test_wrong_tree_is_mismatch) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 2.497s
+
+OK

@@ -1,0 +1,849 @@
+{
+  "schema": "conduit-source-exposed-contract-audit-v1",
+  "review_date": "2026-10-04",
+  "repository": "camerontjs-dot/Conduit",
+  "main_commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "main_tree": "3308565e9fbc35f8541911cea9a38b4e1b251260",
+  "authority": [
+    "https://github.com/camerontjs-dot/Conduit/issues/4#issuecomment-5843421082",
+    "https://github.com/camerontjs-dot/Conduit/issues/4#issuecomment-5482776441",
+    "https://github.com/camerontjs-dot/Conduit/issues/56#issuecomment-5753484851",
+    "https://github.com/camerontjs-dot/Conduit/issues/9"
+  ],
+  "role": "Source-exposed reviewer and bounded repair author; not independent fresh qualifier.",
+  "qualification_aperture": "This packet contains source-derived expected cases. Keep it outside a fresh oracle author's aperture until that oracle is frozen; then use as explicitly source-exposed pressure.",
+  "sources": {
+    "main-proposal": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/OrchestrationProposal.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/OrchestrationProposal.swift"
+    },
+    "main-policy": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/OrchestrationPolicy.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/OrchestrationPolicy.swift"
+    },
+    "main-planner": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/OrchestrationPlanner.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/OrchestrationPlanner.swift"
+    },
+    "main-app": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/Conduit/AppModel.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/AppModel.swift"
+    },
+    "main-orchestrate-ui": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/Conduit/OrchestrateWorkspaceView.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/OrchestrateWorkspaceView.swift"
+    },
+    "main-command": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/ConduitSessionAPI.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/ConduitSessionAPI.swift"
+    },
+    "main-task-events": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/TaskSession.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/TaskSession.swift"
+    },
+    "main-adapter": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/StructuredAdapter.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/StructuredAdapter.swift"
+    },
+    "main-conformance": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "docs/qualification/provider-conformance-v1.json",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/docs/qualification/provider-conformance-v1.json"
+    },
+    "main-conformance-contract": {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "docs/qualification/provider-conformance-v1.md",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/docs/qualification/provider-conformance-v1.md"
+    },
+    "routing122": {
+      "commit": "a6b9cf5b002a925995a6137929e804a93e7a5e03",
+      "path": "Sources/ConduitCore/DeterministicRouting.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/a6b9cf5b002a925995a6137929e804a93e7a5e03/Sources/ConduitCore/DeterministicRouting.swift"
+    },
+    "run138": {
+      "commit": "07ce37df391c8263a55adf23728f6d046d29509b",
+      "path": "Sources/ConduitCore/OrchestrationRun.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/07ce37df391c8263a55adf23728f6d046d29509b/Sources/ConduitCore/OrchestrationRun.swift"
+    },
+    "run138-contract": {
+      "commit": "07ce37df391c8263a55adf23728f6d046d29509b",
+      "path": "docs/orchestration-run-contract.md",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/07ce37df391c8263a55adf23728f6d046d29509b/docs/orchestration-run-contract.md"
+    },
+    "caller146": {
+      "commit": "ab424afd80a45c41de9523dde8d0d9416751821d",
+      "path": "Sources/ConduitCore/ConduitSessionAPI.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/ab424afd80a45c41de9523dde8d0d9416751821d/Sources/ConduitCore/ConduitSessionAPI.swift"
+    },
+    "catalog146": {
+      "commit": "ab424afd80a45c41de9523dde8d0d9416751821d",
+      "path": "Sources/ConduitCore/ConduitSessionToolCatalog.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/ab424afd80a45c41de9523dde8d0d9416751821d/Sources/ConduitCore/ConduitSessionToolCatalog.swift"
+    },
+    "server146": {
+      "commit": "ab424afd80a45c41de9523dde8d0d9416751821d",
+      "path": "Sources/Conduit/ConduitSessionAPIServer.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/ab424afd80a45c41de9523dde8d0d9416751821d/Sources/Conduit/ConduitSessionAPIServer.swift"
+    },
+    "events147": {
+      "commit": "14ffd89b545473d6c4657047efc25dfa053344c7",
+      "path": "Sources/ConduitCore/TaskSupervisoryEvents.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/14ffd89b545473d6c4657047efc25dfa053344c7/Sources/ConduitCore/TaskSupervisoryEvents.swift"
+    },
+    "events147-contract": {
+      "commit": "14ffd89b545473d6c4657047efc25dfa053344c7",
+      "path": "docs/task-supervisory-events.md",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/14ffd89b545473d6c4657047efc25dfa053344c7/docs/task-supervisory-events.md"
+    }
+  },
+  "groups": [
+    {
+      "group_id": "control_contract_extensions",
+      "row_ids": [
+        "4/approvals-errors-tools-artifacts",
+        "4/read-proposals-context",
+        "4/adapter-conformance"
+      ],
+      "existing_coverage": [
+        "Main has a typed proposal/context packet, proposal-only planner interface, deterministic validation, proposal fingerprint and exact-proposal approval token. Orchestrate Start remains an empty disabled action.",
+        "Main adapter effects retain live approval requests and failures; exported conversation events already provide prompt/output and artifact-reference fields. TaskSessionEventKind has no durable approval/tool-call/result/artifact event family.",
+        "#146 keeps the maintained 18-tool/7-write footprint, shared bearer admission principal, initialization refusal and catalogue comparison metadata. It adds no proposal-preparation, global-history or logical-run query.",
+        "#147 is a pure unmounted content-free global projection of existing per-task event logs. It deliberately exports no approval content, output bodies or tool/artifact semantic events.",
+        "The maintained seven-runtime by thirteen-capability matrix is present, with separate provider and Conduit outcomes and explicit unknown/unavailable/unsupported cells. Its unmodified static validator passed against all 29 exact-current-main referenced artifact bytes in this review."
+      ],
+      "chat_completed": [
+        "Inspected the concrete source owners and catalogue; prepared the contract/negative-case and receipt matrix in this packet.",
+        "Implemented a separate bounded proposal-context integer-overflow/refusal candidate with eight XCTest and eight SelfTest controls; exact source manifest is in the sibling proposal-validation packet.",
+        "Revalidated the retained provider-conformance matrix/reference hashes using the maintained offline validator; no historical cell upgraded to fresh native support."
+      ],
+      "next_boundary": [
+        "Proposal arithmetic candidate needs local Swift/SelfTest/XCTest execution.",
+        "Durable provider approval/tool/result/error correlation must consume the accepted #53/#128 provider-turn contract and recovered local D081 command-custody contract, then add source events before #147 projection and MCP mounting. A second transcript-derived truth store would contradict the adopted canonical-history owner.",
+        "Hosted read-only preparation adoption explicitly belongs to #9's bounded transport/catalogue/no-state-change experiment. #4 comment 5482776441 calls for that empirical gate before adoption; #146's frozen footprint must remain exact. A later separate tool candidate must carry its own changed catalogue identity and still create no queued intent.",
+        "Current installed versions and consequential provider behavior require local fixtures. Changed adapter cells are requalified on their new exact candidate; unaffected retained baseline cells do not need repeated provider calls solely for this plan review."
+      ],
+      "source_ids": [
+        "main-proposal",
+        "main-policy",
+        "main-app",
+        "main-task-events",
+        "catalog146",
+        "events147",
+        "main-conformance"
+      ]
+    },
+    {
+      "group_id": "routing_authority",
+      "row_ids": [
+        "P-AUTHORITY"
+      ],
+      "existing_coverage": [
+        "#122 separates requirements, versioned model metadata, runtime capability evidence, exact thread/workspace identities, explicit policy and replayable route receipt. Current, supported runtime claims are required; model metadata cannot grant runtime tools. Work is prohibited by default and creation policy defaults off.",
+        "Main approval token binds the proposal fingerprint and selected project, not mutable route/workspace/entitlement facts.",
+        "#138 stores caller-declared logical run/step conditions and evidence references. A current conduit_recorded stamp is a declared receipt category, not authenticated caller/source authority. Historical current is not re-aged during recovery."
+      ],
+      "chat_completed": [
+        "Inspected exact #122 selection and canonical-receipt code, main policy/reducer and #138 evidence validators.",
+        "Prepared revalidation/approval/collision/no-substitution cases and the exact source inputs required for a later mounted handoff."
+      ],
+      "next_boundary": [
+        "Fresh qualification of the existing unmounted #122/#138 foundations is outstanding.",
+        "A live route consumer needs qualified #53 runtime/turn facts, #57 workspace lease identity, #58 context identity and the caller/command-custody boundary. Those are independent owners, not fields a new pure helper may declare authentic.",
+        "The later launch preflight must compare the exact approved proposal/route against current mutable predicates and return stale/blocked without silently substituting another candidate. Mutable source producers and the exact approved-route consumer are not yet mounted; qualify/reconcile those inputs before serial AppModel/HTTP composition."
+      ],
+      "source_ids": [
+        "routing122",
+        "run138",
+        "run138-contract",
+        "main-policy",
+        "main-proposal"
+      ]
+    },
+    {
+      "group_id": "action_receipts",
+      "row_ids": [
+        "I-RECEIPTS"
+      ],
+      "existing_coverage": [
+        "Main already returns concrete create/task and prompt-delivery dispositions, interrupt event IDs, lifecycle preflights/request-vs-observation fields, provider authority receipts and reconciliation-request state.",
+        "Work-session receipt UI exposes the exact URL only after the writer returns successfully; pending/refused writes do not publish RECORDED. This is an existing owning artifact, not a reason to build a second generic receipt database.",
+        "ActionExplainer is presentation-only pre-action help; it is not a post-action receipt. #138 logical append/artifact references likewise do not prove downstream effects."
+      ],
+      "chat_completed": [
+        "Read actual create/send/reconcile/adopt/interrupt/lifecycle/close and work-session receipt handlers and enumerated their durable or visible owning references.",
+        "Prepared action-specific before/after receipt cases. Explicit missing correlation and later composed checks remain visible."
+      ],
+      "next_boundary": [
+        "The current prompt response does not directly expose its recorded prompt event ID; create duplicate responses also do not carry a new durable command receipt. These exact command/response changes intersect local frozen D081 and must be reconciled with that source before a ChatGPT successor is built.",
+        "Runtime effects, asynchronous stop/capacity release, provider cancellation and final artifact writes require owned local AppModel/runtime/filesystem observations. A successful response or click alone cannot complete this row.",
+        "Cross-surface Run/WorkGroup/Explorer/Context receipt links require their mounted source composition. Preserve the current owning event/journal/file reference rather than translating all effects into one new completion flag."
+      ],
+      "source_ids": [
+        "main-app",
+        "main-command",
+        "run138",
+        "catalog146",
+        "events147"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "READ-01",
+      "row_id": "4/read-proposals-context",
+      "surface": "Existing Core proposal validation",
+      "required_observation": "Same exact proposal/project/context returns inspectable validation and content identity; it creates no execution authority.",
+      "negative_case": "Changed project, stale proposal token, forbidden/broad scope or missing verification must not become launchable.",
+      "required_receipt_fields": [
+        "proposal fingerprint",
+        "selected project",
+        "context schema",
+        "validation reasons"
+      ],
+      "execution_boundary": "Existing pure fixtures; proposal arithmetic successor requires local native gate.",
+      "source_ids": [
+        "main-policy",
+        "main-proposal"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "READ-02",
+      "row_id": "4/read-proposals-context",
+      "surface": "Proposal token arithmetic successor",
+      "required_observation": "Representable exact boundary is accepted; overflow/underflow returns explicit range refusal without changing inputs.",
+      "negative_case": "Int.max+1 must still refuse at Int.max budget; later negative correction cannot hide invalid arithmetic.",
+      "required_receipt_fields": [
+        "exact candidate",
+        "input estimates",
+        "budget",
+        "validation result",
+        "process wait/exit"
+      ],
+      "execution_boundary": "Eight prepared XCTest methods and eight SelfTest checks; native NOT_RUN.",
+      "source_ids": [
+        "main-proposal"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "READ-03",
+      "row_id": "4/read-proposals-context",
+      "surface": "Later read-only preparation query",
+      "required_observation": "Only derived proposal/validation/fingerprint returns from bounded structured input.",
+      "negative_case": "Before/after task/runtime/event/project identity differs, queued instruction appears, or a write is renamed as read: fail.",
+      "required_receipt_fields": [
+        "query schema and catalogue identity",
+        "request digest",
+        "before/after task and runtime IDs",
+        "event cursor",
+        "target-tree receipt",
+        "dispatch layer"
+      ],
+      "execution_boundary": "Separate #9 experiment and future catalogue candidate; not an extra endpoint on frozen #146.",
+      "source_ids": [
+        "main-planner",
+        "catalog146"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "READ-04",
+      "row_id": "4/read-proposals-context",
+      "surface": "Retrieval/context provenance",
+      "required_observation": "Knowledge/project scope and citation/freshness remain attached; nomination is not source or task acceptance.",
+      "negative_case": "Unknown scope, absent context, stale reference, or text saying verified cannot grant source/launch authority.",
+      "required_receipt_fields": [
+        "selected source ID/revision",
+        "scope",
+        "citation class",
+        "freshness/unknown",
+        "validation"
+      ],
+      "execution_boundary": "Existing Core checks plus later #58 source-aware composition; no live retrieval authorized by this packet.",
+      "source_ids": [
+        "main-proposal",
+        "main-app"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "EVENT-01",
+      "row_id": "4/approvals-errors-tools-artifacts",
+      "surface": "Provider approval request",
+      "required_observation": "Exact provider/session/turn/request identity, requested action and unresolved/resolved status survive source history and recovery.",
+      "negative_case": "Foreign request ID, missing turn linkage, stale approval after restart, duplicate approval or arbitrary approved prose grants no permission.",
+      "required_receipt_fields": [
+        "task/runtime/provider/session/turn/request IDs",
+        "source event ID",
+        "requested action",
+        "decision reference",
+        "observed time"
+      ],
+      "execution_boundary": "Current main pending approval is live state; durable extension needs accepted #53/#128 and recovered D081 command identity before canonical-history composition.",
+      "source_ids": [
+        "main-adapter",
+        "main-app",
+        "main-task-events",
+        "events147"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "EVENT-02",
+      "row_id": "4/approvals-errors-tools-artifacts",
+      "surface": "Tool call/result",
+      "required_observation": "Provider-native tool/call identity and result/error phase are retained separately from output message and process completion.",
+      "negative_case": "Orphan result, duplicate/replayed call, foreign turn or absent tool capability stays unresolved rather than completed.",
+      "required_receipt_fields": [
+        "provider call ID",
+        "task/runtime/session/turn IDs",
+        "phase/status",
+        "source reference",
+        "timing/unknown"
+      ],
+      "execution_boundary": "Use #53 provider producers; main generic effect enum has no tool-call/result event family; new canonical source event and native fixture required.",
+      "source_ids": [
+        "main-adapter",
+        "main-task-events",
+        "main-app"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "EVENT-03",
+      "row_id": "4/approvals-errors-tools-artifacts",
+      "surface": "Artifact references",
+      "required_observation": "Message artifact reference and actual resolved artifact identity/availability are distinct; accepted-step linkage remains in #56.",
+      "negative_case": "Missing file, changed bytes/revision or an agent's success statement cannot produce verified artifact or acceptance.",
+      "required_receipt_fields": [
+        "artifact ref kind/path",
+        "exact source revision",
+        "resolver disposition",
+        "verification and acceptance references"
+      ],
+      "execution_boundary": "Current conversation export has artifact refs; actual file/provenance binding composes with #50/#58, and #138 only records logical references.",
+      "source_ids": [
+        "catalog146",
+        "run138",
+        "main-app"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "EVENT-04",
+      "row_id": "4/approvals-errors-tools-artifacts",
+      "surface": "Error/terminal truth",
+      "required_observation": "Provider error, transport failure, process exit, capture close and task acceptance retain separate meanings and provenance.",
+      "negative_case": "Quiet output or provider completed must not erase failed/ambiguous evidence or mark objective accepted.",
+      "required_receipt_fields": [
+        "failure source",
+        "thread/turn ID",
+        "terminal observation",
+        "replay state",
+        "verification/acceptance unknown"
+      ],
+      "execution_boundary": "#128 fresh Core/native qualifier first; mounted AppModel/HTTP requires a later exact composition.",
+      "source_ids": [
+        "main-adapter",
+        "main-app",
+        "run138"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "EVENT-05",
+      "row_id": "4/approvals-errors-tools-artifacts",
+      "surface": "Global source diagnostics",
+      "required_observation": "#147 reports unique sorted diagnostic kinds and reconciliationRequired without usable page/cursor, preserving raw per-task occurrences.",
+      "negative_case": "Thousands of repeated diagnostics remain a bounded refusal; malformed source cannot become clean through pagination or normalization.",
+      "required_receipt_fields": [
+        "store ID",
+        "task IDs",
+        "diagnostic kinds",
+        "refusal size",
+        "source prefix identity",
+        "cursor state"
+      ],
+      "execution_boundary": "Frozen #147 owner repair exists; fresh native and authentic bounded source selection/mounting remain.",
+      "source_ids": [
+        "events147",
+        "events147-contract"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "CAT-01",
+      "row_id": "4/adapter-conformance",
+      "surface": "MCP catalogue/caller",
+      "required_observation": "#146 publishes and returns one catalogue marker with all 18 tools and the same seven writes; initialized labels share one bearer principal.",
+      "negative_case": "Missing/stale/mixed marker, absent tool, wrong write classification, rotating clientInfo or uninitialized write refuses.",
+      "required_receipt_fields": [
+        "published/runtime/initialize identity",
+        "tool/write names",
+        "authentication outcome",
+        "handler invocation count",
+        "admission receipt"
+      ],
+      "execution_boundary": "Exact #146 fresh Core/component qualification, then isolated mounted HTTP and actual hosted cache observation.",
+      "source_ids": [
+        "caller146",
+        "catalog146",
+        "server146"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ADAPTER-01",
+      "row_id": "4/adapter-conformance",
+      "surface": "Historical conformance matrix",
+      "required_observation": "Every one of seven runtimes has all thirteen capabilities and separate provider/Conduit dispositions with resolvable exact evidence.",
+      "negative_case": "A method name, declared catalog profile or historical supported result does not establish current installed/runtime support.",
+      "required_receipt_fields": [
+        "runtime version/interface",
+        "capability",
+        "provider outcome",
+        "Conduit outcome",
+        "evidence hashes",
+        "freshness"
+      ],
+      "execution_boundary": "Unchanged maintained offline validator PASS with 29 exact artifacts; current native behavior NOT_RUN.",
+      "source_ids": [
+        "main-conformance",
+        "main-conformance-contract"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ADAPTER-02",
+      "row_id": "4/adapter-conformance",
+      "surface": "Cancellation scope",
+      "required_observation": "Retain exact-turn cancellation, session cancellation, accepted abort and observed cessation as the provider actually exposes them.",
+      "negative_case": "Abort acknowledged then idle does not assert host stop, stable turn ID, cancellation reason, task completion or acceptance.",
+      "required_receipt_fields": [
+        "provider session/turn scope",
+        "request/response",
+        "pre/post activity",
+        "terminal reason or unknown",
+        "owned teardown"
+      ],
+      "execution_boundary": "Local owned adapter fixture only; no new provider call requested by static matrix validation.",
+      "source_ids": [
+        "main-conformance-contract",
+        "main-app"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ADAPTER-03",
+      "row_id": "4/adapter-conformance",
+      "surface": "Unknown/unavailable capability",
+      "required_observation": "Absent installed/authenticated fixture is unavailable or unknown according to actual evidence; unsupported requires bounded negative authority.",
+      "negative_case": "Do not turn missing credentials into provider failure, catalogue preference into health, or PTY silence into structured completion.",
+      "required_receipt_fields": [
+        "capability state",
+        "installed version/readiness",
+        "negative response or missing prerequisite",
+        "claim scope"
+      ],
+      "execution_boundary": "Local inventory/source-version-specific evidence; preserve retained matrix instead of broad automatic reprobes.",
+      "source_ids": [
+        "main-adapter",
+        "main-conformance"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ROUTE-01",
+      "row_id": "P-AUTHORITY",
+      "surface": "Runtime capability separation",
+      "required_observation": "#122 requires supported current runtime evidence for required capabilities; model profile applicability remains metadata.",
+      "negative_case": "Put filesystem/shell/independence support only in model metadata, or make runtime claim stale/unknown: selection must block.",
+      "required_receipt_fields": [
+        "requirements",
+        "model profile version",
+        "runtime claim/evidence/freshness",
+        "route hard blocks",
+        "decision fingerprint"
+      ],
+      "execution_boundary": "Frozen #122 pure source already implements; fresh native qualifier outstanding.",
+      "source_ids": [
+        "routing122"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ROUTE-02",
+      "row_id": "P-AUTHORITY",
+      "surface": "Exact identities and ambiguous input",
+      "required_observation": "Malformed/duplicate runtime, configuration, allowance, exact-thread and workspace identities fail before lookup/selection.",
+      "negative_case": "Empty thread/workspace, duplicate allowance IDs or delimiter-colliding component IDs cannot select or trap.",
+      "required_receipt_fields": [
+        "input snapshot",
+        "invalid-input reasons",
+        "zero selected route",
+        "actual process exit"
+      ],
+      "execution_boundary": "Frozen #122 pressure controls exist; local native replay and fresh cases.",
+      "source_ids": [
+        "routing122"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ROUTE-03",
+      "row_id": "P-AUTHORITY",
+      "surface": "Disabled creation and Work prohibition",
+      "required_observation": "Usable continuation is not displaced by disabled creation; regular Chat/GitHub is distinct; default Work prohibition remains.",
+      "negative_case": "Missing thread or disabled create cannot trigger new worker; a route receipt cannot launch anything.",
+      "required_receipt_fields": [
+        "action",
+        "policy version",
+        "exact selected thread",
+        "creation flag",
+        "surface",
+        "no-executor observation"
+      ],
+      "execution_boundary": "Pure policy test now; actual launch absence/current caller binding local upon future mounting.",
+      "source_ids": [
+        "routing122"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ROUTE-04",
+      "row_id": "P-AUTHORITY",
+      "surface": "Approve then mutate live predicate",
+      "required_observation": "Execute only the exact approved route if current mutable predicates still hold; otherwise explicit stale/blocked and reapproval.",
+      "negative_case": "Writer lease acquired elsewhere, thread replaced, entitlement unknown, context revision changed, allowance exhausted or health stale: no silent alternate route.",
+      "required_receipt_fields": [
+        "approved proposal/route identity",
+        "current source revisions",
+        "lease/controller",
+        "runtime/session",
+        "context identity",
+        "preflight disposition",
+        "no-launch proof"
+      ],
+      "execution_boundary": "Adopted #56 next mounted gate; producers #53/#57/#58 and D081 command source must be qualified/reconciled first.",
+      "source_ids": [
+        "routing122",
+        "main-proposal",
+        "run138-contract"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "ROUTE-05",
+      "row_id": "P-AUTHORITY",
+      "surface": "Logical recorded authority",
+      "required_observation": "#138 declaration/recovery retains origin, time and freshness; historical current never becomes a fresh capability or approval.",
+      "negative_case": "Provider completion cannot satisfy external verification/acceptance; supplied conduit_recorded text authenticates no caller; checkpoint cannot outrank source history.",
+      "required_receipt_fields": [
+        "run/step IDs",
+        "journal event/command/revision",
+        "evidence source/revision/stamp",
+        "verification",
+        "acceptance"
+      ],
+      "execution_boundary": "Frozen #138 component/native evidence exists; fresh independent and actual consumer authority remain separate.",
+      "source_ids": [
+        "run138",
+        "run138-contract"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-01",
+      "row_id": "I-RECEIPTS",
+      "surface": "Create task with objective",
+      "required_observation": "Return durable task identity and delivered/queued/failed/not-attempted objective disposition; queued establishes no resend and no completion.",
+      "negative_case": "Lost response duplicate key cannot create a second task; changed payload/key conflict refuses; provisioning failure is not delivery.",
+      "required_receipt_fields": [
+        "task ID",
+        "idempotency/request identity",
+        "objective delivery state",
+        "resend-required",
+        "runtime and prompt source references"
+      ],
+      "execution_boundary": "Current handler exists; durable command/lost-response successor must reconcile local frozen D081 before serial AppModel edits.",
+      "source_ids": [
+        "main-app",
+        "catalog146"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-02",
+      "row_id": "I-RECEIPTS",
+      "surface": "Send prompt",
+      "required_observation": "Recorded prompt and eventual asynchronous delivery remain observable; runtime acceptance is separate from turn completion and verification.",
+      "negative_case": "Queued call must not be resent; absent/mismatched prompt correlation or a failed later delivery cannot be reported as accepted work.",
+      "required_receipt_fields": [
+        "task ID",
+        "prompt event ID from owner history",
+        "origin",
+        "delivery state",
+        "turn linkage",
+        "command receipt when defined"
+      ],
+      "execution_boundary": "Main response lacks direct prompt event ID although history owns it; D081 command-custody source and #128 exact terminal truth govern the next composed repair.",
+      "source_ids": [
+        "main-app",
+        "catalog146"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-03",
+      "row_id": "I-RECEIPTS",
+      "surface": "Reconcile task",
+      "required_observation": "Preserve task ID and report request versus observed live reconciliation distinctly.",
+      "negative_case": "Asynchronous history load cannot produce completed reconciliation before identity-compatible runtime observation.",
+      "required_receipt_fields": [
+        "task ID",
+        "reconcile_requested/reconciled",
+        "runtime target",
+        "observed post-status",
+        "error/recoverability"
+      ],
+      "execution_boundary": "Owned local history/runtime fixture under #123 plus exact later composition.",
+      "source_ids": [
+        "main-app"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-04",
+      "row_id": "I-RECEIPTS",
+      "surface": "Adopt provider session",
+      "required_observation": "Return the existing authority receipt for one exact provider session/controller and preserve session history; no prompt/resume/creation.",
+      "negative_case": "Competing controller returns writer_collision; external writer ownership stays unknown; no implicit #57 workspace lease.",
+      "required_receipt_fields": [
+        "provider/session/controller IDs",
+        "authority receipt",
+        "recognized controller",
+        "provider mutation none",
+        "before/after source identity"
+      ],
+      "execution_boundary": "Native observer/coordinator and mounted handler fixture; #146 initialization is not a uniform admission budget for adoption.",
+      "source_ids": [
+        "main-app",
+        "caller146",
+        "catalog146"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-05",
+      "row_id": "I-RECEIPTS",
+      "surface": "Interrupt or typed abort",
+      "required_observation": "Return exact interrupt event ID and requested disposition; later provider/PTY observation owns cancellation evidence.",
+      "negative_case": "interrupted=true compatibility field alone cannot establish cancellation; PTY Ctrl-C cannot become provider-native turn abort.",
+      "required_receipt_fields": [
+        "task ID",
+        "interrupt event ID",
+        "typed preflight",
+        "requested operation",
+        "later provider/session/turn observation"
+      ],
+      "execution_boundary": "Native exact runtime fixture; #128 truth then mounted composition, no live provider action from this packet.",
+      "source_ids": [
+        "main-app",
+        "catalog146"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-06",
+      "row_id": "I-RECEIPTS",
+      "surface": "Lifecycle release/stop/close",
+      "required_observation": "Preflight and response name actual backend consequences; direct PTY capacity remains occupied until the owned process exit is observed.",
+      "negative_case": "Unsupported/unknown operation is not remapped; PID disappearance or signal request alone does not prove complete descendant cleanup or objective success.",
+      "required_receipt_fields": [
+        "preflight",
+        "operation",
+        "target process identity",
+        "request/exit observation",
+        "capacity released",
+        "postcondition",
+        "provider-history persistence"
+      ],
+      "execution_boundary": "Local #123/#126 and runtime/process exact composition; actual waits and unrelated-process control required.",
+      "source_ids": [
+        "main-app",
+        "main-command"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-07",
+      "row_id": "I-RECEIPTS",
+      "surface": "Work-session receipt write",
+      "required_observation": "Pending state precedes writer result; successful receipt exposes the exact returned URL after write.",
+      "negative_case": "Renderer/write failure clears pending without RECORDED; stale success from earlier attempt must not reappear; opening must use the exact new URL.",
+      "required_receipt_fields": [
+        "project/session identity",
+        "write attempt",
+        "exact file URL/revision",
+        "writer result",
+        "visible recorded state",
+        "failure if any"
+      ],
+      "execution_boundary": "Existing source behavior; local temporary MainFrame fixture and UI/write failure injection verify actual result.",
+      "source_ids": [
+        "main-app"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "RECEIPT-08",
+      "row_id": "I-RECEIPTS",
+      "surface": "Logical run artifact/acceptance",
+      "required_observation": "#138 records exact artifact evidence references and separate verification/acceptance; worker replacement preserves run/step identity.",
+      "negative_case": "A stored artifact ID, provider completed or a successful append cannot satisfy actual artifact existence or operator acceptance.",
+      "required_receipt_fields": [
+        "run/step",
+        "artifact evidence ref/revision",
+        "journal command/event",
+        "verification",
+        "acceptance",
+        "worker binding"
+      ],
+      "execution_boundary": "Fresh #138 then #50/#58/#56 product composition with local actual artifacts.",
+      "source_ids": [
+        "run138",
+        "run138-contract"
+      ],
+      "this_review_status": "SOURCE_EXPOSED_PREPARATION_ONLY_NATIVE_NOT_RUN"
+    }
+  ],
+  "portable_execution": {
+    "schema": "conduit-static-conformance-review-v1",
+    "main": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+    "historical_matrix_observed_at": "2026-09-23T23:07:42Z",
+    "result": "MAINTAINED_STATIC_VALIDATOR_PASS",
+    "artifact_objects_base64_decoded_git_blob_verified": 29,
+    "runtimes": [
+      {
+        "runtime": "antigravity",
+        "capabilities": 13,
+        "provider": {
+          "unknown": 13
+        },
+        "conduit": {
+          "unknown": 9,
+          "unsupported": 3,
+          "supported": 1
+        }
+      },
+      {
+        "runtime": "claude",
+        "capabilities": 13,
+        "provider": {
+          "unavailable": 10,
+          "unknown": 3
+        },
+        "conduit": {
+          "unavailable": 8,
+          "unsupported": 3,
+          "unknown": 1,
+          "supported": 1
+        }
+      },
+      {
+        "runtime": "codex_app_server",
+        "capabilities": 13,
+        "provider": {
+          "supported": 10,
+          "unknown": 3
+        },
+        "conduit": {
+          "supported": 9,
+          "unknown": 2,
+          "unsupported": 2
+        }
+      },
+      {
+        "runtime": "gemini_acp",
+        "capabilities": 13,
+        "provider": {
+          "unknown": 11,
+          "supported": 2
+        },
+        "conduit": {
+          "unknown": 9,
+          "unsupported": 2,
+          "supported": 2
+        }
+      },
+      {
+        "runtime": "grok_acp",
+        "capabilities": 13,
+        "provider": {
+          "supported": 8,
+          "unknown": 5
+        },
+        "conduit": {
+          "supported": 8,
+          "unknown": 3,
+          "unsupported": 2
+        }
+      },
+      {
+        "runtime": "opencode",
+        "capabilities": 13,
+        "provider": {
+          "supported": 9,
+          "unknown": 4
+        },
+        "conduit": {
+          "supported": 11,
+          "unknown": 2
+        }
+      },
+      {
+        "runtime": "shell_fallback",
+        "capabilities": 13,
+        "provider": {
+          "unsupported": 10,
+          "supported": 2,
+          "unknown": 1
+        },
+        "conduit": {
+          "unsupported": 6,
+          "unknown": 4,
+          "supported": 3
+        }
+      }
+    ],
+    "capability_cells": 91,
+    "layer_outcomes": 182,
+    "current_native_provider_conformance": "NOT_RUN",
+    "scope": "Exact-main matrix completeness, outcome/reference validation and artifact SHA256 match using unmodified maintained validate-matrix command. Not independent acceptance or fresh installed-provider observation.",
+    "apparatus_notes": [
+      "Default Python and configured primary Python each lacked optional jsonschema import; both attempts stopped before validation.",
+      "Used repository-owned standard-library validator unchanged after fetching every referenced local artifact by exact main SHA; no package installation or source/schema repair."
+    ]
+  },
+  "new_candidate_manifest": "proposal-validation/file-manifest.json",
+  "native_execution": "NOT_RUN",
+  "github_writes_by_this_agent": false,
+  "frozen_candidate_mutations": false,
+  "new_candidate": {
+    "pr": 151,
+    "url": "https://github.com/camerontjs-dot/Conduit/pull/151",
+    "commit": "0ef7979f16ade58fc1146125b808876096510935",
+    "tree": "4a35035c040b1dd097e579edf04c195ba0c9e119",
+    "native": "NOT_RUN",
+    "publication_verified_by": "root agent"
+  }
+}

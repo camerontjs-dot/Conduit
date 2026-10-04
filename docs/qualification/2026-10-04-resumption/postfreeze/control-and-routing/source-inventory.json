@@ -1,0 +1,158 @@
+{
+  "schema": "conduit-contract-review-source-inventory-v1",
+  "main_commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "main_tree": "3308565e9fbc35f8541911cea9a38b4e1b251260",
+  "frozen_candidates": {
+    "122": "a6b9cf5b002a925995a6137929e804a93e7a5e03",
+    "138": "07ce37df391c8263a55adf23728f6d046d29509b",
+    "146": "ab424afd80a45c41de9523dde8d0d9416751821d",
+    "147": "14ffd89b545473d6c4657047efc25dfa053344c7"
+  },
+  "sources": [
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/OrchestrationProposal.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/OrchestrationProposal.swift",
+      "source_id": "main-proposal",
+      "git_blob_sha": "d9f49256cfe710d155c3c3c1bb18c69008c561b7",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/OrchestrationPolicy.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/OrchestrationPolicy.swift",
+      "source_id": "main-policy",
+      "git_blob_sha": "0e4ba88bf8c7f2d0ef113bf4878827f09b3e12a5",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/OrchestrationPlanner.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/OrchestrationPlanner.swift",
+      "source_id": "main-planner",
+      "git_blob_sha": "dc69b436e2f71f2a14168273b5ad0b4626426766",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/Conduit/AppModel.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/AppModel.swift",
+      "source_id": "main-app",
+      "git_blob_sha": "d210945b059bd5e3352e7876dc4c1b446522acbc",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/Conduit/OrchestrateWorkspaceView.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/OrchestrateWorkspaceView.swift",
+      "source_id": "main-orchestrate-ui",
+      "git_blob_sha": "6c9c70701fb0227baec39bde9dd5eaab718f7d2f",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/ConduitSessionAPI.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/ConduitSessionAPI.swift",
+      "source_id": "main-command",
+      "git_blob_sha": "92ee98cef5de98da178064ae5174127214147759",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/TaskSession.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/TaskSession.swift",
+      "source_id": "main-task-events",
+      "git_blob_sha": "14922376a468a27808d6b35c96f1f788180d63f5",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "Sources/ConduitCore/StructuredAdapter.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/StructuredAdapter.swift",
+      "source_id": "main-adapter",
+      "git_blob_sha": "fcb16ee1136ac0adee287720969699289731d305",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "docs/qualification/provider-conformance-v1.json",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/docs/qualification/provider-conformance-v1.json",
+      "source_id": "main-conformance",
+      "git_blob_sha": "b9ce218a3b1a7854f9a4f735dae4960bb9b0f1f5",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "path": "docs/qualification/provider-conformance-v1.md",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/docs/qualification/provider-conformance-v1.md",
+      "source_id": "main-conformance-contract",
+      "git_blob_sha": "8ebdda678770395da48e4615b6086ccae70b7b23",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "a6b9cf5b002a925995a6137929e804a93e7a5e03",
+      "path": "Sources/ConduitCore/DeterministicRouting.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/a6b9cf5b002a925995a6137929e804a93e7a5e03/Sources/ConduitCore/DeterministicRouting.swift",
+      "source_id": "routing122",
+      "git_blob_sha": "c927750ba3b1251c2f6eca46e524539b257cb3b0",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "07ce37df391c8263a55adf23728f6d046d29509b",
+      "path": "Sources/ConduitCore/OrchestrationRun.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/07ce37df391c8263a55adf23728f6d046d29509b/Sources/ConduitCore/OrchestrationRun.swift",
+      "source_id": "run138",
+      "git_blob_sha": "b6e8d3d5bcd92a7fa5b5a4a3dab766b96bb5ef1d",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "07ce37df391c8263a55adf23728f6d046d29509b",
+      "path": "docs/orchestration-run-contract.md",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/07ce37df391c8263a55adf23728f6d046d29509b/docs/orchestration-run-contract.md",
+      "source_id": "run138-contract",
+      "git_blob_sha": "6456dac5a9423a38cbb868220ce61b8762e4fe50",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "ab424afd80a45c41de9523dde8d0d9416751821d",
+      "path": "Sources/ConduitCore/ConduitSessionAPI.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/ab424afd80a45c41de9523dde8d0d9416751821d/Sources/ConduitCore/ConduitSessionAPI.swift",
+      "source_id": "caller146",
+      "git_blob_sha": "70791cc3059b05fd51b8ab06225983a42b630406",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "ab424afd80a45c41de9523dde8d0d9416751821d",
+      "path": "Sources/ConduitCore/ConduitSessionToolCatalog.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/ab424afd80a45c41de9523dde8d0d9416751821d/Sources/ConduitCore/ConduitSessionToolCatalog.swift",
+      "source_id": "catalog146",
+      "git_blob_sha": "22bd6dfcdd4972ffcb136fd21a48020dbcaff634",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "ab424afd80a45c41de9523dde8d0d9416751821d",
+      "path": "Sources/Conduit/ConduitSessionAPIServer.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/ab424afd80a45c41de9523dde8d0d9416751821d/Sources/Conduit/ConduitSessionAPIServer.swift",
+      "source_id": "server146",
+      "git_blob_sha": "0e586e4057f4cdc942770a43661b359ca70a822b",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "14ffd89b545473d6c4657047efc25dfa053344c7",
+      "path": "Sources/ConduitCore/TaskSupervisoryEvents.swift",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/14ffd89b545473d6c4657047efc25dfa053344c7/Sources/ConduitCore/TaskSupervisoryEvents.swift",
+      "source_id": "events147",
+      "git_blob_sha": "f9150be2c78cebcda590308452fbc0746129cbc5",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    },
+    {
+      "commit": "14ffd89b545473d6c4657047efc25dfa053344c7",
+      "path": "docs/task-supervisory-events.md",
+      "url": "https://github.com/camerontjs-dot/Conduit/blob/14ffd89b545473d6c4657047efc25dfa053344c7/docs/task-supervisory-events.md",
+      "source_id": "events147-contract",
+      "git_blob_sha": "a9f00b3f6248371d00c09d612faa6df6db18ab73",
+      "read_scope": "Exact referenced file read; no whole-repository behavioral claim"
+    }
+  ],
+  "qualification_scope": "Read-only source inspection and ordinary source-exposed preparation. Independent native qualification NOT_RUN."
+}

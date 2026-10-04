@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "kit95": "6d706b4369232b1fe1d46f0a05ac3a4140cbc864",
+  "kit95_tree": "bbf82b538bf58253304675371b7769de44abb849",
+  "kit_paired_producer29": "6f599a8531a6dafcdd8c76a86860f84020b97512",
+  "current_conduit_main": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "current_paired_producer46": "11f6f8161dbf6cb78ebc1363a28948a4606fe6e0",
+  "producer46_tree": "d436bc7e6b1b9aaa0b2f58c8da6114729f57230c",
+  "assembler_invoked": false,
+  "comparison": [
+    {
+      "path": "Sources/Conduit/AppModel.swift",
+      "kit95_required_blob": "bef0d61266591b96678c4d81b7f71e5c82cb30c0",
+      "current_main_blob": "d210945b059bd5e3352e7876dc4c1b446522acbc",
+      "matches": false
+    },
+    {
+      "path": "Sources/ConduitCore/ConduitSessionToolCatalog.swift",
+      "kit95_required_blob": "d21b716a6ab8fbe5f3a48e366646adaeb28d063f",
+      "current_main_blob": "d21b716a6ab8fbe5f3a48e366646adaeb28d063f",
+      "matches": true
+    },
+    {
+      "path": "Sources/ConduitSelfTest/main.swift",
+      "kit95_required_blob": "6dc9c86e0988499d851e7ecf24c41f4b3841e0cc",
+      "current_main_blob": "1fc13e31635f2074ddbeb38b8599a22903377e52",
+      "matches": false
+    },
+    {
+      "path": "docs/qualification/provider-conformance-v1.json",
+      "kit95_required_blob": "4e4077c49c97d702b98f8e4c9abb2c757a9b60fc",
+      "current_main_blob": "b9ce218a3b1a7854f9a4f735dae4960bb9b0f1f5",
+      "matches": false
+    },
+    {
+      "path": "Package.swift",
+      "kit95_required_blob": "ba955621c169a19c341cccf3069f2d25b3f60475",
+      "current_main_blob": "ba955621c169a19c341cccf3069f2d25b3f60475",
+      "matches": true
+    },
+    {
+      "path": "CHANGELOG.md",
+      "kit95_required_blob": "60a0bc6a22f4c8aed312388ba0b80a401a78d65e",
+      "current_main_blob": "5ee18cb5987a9c768c2bae7a45f3301e8ad1e7a7",
+      "matches": false
+    },
+    {
+      "path": "DECISIONS.md",
+      "kit95_required_blob": "f548ed60286ca3ccb1e0483396eff85a3eb99f02",
+      "current_main_blob": "75f3a4ae255d6e078c5ce29d97fc6b45ea0356e3",
+      "matches": false
+    }
+  ],
+  "mismatch_count": 5,
+  "disposition": "OLD_KIT_NOT_A_CURRENT_MAIN_ASSEMBLY",
+  "next_source_boundary": "A separately identified current-main consumer composition must reconcile the five mismatched input blobs, #142 operations semantics, #144 query cache semantics and exact producer #46 contract; do not refresh kit guards in place."
+}

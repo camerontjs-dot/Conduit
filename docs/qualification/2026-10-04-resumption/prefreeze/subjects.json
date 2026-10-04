@@ -1,0 +1,15 @@
+{
+  "schema": "conduit-opaque-qualification-subjects/v1",
+  "subjects": [
+    {
+      "id": "123",
+      "head": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+      "tree": "e022251b34654c9cfcbd93f36e13099b347d393b"
+    },
+    {
+      "id": "128",
+      "head": "587be4267f7ef7e3a9e40eacf07aab334dcb59f4",
+      "tree": "6ceb4705cbdb27429dc088dc925ed2dc368084d6"
+    }
+  ]
+}

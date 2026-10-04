@@ -1,0 +1,39 @@
+{
+  "classification": "PORTABLE_SOURCE_CUSTODY_TOOL_DEVELOPER_TESTS_NOT_CONDUIT_NATIVE_QUALIFICATION",
+  "command": [
+    "python",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "Tests",
+    "-p",
+    "test_frozen_source.py",
+    "-v"
+  ],
+  "working_directory": "conduit_resume/qualification-handoff",
+  "observed_exit_code": 0,
+  "tests": 16,
+  "failures": 0,
+  "skipped": 0,
+  "environment": "Linux; Python3 stdlib; explicit /usr/local/bin/git in disposable repositories only",
+  "files": [
+    {
+      "path": "qualification-handoff/scripts/qualification/verify_frozen_source.py",
+      "sha256": "f1e2b1ecca78e0398fd379ad2b49e8f0527920b25c75678f56137bdb4bcbf807",
+      "bytes": 14413
+    },
+    {
+      "path": "qualification-handoff/Tests/test_frozen_source.py",
+      "sha256": "68b94d0ac077489bfc0bd2aee2d52e10baa20e528a3f66df9fe97620c555d96c",
+      "bytes": 10796
+    },
+    {
+      "path": "cleanup-audit-preflight-portable-final.log",
+      "sha256": "e49645b22e5228b00126b3d16c3b50a937749c4a60999bea8b27c6bbac50539d",
+      "bytes": 2521
+    }
+  ],
+  "portability_note": "Only non-UTF8 filename fixture can explicitly skip on filesystem EILSEQ/EINVAL; newline status and symlink controls remain unconditional. No skip occurred in this run.",
+  "receipt_correction": "Final exact source allows any uniquely locked candidate id. Uses exclusively created agent-unique complete log with actual waited exit0; earlier shared preflight-tests.log partial capture is retained and not relied on."
+}

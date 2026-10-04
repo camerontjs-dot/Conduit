@@ -1,0 +1,93 @@
+{
+  "schema": "conduit-frozen-candidate-lock/v1",
+  "repository": "camerontjs-dot/Conduit",
+  "prepared_at": "2026-10-04",
+  "authority": "Exact subjects for this handoff; live programme state remains issue60. Frozen descriptor conflicts are resolved here without editing candidate bytes.",
+  "candidates": [
+    {
+      "id": "123",
+      "pr": 123,
+      "head": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+      "tree": "e022251b34654c9cfcbd93f36e13099b347d393b",
+      "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/123",
+      "qualification": "FRESH_INDEPENDENT_NOT_RUN",
+      "candidate_mutation_allowed": false,
+      "branch": "fix/issue87-owned-state-receipt-successor-20261002",
+      "scope": "Owned actual-app root/port/state/readiness and apparatus-isolation gate",
+      "current_identity_document": "docs/qualification/owned-isolation.md",
+      "hosted_ci_observed_run": 37038934458,
+      "hosted_ci_observed_conclusion": "success"
+    },
+    {
+      "id": "128",
+      "pr": 128,
+      "head": "587be4267f7ef7e3a9e40eacf07aab334dcb59f4",
+      "tree": "6ceb4705cbdb27429dc088dc925ed2dc368084d6",
+      "base_head": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "base_tree": "d76aa2957d69b86b3eb2f7b17cbd5d5abfdea010",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/128",
+      "qualification": "FRESH_INDEPENDENT_NOT_RUN",
+      "candidate_mutation_allowed": false,
+      "branch": "fix/issue114-explicit-thread-identity-successor-20261002",
+      "scope": "Unchanged Core/native-client offline protocol and durable reconstruction; mounted123+128 requires a new composition",
+      "current_identity_document": "docs/qualification/issue114-explicit-thread-freeze.md",
+      "current_owner_receipt": "docs/qualification/receipts/issue114-explicit-thread-owner-native-v1.json",
+      "inherited_noncurrent_descriptor": "CANDIDATE.json",
+      "descriptor_conflict": "CANDIDATE.json identifies predecessor390197f4 rather than this explicit-thread successor; preserve the file and do not use its source_of_truth field to select a candidate.",
+      "owner_source_head": "e401e486d955823f0ffebe07a7b2f7bfb8df984a",
+      "owner_source_tree": "b2cc2b2a2288137c0dacf84434cc765e6a75b88a",
+      "hosted_ci_observed_run": 37047759713,
+      "hosted_ci_observed_conclusion": "success"
+    },
+    {
+      "id": "150",
+      "pr": 150,
+      "head": "09833f6a2631675d6b1cb9863229f10a821d1d5b",
+      "tree": "454afd8bc7a2c0e4ea2db1aaa35e7efc83b28b37",
+      "base_head": "2f895fb471ce85c58f28065f23b7d7883ac8f0a0",
+      "branch": "codex/issue58-selected-record-adapter-20261004",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/150",
+      "scope": "PARENT_148_STACK; no local D079 source included",
+      "qualification": "DEVELOPER_NATIVE_NOT_RUN",
+      "candidate_mutation_allowed": false
+    },
+    {
+      "id": "151",
+      "pr": 151,
+      "head": "0ef7979f16ade58fc1146125b808876096510935",
+      "tree": "4a35035c040b1dd097e579edf04c195ba0c9e119",
+      "base_head": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "branch": "codex/issue4-proposal-budget-overflow-20261004",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/151",
+      "scope": "MAIN_BASED; bounded validation repair",
+      "qualification": "DEVELOPER_NATIVE_NOT_RUN",
+      "candidate_mutation_allowed": false
+    },
+    {
+      "id": "152",
+      "pr": 152,
+      "head": "1174384d69ee793f6fd0c4717ec455fcedc57121",
+      "tree": "208b771f1c9c50f25e7a1d2a6094363b1f921569",
+      "base_head": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "branch": "codex/issue49-retained-thread-recognition-20261004",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/152",
+      "scope": "MAIN_BASED; pure Core only, mounted UI open",
+      "qualification": "DEVELOPER_NATIVE_NOT_RUN",
+      "candidate_mutation_allowed": false
+    },
+    {
+      "id": "153",
+      "pr": 153,
+      "head": "6cada810db1dff0bb0a6604bde4a9b80fc943802",
+      "tree": "000dade8747731afb1c5309ddb3be6eda51846b1",
+      "base_head": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "branch": "codex/issue58-context-delta-identity-20261004",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/153",
+      "scope": "MAIN_BASED; public fingerprint compatibility preserved",
+      "qualification": "DEVELOPER_NATIVE_NOT_RUN",
+      "candidate_mutation_allowed": false
+    }
+  ]
+}

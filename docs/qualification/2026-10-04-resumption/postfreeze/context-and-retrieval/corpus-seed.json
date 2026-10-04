@@ -1,0 +1,310 @@
+{
+  "schema": 1,
+  "status": "SOURCE_SUBSET_AND_SYNTHETIC_SEEDS_PREPARED_MEASUREMENT_NOT_RUN",
+  "empirical_operator_workflow_corpus": false,
+  "tasks": [
+    {
+      "id": "REPO-TASK-DELTA",
+      "class": "REPOSITORY_DERIVED_ENGINEERING_CASE",
+      "objective": "Review whether a stable context item whose source and revision contain pipes is reported as changed.",
+      "origin": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "mandatory_source_paths": [
+        "Sources/ConduitCore/AgentContext.swift",
+        "Tests/ConduitCoreTests/AgentContextTests.swift"
+      ],
+      "relevant_source_paths": [
+        "Sources/ConduitCore/AgentContextPresentation.swift",
+        "Sources/ConduitCore/AgentContextSnapshotStore.swift"
+      ],
+      "irrelevant_control_paths": [
+        "Sources/ConduitCore/MindGraphQuery.swift"
+      ],
+      "source_manifest": [
+        {
+          "role": "mandatory",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/AgentContext.swift",
+          "git_blob": "2761cd4d8d2808ad22ca6e7991b29001b502dc3a",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContext.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "mandatory",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Tests/ConduitCoreTests/AgentContextTests.swift",
+          "git_blob": "e177398aa2f4e3a5440b153069541d39f3b7f49b",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Tests/ConduitCoreTests/AgentContextTests.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "relevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/AgentContextPresentation.swift",
+          "git_blob": "3866f81fe1d7c73f38a81c01628ffab45bb82f05",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContextPresentation.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "relevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/AgentContextSnapshotStore.swift",
+          "git_blob": "cf05e887e2979a30a2874432e56120812b793c30",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContextSnapshotStore.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "irrelevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/MindGraphQuery.swift",
+          "git_blob": "2be57a3641a09c9cb6971b230c39688639499e92",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/MindGraphQuery.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        }
+      ]
+    },
+    {
+      "id": "REPO-TASK-BUDGET",
+      "class": "REPOSITORY_DERIVED_ENGINEERING_CASE",
+      "objective": "Explain why mandatory context cannot be silently removed when the destination capacity or selected cost is unknown.",
+      "origin": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "mandatory_source_paths": [
+        "Sources/ConduitCore/ContextCompiler.swift",
+        "Tests/ConduitCoreTests/ContextCompilerTests.swift"
+      ],
+      "relevant_source_paths": [
+        "Sources/ConduitCore/AgentContext.swift",
+        "Sources/Conduit/ContextStackView.swift"
+      ],
+      "irrelevant_control_paths": [
+        "Sources/ConduitCore/SessionPresentation.swift"
+      ],
+      "source_manifest": [
+        {
+          "role": "mandatory",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/ContextCompiler.swift",
+          "git_blob": "843bc359108c2f5b792bfa76bb10ae2e062813d1",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/ContextCompiler.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "mandatory",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Tests/ConduitCoreTests/ContextCompilerTests.swift",
+          "git_blob": "14aebc36150a304b8e72578a646bea35852f728b",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Tests/ConduitCoreTests/ContextCompilerTests.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "relevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/AgentContext.swift",
+          "git_blob": "2761cd4d8d2808ad22ca6e7991b29001b502dc3a",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContext.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "relevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/Conduit/ContextStackView.swift",
+          "git_blob": "823d3b585cd8cc73fd17721c83cc2198c5918daf",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/ContextStackView.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "irrelevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/SessionPresentation.swift",
+          "git_blob": "121c4afade8b6e7239f195a4c94d89b96891e538",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/SessionPresentation.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        }
+      ]
+    },
+    {
+      "id": "REPO-TASK-SNAPSHOT",
+      "class": "REPOSITORY_DERIVED_ENGINEERING_CASE",
+      "objective": "Identify which explicit operation records a handoff snapshot and which inspection operations only render a draft.",
+      "origin": "https://github.com/camerontjs-dot/Conduit/issues/58",
+      "mandatory_source_paths": [
+        "Sources/ConduitCore/AgentContextSnapshotStore.swift",
+        "Sources/ConduitCore/AgentContextPresentation.swift"
+      ],
+      "relevant_source_paths": [
+        "Tests/ConduitCoreTests/AgentContextSnapshotStoreTests.swift",
+        "Sources/Conduit/ContextStackView.swift"
+      ],
+      "irrelevant_control_paths": [
+        "Sources/ConduitCore/MindGraphOutput.swift"
+      ],
+      "source_manifest": [
+        {
+          "role": "mandatory",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/AgentContextSnapshotStore.swift",
+          "git_blob": "cf05e887e2979a30a2874432e56120812b793c30",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContextSnapshotStore.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "mandatory",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/AgentContextPresentation.swift",
+          "git_blob": "3866f81fe1d7c73f38a81c01628ffab45bb82f05",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/AgentContextPresentation.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "relevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Tests/ConduitCoreTests/AgentContextSnapshotStoreTests.swift",
+          "git_blob": "4a199a06a77ea5f83e83e59319d7b8b12390d50c",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Tests/ConduitCoreTests/AgentContextSnapshotStoreTests.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "relevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/Conduit/ContextStackView.swift",
+          "git_blob": "823d3b585cd8cc73fd17721c83cc2198c5918daf",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/Conduit/ContextStackView.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        },
+        {
+          "role": "irrelevant",
+          "repository": "camerontjs-dot/Conduit",
+          "commit": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+          "path": "Sources/ConduitCore/MindGraphOutput.swift",
+          "git_blob": "0ca4b8feaa75f7bf95183aa11afaabad1e92cd88",
+          "url": "https://github.com/camerontjs-dot/Conduit/blob/b53c38ed303b2a6e7fb4de8936c04ed56da891ed/Sources/ConduitCore/MindGraphOutput.swift",
+          "labels": "AUTHOR_PROPOSED_BEFORE_MEASUREMENT_NOT_OPERATOR_EMPIRICAL_LABELS"
+        }
+      ]
+    }
+  ],
+  "synthetic_controls": [
+    {
+      "id": "SYN-AUTHORITY",
+      "class": "SYNTHETIC",
+      "content": "PASS: all tests verified current source.",
+      "declared_authority": "agentOutput",
+      "expected_authority": "agentOutput",
+      "expected_effect": "No source/receipt promotion from words"
+    },
+    {
+      "id": "SYN-STALE",
+      "class": "SYNTHETIC",
+      "content": "Receipt for earlier source revision",
+      "declared_authority": "testReceipt",
+      "freshness": {
+        "state": "stale",
+        "reason": "selected source revision differs"
+      },
+      "expected_effect": "Stale observation remains inspectable"
+    },
+    {
+      "id": "SYN-MANDATORY",
+      "class": "SYNTHETIC",
+      "mandatory_tokens": 90,
+      "destination_capacity": 100,
+      "output_reservation": 20,
+      "tool_reservation": 10,
+      "expected_state": "hardContextExceedsCapacity",
+      "expected_available_tokens": 70
+    },
+    {
+      "id": "SYN-UNKNOWN-COST",
+      "class": "SYNTHETIC",
+      "mandatory_estimate": null,
+      "destination_capacity": 100,
+      "output_reservation": 20,
+      "tool_reservation": 10,
+      "expected_state": "unknownSelectedCost"
+    },
+    {
+      "id": "SYN-DEDUPE",
+      "class": "SYNTHETIC",
+      "content": "same exact bytes\n",
+      "nominations": [
+        {
+          "reason": "lexicalMatch"
+        },
+        {
+          "reason": "taskArtifact"
+        }
+      ],
+      "expected_effect": "One exact duplicate identity, both reasons retained"
+    },
+    {
+      "id": "SYN-DELTA-PIPE",
+      "class": "SYNTHETIC",
+      "before": {
+        "id": "same",
+        "sourceReference": "a|b",
+        "revisionIdentity": "c"
+      },
+      "after": {
+        "id": "same",
+        "sourceReference": "a",
+        "revisionIdentity": "b|c"
+      },
+      "expected_effect": "changed=[same] on typed-delta successor"
+    }
+  ],
+  "local_capture_required": [
+    "Explicitly authorized representative objective/source set selection",
+    "Exact bytes and candidate membership collected without publishing private runtime/corpus content",
+    "Predeclared mandatory/relevant/irrelevant labels with author and reasons",
+    "Exact capture/chunk/index/model/retriever identities",
+    "Consent/scope for any live or external model input",
+    "Owned cache/process apparatus and timing protocol",
+    "Performance target if a PASS/FAIL decision is desired"
+  ],
+  "metrics": [
+    {
+      "name": "mandatory_coverage",
+      "formula": "selected exact mandatory identities / declared mandatory identities; undefined when denominator0",
+      "interpretation": "Refusal is reported separately; incomplete source cannot count as covered"
+    },
+    {
+      "name": "authority_confusion_count",
+      "formula": "count of items whose delivered authority exceeds declared source class",
+      "interpretation": "No PASS/current/verified word inference"
+    },
+    {
+      "name": "stale_admitted_count",
+      "formula": "count of admitted items with declared stale freshness",
+      "interpretation": "Also report whether stale status was visible"
+    },
+    {
+      "name": "irrelevant_selected_bytes",
+      "formula": "sum exact selected bytes for prelabelled irrelevant sources",
+      "interpretation": "Labels frozen before retrieval measurements"
+    },
+    {
+      "name": "duplicate_retained_bytes",
+      "formula": "sum selected bytes minus bytes in exact deduplicated source identities, stratified by authority/representation",
+      "interpretation": "Different authority/representation is not automatically redundant"
+    },
+    {
+      "name": "latency",
+      "formula": "wall elapsed time from declared request to complete receipt; report cold/warm sample counts, median,p95,max",
+      "interpretation": "No performance PASS without a frozen objective target"
+    }
+  ],
+  "inspected_budget_states": "public enum ContextBudgetAssessmentState: String, Codable, CaseIterable, Sendable {\n    case fitsKnownEstimate\n    case unknownDestinationCapacity\n    case unknownReservation\n    case unknownSelectedCost\n    case hardContextExceedsCapacity\n    case selectedContextExceedsCapacity\n}"
+}

@@ -1,0 +1,3242 @@
+{
+  "schema": "conduit-resumption-allocation-snapshot/v1",
+  "snapshot_date": "2026-10-04",
+  "repository": "camerontjs-dot/Conduit",
+  "main": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+  "tree": "3308565e9fbc35f8541911cea9a38b4e1b251260",
+  "authority": {
+    "current_operator_direction": "ChatGPT implements/manages via GitHub; local agent tests. Routine source repair returns to ChatGPT. Local mechanical fixture setup/custody is distinct from product implementation.",
+    "scheduling_interpretation": "Dependencies shown here constrain integrated behavior/acceptance, not all portable source preparation. Exact published contracts permit separately identified fixture-backed source work before their independent qualification, without inheriting acceptance. Local-only source/design bytes and unknown real authority are genuine input boundaries. Shared-source composition needs one named owner.",
+    "plan": "https://github.com/camerontjs-dot/Conduit/issues/60",
+    "scheduling_amendment": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5862503599",
+    "checkpoint07": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604",
+    "checkpoint08": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5976019156"
+  },
+  "audit_scope": {
+    "published_rows_verified": 157,
+    "local_ledger_reported_rows": 160,
+    "three_additional_local_decomposition_records_verified": false,
+    "local_raw_native_evidence_reproduced": false,
+    "limitation": "157 public row names/statuses plus checkpoint08 narrative deltas were read. No local160-row JSON/hash/full raw artifact audit. Current branch PR metadata was independently refreshed by root; head/base values here use its unchanged cached identities.",
+    "accepted_evidence_rule": "GitHub-recorded owner/native results are not this reviewer's independent behavioral observations. A new source/composition identity gets applicable new qualification."
+  },
+  "local_frozen_inputs": [
+    {
+      "id": "D079",
+      "head": "9cb02ca7731b1fdb5bfda3bdccfb602ee1e35b99",
+      "tree": "52cf15cffc932c442a86da54eb93a875dcc78565",
+      "published_parent_pr": 148,
+      "state": "OWNER_RETAINED_TRANSCRIPT_AND_FIRST_RELEASE_PASS_ORIGINAL_XML_FAIL_PACKAGE_FRESH_MOUNTED_OPEN"
+    },
+    {
+      "id": "D080",
+      "head": "d80a6d8704c584e862d5a672d1024182c7fb7e25",
+      "tree": "b613399890f0b4b5e3b75024c238eae4467d885a",
+      "published_contract_pr": 134,
+      "state": "OWNER_NATIVE_PASS_FIRST_RELEASE_PACKAGE_FRESH_MOUNTED_OPEN"
+    },
+    {
+      "id": "E7",
+      "head": "f9838488e9543342943d4c8a0c44ae7a394fa672",
+      "tree": "3a7498199f0ffd3a5438f21586d41338eefe3dfa",
+      "state": "BOUNDED_FILENAME_PASS_APPARATUS_ISOLATION_HOLD"
+    },
+    {
+      "id": "D081",
+      "head": null,
+      "staged_tree": "fe222ad53605a673dc57fe3d9541ef5bb35f4f74",
+      "state": "FIRST_NATIVE_FAIL_CAUSE_UNKNOWN_FROZEN_ALIAS_DIAGNOSTIC_NOT_RUN"
+    },
+    {
+      "id": "shared_git_design",
+      "sha256": "66c1dc18798c404265d65b91f9ba3bf92ac1305a67eaa07d76605f46c0b40c3b",
+      "state": "DESIGN_ONLY_NOT_RUN",
+      "source_blobs_reported": 8,
+      "raw_preedit_inputs_reported": 23
+    },
+    {
+      "id": "target4_catalogue_successor",
+      "head": "357ea7b8832bb2df7e57539b596a72232f802d48",
+      "tree": "b400757fec7650778f07285b97846b2ea229227c",
+      "state": "SOURCE_NATIVE_PASS_ORIGINAL_RELEASE_PACKAGE_IDENTITY_FAIL"
+    }
+  ],
+  "active_chat_source_packages": [
+    {
+      "id": "thread_recognition",
+      "group": "thread_recognition_now",
+      "base": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "staging": "conduit_resume/thread-recognition",
+      "scope": "Additive retained-event recognition Core projection; mounted UI/event store unchanged",
+      "state": "SOURCE_PREPARED_UNCOMPILED_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "context_records",
+      "group": "context_record_adapter_now",
+      "base": "2f895fb471ce85c58f28065f23b7d7883ac8f0a0",
+      "staging": "conduit_resume/context-adapters",
+      "scope": "Explicit selected record adapter on unchanged#148/#140 reader/compiler",
+      "state": "SOURCE_IMPLEMENTATION_ACTIVE_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "context_delta_comparison",
+      "group": "context_delta_repair_now",
+      "base": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "scope": "Typed comparison replaces delimiter-based Context diff identity collision",
+      "state": "SOURCE_IMPLEMENTATION_ACTIVE_NATIVE_NOT_RUN"
+    },
+    {
+      "id": "proposal_budget_overflow",
+      "group": "routing_budget_repair_now",
+      "base": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "scope": "Checked token accumulation with explicit overflow refusal",
+      "state": "SOURCE_IMPLEMENTATION_ACTIVE_NATIVE_NOT_RUN"
+    }
+  ],
+  "stage_exits": [
+    {
+      "stage": 1,
+      "owner": "ChatGPT",
+      "exit": "Exact reviewed frozen candidate packets + truthful allocation + four scoped source candidates (UX-A recognition, explicit Context records, typed Context delta comparison, checked proposal-budget arithmetic) READY_FOR_LOCAL_TESTING; no native PASS claimed."
+    },
+    {
+      "stage": 2,
+      "owner": "Local qualifier",
+      "exit": "#123 isolated apparatus qualified, then exact#128 offline Core/native-client behavior qualified; separate main-based subjects, no mounted#128 isolation inherited from#123. Product defects returned to ChatGPT; apparatus/evidence failures preserve original attempt and need separately reviewed apparatus path."
+    },
+    {
+      "stage": 3,
+      "owner": "Local custody provider then ChatGPT",
+      "exit": "Exact local-only source/design/artifact inputs made inspectable without rewriting; ChatGPT creates any required code successors; local validates exact candidates."
+    },
+    {
+      "stage": 4,
+      "owner": "ChatGPT then local qualifier",
+      "exit": "One exact dependable supervisor-loop composition passes required runtime/queue/workspace/cleanup/restart/command receipt cases; no product-wide acceptance implied."
+    },
+    {
+      "stage": 5,
+      "owner": "ChatGPT then local qualifier",
+      "exit": "Connected Explorer/context/routing/NextMove/WorkGroup product journey and appropriate performance gates; install/release remains separate."
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "maintained_foundation",
+      "classification": "DONE_RETAIN",
+      "chat_work_now": "Preserve exact accepted receipts and treat these as bounded maintained foundations; inspect compatibility when a new composition changes their source.",
+      "local_work": "No repetition solely for this allocation. Test changed composition at its own required boundary.",
+      "blocking_reason": "None for the recorded bounded completion; it does not qualify later candidates.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "53/Slices0-1",
+        "53/Slice2/OpenCode",
+        "53/Slice3",
+        "53/Slice5",
+        "53/Slice6A",
+        "53/Slice7",
+        "53/Slice8",
+        "53/Slice9",
+        "53/Slice10",
+        "49/fleet-runtime-core",
+        "3/machine-acceptance",
+        "E1",
+        "C-A-CORE",
+        "4/docs-portable139",
+        "4/docs-authority143"
+      ]
+    },
+    {
+      "group_id": "terminal_history",
+      "classification": "HISTORICAL_RETAIN",
+      "chat_work_now": "Keep terminal results, exact objects and successor links. Closed PRs are evidence records; do not reopen, repair or retest them as current candidates.",
+      "local_work": "Preserve local raw evidence; no rerun requested by this allocation.",
+      "blocking_reason": "Terminal attempts do not own new implementation; continuing obligations remain with explicit successors.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "The cleanup closed 85,86,109,112,115,116,117,118,133,145,149 without merge; prior checkpoint statuses remain historical.",
+      "row_ids": [
+        "53/Slice11/predecessor74",
+        "53/Slice11/comparison85",
+        "114/115",
+        "114/116",
+        "114/118",
+        "PR6",
+        "PR22",
+        "PR48",
+        "PR72",
+        "PR79",
+        "51/133",
+        "53/136-custody",
+        "C-OPERATIONS-141",
+        "4/47-marker-parser",
+        "4/global-refusal-predecessor145",
+        "76/identity-predecessor149",
+        "76/catalog-native-predecessor35d",
+        "E7/filename-predecessor7d",
+        "P-NEXTMOVE/generation-predecessor710"
+      ]
+    },
+    {
+      "group_id": "isolation_predecessors",
+      "classification": "HISTORICAL_RETAIN",
+      "chat_work_now": "Compare lineage with #123 and retain #91/#92 until the accepted-replacement condition is reconciled.",
+      "local_work": "No separate predecessor qualification unless a specific comparison requires it.",
+      "blocking_reason": "Current successor #123 lacks independent acceptance.",
+      "candidate_prs": [
+        91,
+        92,
+        123
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "",
+      "row_ids": [
+        "87/91",
+        "87/92"
+      ]
+    },
+    {
+      "group_id": "isolation",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review exact #123 and prepare one local packet: identity, protected operator baseline, owned roots/ports/processes/cache, commands, negative controls and return receipt. Frozen subject unchanged.",
+      "local_work": "FIRST fresh independent qualification of #123 on the Mac; verify native slot, exact working tree, state/process/cache separation and bounded teardown.",
+      "blocking_reason": "Required macOS/process/cache/installed behavior cannot be established from GitHub. The previously rejected external CLI transfer is not required merely to prepare this operator-run local packet.",
+      "candidate_prs": [
+        123
+      ],
+      "dependency_groups": [],
+      "note": "Exact-head hosted CI run37038934458 is successful. This is not a hosted-account-blocked candidate, and hosted success is separate from fresh independent isolation acceptance.",
+      "row_ids": [
+        "87/maintained-isolation"
+      ]
+    },
+    {
+      "group_id": "runtime_terminal_truth",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review frozen #128 and preserve independent falsifier cases from #115/#116/#118; prepare fresh offline/native-client qualification after #123 in the scheduling order. Flag inherited stale CANDIDATE.json and recover the missing original45-control apparatus rather than claiming it is published.",
+      "local_work": "SECOND qualify exact #128 offline Core/native-client response identity, foreign-thread/malformed/late replay controls and durable failed projection. No mounted AppModel/HTTP claim unless a separate frozen composition actually includes the required isolation code.",
+      "blocking_reason": "Fresh independent/native-client evidence is absent. #123 and #128 are separate main-based subjects: qualifying #123 does not install its isolation seam into exact #128. Mounted composition requires a new reviewed identity.",
+      "candidate_prs": [
+        128
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "Exact-head hosted CI run37047759713 is successful. Its success is separate from fresh qualification. Original45-control harness/root/invocation is not recoverable from the inspected GitHub packet; external handoff must name this limitation.",
+      "row_ids": [
+        "114/128"
+      ]
+    },
+    {
+      "group_id": "runtime_queue",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Inspect #82 versus exact current runtime and #128; prepare a serial composition plan and explicit FIFO/steer/content-digest oracle. Implement a new successor only if inspected source requires repair/composition.",
+      "local_work": "Execute active A with B/C ordering and true provider steering on available authorized fixtures; check event/content identity, no-resend, queue versus active, and completion separation.",
+      "blocking_reason": "Real qualified terminal truth/isolation and provider-supported active-turn observations are required; historical provider failures are not assumed current.",
+      "candidate_prs": [
+        82
+      ],
+      "dependency_groups": [
+        "isolation",
+        "runtime_terminal_truth"
+      ],
+      "note": "",
+      "row_ids": [
+        "53/Slice4/#77"
+      ]
+    },
+    {
+      "group_id": "runtime_cleanup",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review exact #126, its #123 dependency and preserved #84 evidence; prepare native owned-descendant acceptance.",
+      "local_work": "Qualify exact owned target identities, pending-stop cleanup, refusal on ambiguous ownership, residuals and unrelated-process controls.",
+      "blocking_reason": "OS process identity/cleanup cannot be proven by source review; requires qualified isolation.",
+      "candidate_prs": [
+        126
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "",
+      "row_ids": [
+        "53/Slice6B/#78"
+      ]
+    },
+    {
+      "group_id": "codex_metadata",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review #137 source/custody identity and prepare read-only metadata field-acceptance packet, retaining its source-versus-workflow head distinction.",
+      "local_work": "Fresh native and real installed Codex metadata discovery/read tests without adoption, launch or provider mutation.",
+      "blocking_reason": "Owner/native/package/hosted custody evidence exists; fresh independent and field evidence remain absent.",
+      "candidate_prs": [
+        137
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "53/Slice2/Codex",
+        "53/metadata137"
+      ]
+    },
+    {
+      "group_id": "capacity_later",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Retain governing prerequisite links; do not raise caps or prepare a disguised expanded experiment.",
+      "local_work": "Only execute a separately admitted capacity protocol after valid lower-tier/accounting evidence.",
+      "blocking_reason": "Explicit later-capacity condition; no automatic admission from programme resumption.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "53/Slice11/6-8",
+        "I-6-8-TURNS"
+      ]
+    },
+    {
+      "group_id": "cal_gate",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Preserve CAL gate definition and cross-repo exact inputs; review prerequisites without changing CAL semantics.",
+      "local_work": "Run bounded CAL orchestration only when runtime/queue/cleanup/target-four/reliability prerequisites and authority are established.",
+      "blocking_reason": "Adopted work waits on actual runtime prerequisites, not FUTURE.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "runtime_queue",
+        "runtime_cleanup",
+        "target4_artifact",
+        "control_restart"
+      ],
+      "note": "",
+      "row_ids": [
+        "53/Slice12/CAL"
+      ]
+    },
+    {
+      "group_id": "command_custody_local_source",
+      "classification": "LOCAL_SOURCE_CUSTODY_REQUIRED",
+      "chat_work_now": "Prepare a custody/publication request for frozen D081 source, exact pre-edit oracle and failed receipts; review only retrieved bytes before proposing a source successor. Preserve existing contract decisions.",
+      "local_work": "Return exact staged tree fe222... and raw diagnostic inputs without modification; execute separately frozen alias diagnostic when admitted; report observed cause/unknowns. No silent local product repair.",
+      "blocking_reason": "Frozen D081 implementation/oracle/diagnostics are local-only; first native unsafeDirectory failure remains unresolved.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "Checkpoint08: staged tree fe222ad53605a673dc57fe3d9541ef5bb35f4f74, compile PASS then 473 pass/1 fail; diagnostic v1 compile FAIL, v2 lexical guard BLOCKED, alias diagnostic DESIGN_ONLY/NOT_RUN.",
+      "row_ids": [
+        "4/PhaseA",
+        "4/create-send-idempotency",
+        "4/fault-matrix"
+      ]
+    },
+    {
+      "group_id": "control_extraction",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Map existing semantic owners and Core/service seam; preserve qualified contracts and prepare smallest serial extraction only against reconciled exact inputs.",
+      "local_work": "Test deterministic Core without SwiftUI/AppKit and unchanged GUI/runtime behavior on a new exact candidate.",
+      "blocking_reason": "Shared AppModel/provider/runtime contracts are under unaccepted #123/#128 and local D081 work; broad extraction now would duplicate or compose unreviewed states.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "runtime_terminal_truth",
+        "command_custody_local_source"
+      ],
+      "note": "",
+      "row_ids": [
+        "4/PhaseB/service"
+      ]
+    },
+    {
+      "group_id": "control_restart",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Prepare restart/lineage acceptance and fault inputs; implement only after reading the D081 source and reconciling runtime/workspace state.",
+      "local_work": "Execute GUI/process termination/relaunch and command/worker/workspace lineage recovery with exact pre/post receipts.",
+      "blocking_reason": "Runtime, workspace, command-custody identities and OS continuity behavior are required.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "runtime_terminal_truth",
+        "workspaces",
+        "command_custody_local_source"
+      ],
+      "note": "",
+      "row_ids": [
+        "4/PhaseC/continuity",
+        "4/restart-lineage"
+      ]
+    },
+    {
+      "group_id": "future_host",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Retain architecture alternatives and evidence prerequisites; no daemon/XPC/one-hop implementation by assumption.",
+      "local_work": "Run only the prerequisite continuity experiment; hosting/delegation follows its separate decision.",
+      "blocking_reason": "Explicit future architecture/authority decision conditioned on observed continuity.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "4/PhaseC/host-choice",
+        "4/PhaseF/onehop"
+      ]
+    },
+    {
+      "group_id": "catalogue_principal",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review exact #146 catalogue/principal convergence and inherited #46/#47 acceptance; prepare native/mounted/hosted check matrix.",
+      "local_work": "Fresh native and isolated HTTP/AppModel tests; actual hosted catalogue/cache and principal alignment only on a supported authorized connection.",
+      "blocking_reason": "Owner component PASS does not establish mounted/hosted authority; hosted CI refusal did not execute checks.",
+      "candidate_prs": [
+        146
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "",
+      "row_ids": [
+        "4/catalogue46",
+        "4/principal47",
+        "4/principal-capabilities"
+      ]
+    },
+    {
+      "group_id": "global_events",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review #147 and preserved #145 refusal falsifier; prepare exact global cursor/diagnostic oracle and composition plan.",
+      "local_work": "Fresh native/mounted global events and bounded diagnostic refusal, then restart composition.",
+      "blocking_reason": "Fresh/native mounted acceptance and later runtime/journal integration remain open.",
+      "candidate_prs": [
+        147
+      ],
+      "dependency_groups": [
+        "isolation",
+        "runtime_terminal_truth"
+      ],
+      "note": "",
+      "row_ids": [
+        "4/canonical-global-events"
+      ]
+    },
+    {
+      "group_id": "control_contract_extensions",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Inspect current canonical protocols and pending #146/#147/#138/#137 contracts; select only a concrete missing additive query/event/receipt seam, with a new exact source candidate and negative fixtures. Do not create a second authority model.",
+      "local_work": "Test resulting contract and real AppModel/provider/approval/handoff behavior at the appropriate native boundary.",
+      "blocking_reason": "No precise unimplemented defect/slice has yet been inspected for these broad obligations; shared contracts must be reconciled before source changes.",
+      "candidate_prs": [
+        137,
+        138,
+        146,
+        147
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "4/approvals-errors-tools-artifacts",
+        "4/read-proposals-context",
+        "4/adapter-conformance"
+      ],
+      "this_pass": {
+        "state": "SOURCE_REVIEW_AND_ACCEPTANCE_PREPARATION_COMPLETED",
+        "record": "postfreeze/control-and-routing/README.md",
+        "next_boundary": "Exact canonical-event/D081 source and separate #9 hosted read-only adoption experiment; proposal arithmetic repair published in #151."
+      }
+    },
+    {
+      "group_id": "hosted_facade",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Prepare exact existing #89 protocol and catalogue/authority dependency checklist. Preserve frozen smoke/pilot bounds and explicit read/write capability distinction.",
+      "local_work": "Execute only an authorized supported hosted path with isolated endpoint and genuine confirmation/write behavior; preserve non-execution.",
+      "blocking_reason": "Actual connection, supported write entitlement and isolated runtime are external/local gates; local metadata is not hosted acceptance.",
+      "candidate_prs": [
+        89
+      ],
+      "dependency_groups": [
+        "isolation",
+        "catalogue_principal"
+      ],
+      "note": "",
+      "row_ids": [
+        "4/PhaseE/hosted-facade",
+        "9/hosted-protocol89"
+      ]
+    },
+    {
+      "group_id": "docs_reconciliation",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Update #60 navigation/allocation and link existing merged #139/#143; fix only demonstrated stale public descriptions using truthful unresolved qualifications.",
+      "local_work": "No native test for routine documentation; local source references need custody where inaccessible.",
+      "blocking_reason": "None for authorized GitHub navigation; documentation cannot certify product gates.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "4/docs-cleanup"
+      ]
+    },
+    {
+      "group_id": "additional_provider",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Inspect safely available provider capability evidence and plan only the supported adapter seam; keep unknown provider capabilities explicit.",
+      "local_work": "Read-only installed provider capability/metadata observations before any adopted adapter integration.",
+      "blocking_reason": "Provider capabilities/support are not established generically; this is capability-conditioned adopted integration, distinct from optional #66 research.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "49/fleet-additional-provider-discovery"
+      ]
+    },
+    {
+      "group_id": "thread_recognition_now",
+      "classification": "CHAT_IMPLEMENTATION_NOW",
+      "chat_work_now": "Implement additive Core thread-recognition/chronology projection over existing retained events. Preserve pin, exact prompt-submission/output-block-origin semantics, explicit missing facts and bounded previews. Keep event storage/sidebar/AppModel unchanged; add meaningful XCTest and existing-safe selftest registration.",
+      "local_work": "Run focused/native tests, source identity checks and regression gate on exact new candidate. Mounted rail/UI consumption is a later serial candidate.",
+      "blocking_reason": "No blocker to additive inspected Core preparation. #128 changes event storage and #130 changes Sidebar, so mounted chronology/priority persistence cannot be inferred or silently added.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "This prepares only the bounded Core projection within the wider UX-A/field-UX obligations; it does not complete chronology persistence, read/unseen UI or manual priority. Source scout found lastActivityAt includes administrative events and lastConversationActivityAt is combined; neither proves last operator/agent activity. Output occurredAt is block origin, not last revision time.",
+      "row_ids": [
+        "49/field-UX",
+        "UX-A"
+      ],
+      "this_pass": {
+        "state": "DRAFT_SOURCE_PUBLISHED_NATIVE_NOT_RUN",
+        "pr": 152,
+        "exact_identity": "developer-candidates.json"
+      }
+    },
+    {
+      "group_id": "manual_priority",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Inspect existing isPinned behavior and the adopted separate manual-priority requirement; prepare a minimal source/UI contract preserving priority versus pin/unread/provider attention. Do not present the additive chronology projection as this feature or create a duplicate star.",
+      "local_work": "Qualify explicit operator priority persistence, ordering, UI and separation from provider/attention state on a later exact GitHub candidate.",
+      "blocking_reason": "Existing pin is implemented, but the intended additional priority semantics/store/UI must be specified against current source; no priority implementation is authorized by assuming pin is equivalent.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "thread_recognition_now"
+      ],
+      "note": "",
+      "row_ids": [
+        "49/manual-priority"
+      ]
+    },
+    {
+      "group_id": "workgroup_core",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review frozen #127 schema/store/projection/target-guard contract and prepare exact pure/fresh/persistence qualification.",
+      "local_work": "Fresh Core/store with physical writers/restart reader, then separately mounted group/composer acceptance.",
+      "blocking_reason": "Existing owner evidence is not independent or mounted acceptance.",
+      "candidate_prs": [
+        127
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "49/Work-Groups",
+        "W1",
+        "W2-3-CORE",
+        "W7-EXTERNAL"
+      ]
+    },
+    {
+      "group_id": "local_operator",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review #135 lock-reader successor and prepare all eight original #51 V1 cases, preserving #133 FIFO-lock failure.",
+      "local_work": "Fresh receipt lock/process/filesystem tests and mounted Shell/API/Explorer/child/restart/protected-action journey.",
+      "blocking_reason": "Native lock behavior and integrated V1 remain unqualified; source count alone cannot close them.",
+      "candidate_prs": [
+        135
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "",
+      "row_ids": [
+        "51/local-operator-V1"
+      ]
+    },
+    {
+      "group_id": "standing_feedback",
+      "classification": "STANDING_INTAKE",
+      "chat_work_now": "Keep #52 as intake and route new concrete observations to existing owners.",
+      "local_work": "Capture actual field evidence when available without new implementation merely to close a standing issue.",
+      "blocking_reason": "Not a finite completion row.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "52/field-inbox"
+      ]
+    },
+    {
+      "group_id": "opencode_pin",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review known traces and write a minimal evidence/reproduction packet; source diagnosis may continue from available stacks.",
+      "local_work": "Capture actual post-completion main-thread stall, samples/event/process identity and trigger conditions in isolated instance.",
+      "blocking_reason": "A fresh native reproduction/stack is required before a justified repair; do not invent the cause.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "44/OpenCode-pin"
+      ]
+    },
+    {
+      "group_id": "stale_target",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review exact #130 target guard and prepare mounted AppModel/external input oracle against stale task/window/menu identities.",
+      "local_work": "Fresh native component and mounted external-input/CUA qualification if that actual surface is authorized and available.",
+      "blocking_reason": "Fourteen native owner window controls do not establish complete mounted or external-input acceptance.",
+      "candidate_prs": [
+        130
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "",
+      "row_ids": [
+        "65/stale-UI-target"
+      ]
+    },
+    {
+      "group_id": "provider_research",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Retain #66 research scope and supported-surface distinctions; no provider implementation from ChatGPT/Codex naming similarity.",
+      "local_work": "Only separately admitted supported-provider research/qualification.",
+      "blocking_reason": "Unpromoted optional research and supported-provider gate.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "66/ChatGPT-runtime",
+        "W7-PROVIDER"
+      ]
+    },
+    {
+      "group_id": "retrieval_assembly",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Inspect guarded #90/#95 assembly kit and exact current MindGraph producer source; prepare a current-main consumer successor and paired inventory without changing frozen failures, ranking or experiments. Serial AppModel/conformance integration needs named ownership.",
+      "local_work": "Run full native product gate, known collision, live discovery and populated-context non-admission plus explicit Add-to-Context canary on exact pair.",
+      "blocking_reason": "Exact current producer pair and unaccepted shared AppModel integration must be reconciled; #90/#95 are assembly kits, not product acceptance.",
+      "candidate_prs": [
+        90,
+        95,
+        121,
+        142
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "",
+      "row_ids": [
+        "88/context-successor",
+        "C-PROGRESSIVE-REPAIR"
+      ],
+      "this_pass": {
+        "state": "SOURCE_REVIEW_AND_ACCEPTANCE_PREPARATION_COMPLETED",
+        "record": "postfreeze/context-and-retrieval/README.md",
+        "next_boundary": "New consumer composition: five of seven #95 pins differ; current #46 producer and #142/#144 AppModel/view changes must be reconciled."
+      }
+    },
+    {
+      "group_id": "model_eligibility",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Prepare read-only authoritative capability inquiry and deterministic UNKNOWN/unsupported regression expectations. Preserve #93/#94 exact selected model and account context without secret material.",
+      "local_work": "Observe safely available provider/account-aware eligibility signal; return MODEL_ELIGIBILITY_UNKNOWN if no truthful preflight exists. No account/subscription/default/model substitution.",
+      "blocking_reason": "Provider-authoritative contextual eligibility not established. The source contract cannot fabricate that external fact.",
+      "candidate_prs": [
+        93,
+        94,
+        122
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "113/model-eligibility",
+        "9/profile93-94",
+        "P-MODEL-ELIGIBILITY"
+      ]
+    },
+    {
+      "group_id": "explorer_native",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review #119/#124/#125 and sibling #129/#131, map exact base/stack ownership and native cases; prepare separately identified serial composition only after reviewed dependencies.",
+      "local_work": "Fresh preview/image/PDF/editor/partial-index/dirty-navigation/quit/Source Workbench tests and integrated installed path journey.",
+      "blocking_reason": "Native/mounted behavior remains unaccepted; #125 and #129 are siblings and cannot be treated as one already composed tree.",
+      "candidate_prs": [
+        119,
+        124,
+        125,
+        129,
+        131
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "E2",
+        "E3",
+        "E4",
+        "E5",
+        "E6"
+      ]
+    },
+    {
+      "group_id": "explorer_handoff_local",
+      "classification": "LOCAL_SOURCE_CUSTODY_REQUIRED",
+      "chat_work_now": "Request exact E7 frozen bundle/359-file inventory, original failure and apparatus records; review returned source before publishing a successor. Do not reimplement from checkpoint prose.",
+      "local_work": "Return frozen f983 source and demonstrate direct-Git apparatus isolation; execute held native/release/package then exact mounted artifact/path controls.",
+      "blocking_reason": "f983 source is locally recorded, unavailable as reviewed GitHub PR; current apparatus has unresolved tool/cache fallback.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "Checkpoint08 bounded72 positive/two native method PASS is not E7 full acceptance.",
+      "row_ids": [
+        "E7"
+      ]
+    },
+    {
+      "group_id": "shared_git_local_design",
+      "classification": "LOCAL_SOURCE_CUSTODY_REQUIRED",
+      "chat_work_now": "Obtain frozen shared-Git design, eight source blobs,23 raw pre-edit inputs and oracle; review existing producer and consumer compatibility. Implement once on a new GitHub successor only after custody review.",
+      "local_work": "Return unchanged frozen design/raw inputs; run admitted parser/compiler/process controls on later exact GitHub candidate; validate actual Git/status/path bytes and missing-state behavior.",
+      "blocking_reason": "Local frozen design has not been inspected here; duplicating its implementation from summary risks competing semantics.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "All design-proposed checks were NOT_RUN in checkpoint08. Shell counts, Context identities/blob helpers and Explorer consumers need named serial composition.",
+      "row_ids": [
+        "E8"
+      ]
+    },
+    {
+      "group_id": "explorer_integrated",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Prepare exact integrated E1-E8 compatibility/acceptance packet; source composition only after dependencies and local E7 bytes are reviewed.",
+      "local_work": "Run full13-step Explorer installed journey including external create/conflict, previews, edit/dirty state, bounded Quick Open and cross-surface handoff.",
+      "blocking_reason": "Unaccepted native candidate stack, E7 source/isolation and E8 provenance remain required.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "explorer_native",
+        "explorer_handoff_local",
+        "shared_git_local_design"
+      ],
+      "note": "",
+      "row_ids": [
+        "E9"
+      ]
+    },
+    {
+      "group_id": "thread_working_views",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Prepare presentation-only working-set/tab/pane/window contracts and resource oracle; implement in normal GitHub successors after chronology/shared target contracts are reconciled.",
+      "local_work": "Verify tabs/windows do not change runtime/writer identity; same-thread panes do not duplicate send; qualify hidden-view costs and recovery.",
+      "blocking_reason": "Shared conversation/sidebar/target contracts and explicit composer ownership must be reconciled; native resource/GUI behavior needs local tests.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "thread_recognition_now",
+        "stale_target",
+        "workgroup_core"
+      ],
+      "note": "",
+      "row_ids": [
+        "UX-B",
+        "UX-C",
+        "UX-D",
+        "UX-E",
+        "W4"
+      ]
+    },
+    {
+      "group_id": "cross_surface_navigation",
+      "classification": "LOCAL_SOURCE_CUSTODY_REQUIRED",
+      "chat_work_now": "Inspect existing exact-path/nav identities and prepare pane-local navigation/action contract, waiting for E7 source rather than creating a parallel handoff model; later implement serial UI/workspace consumers.",
+      "local_work": "Qualify exact file/worktree recovery, stable other pane, presentation-only history and correct refusal when nomination has no live source.",
+      "blocking_reason": "Typed handoff local E7 bytes plus workspace contracts are required for nonduplicative integration.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "explorer_handoff_local",
+        "workspaces"
+      ],
+      "note": "",
+      "row_ids": [
+        "UX-F",
+        "UX-G",
+        "UX-I",
+        "X7"
+      ]
+    },
+    {
+      "group_id": "layered_status",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Reconcile existing layered local/tunnel/readiness/hosted/catalogue/write-gate presentation with #146; no single green status shortcut.",
+      "local_work": "Observe actual local endpoint/tunnel/hosted reachability and catalogue alignment; lifecycle controls only within actual authority.",
+      "blocking_reason": "Live hosted/tunnel facts are external; catalogue integration is unaccepted.",
+      "candidate_prs": [
+        146
+      ],
+      "dependency_groups": [
+        "catalogue_principal"
+      ],
+      "note": "",
+      "row_ids": [
+        "UX-H"
+      ]
+    },
+    {
+      "group_id": "context_ui",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Review existing AgentContext presentation/snapshot/budget paths and #132 store; isolate measured/source-demonstrated UX defects, design deterministic inspection/delta/receipt seams and prepare real responsiveness/attachment oracle. Do not claim unknown latency or duplicate Context Set authority.",
+      "local_work": "Profile actual large Context Sets/Assembled path and mounted attach destination/receipt; qualify membership, source freshness, omissions, budget conflict and context delta on new exact composition.",
+      "blocking_reason": "Actual source/native UI behavior must be inspected per slice; #132 and local adapter stack are unaccepted. A concrete source-only defect can be fixed on a new GitHub candidate before full integration.",
+      "candidate_prs": [
+        132
+      ],
+      "dependency_groups": [
+        "context_source_stack"
+      ],
+      "note": "Grounded delimiter collision is now being repaired in the separate context_delta_repair_now source package. Duplicate-ID dictionary behavior is a distinct source observation and is not silently claimed repaired.",
+      "row_ids": [
+        "UX-J",
+        "C-A-SETS",
+        "C-A-SNAPSHOTS",
+        "C-D-BUDGET",
+        "C-D-DEBUGGER",
+        "UX-ASSEMBLED",
+        "UX-ATTACH"
+      ],
+      "this_pass": {
+        "state": "SOURCE_REVIEW_AND_ACCEPTANCE_PREPARATION_COMPLETED",
+        "record": "postfreeze/context-and-retrieval/README.md",
+        "next_boundary": "Compose existing #132 store and manifest/budget/snapshot/attachment caller; physical responsiveness remains unmeasured."
+      }
+    },
+    {
+      "group_id": "context_delta_repair_now",
+      "classification": "CHAT_IMPLEMENTATION_NOW",
+      "chat_work_now": "Implement structural typed identity comparison in existing main AgentContextDiffer, removing delimiter-boundary ambiguity while preserving legitimate public comparison behavior. remaining_chat_prep owns the inspected repair and targeted red/regression inputs.",
+      "local_work": "Run exact-source collision/noncollision/nil-empty/protected-field controls and native regression after ChatGPT publishes a frozen candidate.",
+      "blocking_reason": "No external/local-source blocker to this concrete portable source repair. Native compile/behavior remains NOT_RUN; wider Context Delta UI/manifest/source integration remains a separate ordinary boundary.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "This does not qualify all C-D-DELTA obligations, change ContextCompiler deduplication, or imply a duplicate-ID policy repair.",
+      "row_ids": [
+        "C-D-DELTA"
+      ],
+      "this_pass": {
+        "state": "DRAFT_SOURCE_PUBLISHED_NATIVE_NOT_RUN",
+        "pr": 153,
+        "exact_identity": "developer-candidates.json"
+      }
+    },
+    {
+      "group_id": "mindgraph_scope",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review exact #144 query-cache scope/normalized-query/topK identity and prepare fresh/regression packet.",
+      "local_work": "Fresh native and mounted scope-switch/cache tests, preserving exact source/response mapping.",
+      "blocking_reason": "Owner pressure/native/package results are not fresh/mounted acceptance; hosted required run refused before steps.",
+      "candidate_prs": [
+        144
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "UX-MINDGRAPH-SCOPE"
+      ]
+    },
+    {
+      "group_id": "mindgraph_cards",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Inspect exact existing cards/actions and pending #144/#142 shared UI/consumer changes; prepare one common object action seam with unavailable reasons and exact source references.",
+      "local_work": "Qualify card inspection/navigation/non-admission with actual source and populated context state.",
+      "blocking_reason": "Shared MindGraphQueryView/consumer source and local E7 navigation require serial reconciliation before mounted implementation.",
+      "candidate_prs": [
+        144,
+        142
+      ],
+      "dependency_groups": [
+        "cross_surface_navigation",
+        "retrieval_assembly"
+      ],
+      "note": "",
+      "row_ids": [
+        "UX-MINDGRAPH-CARDS"
+      ],
+      "this_pass": {
+        "state": "SOURCE_REVIEW_AND_ACCEPTANCE_PREPARATION_COMPLETED",
+        "record": "postfreeze/context-and-retrieval/README.md",
+        "next_boundary": "One #142/#144 view composition and exact Explorer/E7 navigation source before mounted card/action acceptance."
+      }
+    },
+    {
+      "group_id": "workspaces",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review frozen #120 and retained #96/#100/#101; prepare exact-base allocation, lease, drift, cleanup/preserve and integration handoff oracle. Do not repair legacy stacks silently.",
+      "local_work": "Fresh Core/disposable Git/native cwd/reuse/cleanup tests then actual multiactor collision and mounted workspace integration; destructive actions remain explicitly scoped.",
+      "blocking_reason": "Owner/Core predecessor passes do not qualify current #120 or mounted/runtime/cleanup composition.",
+      "candidate_prs": [
+        120
+      ],
+      "dependency_groups": [
+        "isolation",
+        "runtime_terminal_truth"
+      ],
+      "note": "",
+      "row_ids": [
+        "X1-4",
+        "X5",
+        "X6-MOUNT",
+        "X8-PRESERVE",
+        "X8-CLEANUP",
+        "X9",
+        "X10"
+      ]
+    },
+    {
+      "group_id": "future_sandbox",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Retain future sandbox/egress/graph adapter scope and honest worktree-versus-security boundary.",
+      "local_work": "No execution from this resumption unless separately admitted.",
+      "blocking_reason": "Explicit later/additive architecture or egress decision; not ordinary product backlog.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "X-SANDBOX",
+        "C-EGRESS",
+        "C-GRAPH-ADAPTER"
+      ]
+    },
+    {
+      "group_id": "context_source_stack",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review published #140/#148 exact source and prepare fresh candidate-specific tests. Their qualification is not blocked on unpublished D079; D079 is a separate later source/custody object.",
+      "local_work": "Fresh exact-file reader and lexical nomination controls on published frozen candidates; mounted stack acceptance separately on a reviewed composition.",
+      "blocking_reason": "Published owner-tested exact-file/lexical candidates await fresh/native/mounted evidence. Local D079 and shared-Git design are required only for their own extensions/composition.",
+      "candidate_prs": [
+        140,
+        148
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "C-A-EXACT-SOURCE140",
+        "C-A-LEXICAL"
+      ]
+    },
+    {
+      "group_id": "context_record_adapter_now",
+      "classification": "CHAT_IMPLEMENTATION_NOW",
+      "chat_work_now": "Implement additive explicit agent-artifact/test-receipt/lifecycle-record adapter over unchanged published #140 exact-file reader, with explicit caller provenance, stale/unknown freshness and maintained ContextSet deduplication. No receipt parsing, producer inference, latest discovery, Git or local D079 changes. Root context_adapters agent owns this staged source.",
+      "local_work": "Run focused new adapter/native controls and inherited exact-file/compiler regressions on the exact new GitHub candidate; verify refusal of unknown provenance, incompatible duplicate metadata and incomplete source observations. Mounted admission remains separate.",
+      "blocking_reason": "No blocker to this inspected additive source implementation. It depends on unaccepted #140 source for compilation, so local/native acceptance of the new exact candidate must include the actual reader/compiler boundary; no parent PASS inherited.",
+      "candidate_prs": [
+        140
+      ],
+      "dependency_groups": [],
+      "note": "This is only the artifact/receipt/record sub-boundary of C-A-SOURCES. Local authored links and the shared-Git producer remain separately frozen; their absence does not block the additive explicitly selected-record adapter.",
+      "row_ids": [
+        "C-A-SOURCES"
+      ],
+      "this_pass": {
+        "state": "DRAFT_SOURCE_PUBLISHED_NATIVE_NOT_RUN",
+        "pr": 150,
+        "exact_identity": "developer-candidates.json"
+      }
+    },
+    {
+      "group_id": "local_authored_links_custody",
+      "classification": "LOCAL_SOURCE_CUSTODY_REQUIRED",
+      "chat_work_now": "Request unchanged D079 source bundle, exact oracle and raw first-native/transcript/first-release evidence; review source before publishing or composing it.",
+      "local_work": "Return frozen D079 bytes; complete missing package/fresh/mounted gates on exactly identified apparatus; preserve original XML gate FAIL.",
+      "blocking_reason": "D079 is local-only at9cb02ca...; GitHub checkpoint prose does not supply source bytes.",
+      "candidate_prs": [
+        148
+      ],
+      "dependency_groups": [],
+      "note": "Additional scheduling decomposition of the already adopted C-A-SOURCES boundary, not a claim to reconstruct one of the three unknown local160-ledger row IDs.",
+      "row_ids": []
+    },
+    {
+      "group_id": "context_corpus_harness",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Design/prepare frozen real-workflow use-case cases, exact input manifests, mandatory-context/stale/irrelevant/authority/duplicate/budget/latency metrics and negative controls. Use authorized inspectable sources; do not invent real-workflow labels or run frozen external experiments.",
+      "local_work": "Capture authorized representative local source/workflow fixtures and run physical lexical/semantic/hybrid measurements only after freeze and accepted apparatus.",
+      "blocking_reason": "Actual local workflow/source corpus identities and selection authority may be missing; synthetic scaffolding is preparation, not a validated real-workflow corpus.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "context_source_stack"
+      ],
+      "note": "",
+      "row_ids": [
+        "C-B"
+      ],
+      "this_pass": {
+        "state": "SOURCE_REVIEW_AND_ACCEPTANCE_PREPARATION_COMPLETED",
+        "record": "postfreeze/context-and-retrieval/README.md",
+        "next_boundary": "Repository-derived/synthetic seeds prepared; representative authorized local workflow/source bytes and predeclared measurement inputs remain absent."
+      }
+    },
+    {
+      "group_id": "context_semantic",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Keep pluggable embedder/source-range/invalidation plan tied to frozen evaluation; no default engine selection or semantic gain claim.",
+      "local_work": "Run comparative semantic/lexical/hybrid evaluation only under frozen harness and measured-gain conditions.",
+      "blocking_reason": "Adopted semantic work waits on actual harness and demonstrated improvement; no automatic product expansion.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "context_corpus_harness"
+      ],
+      "note": "",
+      "row_ids": [
+        "C-C"
+      ]
+    },
+    {
+      "group_id": "filesystem_observation",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review frozen #111 repair and preserved #109 alias/deletion discriminator; prepare a new owned HTTP apparatus, not a source retry based on an apparatus crash.",
+      "local_work": "Fresh filesystem/HTTP exact root-alias create/read/update/delete/missing/link cases on qualified isolated app.",
+      "blocking_reason": "Prior attempt is INCONCLUSIVE due interposer crash; HTTP isolation remains unqualified.",
+      "candidate_prs": [
+        111
+      ],
+      "dependency_groups": [
+        "isolation"
+      ],
+      "note": "",
+      "row_ids": [
+        "C-FILESYSTEM"
+      ]
+    },
+    {
+      "group_id": "operations_pair",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Preserve #121/MindGraph46 bounded15-control pair; review #142 exact promotion dependencies and create no new schema/engine authority.",
+      "local_work": "Qualify full AppModel/SessionAPI/catalogue/corpus/installed daemon boundaries using approved inputs/connection.",
+      "blocking_reason": "Bounded Core/CLI pair PASS does not qualify original45 pair, whole product or installed provenance.",
+      "candidate_prs": [
+        121,
+        142
+      ],
+      "dependency_groups": [
+        "retrieval_assembly"
+      ],
+      "note": "",
+      "row_ids": [
+        "C-OPERATIONS"
+      ]
+    },
+    {
+      "group_id": "operations_live",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review #142 promotion packet and exact external source/retrieval/transport gate list; prepare only available metadata and source checks.",
+      "local_work": "Actual installed/tunnel/source-selection and provenance qualification; protect existing connector/daemon/client state.",
+      "blocking_reason": "External environment/connection/source authorization and unaccepted product prerequisites.",
+      "candidate_prs": [
+        142
+      ],
+      "dependency_groups": [
+        "isolation",
+        "operations_pair"
+      ],
+      "note": "",
+      "row_ids": [
+        "C-OPERATIONS-LIVE",
+        "C-OPERATIONS-PROMOTION142"
+      ]
+    },
+    {
+      "group_id": "context_composition",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Prepare exact producer/consumer/manifest/source/Context Set compatibility map and later new composition candidate.",
+      "local_work": "Run populated-context handoff/non-admission/receipt/freshness tests and actual delivery.",
+      "blocking_reason": "Independent source/adapter/isolation/Set acceptance and exact local source custody are incomplete.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "context_source_stack",
+        "context_ui",
+        "filesystem_observation",
+        "operations_pair"
+      ],
+      "note": "",
+      "row_ids": [
+        "C-COMPOSE"
+      ]
+    },
+    {
+      "group_id": "context_bootstrap",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Inspect external MainFrame session-resume qualification and prepare Conduit consumer references; no producer pass inferred.",
+      "local_work": "Return exact upstream accepted source/receipt and test actual context entry only when it is ready.",
+      "blocking_reason": "External project qualification is required; checkpoint07 MainFrame40 remained unmerged.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "C-BOOTSTRAP"
+      ]
+    },
+    {
+      "group_id": "routing_core",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review #122 deterministic profiles/capabilities/UNKNOWN/blocked/replay cases and prepare exact fresh local test packet.",
+      "local_work": "Fresh Core/replay/serialization tests; no provider launch required for this pure stage.",
+      "blocking_reason": "Frozen owner-tested source awaits independent qualification.",
+      "candidate_prs": [
+        122
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "P1-3"
+      ]
+    },
+    {
+      "group_id": "routing_run",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review #138 logical Run/Step journal and prepare persistence/replay oracle without equating it with runtime commands.",
+      "local_work": "Fresh physical journal/fault/duplicate/restart tests on exact candidate; mounted run lifecycle separately.",
+      "blocking_reason": "Logical pure contract owner PASS is not independent or integrated runtime acceptance.",
+      "candidate_prs": [
+        138
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "P-RUN"
+      ]
+    },
+    {
+      "group_id": "routing_authority",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Inspect existing proposal/route/authority contracts and #122/#138; implement only the smallest grounded additive policy/approval seam with explicit UNKNOWN and no live grant, on a new exact candidate.",
+      "local_work": "Fresh pure policy tests then actual approval/write binding at live boundary.",
+      "blocking_reason": "No concrete missing contract code has yet been inspected in this pass; live facts remain outside pure policy.",
+      "candidate_prs": [
+        122,
+        138
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "P-AUTHORITY"
+      ],
+      "this_pass": {
+        "state": "SOURCE_REVIEW_AND_ACCEPTANCE_PREPARATION_COMPLETED",
+        "record": "postfreeze/control-and-routing/README.md",
+        "next_boundary": "Qualified/reconciled runtime, workspace lease, context, entitlement and command/caller producers for live approval/revalidation."
+      }
+    },
+    {
+      "group_id": "routing_budget_repair_now",
+      "classification": "CHAT_IMPLEMENTATION_NOW",
+      "chat_work_now": "Implement checked token accumulation and explicit arithmetic-overflow refusal in main OrchestrationProposal, preserving representable proposals and existing unknown-budget states. routing_contract_audit owns this concrete inspected source repair.",
+      "local_work": "Run zero/normal/Int.max-boundary/overflow/missing-estimate controls on exact new source plus native proposal regressions.",
+      "blocking_reason": "No external authority or unpublished local input is needed for checked arithmetic. Real capacity/eligibility/live routing facts remain outside this source repair.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "Scheduling decomposition of existing deterministic proposal/budget obligations under#56/P1-3/P-AUTHORITY, not a reconstructed local160-ledger row and not a replacement for frozen#122.",
+      "row_ids": []
+    },
+    {
+      "group_id": "routing_live",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Prepare exact capability/context/workspace/run/authority handoff and source composition map; implement ordinary API/UI/live-feed/launch changes as real inputs become qualified.",
+      "local_work": "Qualify matching reuse, stale route refusal, one approved worker launch and origin-equivalent routing; preserve no substitution and writer identity.",
+      "blocking_reason": "Qualified runtime/queue/cleanup/workspace/context, policy and eligibility evidence is required for true live routes.",
+      "candidate_prs": [
+        122,
+        138
+      ],
+      "dependency_groups": [
+        "runtime_queue",
+        "runtime_cleanup",
+        "workspaces",
+        "context_composition",
+        "routing_core",
+        "routing_authority"
+      ],
+      "note": "",
+      "row_ids": [
+        "P-LIVE-FEED",
+        "P-REUSE",
+        "P-API",
+        "P-UI",
+        "P-LAUNCH",
+        "P-ORIGINS",
+        "P-WORKFLOW"
+      ]
+    },
+    {
+      "group_id": "nextmove_contract",
+      "classification": "CHAT_REVIEW_PREPARATION_NOW_LOCAL_EXECUTION",
+      "chat_work_now": "Review published frozen #134 value/assessment contract and prepare its exact pure tests; the local D080 generator is a distinct extension and cannot substitute for this subject.",
+      "local_work": "Fresh contract/native checks on exact #134 can be executed without D080 source. Generator/feed/editor behavior needs separately recovered and qualified D080.",
+      "blocking_reason": "Owner-tested pure contract awaits fresh/native acceptance; no local-source blocker to reading/testing published #134 itself.",
+      "candidate_prs": [
+        134
+      ],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "P-NEXTMOVE-CONTRACT"
+      ]
+    },
+    {
+      "group_id": "nextmove_local_source",
+      "classification": "LOCAL_SOURCE_CUSTODY_REQUIRED",
+      "chat_work_now": "Review #134 contract; request exact D080 generator/source/oracle bundle before consumer UI or candidate publication. Prepare explanation/editable composer vs staged new-proposal acceptance.",
+      "local_work": "Return unchanged D080 source; execute missing first-release/package/fresh controls on exact source, then actual feed/editor integration when published candidate ready.",
+      "blocking_reason": "D080 generator is a locally frozen successor, not published #134 source; do not reimplement or assume generator acceptance.",
+      "candidate_prs": [
+        134
+      ],
+      "dependency_groups": [],
+      "note": "Checkpoint08 owner native complete480 self/10 Python/636 passes3 skips; first release/package/fresh/mounted still open.",
+      "row_ids": [
+        "P-NEXTMOVE-UI"
+      ]
+    },
+    {
+      "group_id": "routing_future",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Retain conditional automation/ranking/profile/allowance plan; no automatic worker routing or allowance assumptions.",
+      "local_work": "Only separately admitted capability/usage/authority experiments.",
+      "blocking_reason": "Explicit later automatic delegation/dynamic ranking conditions.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "P-AUTO-DELEGATION",
+        "P-DYNAMIC"
+      ]
+    },
+    {
+      "group_id": "workgroup_mount",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Prepare serial #127 group rail/composer mount and exact workspace/context/run/reference integration; source implementation follows reviewed shared seams.",
+      "local_work": "Mounted persistent target breadcrumbs/non-member warning, one canonical writer, restore/link/run integration.",
+      "blocking_reason": "Unaccepted core, shared Sidebar/AppModel and workspace/context/run inputs; selecting groups cannot confer runtime authority.",
+      "candidate_prs": [
+        127
+      ],
+      "dependency_groups": [
+        "workgroup_core",
+        "stale_target",
+        "workspaces",
+        "context_composition",
+        "routing_run"
+      ],
+      "note": "",
+      "row_ids": [
+        "W2-3-MOUNT",
+        "W5",
+        "W6"
+      ]
+    },
+    {
+      "group_id": "system_composition",
+      "classification": "DOWNSTREAM_CHAT_IMPLEMENTATION",
+      "chat_work_now": "Own exact compatible composition branch, scope review and acceptance packet; choose one dependable control-loop scenario before the full connected product journey.",
+      "local_work": "Native/installed negative/restart/control-loop and performance qualification, then full objective/context/route/workspace/worker/artifact/verification journey.",
+      "blocking_reason": "Lane acceptance and source/runtime composition remain incomplete; component passes cannot be reused as composed acceptance.",
+      "candidate_prs": [],
+      "dependency_groups": [
+        "runtime_queue",
+        "runtime_cleanup",
+        "workspaces",
+        "command_custody_local_source",
+        "context_composition",
+        "routing_live",
+        "explorer_integrated",
+        "workgroup_mount"
+      ],
+      "note": "",
+      "row_ids": [
+        "I-ONE-CANDIDATE",
+        "I-PERFORMANCE",
+        "I-END-TO-END"
+      ]
+    },
+    {
+      "group_id": "action_receipts",
+      "classification": "CHAT_SOURCE_PREPARATION_NOW",
+      "chat_work_now": "Inspect actual consequential actions and their owning receipts; add narrowly missing visible receipt/reference behavior in the relevant new GitHub candidate rather than create a separate truth store.",
+      "local_work": "Verify effect/destination/receipt through each owning installed flow.",
+      "blocking_reason": "Concrete action-specific missing behavior must be inspected; cross-surface and runtime dependencies apply per action.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "I-RECEIPTS"
+      ],
+      "this_pass": {
+        "state": "SOURCE_REVIEW_AND_ACCEPTANCE_PREPARATION_COMPLETED",
+        "record": "postfreeze/control-and-routing/README.md",
+        "next_boundary": "Recover local D081 before changing prompt/command correlation; native owning action and later mounted references."
+      }
+    },
+    {
+      "group_id": "release",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Prepare release identity/checklist only when a qualified exact candidate exists; no install or release in this split restoration.",
+      "local_work": "Execute authorized packaging/artifact validation separately from operator install/release; actual release needs its own authority.",
+      "blocking_reason": "Separate operator install/release decision and unqualified integrated subject.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "I-RELEASE-INSTALL"
+      ]
+    },
+    {
+      "group_id": "external_cli_route",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Prepare operator-run local qualification prompt using authorized intended local testing workflow. Keep the previously rejected external CLI launch distinctly pending.",
+      "local_work": "Operator/local qualifier performs tests; do not automatically transmit private source to a separate external CLI backend merely because local testing was requested.",
+      "blocking_reason": "Prior external CLI source/account scope lacked explicit transfer authorization. This does not block drafting the local prompt or ordinary GitHub implementation.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "qualification/private-source-CLI"
+      ]
+    },
+    {
+      "group_id": "hosted_ci",
+      "classification": "CONDITIONAL_EXTERNAL",
+      "chat_work_now": "Record exact zero-step workflow evidence; prepare accepted local alternative gates without treating them as hosted CI.",
+      "local_work": "Run required local native gate; hosted tests only when legitimately available, without account changes or repeated speculative reruns.",
+      "blocking_reason": "Recorded payment-or-spending-limit refusal before steps; exact alternative cause UNKNOWN.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "",
+      "row_ids": [
+        "qualification/hosted-CI-account"
+      ]
+    },
+    {
+      "group_id": "target4_artifact",
+      "classification": "LOCAL_SOURCE_CUSTODY_REQUIRED",
+      "chat_work_now": "Request exact local357 source, original release/package pair and comparison/localization evidence. Inspect same-pair differences before any new instrumentation or identity algorithm change.",
+      "local_work": "Preserve unchanged artifact pair, run only admitted read-only localization; six downstream checks remain NOT_RUN until strict identity gate actually passes.",
+      "blocking_reason": "Local frozen successor/artifact bytes absent here;26 prefix byte differences18 outside masks remain unexplained. Source-native success is distinct.",
+      "candidate_prs": [],
+      "dependency_groups": [],
+      "note": "Do not rebuild, mask extra bytes or substitute artifacts to get identity PASS; any source defect gets a separate GitHub successor.",
+      "row_ids": [
+        "76/target4-instrumentation",
+        "76/catalog-artifact357"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "row_id": "53/Slices0-1",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice2/OpenCode",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice2/Codex",
+      "owner_record": "#53,#49",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_FIELD_AND_INDEPENDENT_GATES_OPEN",
+      "group_id": "codex_metadata",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice3",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice4/#77",
+      "owner_record": "#53,#77",
+      "checkpoint07_disposition": "ACTIVE_PREREQUISITE",
+      "group_id": "runtime_queue",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice5",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice6A",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice6B/#78",
+      "owner_record": "#53,#78",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "runtime_cleanup",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice7",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice8",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice9",
+      "owner_record": "#53,#51",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice10",
+      "owner_record": "#53,#49",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice11/predecessor74",
+      "owner_record": "#53,#76",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice11/comparison85",
+      "owner_record": "#53,#76",
+      "checkpoint07_disposition": "TERMINAL_SUPPORTED_WITH_BOUNDS",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice11/6-8",
+      "owner_record": "#53",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL",
+      "group_id": "capacity_later",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/Slice12/CAL",
+      "owner_record": "#53,#4",
+      "checkpoint07_disposition": "ACTIVE_PREREQUISITE",
+      "group_id": "cal_gate",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "114/115",
+      "owner_record": "#114,#53",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "114/116",
+      "owner_record": "#114,#53",
+      "checkpoint07_disposition": "TERMINAL_FAIL_FROZEN",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/PhaseA",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "PARTIAL_SOURCE_BOUNDARY_RECONCILED_D081_ACTIVE",
+      "group_id": "command_custody_local_source",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/catalogue46",
+      "owner_record": "#4,#9",
+      "checkpoint07_disposition": "PARTIAL_OWNER_NATIVE_PASS_ACCEPTANCE_GATES_BLOCKED",
+      "group_id": "catalogue_principal",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/principal47",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "PARTIAL_OWNER_NATIVE_PASS_ACCEPTANCE_GATES_BLOCKED",
+      "group_id": "catalogue_principal",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/PhaseB/service",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "ACTIVE_PREREQUISITE",
+      "group_id": "control_extraction",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/PhaseC/continuity",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "ACTIVE_PREREQUISITE",
+      "group_id": "control_restart",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/PhaseC/host-choice",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_OPERATOR_DECISION",
+      "group_id": "future_host",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/canonical-global-events",
+      "owner_record": "#4,#53",
+      "checkpoint07_disposition": "PARTIAL_OWNER_NATIVE_REPAIR_PASS_ACCEPTANCE_GATES_BLOCKED",
+      "group_id": "global_events",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/restart-lineage",
+      "owner_record": "#4,#53,#57",
+      "checkpoint07_disposition": "ACTIONABLE_FOUNDATION",
+      "group_id": "control_restart",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/create-send-idempotency",
+      "owner_record": "#4,#53",
+      "checkpoint07_disposition": "ACTIVE_D081_SOURCE_AFTER_PRESERVED_RESTART_BINDING_RED",
+      "group_id": "command_custody_local_source",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/approvals-errors-tools-artifacts",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "ACTIONABLE_FOUNDATION",
+      "group_id": "control_contract_extensions",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/principal-capabilities",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "PARTIAL_ACTIONABLE",
+      "group_id": "catalogue_principal",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/read-proposals-context",
+      "owner_record": "#4,#56,#58",
+      "checkpoint07_disposition": "PARTIAL_ACTIONABLE",
+      "group_id": "control_contract_extensions",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/adapter-conformance",
+      "owner_record": "#4,#49,#53",
+      "checkpoint07_disposition": "PARTIAL_ACTIONABLE",
+      "group_id": "control_contract_extensions",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/fault-matrix",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "PARTIAL_D081_BASELINE_RED_SOURCE_FAULT_FIXTURES_ACTIVE",
+      "group_id": "command_custody_local_source",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/PhaseE/hosted-facade",
+      "owner_record": "#4,#9",
+      "checkpoint07_disposition": "ACTIVE_PREREQUISITE_PLUS_EXTERNAL_GATES",
+      "group_id": "hosted_facade",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/PhaseF/onehop",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL",
+      "group_id": "future_host",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/docs-cleanup",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "PARTIAL_BOUNDED_DOCS_MERGED_QUALIFICATION_STATUS_OPEN",
+      "group_id": "docs_reconciliation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "49/fleet-runtime-core",
+      "owner_record": "#49,#53",
+      "checkpoint07_disposition": "DONE_MERGED_QUALIFIED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "49/fleet-additional-provider-discovery",
+      "owner_record": "#49",
+      "checkpoint07_disposition": "CONDITIONAL_CAPABILITY_CHECK_THEN_ADOPTED_INTEGRATION",
+      "group_id": "additional_provider",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "49/field-UX",
+      "owner_record": "#49,#60,#4",
+      "checkpoint07_disposition": "ACTIONABLE_PRODUCT_DEBT",
+      "group_id": "thread_recognition_now",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "49/manual-priority",
+      "owner_record": "#49,#60",
+      "checkpoint07_disposition": "ACTIONABLE_PRODUCT_DEBT",
+      "group_id": "manual_priority",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "49/Work-Groups",
+      "owner_record": "#49,#71,#60",
+      "checkpoint07_disposition": "ACTIVE_PREREQUISITE",
+      "group_id": "workgroup_core",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "51/local-operator-V1",
+      "owner_record": "#51",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "local_operator",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "52/field-inbox",
+      "owner_record": "#52,#60",
+      "checkpoint07_disposition": "STANDING_INTAKE_NOT_FINITE_IMPLEMENTATION",
+      "group_id": "standing_feedback",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "87/maintained-isolation",
+      "owner_record": "#87,#4,#53",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "isolation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "87/91",
+      "owner_record": "#87",
+      "checkpoint07_disposition": "HISTORICAL_DRAFT_PRESERVED_PENDING_ACCEPTED_SUCCESSOR",
+      "group_id": "isolation_predecessors",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "87/92",
+      "owner_record": "#87",
+      "checkpoint07_disposition": "HISTORICAL_DRAFT_PRESERVED_PENDING_ACCEPTED_SUCCESSOR",
+      "group_id": "isolation_predecessors",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "3/machine-acceptance",
+      "owner_record": "#3",
+      "checkpoint07_disposition": "DONE_CLOSED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "9/hosted-protocol89",
+      "owner_record": "#9,#4,#87",
+      "checkpoint07_disposition": "ACTIONABLE_PREPARATION_PLUS_EXTERNAL_GATES",
+      "group_id": "hosted_facade",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "9/profile93-94",
+      "owner_record": "#9,#56,#113",
+      "checkpoint07_disposition": "ACTIONABLE_METADATA_PREFLIGHT_WITH_BOUNDED_UNKNOWN",
+      "group_id": "model_eligibility",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "44/OpenCode-pin",
+      "owner_record": "#44,#49",
+      "checkpoint07_disposition": "#44_ACTIONABLE_REPRO_CAPTURE",
+      "group_id": "opencode_pin",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "65/stale-UI-target",
+      "owner_record": "#65,#87",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "stale_target",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "66/ChatGPT-runtime",
+      "owner_record": "#66,#49",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_RESEARCH",
+      "group_id": "provider_research",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "88/context-successor",
+      "owner_record": "#88,#58",
+      "checkpoint07_disposition": "ACTIONABLE_GUARDED_ASSEMBLY",
+      "group_id": "retrieval_assembly",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "113/model-eligibility",
+      "owner_record": "#113,#56",
+      "checkpoint07_disposition": "BLOCKED_EXTERNAL_AUTHORITY_BOUNDARY",
+      "group_id": "model_eligibility",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "PR6",
+      "owner_record": "historical runtime/control-plane lineage",
+      "checkpoint07_disposition": "SUPERSEDED_CLOSED_UNMERGED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "PR22",
+      "owner_record": "historical runtime/control-plane lineage",
+      "checkpoint07_disposition": "SUPERSEDED_CLOSED_UNMERGED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "PR48",
+      "owner_record": "historical runtime/control-plane lineage",
+      "checkpoint07_disposition": "SUPERSEDED_CLOSED_UNMERGED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "PR72",
+      "owner_record": "historical runtime/control-plane lineage",
+      "checkpoint07_disposition": "SUPERSEDED_CLOSED_UNMERGED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "PR79",
+      "owner_record": "historical runtime/control-plane lineage",
+      "checkpoint07_disposition": "TERMINAL_FAIL_SUPERSEDED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E1",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "DONE_MERGED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E2",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "explorer_native",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E3",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "explorer_native",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E4",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "explorer_native",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E5",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "explorer_native",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E6",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "explorer_native",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E7",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "FROZEN_SUCCESSOR_OWNER_FILENAME_PASS_FULL_APP_GATES_ACTIONABLE",
+      "group_id": "explorer_handoff_local",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E8",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "ACTIONABLE_IMPLEMENTATION",
+      "group_id": "shared_git_local_design",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E9",
+      "owner_record": "#54 / #50",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "explorer_integrated",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-A",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "ACTIONABLE_IMPLEMENTATION",
+      "group_id": "thread_recognition_now",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-B",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "thread_working_views",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-C",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "thread_working_views",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-D",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "thread_working_views",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-E",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "thread_working_views",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-F",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "ACTIONABLE_IMPLEMENTATION",
+      "group_id": "cross_surface_navigation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-G",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "cross_surface_navigation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-H",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "PARTIAL_MERGED_ACTIONABLE_RECONCILIATION",
+      "group_id": "layered_status",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-I",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "cross_surface_navigation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-J",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "ACTIONABLE_IMPLEMENTATION",
+      "group_id": "context_ui",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-MINDGRAPH-SCOPE",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "OWNER_NATIVE_PRESSURE_PACKAGE_PASS_HOSTED_AND_INDEPENDENT_BLOCKED",
+      "group_id": "mindgraph_scope",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-MINDGRAPH-CARDS",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "ACTIONABLE_IMPLEMENTATION",
+      "group_id": "mindgraph_cards",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-ASSEMBLED",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "ACTIONABLE_PROFILE_AND_REPAIR",
+      "group_id": "context_ui",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "UX-ATTACH",
+      "owner_record": "#60 UX mini-train / #50 / #49 / #4",
+      "checkpoint07_disposition": "ACTIONABLE_IMPLEMENTATION",
+      "group_id": "context_ui",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X1-4",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "workspaces",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X5",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "workspaces",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X6-MOUNT",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "workspaces",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X7",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "cross_surface_navigation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X8-PRESERVE",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "workspaces",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X8-CLEANUP",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "workspaces",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X9",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "workspaces",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X10",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_ACCEPTANCE_GATES_OPEN",
+      "group_id": "workspaces",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "X-SANDBOX",
+      "owner_record": "#57",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_EXPLICIT",
+      "group_id": "future_sandbox",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-A-CORE",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "DONE_MERGED_BOUNDED",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-A-SOURCES",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "PARTIAL_SOURCE_ADAPTERS_PASS_D079_NATIVE_XML_APPARATUS_FAIL_REMAINING_ACTIONABLE",
+      "group_id": "context_record_adapter_now",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-A-SETS",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "PARTIAL_OWNER_COMPONENT_PASS_UI_ACTIONABLE",
+      "group_id": "context_ui",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-A-SNAPSHOTS",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "PARTIAL_MERGED_ACTIONABLE_INTEGRATION",
+      "group_id": "context_ui",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-B",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "ACTIONABLE_APPARATUS_PREPARATION",
+      "group_id": "context_corpus_harness",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-C",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "context_semantic",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-D-BUDGET",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "PARTIAL_QUALIFIED_WAIT_INTEGRATION",
+      "group_id": "context_ui",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-D-DELTA",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "context_delta_repair_now",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-D-DEBUGGER",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "context_ui",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-EGRESS",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_EXPLICIT",
+      "group_id": "future_sandbox",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-GRAPH-ADAPTER",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_EXPLICIT",
+      "group_id": "future_sandbox",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-PROGRESSIVE-REPAIR",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "ACTIONABLE_ASSEMBLY_AND_SUCCESSOR_QUALIFICATION",
+      "group_id": "retrieval_assembly",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-FILESYSTEM",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "ACTIONABLE_ISOLATION_SUCCESSOR_QUALIFICATION",
+      "group_id": "filesystem_observation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-OPERATIONS",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "TERMINAL_PASS_BOUNDED_CORE_PAIR_PRODUCT_PROMOTION_GATES_OPEN",
+      "group_id": "operations_pair",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-OPERATIONS-LIVE",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "BLOCKED_EXTERNAL_AUTHORITY_ENVIRONMENT",
+      "group_id": "operations_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-COMPOSE",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "context_composition",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-BOOTSTRAP",
+      "owner_record": "#58 / #88 / #54",
+      "checkpoint07_disposition": "WAIT_EXTERNAL_PROJECT_QUALIFICATION",
+      "group_id": "context_bootstrap",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P1-3",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "routing_core",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-RUN",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "OWNER_PURE_COMPONENT_PASS_INDEPENDENT_AND_MOUNTED_GATES_OPEN",
+      "group_id": "routing_run",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-LIVE-FEED",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "routing_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-REUSE",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "routing_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-AUTHORITY",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "ACTIONABLE_PURE_CONTRACT_WAIT_LIVE",
+      "group_id": "routing_authority",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-API",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "routing_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-UI",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "routing_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-LAUNCH",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "routing_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-ORIGINS",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "routing_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-WORKFLOW",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "routing_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-NEXTMOVE-CONTRACT",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "PARTIAL_GENERATOR_SUCCESSOR_OWNER_COMPONENT_PASS_FULL_APP_ACTIONABLE",
+      "group_id": "nextmove_contract",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-NEXTMOVE-UI",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "nextmove_local_source",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-MODEL-ELIGIBILITY",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "BLOCKED_EXTERNAL_PROVIDER_AUTHORITY",
+      "group_id": "model_eligibility",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-AUTO-DELEGATION",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_EXPLICIT",
+      "group_id": "routing_future",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-DYNAMIC",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_EXPLICIT",
+      "group_id": "routing_future",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W1",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "workgroup_core",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W2-3-CORE",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "workgroup_core",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W2-3-MOUNT",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "WAIT_ACTIVE_SERIAL_INTEGRATION",
+      "group_id": "workgroup_mount",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W4",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "thread_working_views",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W5",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "workgroup_mount",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W6",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "workgroup_mount",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W7-EXTERNAL",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "workgroup_core",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "W7-PROVIDER",
+      "owner_record": "#71",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_EXPLICIT",
+      "group_id": "provider_research",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "I-ONE-CANDIDATE",
+      "owner_record": "#60",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "system_composition",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "I-RECEIPTS",
+      "owner_record": "#60",
+      "checkpoint07_disposition": "ACTIONABLE_INCREMENTAL_IMPLEMENTATION",
+      "group_id": "action_receipts",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "I-PERFORMANCE",
+      "owner_record": "#60",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "system_composition",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "I-END-TO-END",
+      "owner_record": "#60",
+      "checkpoint07_disposition": "WAIT_ACTIVE_CONDUIT_PREREQUISITES",
+      "group_id": "system_composition",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "I-6-8-TURNS",
+      "owner_record": "#60",
+      "checkpoint07_disposition": "FUTURE_CONDITIONAL_EXPLICIT",
+      "group_id": "capacity_later",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "I-RELEASE-INSTALL",
+      "owner_record": "#60",
+      "checkpoint07_disposition": "EXCLUDED_SEPARATE_OPERATOR_AUTHORITY",
+      "group_id": "release",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "114/118",
+      "owner_record": "#114,#53",
+      "checkpoint07_disposition": "TERMINAL_FAIL_FROZEN",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "114/128",
+      "owner_record": "#114,#53",
+      "checkpoint07_disposition": "OWNER_COMPONENT_GATES_PASS_INDEPENDENT_BLOCKED",
+      "group_id": "runtime_terminal_truth",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "51/133",
+      "owner_record": "#51",
+      "checkpoint07_disposition": "TERMINAL_FAIL_BOUNDED_FROZEN",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "qualification/private-source-CLI",
+      "owner_record": "#60,#87,#114",
+      "checkpoint07_disposition": "BLOCKED_EXPLICIT_SOURCE_ACCESS_AUTHORITY",
+      "group_id": "external_cli_route",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/docs-portable139",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "DONE_MERGED_BOUNDED_DOCS_ONLY",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/docs-authority143",
+      "owner_record": "#4",
+      "checkpoint07_disposition": "DONE_MERGED_BOUNDED_DOCS_ONLY",
+      "group_id": "maintained_foundation",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/metadata137",
+      "owner_record": "#53,#49",
+      "checkpoint07_disposition": "OWNER_COMPONENT_AND_HOSTED_CUSTODY_PASS_REQUIRED_QUALIFICATION_OPEN",
+      "group_id": "codex_metadata",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "53/136-custody",
+      "owner_record": "#53,#49",
+      "checkpoint07_disposition": "TERMINAL_FAIL_CUSTODY_SUPERSEDED_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-A-EXACT-SOURCE140",
+      "owner_record": "#58",
+      "checkpoint07_disposition": "OWNER_SOURCE_NATIVE_PACKAGE_HOSTED_PASS_FRESH_QUALIFICATION_OPEN",
+      "group_id": "context_source_stack",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-A-LEXICAL",
+      "owner_record": "#58",
+      "checkpoint07_disposition": "OWNER_NATIVE_PACKAGE_PASS_HOSTED_PARENT_FRESH_MOUNTED_PENDING",
+      "group_id": "context_source_stack",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-OPERATIONS-PROMOTION142",
+      "owner_record": "#58,#4",
+      "checkpoint07_disposition": "OPEN_EXTERNAL_PREPARATION_REQUIRED_INSTALLED_TUNNEL_GATES",
+      "group_id": "operations_live",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "C-OPERATIONS-141",
+      "owner_record": "#58,#4",
+      "checkpoint07_disposition": "SUPERSEDED_CLOSED_STALE_BASE_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/47-marker-parser",
+      "owner_record": "#4,#9",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED_SOURCE_SUPERSEDED_146",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "76/target4-instrumentation",
+      "owner_record": "#76,#53",
+      "checkpoint07_disposition": "PARTIAL_RUNTIME_REPAIR_NATIVE_PASS_TERMINAL_ARTIFACT_FAIL_DIAGNOSIS_ACTIVE",
+      "group_id": "target4_artifact",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "qualification/hosted-CI-account",
+      "owner_record": "#60",
+      "checkpoint07_disposition": "BLOCKED_EXTERNAL_ACCOUNT_BILLING_OR_SPENDING_LIMIT",
+      "group_id": "hosted_ci",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "4/global-refusal-predecessor145",
+      "owner_record": "#4/#53",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "76/identity-predecessor149",
+      "owner_record": "#76/#53",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "76/catalog-native-predecessor35d",
+      "owner_record": "#76/#53",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "76/catalog-artifact357",
+      "owner_record": "#76/#53",
+      "checkpoint07_disposition": "TERMINAL_ARTIFACT_PAIR_FAIL_SOURCE_NATIVE_PASS_DIAGNOSIS_ACTIVE",
+      "group_id": "target4_artifact",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "E7/filename-predecessor7d",
+      "owner_record": "#54/#50",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    },
+    {
+      "row_id": "P-NEXTMOVE/generation-predecessor710",
+      "owner_record": "#56",
+      "checkpoint07_disposition": "TERMINAL_FAIL_PRESERVED",
+      "group_id": "terminal_history",
+      "source_url": "https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-5975032604"
+    }
+  ],
+  "open_prs": [
+    {
+      "pr": 45,
+      "title": "Design optional ambient pixel animation system",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/45",
+      "head_sha": "96d6c9cce902542e3dd661b44432b54ca73360f8",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "0c3ff83b9665f2555a52e21bfad7a07f6fd97092",
+      "classification": "OPTIONAL_DESIGN",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 82,
+      "title": "fix(slice4): queue structured second prompts behind active turns per provider capability",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/82",
+      "head_sha": "c90172d3f46437c356274f79976b5074e5ef0d7e",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "ce2ea202c734ec4533b43fc72967e110b049ea3e",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "runtime_queue"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Real qualified terminal truth/isolation and provider-supported active-turn observations are required; historical provider failures are not assumed current."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 84,
+      "title": "fix(lifecycle): clean only exact owned residual descendants",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/84",
+      "head_sha": "ff17bcffae7ffbeddd0dd978cd5b0ef2e2aa267a",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "61349887dcf5d562ee3bfd96acfd443e63191c3f",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 89,
+      "title": "research-infra: qualify hosted Codex supervision and measure control efficiency",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/89",
+      "head_sha": "89733c67556bbf1fde7e31edffc229e527321815",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "61349887dcf5d562ee3bfd96acfd443e63191c3f",
+      "classification": "HOSTED_PROTOCOL_PREPARATION",
+      "work_groups": [
+        "hosted_facade"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Actual connection, supported write entitlement and isolated runtime are external/local gates; local metadata is not hosted acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 90,
+      "title": "Repair #88: expansion validation, catalog and guarded app integration",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/90",
+      "head_sha": "b8011f96afda2a99e2b8722c06da63e351d2bd40",
+      "target_base_ref": "feat/mindgraph-agent-human-projections",
+      "observed_target_base_sha": "ece4a68cfc41cc89a81341991e8a58dc3bd12c83",
+      "classification": "GUARDED_ASSEMBLY_KIT",
+      "work_groups": [
+        "retrieval_assembly"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Exact current producer pair and unaccepted shared AppModel integration must be reconciled; #90/#95 are assembly kits, not product acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 91,
+      "title": "Add isolated Session API qualification port",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/91",
+      "head_sha": "3e557adb98bdf32c7c3e39e2c3d215b24ea1ef4e",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "61349887dcf5d562ee3bfd96acfd443e63191c3f",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [
+        "isolation_predecessors"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Current successor #123 lacks independent acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 92,
+      "title": "test(conformance): guard PR91 source-record renewal without rewriting provider evidence",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/92",
+      "head_sha": "e1c6e41e5a74a53e687b6ed42e3cd3bb858313f7",
+      "target_base_ref": "codex/issue87-session-api-port",
+      "observed_target_base_sha": "3e557adb98bdf32c7c3e39e2c3d215b24ea1ef4e",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [
+        "isolation_predecessors"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Current successor #123 lacks independent acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 93,
+      "title": "prep(hosted): bind Luna Max before frozen supervision trials",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/93",
+      "head_sha": "845f0368b22d1c8b095d59c8010a5685d2876c57",
+      "target_base_ref": "research-infra/hosted-supervisor-v1-20260926",
+      "observed_target_base_sha": "89733c67556bbf1fde7e31edffc229e527321815",
+      "classification": "ELIGIBILITY_PREPARATION",
+      "work_groups": [
+        "model_eligibility"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Provider-authoritative contextual eligibility not established. The source contract cannot fabricate that external fact."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 94,
+      "title": "prep(hosted): verify the configuration route without probe-only overrides",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/94",
+      "head_sha": "41b5069fa8804866363bb5548f027a977377820e",
+      "target_base_ref": "prep/hosted-luna-max-profile-v1-20260927",
+      "observed_target_base_sha": "845f0368b22d1c8b095d59c8010a5685d2876c57",
+      "classification": "ELIGIBILITY_PREPARATION",
+      "work_groups": [
+        "model_eligibility"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Provider-authoritative contextual eligibility not established. The source contract cannot fabricate that external fact."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 95,
+      "title": "Repair #88 C: guarded Unreleased/Fixed assembly-anchor successor",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/95",
+      "head_sha": "6d706b4369232b1fe1d46f0a05ac3a4140cbc864",
+      "target_base_ref": "repair/mindgraph-binding-20260927",
+      "observed_target_base_sha": "b8011f96afda2a99e2b8722c06da63e351d2bd40",
+      "classification": "GUARDED_ASSEMBLY_KIT",
+      "work_groups": [
+        "retrieval_assembly"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Exact current producer pair and unaccepted shared AppModel integration must be reconciled; #90/#95 are assembly kits, not product acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 96,
+      "title": "Execution Workspaces: isolated Git worktrees and one-writer leases",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/96",
+      "head_sha": "f7d138e6f2ad3f6705d128d31ff263eb1edda555",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "61349887dcf5d562ee3bfd96acfd443e63191c3f",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 97,
+      "title": "Routing foundation: deterministic profile and blocked-state decisions",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/97",
+      "head_sha": "922c294d53c7350a346618dde83237510adf76be",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "61349887dcf5d562ee3bfd96acfd443e63191c3f",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 98,
+      "title": "Work Groups WG1-WG3: durable references, rail projection, target guards",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/98",
+      "head_sha": "f86e6a0782169ecaf5e3ecddef6e53f63c32f544",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "61349887dcf5d562ee3bfd96acfd443e63191c3f",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 99,
+      "title": "Explorer: canonical native image and PDF preview",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/99",
+      "head_sha": "62b278c2ee88302c72682ef854da9e5a582a3ce5",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "61349887dcf5d562ee3bfd96acfd443e63191c3f",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 100,
+      "title": "Execution Workspaces: bind runtime lineage and reuse preflight",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/100",
+      "head_sha": "e53ac62c943f6176bc0d6c805de70111e52bd33d",
+      "target_base_ref": "feature/execution-workspaces-v1-20260928",
+      "observed_target_base_sha": "f7d138e6f2ad3f6705d128d31ff263eb1edda555",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 101,
+      "title": "Execution Workspaces: mount runtime cwd and enforce launch/reuse",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/101",
+      "head_sha": "3f4688d35e6c389359c5a6c1cc509756d00d9e40",
+      "target_base_ref": "feature/execution-workspace-runtime-binding-20260928",
+      "observed_target_base_sha": "e53ac62c943f6176bc0d6c805de70111e52bd33d",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 105,
+      "title": "Hosted MCP: inspect MainFrame files through Explorer Core",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/105",
+      "head_sha": "6810feb8264b67f970a1c5044bc5ceafd38ddf1a",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "aeb224a8735f20fd3f457d380236ba931da3ed59",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 106,
+      "title": "feat(mindgraph): expose a distinct operations nomination scope",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/106",
+      "head_sha": "d7eff6fe2bea84f24b0b327bdb769e58781f9ec1",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "aeb224a8735f20fd3f457d380236ba931da3ed59",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 110,
+      "title": "feat(mindgraph): prepare current-main operations consumer",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/110",
+      "head_sha": "c4a017a93cd3336d51091e550ea5e90c5ccbef60",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "HISTORICAL_ACCEPTED_LINEAGE_PENDING",
+      "work_groups": [],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Preserve recorded purpose/lineage and governing prerequisites; do not treat this PR as an additional active implementation.",
+      "local_execution": "Not a fresh test target absent a specific governing requirement."
+    },
+    {
+      "pr": 111,
+      "title": "fix(filesystem): preserve contained deletion across root aliases",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/111",
+      "head_sha": "1e9b59239f70b83031c3816f7885cb1ff53c5cc3",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "filesystem_observation"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Prior attempt is INCONCLUSIVE due interposer crash; HTTP isolation remains unqualified."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 119,
+      "title": "feat(explorer): integrate bounded native media previews",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/119",
+      "head_sha": "3e85ff1a88bedd05b9661f91fc019a971b28824c",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "explorer_native"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Native/mounted behavior remains unaccepted; #125 and #129 are siblings and cannot be treated as one already composed tree."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 120,
+      "title": "feat(workspaces): maintain isolated allocation, runtime binding and safe cleanup",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/120",
+      "head_sha": "d6528c433bf88e57aac274d69804785df4a874e4",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "workspaces"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Owner/Core predecessor passes do not qualify current #120 or mounted/runtime/cleanup composition."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 121,
+      "title": "fix(mindgraph): reject ambiguous operations envelope members",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/121",
+      "head_sha": "99cdbac4736fffeb3ae54db60ae185b7ba2f9585",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "operations_pair"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Bounded Core/CLI pair PASS does not qualify original45 pair, whole product or installed provenance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 122,
+      "title": "Maintain deterministic routing core and replayable fixture receipts",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/122",
+      "head_sha": "a6b9cf5b002a925995a6137929e804a93e7a5e03",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "routing_core"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Frozen owner-tested source awaits independent qualification."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 123,
+      "title": "Add owned state and fixture readiness for isolated qualification",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/123",
+      "head_sha": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "isolation"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Required macOS/process/cache/installed behavior cannot be established from GitHub. The previously rejected external CLI transfer is not required merely to prepare this operator-run local packet."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 124,
+      "title": "feat(explorer): bounded text editing and dirty navigation",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/124",
+      "head_sha": "3ae84edf78cf84493f1adfcf12e1d029a59de0c9",
+      "target_base_ref": "feat/explorer-preview-successor-20261002",
+      "observed_target_base_sha": "3e85ff1a88bedd05b9661f91fc019a971b28824c",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "explorer_native"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Native/mounted behavior remains unaccepted; #125 and #129 are siblings and cannot be treated as one already composed tree."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 125,
+      "title": "feat(explorer): retain bounded partial Quick Open snapshots",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/125",
+      "head_sha": "40d4c93da79e292413865ebfcc0e947302dc3126",
+      "target_base_ref": "feat/explorer-bounded-text-editing-20261002",
+      "observed_target_base_sha": "3ae84edf78cf84493f1adfcf12e1d029a59de0c9",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "explorer_native"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Native/mounted behavior remains unaccepted; #125 and #129 are siblings and cannot be treated as one already composed tree."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 126,
+      "title": "fix(lifecycle): complete exact-owned descendant cleanup after pending stop",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/126",
+      "head_sha": "53d9dbbf5bfd5b8c1a0033d1bb7630d1b4527b1d",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "runtime_cleanup"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "OS process identity/cleanup cannot be proven by source review; requires qualified isolation."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 127,
+      "title": "feat(core): maintain Work Group references and target guards",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/127",
+      "head_sha": "bcbc5ce89cab90d652c44ad73e1e094e2a1ca185",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "workgroup_core"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Existing owner evidence is not independent or mounted acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 128,
+      "title": "fix(codex): require correlated native thread identity before readiness",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/128",
+      "head_sha": "587be4267f7ef7e3a9e40eacf07aab334dcb59f4",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "runtime_terminal_truth"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Fresh independent/native-client evidence is absent. #123 and #128 are separate main-based subjects: qualifying #123 does not install its isolation seam into exact #128. Mounted composition requires a new reviewed identity."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 129,
+      "title": "fix(explorer): preserve unsaved buffers on application quit",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/129",
+      "head_sha": "0bc997d43b06b81867c9f7236c69493d585dbd00",
+      "target_base_ref": "feat/explorer-bounded-text-editing-20261002",
+      "observed_target_base_sha": "3ae84edf78cf84493f1adfcf12e1d029a59de0c9",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "explorer_native"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Native/mounted behavior remains unaccepted; #125 and #129 are siblings and cannot be treated as one already composed tree."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 130,
+      "title": "fix(ui): refuse stale task and menu input targets",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/130",
+      "head_sha": "9606129b91186a3335d33139e550f03e1a550b22",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "stale_target"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Fourteen native owner window controls do not establish complete mounted or external-input acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 131,
+      "title": "fix(workbench): preserve source buffers through Close and Quit",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/131",
+      "head_sha": "95bd4daf3a3f6c3611768ab4f82de54eb7b4e7cc",
+      "target_base_ref": "feat/explorer-quit-loss-guard-20261002",
+      "observed_target_base_sha": "0bc997d43b06b81867c9f7236c69493d585dbd00",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "explorer_native"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Native/mounted behavior remains unaccepted; #125 and #129 are siblings and cannot be treated as one already composed tree."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 132,
+      "title": "feat(context): retain revisioned Context Set definitions",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/132",
+      "head_sha": "74d16781776da8e9a1eed0dff7685802f8099284",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "context_ui"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Actual source/native UI behavior must be inspected per slice; #132 and local adapter stack are unaccepted. A concrete source-only defect can be fixed on a new GitHub candidate before full integration."
+      ],
+      "candidate_gate_note": "Pure Context Set candidate itself needs fresh physical persistence/Core qualification; broader UI/source inspection is separately described in context_ui.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 134,
+      "title": "Add derived Next Move proposal contract and deterministic fixtures",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/134",
+      "head_sha": "dce601dd35600304d5c724c192223d2e7f5d7b19",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "nextmove_contract"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Owner-tested pure contract awaits fresh/native acceptance; no local-source blocker to reading/testing published #134 itself."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 135,
+      "title": "fix(local-operator): keep receipt lock reads bounded",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/135",
+      "head_sha": "6d7d348fd3476ef52ba15b283da5439e549249f6",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "local_operator"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Native lock behavior and integrated V1 remain unqualified; source count alone cannot close them."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 137,
+      "title": "feat(runtime): observe Codex metadata with retained native evidence",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/137",
+      "head_sha": "96ca202c7e3ce900173ed3deaab8de64281ed726",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "codex_metadata"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Owner/native/package/hosted custody evidence exists; fresh independent and field evidence remain absent."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 138,
+      "title": "feat(orchestration): add durable logical run and step journal",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/138",
+      "head_sha": "07ce37df391c8263a55adf23728f6d046d29509b",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "d10ec1c90c835e8b210a4e27e7333fd8e436bd7a",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "routing_run"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Logical pure contract owner PASS is not independent or integrated runtime acceptance."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 140,
+      "title": "feat(context): bind exact file candidates to observed source bytes",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/140",
+      "head_sha": "6541d27aa4c303442afcc263c73fa12a5ae40f24",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "7512943469f2f2c65b268fe9db542c6a46908fbf",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "context_source_stack"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Published owner-tested exact-file/lexical candidates await fresh/native/mounted evidence. Local D079 and shared-Git design are required only for their own extensions/composition."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 142,
+      "title": "Promotion: qualify installed MindGraph operations consumer",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/142",
+      "head_sha": "7800a10a5622242ce6653f24e0a5e5e3b73dec72",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "7512943469f2f2c65b268fe9db542c6a46908fbf",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "operations_live"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "External environment/connection/source authorization and unaccepted product prerequisites."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 144,
+      "title": "fix(mindgraph): isolate query caches by exact request identity",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/144",
+      "head_sha": "6de5a8612584a1c667ce50a818fbadeefa2c5bb1",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "mindgraph_scope"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Owner pressure/native/package results are not fresh/mounted acceptance; hosted required run refused before steps."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 146,
+      "title": "fix(mcp): reconcile catalogue and shared-bearer caller authority",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/146",
+      "head_sha": "ab424afd80a45c41de9523dde8d0d9416751821d",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "catalogue_principal"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Owner component PASS does not establish mounted/hosted authority; hosted CI refusal did not execute checks."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 147,
+      "title": "fix(supervision): bound global diagnostic refusals after #145",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/147",
+      "head_sha": "14ffd89b545473d6c4657047efc25dfa053344c7",
+      "target_base_ref": "main",
+      "observed_target_base_sha": "b53c38ed303b2a6e7fb4de8936c04ed56da891ed",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "global_events"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Fresh/native mounted acceptance and later runtime/journal integration remain open."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    },
+    {
+      "pr": 148,
+      "title": "feat(context): observe explicitly selected lexical source nominations",
+      "url": "https://github.com/camerontjs-dot/Conduit/pull/148",
+      "head_sha": "2f895fb471ce85c58f28065f23b7d7883ac8f0a0",
+      "target_base_ref": "codex/issue58-context-exact-source-adapter-20261003",
+      "observed_target_base_sha": "6541d27aa4c303442afcc263c73fa12a5ae40f24",
+      "classification": "CURRENT_CANDIDATE_WITH_UNFINISHED_GATES",
+      "work_groups": [
+        "context_source_stack"
+      ],
+      "frozen_source_mutation_allowed": false,
+      "blocking_reasons": [
+        "Published owner-tested exact-file/lexical candidates await fresh/native/mounted evidence. Local D079 and shared-Git design are required only for their own extensions/composition."
+      ],
+      "candidate_gate_note": "Exact frozen candidate gates remain as recorded; no local successor is implied by this PR identity.",
+      "chat_work": "Review exact source and lineage, prepare required candidate-specific tests; create a new successor only for justified code/composition changes.",
+      "local_execution": "As defined by work_groups; no merge/install/release implied by test PASS."
+    }
+  ],
+  "snapshot_scope": "Pre-publication refreshed baseline: 44 Draft PRs / 23 issues. Four source PRs are added by the explicit publication amendment; the separate handoff PR is coordination/apparatus, not a product candidate. Live census remains issue60.",
+  "publication_amendment": {
+    "date": "2026-10-04",
+    "developer_candidates": "developer-candidates.json",
+    "added_product_prs": [
+      150,
+      151,
+      152,
+      153
+    ],
+    "implementation_state": "SOURCE_PUBLISHED_NATIVE_NOT_RUN",
+    "completed_preparation_packets": [
+      "postfreeze/context-and-retrieval/README.md",
+      "postfreeze/control-and-routing/README.md"
+    ],
+    "remaining_broader_source_work": "Specific source composition and missing local/authority inputs remain adopted work; not reclassified FUTURE."
+  },
+  "row_resolution": "Every row inherits the group with matching group_id; an explicitly present row field overrides that group field. This keeps all 157 row identities/dispositions without repeating identical work/dependency prose."
+}

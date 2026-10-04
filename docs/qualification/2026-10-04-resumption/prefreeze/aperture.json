@@ -1,0 +1,37 @@
+{
+  "schema": "conduit-qualification-information-aperture/v1",
+  "scope": "Fresh oracle author BEFORE oracle/harness freeze; this is an allowlist contract, not an OS sandbox or a proof of enforced isolation.",
+  "allowed_files": [
+    {
+      "path": "contract.md",
+      "sha256": "40b0234bdf0eaa247ed55d6d5d2be93197314a39e68f1fb8e734fb6802aae073"
+    },
+    {
+      "path": "subjects.json",
+      "sha256": "197357efba4b2cb1688ab03906a046d4ce2b2784f804e802dfb7ce30c2b34104"
+    }
+  ],
+  "allowed_tools": "Only coordinator-declared tools restricted to this copied aperture and author-owned outputs. No browser, GitHub connector, broad shell/filesystem access, shared transcript or parent context that exposes forbidden material.",
+  "forbidden_information_classes": [
+    "candidate source or binaries",
+    "committed or owner tests and fixtures",
+    "owner receipts and results",
+    "PR or issue discussions/history",
+    "local pause review and raw-material index",
+    "postfreeze recovery manifest",
+    "postfreeze developer pressure",
+    "coordinator prompt, README and broader chat",
+    "unrelated repository or operator files"
+  ],
+  "additional_interfaces": "Only declaration-only interface contracts, separately pinned and added to this manifest BEFORE authoring. No silent implementation exposure.",
+  "enforcement_receipt_required": [
+    "exact copied file inventory with SHA-256",
+    "effective workspace and tool restrictions",
+    "author prior-context/exposure declaration",
+    "additional interface supplements",
+    "freeze artifact hashes and time",
+    "deviations or contamination"
+  ],
+  "if_not_enforceable": "Do source-exposed developer qualification only; independent gate remains open.",
+  "postfreeze": "Executor/reviewer may read source, owner controls and postfreeze materials only after preserving the oracle/apparatus freeze; never backdate or silently repair the frozen subject."
+}

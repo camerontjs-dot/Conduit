@@ -1,0 +1,31 @@
+{
+  "schema": "conduit-local-qualification-return/v1",
+  "run_id": null,
+  "started_at_utc": null,
+  "finished_at_utc": null,
+  "coordinator_exposure": "SOURCE_EXPOSED",
+  "candidate": {"id": null, "head": null, "tree": null, "physical_source_preflight_receipts": []},
+  "apparatus": {"recovered_or_new": null, "source_sha256": null, "wrapper_sha256": null, "fixture_manifest_sha256": null, "oracle_sha256": null, "freeze_receipt": null, "allowed_aperture_sha256": null, "exposure_log": null, "independence": "UNESTABLISHED"},
+  "environment": {"os": null, "architecture": null, "xcode": null, "swift": null, "git_executable": null, "native_slot": null, "checkout": null, "owned_roots": [], "owned_ports": [], "cache_roots": [], "protected_baseline_manifest": null},
+  "execution_bounds": {"governing_artifact": null, "package_limit": null, "attempts_used": null, "attempts_remaining": null, "observation_time_limit": null, "remaining_budget": null, "recovered": false},
+  "commands": [],
+  "gates": [
+    {"name": "source_identity", "disposition": "NOT_RUN", "supported_claim": null, "raw_artifacts": []},
+    {"name": "independent_native", "disposition": "NOT_RUN", "supported_claim": null, "raw_artifacts": []},
+    {"name": "owner_regression_replay", "disposition": "NOT_RUN", "supported_claim": null, "raw_artifacts": []},
+    {"name": "post_freeze_developer_pressure", "disposition": "NOT_RUN", "supported_claim": null, "raw_artifacts": []},
+    {"name": "first_release_artifact", "disposition": "NOT_RUN", "supported_claim": null, "raw_artifacts": []},
+    {"name": "package_identity_signature", "disposition": "NOT_RUN", "supported_claim": null, "raw_artifacts": []},
+    {"name": "mounted_composition", "disposition": "NOT_RUN", "supported_claim": null, "raw_artifacts": []}
+  ],
+  "case_results": [],
+  "counterexamples": [],
+  "deviations": [],
+  "unknowns": [],
+  "teardown": {"owned_processes_waited": [], "owned_paths_removed": [], "residuals": null, "protected_baseline_comparison": null},
+  "local_artifact_manifest": null,
+  "sanitized_github_receipt_urls": [],
+  "smallest_next_action": null,
+  "requires_new_candidate": false,
+  "production_installed_or_released": false
+}
