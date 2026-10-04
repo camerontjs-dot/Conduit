@@ -450,7 +450,7 @@ public struct ProviderRuntimeReconciliation: Codable, Equatable, Sendable {
 /// not on the provider session, because a durable provider session may change
 /// model between turns.
 public struct WorkerLineage: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var conduitTaskID: OrchestrationValue<String>
@@ -468,6 +468,10 @@ public struct WorkerLineage: Codable, Equatable, Sendable {
     public var terminal: WorkerTerminalState
     public var observation: SupervisionObservationStamp
     public var providerSpecific: OrchestrationValue<ProviderSpecificPayload>
+    /// Exact ExecutionWorkspace handoff/binding when this worker has been
+    /// associated with the qualified workspace authority model. Legacy and
+    /// externally discovered workers may legitimately have no binding.
+    public var executionWorkspace: WorkerExecutionWorkspaceBinding?
     public var runtimeReconciliation: ProviderRuntimeReconciliation?
 
     public init(
@@ -487,6 +491,7 @@ public struct WorkerLineage: Codable, Equatable, Sendable {
         terminal: WorkerTerminalState,
         observation: SupervisionObservationStamp,
         providerSpecific: OrchestrationValue<ProviderSpecificPayload>,
+        executionWorkspace: WorkerExecutionWorkspaceBinding? = nil,
         runtimeReconciliation: ProviderRuntimeReconciliation? = nil
     ) {
         self.schemaVersion = schemaVersion
@@ -505,6 +510,7 @@ public struct WorkerLineage: Codable, Equatable, Sendable {
         self.terminal = terminal
         self.observation = observation
         self.providerSpecific = providerSpecific
+        self.executionWorkspace = executionWorkspace
         self.runtimeReconciliation = runtimeReconciliation
     }
 }

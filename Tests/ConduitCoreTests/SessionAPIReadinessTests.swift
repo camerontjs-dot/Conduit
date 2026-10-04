@@ -29,7 +29,8 @@ final class SessionAPIReadinessTests: XCTestCase {
             agent: "Shell",
             projectSlug: "synthetic",
             objective: "",
-            idempotencyKey: nil
+            idempotencyKey: nil,
+            executionWorkspace: nil
         )
 
         for state in ConduitSessionAPIReadiness.allCases where state != .ready {

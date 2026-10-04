@@ -60,6 +60,79 @@ final class TaskSessionModelTests: XCTestCase {
         XCTAssertEqual(project.fallbackSlug, "conduit")
     }
 
+    func testProjectionRetainsOnlyConduitRecordedExecutionWorkspaceAuthority() throws {
+        let sessionID = TaskSessionID()
+        let createdAt = Date(timeIntervalSince1970: 1_800_000_050)
+        let metadata = TaskSessionMetadata(
+            workspace: .project(
+                ProjectWorkspaceScopeSnapshot(
+                    rootURL: rootURL,
+                    projectURL: projectURL,
+                    fallbackTitle: "Conduit",
+                    fallbackSlug: "conduit"
+                )
+            ),
+            agentName: "OpenCode",
+            defaultTitle: "OpenCode · Conduit"
+        )
+        let workspace = ExecutionWorkspace(
+            id: "workspace-task-fixture",
+            mode: .isolatedGitWorktree,
+            authority: .readWrite,
+            repository: GitRepositoryIdentity(
+                repositoryRoot: "/tmp/MainFrame/30_projects/conduit",
+                commonGitDirectory: "/tmp/MainFrame/.git"
+            ),
+            path: "/tmp/conduit-task-workspace",
+            baseRevision: "main",
+            baseSHA: String(repeating: "a", count: 40),
+            branchRef: "refs/heads/conduit/task-fixture",
+            expectedHeadSHA: String(repeating: "a", count: 40),
+            leaseID: "lease-task-fixture",
+            lifecycle: .active,
+            provenance: .conduitAllocated,
+            createdAt: createdAt
+        )
+        var forged = workspace
+        forged.id = "workspace-forged"
+
+        let creation = event(
+            sessionID,
+            at: createdAt,
+            authority: .conduitRecorded,
+            kind: .created(metadata)
+        )
+        let bound = event(
+            sessionID,
+            at: createdAt.addingTimeInterval(1),
+            authority: .conduitRecorded,
+            kind: .executionWorkspaceBound(workspace)
+        )
+        let invalidOverwrite = event(
+            sessionID,
+            at: createdAt.addingTimeInterval(2),
+            authority: .operatorAsserted,
+            kind: .executionWorkspaceBound(forged)
+        )
+
+        XCTAssertTrue(bound.hasValidAuthority)
+        XCTAssertFalse(invalidOverwrite.hasValidAuthority)
+
+        let snapshot = try XCTUnwrap(
+            TaskSessionProjection.project(
+                taskSessionID: sessionID,
+                events: [creation, bound, invalidOverwrite]
+            )
+        )
+        XCTAssertEqual(snapshot.executionWorkspace, workspace)
+
+        let roundTrip = try JSONDecoder().decode(
+            TaskSessionEvent.self,
+            from: JSONEncoder().encode(bound)
+        )
+        XCTAssertEqual(roundTrip, bound)
+    }
+
     func testProjectionAppliesMetadataChangesWithoutReplacingCreation() throws {
         let sessionID = TaskSessionID(
             rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000010")!

@@ -47,6 +47,27 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   Existing one-time profile/key provisioning through `scripts/chatgpt-tunnel`
   remains supported.
 
+
+- Execution Workspaces can now inspect registered Git worktrees, freeze an exact
+  base SHA, allocate an isolated task worktree without switching the ordinary
+  checkout, acquire one explicit workspace writer lease, reconcile branch/HEAD/
+  cwd/dirty/missing-worktree drift, and release writer authority while preserving
+  the worktree. Session API task creation may now opt into an isolated Git
+  worktree with an explicit base revision: Conduit preserves logical project
+  identity separately from process cwd, records the exact workspace on the
+  durable task, and blocks launch/reuse before provider mutation unless the
+  workspace, lease, and reuse observations satisfy the runtime preflight. Omitted
+  workspace arguments preserve the existing project-directory launch behavior.
+  OpenCode is the first provider whose persisted directory can satisfy positive
+  workspace-bound reuse; unsupported provider reuse remains UNKNOWN/fail-closed.
+  Workspace leasing remains separate from provider-session writer authority;
+  explicit cleanup can remove a clean preserved allocation only after checking
+  its recorded provenance and latest released writer lease. Dirty, ignored,
+  drifted, locked, or uncertain state blocks removal; the branch and commits are
+  retained. Prepared and result cleanup receipts preserve allocation lineage.
+  Manual and API allocation share one workspace authority store.
+  Merge, rebase, cherry-pick, reset, clean, discard, and automatic deletion stay
+  outside this slice (#57, #60).
 - `conduit_fleet_snapshot` provides one versioned, read-only handoff projection
   with independent task/provider cursors. It rebuilds Conduit tasks and adapter
   thread handles from existing durable stores, adds read-only OpenCode worker

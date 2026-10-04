@@ -2020,6 +2020,95 @@ proves process-to-command or provider-host/turn identity, or when a later slice
 defines the authority needed for stronger lifecycle claims.
 ---
 
+## D-058: Execution workspace authority is explicit and separate from provider-session control
+
+**Status:** Proposed (2026-09-28; maintained #57 successor on 2026-10-02)
+
+**Context:** Provider-session writer authority from D-052 prevents two Conduit
+controllers from steering one provider conversation. It does not prevent two
+workers from writing the same Git checkout, a resumed worker from pointing at
+the wrong worktree, or an agent from leaving the operator's normal checkout on
+an unexpected branch. #57 requires a separate filesystem/repository ownership
+boundary.
+
+**Decision:**
+
+1. `ExecutionWorkspace` is the typed local execution boundary. Writable Git work
+   defaults to an isolated registered worktree pinned to an exact prepared base
+   SHA and an explicit task branch. Read-only inspection may use the ordinary
+   checkout without allocating another worktree.
+2. `WorkspaceLease` is a separate one-writer authority. Provider-session writer
+   control does not grant workspace write authority, and a workspace lease does
+   not grant provider-session control.
+3. Allocation captures the human checkout immediately before `git worktree add`
+   and verifies that checkout's branch, HEAD, and dirty state are unchanged
+   afterward. If the named base ref moves after preparation, allocation remains
+   pinned to the prepared SHA and reports the movement rather than silently
+   retargeting.
+4. Reconciliation treats missing/deregistered worktrees, repository mismatch,
+   branch/HEAD/cwd drift, dirty state, and lease mismatch as explicit states.
+   Dirty or ambiguous state fails closed for cleanup/integration.
+5. Lease release preserves the worktree and branch. Provider completion does not
+   authorize merge, rebase, cherry-pick, reset, clean, discard, or worktree
+   removal.
+6. Git worktrees are checkout/workspace isolation, not a security sandbox.
+   Stronger filesystem, process, network, or container isolation remains a
+   separate capability.
+7. Logical MainFrame project identity and provider process cwd are separate.
+   `SessionDescriptor.projectPath` continues to identify the project; an
+   eligible workspace supplies the explicit runtime directory without changing
+   project/tmux ownership metadata.
+8. A task may persist one exact Conduit-recorded `ExecutionWorkspace` in its
+   append-only task stream. Provider thread persistence remains provider identity
+   only and is not promoted into workspace authority.
+9. Workspace-bound launch/reuse must pass the exact runtime preflight before a
+   provider process, host, or turn is started. Reuse additionally requires
+   re-observed provider cwd/worktree facts where the provider exposes them.
+   Missing reuse evidence remains UNKNOWN and blocks rather than degrading to a
+   fresh project-directory launch.
+
+**Boundary:** The mounted successor adds an explicit Session API path for
+isolated writable workspaces and wires workspace preflight into runtime
+startup. Omitted workspace arguments preserve existing launch behavior.
+OpenCode persistence is the first positive reuse observation path; other
+provider reuse remains fail-closed until equivalent cwd/worktree evidence
+exists. Source implementation does not establish that an installed provider
+actually honored the intended cwd. Mounted runtime acceptance remains a fresh
+machine-bound qualification gate. Explicit cleanup
+in the maintained successor removes only an unchanged, clean, preserved
+Conduit allocation after checking its allocation receipt and latest released
+lease under the writer ledger lock. An immutable prepared cleanup receipt
+is mandatory before removal, and a separate result retains exact allocation
+lineage after the worktree administration directory is removed. It retains
+the branch and commits, never
+forces removal, and rejects dirty, ignored, drifted, locked, or UNKNOWN state.
+Discard, integration, merge/rebase/cherry-pick, and security sandbox behavior
+remain separate later boundaries.
+
+**Maintained successor (2026-10-02):** The source now uses one workspace root
+and lease ledger for manual and Session API allocation. Git worktree discovery
+uses complete NUL-delimited observations so whitespace in paths is preserved;
+truncated observations fail UNKNOWN. Allocation records exact provenance in
+the worktree's Git administration directory. That receipt grants no provider
+authority and is required for explicit cleanup; older or unrecorded worktrees
+stay preserved. Qualification isolation remains owned by #87.
+
+The maintained candidate composes frozen [#96](https://github.com/camerontjs-dot/Conduit/pull/96)
+`f7d138e6f2ad3f6705d128d31ff263eb1edda555`, [#100](https://github.com/camerontjs-dot/Conduit/pull/100)
+`e53ac62c943f6176bc0d6c805de70111e52bd33d`, and [#101](https://github.com/camerontjs-dot/Conduit/pull/101)
+`3f4688d35e6c389359c5a6c1cc509756d00d9e40` onto current main. Historical
+FAIL/PASS receipts stay bounded to their exact candidates. Composition does
+not transfer their acceptance; native development checks, independent
+qualification and mounted app acceptance remain separate evidence.
+
+**Reconsideration trigger:** Revisit the representation if local qualification
+shows Git worktree identity or provider cwd cannot be reconciled reliably, if
+the task event stream cannot preserve workspace authority across restart, or if
+another provider exposes a stronger native workspace/cwd identity that changes
+the reuse evidence boundary.
+
+---
+
 ## D-059: ChatGPT tunnel process ownership is explicit and separate from API authority
 
 **Status:** Accepted (2026-09-29; daily-driver RC candidate)

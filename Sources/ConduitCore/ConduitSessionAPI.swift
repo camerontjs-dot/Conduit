@@ -65,6 +65,20 @@ public struct ConduitSessionCaller: Equatable, Sendable {
     )
 }
 
+public enum ConduitExecutionWorkspaceRequest: Equatable, Sendable {
+    /// Allocate and lease one isolated Git worktree before provider launch.
+    /// The caller supplies the base revision; Conduit resolves and freezes the
+    /// exact SHA before allocation.
+    case isolatedGitWorktree(baseRevision: String)
+
+    public var fingerprintComponent: String {
+        switch self {
+        case .isolatedGitWorktree(let baseRevision):
+            return "isolated_git_worktree:\(baseRevision)"
+        }
+    }
+}
+
 public enum ConduitSessionCommand: Equatable, Sendable {
     case listProjects
     case listSessions(cursor: String?, limit: Int?)
@@ -89,7 +103,8 @@ public enum ConduitSessionCommand: Equatable, Sendable {
         agent: String,
         projectSlug: String,
         objective: String,
-        idempotencyKey: String?
+        idempotencyKey: String?,
+        executionWorkspace: ConduitExecutionWorkspaceRequest?
     )
     case reconcileTask(taskSessionID: String)
     case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin)

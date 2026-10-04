@@ -7,6 +7,42 @@ import ConduitCore
 import Dispatch
 import Foundation
 
+// Fixture-only child process for cross-process lease pressure. Every path and
+// identity must be supplied; ordinary selftest execution never enters a
+// provider or app runtime.
+if CommandLine.arguments.dropFirst().first == "--workspace-lease-probe" {
+    let arguments = CommandLine.arguments
+    guard arguments.count == 7 else {
+        fputs("usage: --workspace-lease-probe directory workspace owner ready-file start-file\n", stderr)
+        exit(2)
+    }
+    do {
+        try "ready\n".write(toFile: arguments[5], atomically: true, encoding: .utf8)
+        let deadline = Date().addingTimeInterval(10)
+        while !FileManager.default.fileExists(atPath: arguments[6]), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        guard FileManager.default.fileExists(atPath: arguments[6]) else {
+            fputs("lease probe start barrier unavailable\n", stderr)
+            exit(2)
+        }
+        let store = WorkspaceLeaseStore(directory: URL(fileURLWithPath: arguments[2], isDirectory: true))
+        let payload: [String: String]
+        do {
+            let lease = try store.acquire(workspaceID: arguments[3], ownerID: arguments[4])
+            payload = ["disposition": "acquired", "owner_id": lease.ownerID, "lease_id": lease.id]
+        } catch WorkspaceLeaseStoreError.writerCollision(_, let owner) {
+            payload = ["disposition": "writer_collision", "recognized_owner_id": owner]
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        print(String(decoding: data, as: UTF8.self))
+        exit(0)
+    } catch {
+        fputs("lease probe failed: \(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
+}
+
 var passed = 0
 var failures: [String] = []
 
@@ -30,6 +66,19 @@ func withTempDir(_ body: (URL) throws -> Void) {
     } catch {
         failures.append("uncaught error: \(error)")
         print("FAIL uncaught error: \(error)")
+    }
+}
+
+func selftestGit(_ directory: URL, _ arguments: [String]) throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["git", "-C", directory.path] + arguments
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+        throw NSError(domain: "ConduitSelfTestGit", code: Int(process.terminationStatus))
     }
 }
 
@@ -1805,6 +1854,21 @@ check("session descriptor task identity defaults to absent",
 check("session descriptor reconnect safeguards default off",
       defaultTaskDescriptor.adoptsLegacyTaskSession == false
         && defaultTaskDescriptor.requiresExistingTmuxSession == false)
+check("session descriptor defaults process cwd to logical project",
+      defaultTaskDescriptor.runtimeDirectory.standardizedFileURL == instProject.standardizedFileURL)
+let isolatedRuntimeDirectory = URL(
+    fileURLWithPath: "/tmp/conduit-selftest-runtime-directory",
+    isDirectory: true
+)
+let isolatedTaskDescriptor = SessionDescriptor(
+    projectPath: instProject,
+    executionDirectory: isolatedRuntimeDirectory,
+    agent: AgentProfile(name: "OpenCode", command: "opencode")
+)
+check("session descriptor separates logical project from process cwd",
+      isolatedTaskDescriptor.projectPath.standardizedFileURL == instProject.standardizedFileURL
+        && isolatedTaskDescriptor.runtimeDirectory.standardizedFileURL
+            == isolatedRuntimeDirectory.standardizedFileURL)
 
 let boundTaskDescriptor = SessionDescriptor(
     projectPath: instProject,
@@ -2311,7 +2375,8 @@ check(
             agent: "Shell",
             projectSlug: "synthetic",
             objective: "",
-            idempotencyKey: nil
+            idempotencyKey: nil,
+            executionWorkspace: nil
         ),
         readiness: .mainframeAuthorizationRequired
     )
@@ -2323,7 +2388,8 @@ check(
             agent: "Shell",
             projectSlug: "synthetic",
             objective: "",
-            idempotencyKey: nil
+            idempotencyKey: nil,
+            executionWorkspace: nil
         ),
         readiness: .ready
     )
@@ -3748,7 +3814,142 @@ check(
     ) == .stopOwned
 )
 
+
+// MARK: - Execution Workspace
+
+withTempDir { directory in
+    let store = WorkspaceLeaseStore(directory: directory)
+    let workspace = ExecutionWorkspace(
+        id: "selftest-workspace",
+        mode: .isolatedGitWorktree,
+        authority: .readWrite,
+        repository: nil,
+        path: "/tmp/conduit-selftest-workspace",
+        baseRevision: "main",
+        baseSHA: String(repeating: "a", count: 40),
+        branchRef: "refs/heads/conduit/selftest",
+        expectedHeadSHA: String(repeating: "a", count: 40),
+        lifecycle: .allocated,
+        provenance: .conduitAllocated
+    )
+    let lease = try store.acquire(
+        workspaceID: workspace.id,
+        ownerID: "selftest-writer"
+    )
+    let repeatedLease = try store.acquire(
+        workspaceID: workspace.id,
+        ownerID: "selftest-writer"
+    )
+    check(
+        "execution workspace lease is one-writer and idempotent",
+        repeatedLease == lease
+    )
+    let mountedWorkspace = workspace.binding(lease)
+    let mounted = ExecutionWorkspaceRuntimeMountPlanner.plan(
+        action: .launch,
+        requiredWorkspace: mountedWorkspace,
+        reconciliation: ExecutionWorkspaceReconciliation(
+            disposition: .ready,
+            worktree: GitWorktreeRecord(
+                path: mountedWorkspace.path!,
+                headSHA: mountedWorkspace.expectedHeadSHA!,
+                branchRef: mountedWorkspace.branchRef,
+                isDetached: false,
+                isBare: false,
+                isLocked: false,
+                isPrunable: false
+            ),
+            activeLease: lease,
+            issues: []
+        )
+    )
+    check(
+        "eligible execution workspace produces exact runtime mount",
+        mounted.isEligible
+            && mounted.executionDirectory?.standardizedFileURL.path
+                == mountedWorkspace.path
+    )
+    let wrongOwnerMount = ExecutionWorkspaceRuntimeMountPlanner.plan(
+        action: .launch,
+        requiredWorkspace: mountedWorkspace,
+        reconciliation: ExecutionWorkspaceReconciliation(
+            disposition: .ready,
+            worktree: nil,
+            activeLease: lease,
+            issues: []
+        ),
+        expectedLeaseOwnerID: "different-task-owner"
+    )
+    check(
+        "workspace runtime mount rejects a different task writer",
+        wrongOwnerMount.preflight.disposition == .blocked
+            && wrongOwnerMount.executionDirectory == nil
+    )
+
+    var collisionObserved = false
+    do {
+        _ = try store.acquire(
+            workspaceID: workspace.id,
+            ownerID: "other-writer"
+        )
+    } catch WorkspaceLeaseStoreError.writerCollision {
+        collisionObserved = true
+    }
+    check(
+        "execution workspace rejects a second writer",
+        collisionObserved
+    )
+    check(
+        "leased execution workspace produces a human-entry warning",
+        ExecutionWorkspacePresentation.humanEntryWarning(
+            workspace: workspace.binding(lease),
+            lease: lease
+        ) != nil
+    )
+    _ = try store.release(
+        workspaceID: workspace.id,
+        ownerID: "selftest-writer",
+        expectedLeaseID: lease.id
+    )
+    let releasedLeaseState = try store.activeLease(workspaceID: workspace.id)
+    check(
+        "workspace lease release clears writer authority without cleanup",
+        releasedLeaseState == nil
+    )
+}
+
 // MARK: - Summary
+
+withTempDir { directory in
+    let repository = directory.appendingPathComponent("repository", isDirectory: true)
+    try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+    try selftestGit(repository, ["init", "--quiet"])
+    try selftestGit(repository, ["config", "user.name", "Conduit Fixture"])
+    try selftestGit(repository, ["config", "user.email", "fixture@example.invalid"])
+    try "baseline\n".write(to: repository.appendingPathComponent("baseline.txt"), atomically: true, encoding: .utf8)
+    try selftestGit(repository, ["add", "baseline.txt"])
+    try selftestGit(repository, ["commit", "--quiet", "-m", "baseline"])
+    let controller = GitExecutionWorkspaceController()
+    let allocation = try controller.allocate(controller.prepareAllocation(
+        repositoryRoot: repository,
+        workspaceRoot: directory.appendingPathComponent("workspaces", isDirectory: true),
+        branchName: "conduit/selftest-cleanup", baseRevision: "HEAD"
+    ))
+    let store = WorkspaceLeaseStore(directory: directory.appendingPathComponent("leases", isDirectory: true))
+    let lease = try store.acquire(workspaceID: allocation.workspace.id, ownerID: "selftest-cleanup-owner")
+    try store.release(workspaceID: allocation.workspace.id, ownerID: lease.ownerID, expectedLeaseID: lease.id)
+    let preserved = allocation.workspace.binding(lease).preservingAfterLeaseRelease()
+    var wrongOwnerRejected = false
+    do {
+        _ = try controller.cleanupPreservedWorkspace(preserved, leaseStore: store, releasedLeaseID: lease.id, ownerID: "wrong-owner")
+    } catch { wrongOwnerRejected = true }
+    check("workspace cleanup rejects unrecognized release authority", wrongOwnerRejected)
+    let receipt = try controller.cleanupPreservedWorkspace(preserved, leaseStore: store, releasedLeaseID: lease.id, ownerID: lease.ownerID)
+    check("workspace cleanup removes only the clean worktree", !FileManager.default.fileExists(atPath: receipt.removedWorktreePath))
+    check("workspace cleanup retains the task branch", receipt.retainedBranchRef == "refs/heads/conduit/selftest-cleanup")
+    let records = try controller.discoverWorktrees(repositoryRoot: repository)
+    check("workspace cleanup preserves the ordinary checkout", records.count == 1 && records.first?.headSHA == receipt.retainedHeadSHA)
+}
 
 print("\n\(passed) passed, \(failures.count) failed")
 if !failures.isEmpty {

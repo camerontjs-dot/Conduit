@@ -517,7 +517,37 @@ final class ConduitSessionAPIServer {
                 arguments["idempotency_key"]?.stringValue
                     ?? arguments["idempotencyKey"]?.stringValue
             )?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if agent.isEmpty || projectSlug.isEmpty {
+            let rawWorkspaceMode = (
+                arguments["workspace_mode"]?.stringValue
+                    ?? arguments["workspaceMode"]?.stringValue
+            )?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let workspaceBase = (
+                arguments["workspace_base_revision"]?.stringValue
+                    ?? arguments["workspaceBaseRevision"]?.stringValue
+            )?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let workspaceRequest: ConduitExecutionWorkspaceRequest?
+            let workspaceArgumentsValid: Bool
+            switch rawWorkspaceMode {
+            case nil, "":
+                workspaceRequest = nil
+                workspaceArgumentsValid = workspaceBase?.isEmpty ?? true
+            case "isolated_git_worktree":
+                if let workspaceBase, !workspaceBase.isEmpty {
+                    workspaceRequest = .isolatedGitWorktree(
+                        baseRevision: workspaceBase
+                    )
+                    workspaceArgumentsValid = true
+                } else {
+                    workspaceRequest = nil
+                    workspaceArgumentsValid = false
+                }
+            default:
+                workspaceRequest = nil
+                workspaceArgumentsValid = false
+            }
+
+            if agent.isEmpty || projectSlug.isEmpty || !workspaceArgumentsValid {
                 command = nil
             } else {
                 command = .createTask(
@@ -526,7 +556,8 @@ final class ConduitSessionAPIServer {
                     objective: objective,
                     idempotencyKey: (idempotencyKey?.isEmpty ?? true)
                         ? nil
-                        : idempotencyKey
+                        : idempotencyKey,
+                    executionWorkspace: workspaceRequest
                 )
             }
         case "conduit_reconcile_task":
@@ -894,7 +925,7 @@ final class ConduitSessionAPIServer {
     private static let writeTools: [[String: Any]] = [
         [
             "name": "conduit_create_task",
-            "description": "Start a Conduit agent session and return its taskSessionID. Delivery of objective is attempted once, immediately, and the response reports objective_delivery_state: delivered (it reached the runtime), queued (Conduit accepted it and will finish delivering it without another call - do not resend, or the objective runs twice), or failed (the runtime refused it; objective_resend_required is true, so wait for conduit_session_status to report ready and send it with conduit_send_prompt). Approvals stay on the Mac.",
+            "description": "Start a Conduit agent session and return its taskSessionID. Delivery of objective is attempted once, immediately, and the response reports objective_delivery_state. An optional isolated_git_worktree request resolves the supplied base revision, allocates a task worktree, acquires its writer lease, and must pass workspace preflight before provider launch. Approvals stay on the Mac.",
             "annotations": ConduitSessionAPIServer.stateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -905,7 +936,16 @@ final class ConduitSessionAPIServer {
                     ],
                     "project_slug": [
                         "type": "string",
-                        "description": "Folder name of a project as returned in the slug field of conduit_list_projects. This is the session working directory, so it must be an existing project, not a new name.",
+                        "description": "Folder name of a project as returned in conduit_list_projects. It remains the logical project identity; without workspace_mode it is also the process cwd.",
+                    ],
+                    "workspace_mode": [
+                        "type": "string",
+                        "enum": ["isolated_git_worktree"],
+                        "description": "Optional isolated ExecutionWorkspace request. Omit to preserve project-directory launch behavior.",
+                    ],
+                    "workspace_base_revision": [
+                        "type": "string",
+                        "description": "Required with workspace_mode=isolated_git_worktree. Resolved to an exact commit SHA before allocation.",
                     ],
                     "objective": [
                         "type": "string",

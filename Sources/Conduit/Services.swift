@@ -265,7 +265,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
             // and before any prompt delivery.
             let ensureResult = driver.ensureSession(
                 name: name,
-                directory: descriptor.projectPath.path,
+                directory: descriptor.runtimeDirectory.path,
                 command: paneCommand(),
                 sessionEnvironment: shellTelemetryEnvironment,
                 // Only stamp identity when Conduit actually knows it; a
@@ -293,7 +293,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 terminalView.startProcess(
                     executable: tmux,
                     args: ["attach-session", "-t", "=\(name)"],
-                    currentDirectory: descriptor.projectPath.path
+                    currentDirectory: descriptor.runtimeDirectory.path
                 )
                 terminalTitle = "\(descriptor.title) · durable"
                 return
@@ -662,7 +662,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
         terminalView.startProcess(
             executable: executable,
             args: ["--remote", "unix://\(socketPath)"],
-            currentDirectory: descriptor.projectPath.path
+            currentDirectory: descriptor.runtimeDirectory.path
         )
         terminalTitle = "\(descriptor.title) · app-server + remote TUI"
     }
@@ -1148,7 +1148,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 executable: agent.command,
                 args: launchArgs,
                 environment: environment,
-                currentDirectory: descriptor.projectPath.path
+                currentDirectory: descriptor.runtimeDirectory.path
             )
         } else {
             let command = ShellQuoting.commandLine(agent.command, launchArgs)
@@ -1156,7 +1156,7 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
                 executable: "/bin/zsh",
                 args: ["-l", "-c", "exec \(command)"],
                 environment: environment,
-                currentDirectory: descriptor.projectPath.path
+                currentDirectory: descriptor.runtimeDirectory.path
             )
         }
     }
