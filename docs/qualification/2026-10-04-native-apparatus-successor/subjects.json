@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "apparatus_id": "native-apparatus-successor-20261004-v1",
+  "work_class": "research_infrastructure",
+  "base_commit": "1f42d3ef6ad53e69a8a75a2a09c44db12130c47a",
+  "subjects": [
+    {
+      "pr": 150,
+      "commit": "09833f6a2631675d6b1cb9863229f10a821d1d5b",
+      "tree": "454afd8bc7a2c0e4ea2db1aaa35e7efc83b28b37",
+      "consumed_full_native_attempts": 1,
+      "successor_full_native_attempts_authorized": 1,
+      "prior_failure_class": "apparatus",
+      "prior_failure": "socketPathTooLong + consequent unwaited expectation",
+      "return_receipt_sha256": "d876cacbf684a1e07b2dbc5efa60e039e6c382090b85276c54c5bc563f2621f1"
+    },
+    {
+      "pr": 151,
+      "commit": "0ef7979f16ade58fc1146125b808876096510935",
+      "tree": "4a35035c040b1dd097e579edf04c195ba0c9e119",
+      "consumed_full_native_attempts": 1,
+      "successor_full_native_attempts_authorized": 1,
+      "prior_failure_class": "apparatus",
+      "prior_failure": "default sandbox refused owned Unix-socket bind + consequent unwaited expectation",
+      "return_receipt_sha256": "237b0c53f575fabdbe88b1159f58177647bdb04c6d7c11a13ec480a3a08897fa"
+    }
+  ],
+  "provider_turns_authorized": 0,
+  "installation_authorized": false,
+  "source_repair_authorized": false,
+  "independence_claimed": false
+}
