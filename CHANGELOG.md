@@ -27,6 +27,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Core can assemble explicitly selected agent artifacts, test/qualification
+  receipts and lifecycle/project records through the existing exact-file reader
+  while retaining their declared provenance. Missing inputs, unsupported
+  freshness claims and duplicate metadata loss refuse a complete handoff.
+  Reading a receipt does not validate its result or grant acceptance. App,
+  runtime and automatic-discovery integration remain separate programme stages.
+
 - Core can nominate context through the existing cached-text Find engine and
   expand only explicit selections through exact file observation. It keeps
   cached previews separate from source bytes, exposes clipped and partial
