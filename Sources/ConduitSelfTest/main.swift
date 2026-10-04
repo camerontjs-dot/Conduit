@@ -3750,6 +3750,32 @@ check(
 
 // MARK: - Summary
 
+// MARK: - Explorer preview routing and bounded source snapshots
+
+withTempDir { root in
+    let file = root.appendingPathComponent("artifact.pdf")
+    let bytes = Data([37, 80, 68, 70])
+    try bytes.write(to: file)
+    let node = MainframeExplorerNode(name: "artifact.pdf", relativePath: "artifact.pdf",
+        url: file, kind: .file, zone: .system, recordScope: nil)
+    let loader = MainframeExplorerPreviewLoader()
+    check("Explorer PDF route is native and separate from text", MainframeExplorerPreviewRouter.route(for: node) == .pdf)
+    let snapshot = try loader.read(root: root, node: node)
+    check("Explorer preview reads the exact source bytes", snapshot == bytes)
+    check("Explorer preview rejects an oversized source", (try? loader.read(root: root, node: node, maxBytes: 3)) == nil)
+    let wrongURL = MainframeExplorerNode(name: "artifact.pdf", relativePath: "artifact.pdf",
+        url: root.appendingPathComponent("different.pdf"), kind: .file, zone: .system, recordScope: nil)
+    check("Explorer preview rejects substituted URL identity", (try? loader.read(root: root, node: wrongURL)) == nil)
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.createSymbolicLink(at: file, withDestinationURL: root.appendingPathComponent("target.pdf"))
+    check("Explorer cached file replacement cannot traverse a symlink", (try? loader.read(root: root, node: node)) == nil)
+    let textFile = root.appendingPathComponent("binary.txt")
+    try Data([65, 0, 66]).write(to: textFile)
+    let textNode = MainframeExplorerNode(name: "binary.txt", relativePath: "binary.txt",
+        url: textFile, kind: .file, zone: .system, recordScope: nil)
+    check("Explorer binary bytes cannot become garbage text", (try? loader.readUTF8Text(root: root, node: textNode)) == nil)
+}
+
 print("\n\(passed) passed, \(failures.count) failed")
 if !failures.isEmpty {
     print("failures:")

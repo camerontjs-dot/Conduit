@@ -40,6 +40,13 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Explorer uses one exact-path preview route for bounded UTF-8 text, static
+  native images, PDFs, and explicit unsupported-file metadata. Images provide
+  Fit, 100%, zoom, and scrolling; PDFs provide page navigation, Fit, and zoom.
+  Preview reads reject symlink descendants and mismatched paths, and native
+  decoders receive a bounded byte snapshot. Missing, oversized, corrupt, and
+  password-protected files retain distinct unavailable states (#50, #54).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps
