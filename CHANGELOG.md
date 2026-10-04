@@ -119,6 +119,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Proposal context validation now rejects integer overflow and underflow in
+  supplied token estimates without terminating the process. Unrepresentable
+  totals remain invalid even at the largest budget; ordinary totals, negative
+  entry rejection and proposal-only authority are unchanged.
+
 - Fleet keeps every provider inventory row visible but reads expensive
   turn/runtime detail only for sessions with a current exact Conduit task
   association or current Conduit writer authority. Skipped historical/external
