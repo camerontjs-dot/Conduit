@@ -895,6 +895,84 @@ final class AppModel: ObservableObject {
         return conversationRetentionStateByTask[selectedTaskSessionID]
     }
 
+    /// One bounded recognition snapshot for the task rail. The rail asks only
+    /// when a row is hovered or focused; it does not subscribe to live output
+    /// revisions. Live runtime events are therefore a bounded retained window,
+    /// while a successfully read local log is the complete retained timeline.
+    func threadRecognitionSnapshot(
+        for taskSessionID: TaskSessionID,
+        previewByteLimit: Int = ThreadRecognition.defaultPreviewByteLimit
+    ) async -> ThreadRecognitionSnapshot {
+        if let runtime = sessions.first(where: {
+            $0.descriptor.taskSessionID == taskSessionID
+                && !$0.controller.lifecycle.isTerminal
+        }) ?? sessions.first(where: {
+            $0.descriptor.taskSessionID == taskSessionID
+        }) {
+            return ThreadRecognition.project(
+                taskSessionID: taskSessionID,
+                events: runtime.presentationEvents,
+                source: .retained(.boundedRetainedWindow),
+                previewByteLimit: previewByteLimit
+            )
+        }
+
+        if let diagnostics = conversationHistoryDiagnostics[taskSessionID],
+           !diagnostics.isEmpty {
+            return ThreadRecognition.project(
+                taskSessionID: taskSessionID,
+                events: [],
+                source: .unavailable(.sourceHasDiagnostics),
+                previewByteLimit: previewByteLimit
+            )
+        }
+
+        if let cached = conversationHistoryByTask[taskSessionID] {
+            let source: ThreadRecognitionSourceState
+            switch conversationRetentionStateByTask[taskSessionID] {
+            case .some(.loading):
+                source = .unavailable(.sourceNotLoaded)
+            case .some(.failed(_)):
+                source = .unavailable(.sourceUnreadable)
+            case .some(.missingExpected), .some(.legacyPreRetention):
+                source = .unavailable(.sourceMissing)
+            case .some(.pending):
+                source = .retained(.boundedRetainedWindow)
+            case .some(.persisted), .none:
+                source = .retained(.completeRetainedTimeline)
+            }
+            return ThreadRecognition.project(
+                taskSessionID: taskSessionID,
+                events: cached,
+                source: source,
+                previewByteLimit: previewByteLimit
+            )
+        }
+
+        return await withCheckedContinuation { continuation in
+            conversationPersistence.read(
+                taskSessionID: taskSessionID
+            ) { result in
+                let source: ThreadRecognitionSourceState
+                if !result.log.diagnostics.isEmpty {
+                    source = .unavailable(.sourceHasDiagnostics)
+                } else if result.fileWasPresent {
+                    source = .retained(.completeRetainedTimeline)
+                } else {
+                    source = .unavailable(.sourceMissing)
+                }
+                continuation.resume(
+                    returning: ThreadRecognition.project(
+                        taskSessionID: taskSessionID,
+                        events: result.log.events,
+                        source: source,
+                        previewByteLimit: previewByteLimit
+                    )
+                )
+            }
+        }
+    }
+
     var selectedTaskProject: MainframeProject? {
         selectedTaskSnapshot.flatMap { project(for: $0) }
     }
