@@ -3913,6 +3913,12 @@ withTempDir { root in
     try runContextLexicalSourceChecks(root: root) { name, condition in check(name, condition) }
 }
 
+// MARK: - Explicit record source adapter
+
+withTempDir { root in
+    try runContextRecordSourceChecks(root: root) { name, condition in check(name, condition) }
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
