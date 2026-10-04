@@ -24,8 +24,21 @@ public struct OrchestrationContextPacket: Codable, Equatable, Sendable {
         self.entries = entries
     }
 
+    /// Presentation estimate. An unrepresentable total uses the largest
+    /// displayable value; validation still rejects it even with that budget.
+    /// Callers must use validationReasons, not this value, to admit a packet.
     public var tokenEstimate: Int {
-        entries.reduce(0) { $0 + $1.tokenEstimate }
+        checkedTokenEstimate ?? Int.max
+    }
+
+    private var checkedTokenEstimate: Int? {
+        var total = 0
+        for entry in entries {
+            let next = total.addingReportingOverflow(entry.tokenEstimate)
+            guard !next.overflow else { return nil }
+            total = next.partialValue
+        }
+        return total
     }
 
     public func validationReasons(maximumTokens: Int) -> [String] {
@@ -39,7 +52,11 @@ public struct OrchestrationContextPacket: Codable, Equatable, Sendable {
         if entries.contains(where: { !$0.isLabelled }) {
             reasons.append("Every context entry must retain scope and citation labels.")
         }
-        if tokenEstimate > maximumTokens {
+        let total = checkedTokenEstimate
+        if total == nil {
+            reasons.append("Context token estimates exceed the supported integer range.")
+        }
+        if let total, total > maximumTokens {
             reasons.append("Selected context exceeds the planner budget.")
         }
         return reasons

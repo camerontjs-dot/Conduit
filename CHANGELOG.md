@@ -27,6 +27,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Proposal context validation now rejects integer overflow and underflow in
+  supplied token estimates without terminating the process. Unrepresentable
+  totals remain invalid even at the largest budget; ordinary totals, negative
+  entry rejection and proposal-only authority are unchanged.
+
 - Context handoff diffs compare source identity fields separately so a literal
   pipe in a source reference or revision cannot hide a changed item. Stable
   item IDs, presentation-only exclusions and the legacy public fingerprint

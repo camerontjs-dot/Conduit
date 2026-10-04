@@ -3758,6 +3758,85 @@ runContextIdentityDiffChecks { name, condition in
     check(name, condition)
 }
 
+// MARK: - Proposal context budget arithmetic
+
+do {
+    let overflowReason = "Context token estimates exceed the supported integer range."
+    let labelReason = "Every context entry must retain scope and citation labels."
+    let budgetReason = "Selected context exceeds the planner budget."
+    func packet(_ estimates: [Int]) -> OrchestrationContextPacket {
+        OrchestrationContextPacket(
+            projectID: "context-budget-fixture",
+            generatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            entries: estimates.enumerated().map { index, estimate in
+                OrchestrationContextEntry(
+                    id: "entry-\(index)", scope: .knowledge,
+                    displayPath: "fixture/entry-\(index).md",
+                    citationClass: .unknown, excerpt: "Selected nomination only.",
+                    tokenEstimate: estimate, selectedByOperator: true
+                )
+            }
+        )
+    }
+    func validation(_ context: OrchestrationContextPacket, maximumTokens: Int = Int.max)
+        -> OrchestrationProposalValidation {
+        let proposal = OrchestrationProposal(
+            objective: "Review one bounded fixture.", projectID: context.projectID,
+            suggestedAgent: "Fixture Planner", scopeAllowlist: ["fixture/"],
+            deliverables: ["Review receipt"],
+            verificationSteps: ["Inspect the retained fixture."], risks: [],
+            nonGoals: ["No worker launch."]
+        )
+        return OrchestrationProposalPolicy(
+            allowedAgentNames: [proposal.suggestedAgent], maximumContextTokens: maximumTokens
+        ).validate(proposal: proposal, selectedProjectID: context.projectID,
+                   contextPacket: context, workerAlreadyActive: false)
+    }
+    let overflow = packet([Int.max, 1])
+    check("proposal token overflow refuses even at the largest budget",
+          overflow.tokenEstimate == Int.max
+            && overflow.entries.map(\.tokenEstimate) == [Int.max, 1]
+            && validation(overflow) == .needsOperatorRevision(reasons: [overflowReason]))
+    check("decoded proposal context retains overflow input and refusal", {
+        let original = packet([1, Int.max])
+        guard let data = try? JSONEncoder().encode(original),
+              let decoded = try? JSONDecoder().decode(OrchestrationContextPacket.self, from: data)
+        else { return false }
+        return decoded == original
+            && validation(decoded) == .needsOperatorRevision(reasons: [overflowReason])
+    }())
+    let boundary = packet([Int.max - 1, 1])
+    check("representable maximum proposal context remains valid",
+          boundary.tokenEstimate == Int.max && validation(boundary) == .valid
+            && boundary.validationReasons(maximumTokens: Int.max - 1) == [budgetReason])
+    let negative = packet([-1, 2])
+    check("negative proposal token counts remain invalid despite a fitting total",
+          negative.tokenEstimate == 1
+            && validation(negative, maximumTokens: 1) == .needsOperatorRevision(reasons: [labelReason]))
+    check("proposal token underflow refuses and preserves entries",
+          [[Int.min, -1], [-1, Int.min]].allSatisfy { estimates in
+              let context = packet(estimates)
+              return context.tokenEstimate == Int.max
+                && context.entries.map(\.tokenEstimate) == estimates
+                && validation(context) == .needsOperatorRevision(reasons: [labelReason, overflowReason])
+          })
+    check("later arithmetic correction cannot hide invalid proposal context",
+          [[Int.max, 1, -1], [Int.min, -1, 1]].allSatisfy { estimates in
+              let context = packet(estimates)
+              return context.entries.map(\.tokenEstimate) == estimates
+                && context.validationReasons(maximumTokens: Int.max) == [labelReason, overflowReason]
+          })
+    check("negative proposal budget still refuses an empty packet",
+          packet([]).tokenEstimate == 0
+            && validation(packet([]), maximumTokens: -1) == .needsOperatorRevision(reasons: [budgetReason]))
+    check("zero and ordinary proposal budgets retain their boundary behavior",
+          packet([]).validationReasons(maximumTokens: 0).isEmpty
+            && packet([0]).validationReasons(maximumTokens: 0).isEmpty
+            && packet([40, 30]).tokenEstimate == 70
+            && validation(packet([40, 30]), maximumTokens: 70) == .valid
+            && packet([40, 30]).validationReasons(maximumTokens: 69) == [budgetReason])
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
