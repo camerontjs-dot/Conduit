@@ -40,6 +40,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Pure Core retained-thread recognition candidate: preserve prompt origins, delivery and output capture authority; distinguish bounded-window absence; and provide bounded exact previews. Source is uncompiled and not mounted in the task rail; native checks remain pending.
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps
