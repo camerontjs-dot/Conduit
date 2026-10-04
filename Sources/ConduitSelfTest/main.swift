@@ -33,6 +33,12 @@ func withTempDir(_ body: (URL) throws -> Void) {
     }
 }
 
+// MARK: - Retained thread recognition (UX-A)
+
+runThreadRecognitionSelfChecks { name, result in
+    check(name, result)
+}
+
 // MARK: - FrontmatterParser
 
 let frontmatter = FrontmatterParser.parse("""
