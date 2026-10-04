@@ -40,6 +40,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- ConduitCore includes a fixture-only deterministic routing foundation for
+  explicit work requirements, versioned model-profile references, runtime
+  capability facts and replayable decision receipts. Missing or stale required
+  facts and writer collisions block selection; ambiguous identities or policy
+  inputs are rejected. Regular Chat plus GitHub remains distinct, ChatGPT Work
+  is prohibited by default and worker creation stays disabled. This foundation
+  does not change the Orchestrate UI, launch a worker or establish live model
+  eligibility (#56).
+
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
   healthy externally started tunnel without claiming control over it, and keeps

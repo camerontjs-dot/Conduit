@@ -3748,6 +3748,97 @@ check(
     ) == .stopOwned
 )
 
+// MARK: - Deterministic Profile Routing
+
+let routingFixtureProfile = ModelCapabilityProfileReference(
+    profileID: "selftest-profile",
+    version: "fixture-v1"
+)
+let routingFixtureConfig = ModelExecutionConfiguration(
+    id: "chat-config",
+    profile: routingFixtureProfile,
+    providerID: "fixture-provider",
+    modelID: "fixture-model",
+    applicableRoles: [.implementer],
+    applicableTaskClasses: [.implementation]
+)
+let routingFixtureRuntime = RuntimeCapabilityProfile(
+    id: "regular-chat",
+    surface: .regularChatGitHub,
+    locality: .externalChat,
+    capabilities: [.sourceInspection, .gitHubMutation],
+    exactThreadID: .unknown,
+    canContinueExisting: false,
+    canCreateWorker: false,
+    configurations: [routingFixtureConfig]
+)
+let routingFixtureRequirements = RoutingWorkRequirements(
+    id: "selftest-requirements",
+    packageID: "selftest-package",
+    role: .implementer,
+    taskClass: .implementation,
+    requiredCapabilities: [.sourceInspection, .gitHubMutation],
+    prohibitedSurfaces: [.chatGPTWork]
+)
+let routingFixtureDecision = DeterministicRouteResolver.route(
+    requirements: routingFixtureRequirements,
+    runtimes: [routingFixtureRuntime],
+    allowances: [],
+    policy: DeterministicRoutingPolicy(version: "selftest-policy")
+)
+check(
+    "routing keeps regular Chat plus GitHub as a distinct eligible surface",
+    routingFixtureDecision.disposition == .selected
+        && routingFixtureDecision.selectedCandidateID == "regular-chat::chat-config"
+        && routingFixtureDecision.candidates.first?.action == .externalRegularChat
+)
+
+let routingModelOnlyRuntime = RuntimeCapabilityProfile(
+    id: "model-only",
+    surface: .regularChatGitHub,
+    locality: .externalChat,
+    canContinueExisting: false,
+    canCreateWorker: false,
+    configurations: [ModelExecutionConfiguration(
+        id: "model-only-config",
+        profile: routingFixtureProfile,
+        providerID: "fixture-provider",
+        modelID: "fixture-model",
+        applicableRoles: [.implementer],
+        applicableTaskClasses: [.implementation],
+        capabilities: [.sourceInspection, .gitHubMutation]
+    )]
+)
+let routingModelOnlyDecision = DeterministicRouteResolver.route(
+    requirements: routingFixtureRequirements,
+    runtimes: [routingModelOnlyRuntime],
+    allowances: [],
+    policy: DeterministicRoutingPolicy(version: "selftest-policy")
+)
+check(
+    "routing model metadata cannot create runtime capability",
+    routingModelOnlyDecision.disposition == .noEligibleRoute
+        && routingModelOnlyDecision.selectedCandidateID == nil
+)
+let routingDuplicatePool = AllowancePoolMetadata(poolID: "duplicate-fixture", unit: .turns)
+check(
+    "routing duplicate allowance snapshot fails closed without trapping",
+    DeterministicRouteResolver.route(
+        requirements: routingFixtureRequirements,
+        runtimes: [routingFixtureRuntime],
+        allowances: [routingDuplicatePool, routingDuplicatePool],
+        policy: DeterministicRoutingPolicy(version: "selftest-policy")
+    ).disposition == .invalidInput
+)
+check(
+    "routing receipt preserves policy, requirements and unknown allowance",
+    routingFixtureDecision.inputs.requirements == routingFixtureRequirements
+        && routingFixtureDecision.inputs.policy.prohibitedSurfaces.contains(.chatGPTWork)
+        && !routingFixtureDecision.inputs.policy.allowWorkerCreation
+        && routingFixtureDecision.candidates.first?.allowance.state == .unknown
+        && (try? JSONDecoder().decode(RouteDecision.self, from: routingFixtureDecision.receiptData())) == routingFixtureDecision
+)
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
