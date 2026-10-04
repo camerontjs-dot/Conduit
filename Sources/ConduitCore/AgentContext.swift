@@ -158,8 +158,10 @@ public struct AgentContextItem: Identifiable, Equatable, Codable, Sendable {
         return "\(sourceReference):\(lineRange.lowerBound)-\(lineRange.upperBound)"
     }
 
-    /// Identity used for context-diff purposes. It intentionally excludes
-    /// presentation-only title and token estimates.
+    /// Legacy delimiter-separated fingerprint, retained for caller compatibility.
+    /// Arbitrary source/reference text can collide in this representation, so
+    /// context diffs compare typed identity fields instead. The fingerprint
+    /// intentionally excludes presentation-only title and token estimates.
     public var identityFingerprint: String {
         let range = lineRange.map { "\($0.lowerBound)-\($0.upperBound)" } ?? ""
         return [
@@ -281,7 +283,7 @@ public struct AgentContextItemChange: Equatable, Sendable {
 }
 
 public enum AgentContextDiffer {
-    /// Compares stable item IDs, then exact identity fingerprints. File names or
+    /// Compares stable item IDs, then typed identity fields. File names or
     /// display titles alone are never used to infer sameness.
     public static func diff(
         previous: AgentContextBundle,
@@ -303,7 +305,7 @@ public enum AgentContextDiffer {
         let changed = before.keys
             .compactMap { id -> AgentContextItemChange? in
                 guard let old = before[id], let new = after[id],
-                      old.identityFingerprint != new.identityFingerprint else {
+                      !hasSameIdentity(old, new) else {
                     return nil
                 }
                 return AgentContextItemChange(before: old, after: new)
@@ -311,6 +313,16 @@ public enum AgentContextDiffer {
             .sorted { $0.after.id < $1.after.id }
 
         return AgentContextDiff(added: added, removed: removed, changed: changed)
+    }
+
+    private static func hasSameIdentity(_ lhs: AgentContextItem, _ rhs: AgentContextItem) -> Bool {
+        lhs.kind == rhs.kind
+            && lhs.authority == rhs.authority
+            && lhs.sourceReference == rhs.sourceReference
+            // Preserve the existing equivalence of absent and empty revisions.
+            && (lhs.revisionIdentity ?? "") == (rhs.revisionIdentity ?? "")
+            && lhs.lineRange == rhs.lineRange
+            && lhs.freshness == rhs.freshness
     }
 }
 
