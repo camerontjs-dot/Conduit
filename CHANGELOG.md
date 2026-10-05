@@ -52,12 +52,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
-- Thread recognition now has a bounded task-rail composition candidate: rows show conversation recency separately from generic task activity, while hover/focus reads one retained recognition snapshot without selecting, reconnecting, adopting, launching, sending, or subscribing the rail to token-by-token output. Native and mounted acceptance remain pending for the composition.
-  Task rows explicitly participate in SwiftUI focus so the recognition card can
-  be reached by keyboard focus on modern macOS without changing the global
-  Keyboard Navigation setting.
+- Task-rail thread recognition now shows conversation-aware recency and bounded
+  retained prompt/output previews on pointer hover or keyboard focus. Persisted,
+  live, missing and diagnostic source states remain distinct, and high-frequency
+  conversation revisions stay outside the narrow sidebar projection.
 
-- Pure Core retained-thread recognition candidate: preserve prompt origins, delivery and output capture authority; distinguish bounded-window absence; and provide bounded exact previews. Source is uncompiled and not mounted in the task rail; native checks remain pending.
+- Conversation prompt and output timestamps keep their compact display but reveal
+  the exact absolute event time, including seconds, on pointer hover or keyboard
+  focus. Output timestamps are labelled as first observation, not completion.
 
 - Settings now includes an explicit **Run ChatGPT tunnel with Conduit** control.
   Conduit starts and stops only the `tunnel-client` process it owns, reports a
