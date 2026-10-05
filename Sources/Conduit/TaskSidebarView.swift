@@ -22,7 +22,11 @@ struct TaskSidebarView: View {
     @State private var taskToRename: TaskSessionSnapshot?
     @State private var taskToEnd: TaskSessionSnapshot?
     @State private var showTaskHistoryDiagnostics = false
+    @State private var hoveredTaskSessionID: TaskSessionID?
+    @State private var recognitionTaskSessionID: TaskSessionID?
+    @State private var recognitionSnapshot: ThreadRecognitionSnapshot?
     @FocusState private var isTaskSearchFocused: Bool
+    @FocusState private var focusedTaskRowID: UUID?
 
     init(model: AppModel, sidebarModel: TaskSidebarModel) {
         self.model = model
@@ -48,6 +52,15 @@ struct TaskSidebarView: View {
             juicyEnabled: sidebar.juicyFeedbackEnabled,
             reduceMotion: reduceMotion
         )
+    }
+
+    /// Hover takes precedence over keyboard focus. Neither path selects the task
+    /// or changes provider/runtime authority.
+    private var recognitionTargetID: TaskSessionID? {
+        if let hoveredTaskSessionID {
+            return hoveredTaskSessionID
+        }
+        return focusedTaskRowID.map { TaskSessionID(rawValue: $0) }
     }
 
     private var pinnedRows: [TaskSessionCatalogRow] {
@@ -212,6 +225,18 @@ struct TaskSidebarView: View {
         }
         .onChange(of: sidebar.taskSearchFocusRequest) { _ in
             isTaskSearchFocused = true
+        }
+        .task(id: recognitionTargetID?.rawValue) {
+            guard let taskID = recognitionTargetID else {
+                recognitionTaskSessionID = nil
+                recognitionSnapshot = nil
+                return
+            }
+            recognitionTaskSessionID = taskID
+            recognitionSnapshot = nil
+            let snapshot = await model.threadRecognitionSnapshot(for: taskID)
+            guard recognitionTargetID == taskID else { return }
+            recognitionSnapshot = snapshot
         }
     }
 
@@ -410,7 +435,8 @@ struct TaskSidebarView: View {
 
     private func taskRow(_ row: TaskSessionCatalogRow) -> some View {
         let isSelected = sidebar.selectedTaskSessionID == row.id
-        return HStack(alignment: .center, spacing: 7) {
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 7) {
             Button {
                 model.selectTask(row.id)
             } label: {
@@ -430,6 +456,18 @@ struct TaskSidebarView: View {
                                     .foregroundStyle(palette.dim)
                                     .accessibilityLabel("Pinned")
                             }
+                            Spacer(minLength: 4)
+                            let cue = taskRecencyCue(row.session)
+                            HStack(spacing: 3) {
+                                Image(systemName: cue.isConversation ? "bubble.left" : "clock")
+                                    .font(.system(size: 8))
+                                    .accessibilityHidden(true)
+                                Text(cue.compact)
+                                    .font(.system(size: 9, design: .monospaced))
+                            }
+                            .foregroundStyle(palette.faint)
+                            .help(cue.help)
+                            .accessibilityLabel(cue.accessibilityLabel)
                         }
 
                         Text(
@@ -455,6 +493,12 @@ struct TaskSidebarView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Recognition is a focus-driven inspection affordance, not only
+            // button activation. Explicit participation keeps task rows
+            // keyboard-reachable on modern macOS without requiring the global
+            // Keyboard Navigation setting.
+            .focusable()
+            .focused($focusedTaskRowID, equals: row.id.rawValue)
             .accessibilityLabel(taskAccessibilityLabel(row, isSelected: isSelected))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityHint(
@@ -479,6 +523,11 @@ struct TaskSidebarView: View {
                 .accessibilityLabel("Reconnect \(row.session.displayTitle)")
                 .help("Explicitly reconnect to the observed tmux runtime")
             }
+            }
+
+            if recognitionTargetID == row.id {
+                threadRecognitionCard(row)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, sidebar.density == .focused ? 7 : 9)
@@ -491,6 +540,13 @@ struct TaskSidebarView: View {
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 9))
+        .onHover { isInside in
+            if isInside {
+                hoveredTaskSessionID = row.id
+            } else if hoveredTaskSessionID == row.id {
+                hoveredTaskSessionID = nil
+            }
+        }
         .scaleEffect(isSelected && playJuicyChrome ? 1.01 : 1.0)
         .animation(
             playJuicyChrome
@@ -1011,6 +1067,189 @@ struct TaskSidebarView: View {
             ? "\n\n…and \(remainder) more. Raw JSONL sources were preserved."
             : "\n\nRaw JSONL sources were preserved."
         return visible.joined(separator: "\n") + suffix
+    }
+
+    private struct TaskRecencyCue {
+        let compact: String
+        let isConversation: Bool
+        let help: String
+        let accessibilityLabel: String
+    }
+
+    private func taskRecencyCue(_ task: TaskSessionSnapshot) -> TaskRecencyCue {
+        let isConversation = task.lastConversationActivityAt != nil
+        let date = task.lastConversationActivityAt ?? task.lastActivityAt
+        let compact = compactRecency(date)
+        let exact = exactTimestamp(date)
+        let subject = isConversation ? "Last conversation activity" : "Last task activity"
+        return TaskRecencyCue(
+            compact: compact,
+            isConversation: isConversation,
+            help: "\(subject): \(exact)",
+            accessibilityLabel: "\(subject), \(exact)"
+        )
+    }
+
+    private func compactRecency(_ date: Date, now: Date = Date()) -> String {
+        let interval = max(0, now.timeIntervalSince(date))
+        if interval < 60 {
+            return "now"
+        }
+        if interval < 3_600 {
+            return "\(max(1, Int(interval / 60)))m"
+        }
+        let calendar = Calendar.current
+        if calendar.isDate(date, inSameDayAs: now) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        }
+        if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+        return date.formatted(.dateTime.year().month(.abbreviated).day())
+    }
+
+    private func exactTimestamp(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .standard)
+    }
+
+    @ViewBuilder
+    private func threadRecognitionCard(_ row: TaskSessionCatalogRow) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("THREAD")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.5)
+                    .foregroundStyle(palette.dim)
+                Spacer(minLength: 4)
+                if recognitionTaskSessionID == row.id,
+                   let recognitionSnapshot {
+                    Text(recognitionSourceLabel(recognitionSnapshot.source))
+                        .font(.system(size: 9))
+                        .foregroundStyle(palette.faint)
+                        .lineLimit(1)
+                } else {
+                    Text("Loading retained context…")
+                        .font(.system(size: 9))
+                        .foregroundStyle(palette.faint)
+                }
+            }
+
+            if recognitionTaskSessionID == row.id,
+               let recognitionSnapshot {
+                promptRecognition(recognitionSnapshot.latestPrompt)
+                outputRecognition(recognitionSnapshot.latestOutputBlock)
+            }
+        }
+        .padding(8)
+        .background(palette.surface.opacity(0.72))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(palette.lineSoft, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Thread recognition preview for \(row.session.displayTitle)")
+    }
+
+    @ViewBuilder
+    private func promptRecognition(
+        _ fact: ThreadRecognitionFact<ThreadRecognitionPrompt>
+    ) -> some View {
+        switch fact {
+        case .observed(let prompt):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Prompt · \(prompt.origin.displayName) · \(exactTimestamp(prompt.event.occurredAt))")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(palette.dim)
+                Text(prompt.preview.text.isEmpty ? "No prompt text retained." : prompt.preview.text)
+                    .font(.system(size: 10))
+                    .foregroundStyle(palette.text)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+                if prompt.preview.wasClipped || prompt.preview.sourceWasTruncated {
+                    Text("Excerpt is bounded.")
+                        .font(.system(size: 8))
+                        .foregroundStyle(palette.faint)
+                }
+            }
+        case .notObserved(let coverage):
+            Text("No prompt observed in \(recognitionCoverageLabel(coverage).lowercased()).")
+                .font(.system(size: 9))
+                .foregroundStyle(palette.faint)
+        case .unavailable(let reason):
+            Text("Prompt unavailable: \(recognitionUnavailableLabel(reason)).")
+                .font(.system(size: 9))
+                .foregroundStyle(palette.faint)
+        }
+    }
+
+    @ViewBuilder
+    private func outputRecognition(
+        _ fact: ThreadRecognitionFact<ThreadRecognitionOutput>
+    ) -> some View {
+        switch fact {
+        case .observed(let output):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Output · \(output.extraction.displayName) · \(exactTimestamp(output.event.occurredAt))")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(palette.dim)
+                Text(output.preview.text.isEmpty ? "No output text retained." : output.preview.text)
+                    .font(.system(size: 10))
+                    .foregroundStyle(palette.text)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+                if output.preview.wasClipped || output.preview.sourceWasTruncated {
+                    Text("Excerpt is bounded.")
+                        .font(.system(size: 8))
+                        .foregroundStyle(palette.faint)
+                }
+            }
+        case .notObserved(let coverage):
+            Text("No output observed in \(recognitionCoverageLabel(coverage).lowercased()).")
+                .font(.system(size: 9))
+                .foregroundStyle(palette.faint)
+        case .unavailable(let reason):
+            Text("Output unavailable: \(recognitionUnavailableLabel(reason)).")
+                .font(.system(size: 9))
+                .foregroundStyle(palette.faint)
+        }
+    }
+
+    private func recognitionSourceLabel(_ source: ThreadRecognitionSourceState) -> String {
+        switch source {
+        case .retained(let coverage):
+            return recognitionCoverageLabel(coverage)
+        case .unavailable(let reason):
+            return "Unavailable · \(recognitionUnavailableLabel(reason))"
+        }
+    }
+
+    private func recognitionCoverageLabel(_ coverage: ThreadRecognitionCoverage) -> String {
+        switch coverage {
+        case .completeRetainedTimeline:
+            return "Retained timeline"
+        case .boundedRetainedWindow:
+            return "Retained window"
+        }
+    }
+
+    private func recognitionUnavailableLabel(
+        _ reason: ThreadRecognitionUnavailableReason
+    ) -> String {
+        switch reason {
+        case .sourceNotLoaded: return "source not loaded"
+        case .sourceMissing: return "source missing"
+        case .sourceUnreadable: return "source unreadable"
+        case .sourceHasDiagnostics: return "source has diagnostics"
+        case .duplicateEventIdentity: return "duplicate event identity"
+        case .invalidEventAuthority: return "invalid event authority"
+        case .invalidEventTime: return "invalid event time"
+        case .invalidPreviewByteLimit: return "invalid preview limit"
+        case .notRetainedByInputContract: return "not retained by the input contract"
+        }
     }
 
     private func taskMetadataLine(_ task: TaskSessionSnapshot) -> String {
