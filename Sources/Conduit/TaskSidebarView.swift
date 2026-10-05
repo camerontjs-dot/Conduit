@@ -493,6 +493,11 @@ struct TaskSidebarView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Recognition is a focus-driven inspection affordance, not only
+            // button activation. Explicit participation keeps task rows
+            // keyboard-reachable on modern macOS without requiring the global
+            // Keyboard Navigation setting.
+            .focusable()
             .focused($focusedTaskRowID, equals: row.id.rawValue)
             .accessibilityLabel(taskAccessibilityLabel(row, isSelected: isSelected))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
