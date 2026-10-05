@@ -598,9 +598,12 @@ struct ConversationView: View {
                 ConversationCopyTurnButton(
                     text: ConversationTranscript.copyText(for: event)
                 )
-                Text(relativeOrClock(event.occurredAt))
-                    .font(.caption2)
-                    .foregroundStyle(palette.faint)
+                ConversationEventTimestampLabel(
+                    date: event.occurredAt,
+                    compactText: relativeOrClock(event.occurredAt),
+                    semanticLabel: "Prompt recorded",
+                    color: palette.faint
+                )
             }
             if !prompt.text.isEmpty {
                 Text(prompt.text)
@@ -679,9 +682,12 @@ struct ConversationView: View {
                 ConversationCopyTurnButton(
                     text: ConversationTranscript.copyText(for: event)
                 )
-                Text(relativeOrClock(event.occurredAt))
-                    .font(.caption2)
-                    .foregroundStyle(palette.faint)
+                ConversationEventTimestampLabel(
+                    date: event.occurredAt,
+                    compactText: relativeOrClock(event.occurredAt),
+                    semanticLabel: "Output first observed",
+                    color: palette.faint
+                )
             }
 
             if let thinking = split.thinking, !thinking.isEmpty {
@@ -995,6 +1001,34 @@ struct ConversationView: View {
     }
 }
 
+private struct ConversationEventTimestampLabel: View {
+    let date: Date
+    let compactText: String
+    let semanticLabel: String
+    let color: Color
+
+    @State private var isHovering = false
+    @FocusState private var isFocused: Bool
+
+    private var exactText: String {
+        date.formatted(date: .abbreviated, time: .standard)
+    }
+
+    var body: some View {
+        Text(isHovering || isFocused ? exactText : compactText)
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(color)
+            .fixedSize()
+            // The exact time is an inspection affordance. Explicit focus
+            // participation makes the same reveal available without a pointer.
+            .focusable()
+            .focused($isFocused)
+            .onHover { isHovering = $0 }
+            .help("\(semanticLabel): \(exactText)")
+            .accessibilityLabel("\(semanticLabel): \(exactText)")
+    }
+}
+
 // MARK: - Density metrics
 
 private struct ConversationLayoutMetrics {
@@ -1182,14 +1216,15 @@ struct ConversationHistoryView: View {
                 ConversationCopyTurnButton(
                     text: ConversationTranscript.copyText(for: event)
                 )
-                Text(
-                    event.occurredAt.formatted(
+                ConversationEventTimestampLabel(
+                    date: event.occurredAt,
+                    compactText: event.occurredAt.formatted(
                         date: .abbreviated,
                         time: .shortened
-                    )
+                    ),
+                    semanticLabel: "Prompt recorded",
+                    color: palette.faint
                 )
-                .font(.caption2)
-                .foregroundStyle(palette.faint)
             }
             if !prompt.text.isEmpty {
                 Text(prompt.text)
@@ -1234,14 +1269,15 @@ struct ConversationHistoryView: View {
                 ConversationCopyTurnButton(
                     text: ConversationTranscript.copyText(for: event)
                 )
-                Text(
-                    event.occurredAt.formatted(
+                ConversationEventTimestampLabel(
+                    date: event.occurredAt,
+                    compactText: event.occurredAt.formatted(
                         date: .abbreviated,
                         time: .shortened
-                    )
+                    ),
+                    semanticLabel: "Output first observed",
+                    color: palette.faint
                 )
-                .font(.caption2)
-                .foregroundStyle(palette.faint)
             }
             if displayText.isEmpty {
                 Text("(empty projection)")
