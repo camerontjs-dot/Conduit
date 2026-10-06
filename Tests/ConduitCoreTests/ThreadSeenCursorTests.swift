@@ -32,6 +32,7 @@ final class ThreadSeenCursorTests: XCTestCase {
         applicationIsActive: Bool = true,
         windowIsKey: Bool = true,
         windowIsVisible: Bool = true,
+        windowIsOcclusionVisible: Bool = true,
         visibleLatestRevision: ThreadOutputRevisionIdentity? = nil
     ) -> ThreadSeenObservation {
         ThreadSeenObservation(
@@ -40,6 +41,7 @@ final class ThreadSeenCursorTests: XCTestCase {
             applicationIsActive: applicationIsActive,
             windowIsKey: windowIsKey,
             windowIsVisible: windowIsVisible,
+            windowIsOcclusionVisible: windowIsOcclusionVisible,
             visibleLatestRevision: visibleLatestRevision ?? identity()
         )
     }
@@ -132,6 +134,17 @@ final class ThreadSeenCursorTests: XCTestCase {
         )
     }
 
+    func testOccludedWindowDoesNotAdvance() {
+        XCTAssertEqual(
+            ThreadSeenCursor.decide(
+                taskSessionID: taskID,
+                unseenState: .unseen(identity()),
+                observation: observation(windowIsOcclusionVisible: false)
+            ),
+            .unchanged
+        )
+    }
+
     func testMissingLatestVisibleRevisionDoesNotAdvance() {
         let receipt = ThreadSeenObservation(
             taskSessionID: taskID,
@@ -139,6 +152,7 @@ final class ThreadSeenCursorTests: XCTestCase {
             applicationIsActive: true,
             windowIsKey: true,
             windowIsVisible: true,
+            windowIsOcclusionVisible: true,
             visibleLatestRevision: nil
         )
         XCTAssertEqual(
