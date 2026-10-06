@@ -47,6 +47,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from mcp_catalog_contract import catalog_alignment
+
 HOST = "127.0.0.1"
 PORT = 8750
 BASE = f"http://{HOST}:{PORT}"
@@ -117,8 +119,8 @@ class SessionAPI:
         return parsed.get("result", {})
 
     def initialize(self) -> dict:
-        # Writes fail closed until an initialize is seen: caller identity on
-        # this listener is the clientInfo from the most recent initialize.
+        # Writes fail closed until valid initialize metadata is observed.
+        # clientInfo is an audit label; the shared bearer is the rate principal.
         return self._rpc(
             "initialize",
             {
@@ -343,24 +345,39 @@ def preflight(verbose: bool = True) -> dict:
     surface: dict = {}
     if ok:
         api = SessionAPI(load_token())
-        api.initialize()
+        initialized = api.initialize()
         tools = api.tools()
+        projects_payload = api.call("conduit_list_projects")
+        adapters_payload = api.call("conduit_list_adapters")
+        runtime_contract = projects_payload.get("mcp_contract") or {}
+        server_info = initialized.get("serverInfo") or {}
+        alignment = catalog_alignment(tools, runtime_contract, server_info)
+        # Keep malformed observations in the alignment result. Presentation
+        # filters cannot turn a partial catalogue into an execution prerequisite.
+        presentable_tools = [
+            tool for tool in tools
+            if isinstance(tool, dict)
+            and isinstance(tool.get("name"), str)
+            and isinstance(tool.get("annotations"), dict)
+        ] if isinstance(tools, list) else []
         surface = {
-            "tool_count": len(tools),
             "read_tools": [
-                t["name"] for t in tools
+                t["name"] for t in presentable_tools
                 if (t.get("annotations") or {}).get("readOnlyHint")
             ],
             "write_tools": [
-                t["name"] for t in tools
+                t["name"] for t in presentable_tools
                 if not (t.get("annotations") or {}).get("readOnlyHint")
             ],
             "projects": [
-                p.get("slug") for p in (api.call("conduit_list_projects").get("projects") or [])
+                p.get("slug") for p in (projects_payload.get("projects") or [])
             ],
             "adapters": [
-                a.get("name") for a in (api.call("conduit_list_adapters").get("adapters") or [])
+                a.get("name") for a in (adapters_payload.get("adapters") or [])
             ],
+            "server_info": server_info,
+            "runtime_contract": runtime_contract,
+            **alignment,
         }
     if verbose:
         print("=== Object under test (plan §1.1) ===")
@@ -374,6 +391,10 @@ def preflight(verbose: bool = True) -> dict:
             print(f"  write: {', '.join(surface['write_tools'])}")
             print(f"  projects: {len(surface['projects'])}")
             print(f"  adapters: {', '.join(a for a in surface['adapters'] if a)}")
+            print(f"  catalog_markers: {surface['catalog_markers']}")
+            print(f"  catalog_aligned: {surface['catalog_aligned']}")
+            if not surface["catalog_aligned"]:
+                print(f"  ! alignment issues: {surface['catalog_alignment_issues']}")
     return {"pin": pin, "listener_up": ok, "listener_detail": detail,
             "writes_enabled": gate, "surface": surface}
 
@@ -825,6 +846,11 @@ def main() -> int:
         print("  Launch Conduit.app and enable 'Listen for Session API on loopback'.")
         write_receipt(pre, None, "BLOCKED — listener down; no write attempted.")
         return 2
+
+    if not pre["surface"].get("catalog_aligned"):
+        print("\nREFUSED: supplied tools/list and runtime MCP contract are not internally aligned.")
+        write_receipt(pre, None, "BLOCKED — catalogue alignment unavailable; no write attempted.")
+        return 6
 
     if not args.run:
         print("\nPreflight only. Nothing was written.")

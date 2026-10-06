@@ -39,6 +39,17 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Changed
 
+- MCP tool descriptions and runtime results now expose one catalogue identity
+  and the current tool footprint. The offline catalogue check refuses partial,
+  malformed or contradictory metadata before the existing canary proceeds.
+  Internal alignment does not establish hosted-client cache refresh.
+
+- Session API admission now uses its existing shared bearer as one principal;
+  the latest initialize label remains audit metadata. All seven recognized
+  writes require initialized caller context, including provider adoption,
+  while preserving the write gate and existing admission/writer policies.
+  Native, isolated field and fresh consequential qualification remain separate.
+
 - Product documentation now describes the existing structured hosts,
   app-hosted control plane and proposal-only Orchestrate baseline. The master
   plan points to the current #60 train and separates landed components from

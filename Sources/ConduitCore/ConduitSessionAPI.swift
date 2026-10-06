@@ -43,20 +43,37 @@ public struct ConduitSessionSnapshot: Equatable, Sendable {
     }
 }
 
-/// Who is on the other end of a Session API request.
+/// Admission principal and separately observed audit metadata for a request.
 ///
-/// The listener holds one bearer token and speaks MCP `2024-11-05`, which has
-/// no per-request session header, so identity is the `clientInfo` from the most
-/// recent `initialize` on this listener. That bounds the total write rate
-/// through the MCP surface; it is not proof of per-caller isolation between two
-/// clients sharing the token.
+/// The current listener authenticates one shared bearer credential. Its latest
+/// valid initialize.clientInfo is an audit label, never a separately authenticated
+/// caller or a fresh rate bucket. This does not provide per-client isolation.
 public struct ConduitSessionCaller: Equatable, Sendable {
     public let identity: String?
     public let observedAt: Date?
+    public let clientInfo: String?
 
-    public init(identity: String?, observedAt: Date?) {
+    public init(identity: String?, observedAt: Date?, clientInfo: String? = nil) {
         self.identity = identity
         self.observedAt = observedAt
+        self.clientInfo = clientInfo
+    }
+
+    /// Use only after the existing exact bearer authentication succeeds.
+    /// A missing audit label preserves the listener's fail-closed initialize
+    /// prerequisite; supplying a label does not authenticate a new principal.
+    public static func authenticatedBySharedBearer(
+        clientInfo: String?,
+        observedAt: Date?
+    ) -> ConduitSessionCaller {
+        guard let label = clientInfo?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !label.isEmpty
+        else { return .unidentified }
+        return ConduitSessionCaller(
+            identity: "session-api-shared-bearer-v1",
+            observedAt: observedAt,
+            clientInfo: label
+        )
     }
 
     public static let unidentified = ConduitSessionCaller(
@@ -134,6 +151,16 @@ public enum ConduitSessionAPI {
              .lifecycleOperation, .interrupt, .closeSession:
             return true
         }
+    }
+
+    /// Only the listener's initialization prerequisite. Bearer authentication,
+    /// the local write gate, admission budgets and target authority are separate.
+    public static func callerContextAllows(
+        _ command: ConduitSessionCommand,
+        caller: ConduitSessionCaller
+    ) -> Bool {
+        !isWrite(command)
+            || caller.identity?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     public static func allowsCommand(

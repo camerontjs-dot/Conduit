@@ -2065,3 +2065,54 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-076: MCP catalogue identity and shared-bearer caller accounting
+
+**Status:** Proposed (2026-10-03; bounded source successor to #46/#47)
+
+**Context:** The [chat-first programme's adopted caller-contract stack](https://github.com/camerontjs-dot/Conduit/issues/4#issuecomment-5743092365)
+includes catalogue freshness (#46) and honest shared-bearer admission accounting
+(#47). The frozen Drafts remain historical candidates. #47's offline catalogue
+marker pattern failed compilation in a separately preserved source check; that
+result does not establish a live listener or provider failure.
+
+**Proposal:**
+
+1. Derive the catalogue comparison marker, runtime tool-name footprint and
+   write-tool footprint from the existing Core catalogue. The current contract
+   has eighteen tools and seven writes. Bump the catalogue identity when a
+   caller-facing schema or description changes. Runtime metadata repeats the
+   existing create-task delivery/retry rule without converting delivery into
+   completion, verification or objective acceptance.
+2. The existing listener authenticates one exact shared bearer credential.
+   After that check succeeds, its caller factory uses one admission principal.
+   The latest valid initialize.clientInfo and observation time remain audit
+   metadata. Changing the label or audit time must not create a new rate bucket.
+   This supplies no per-client capability isolation or per-request attribution.
+3. Preserve the local write gate. Apply the already adopted fail-closed
+   initialize prerequisite at the common recognized typed-write dispatch,
+   including provider-session adoption. This prerequisite adds no adoption
+   budget, writer claim, workspace lease or execution capacity policy.
+4. Use a pure offline helper to refuse missing, partial, duplicate, malformed,
+   mixed or stale catalogue observations and contradictory runtime/initialize
+   metadata. The existing canary reports that alignment before proceeding.
+   Internal alignment is an apparatus prerequisite, not hosted-client cache
+   refresh evidence or authorization to run the canary.
+
+**Evidence boundary:** Core and offline fixtures can exercise this source
+contract. Exact native handler checks, fresh consequential qualification,
+isolated mounted acceptance and actual hosted-client freshness remain separate
+gates. Neither this Proposed record nor a source pass qualifies the entire
+chat-first programme, adopts a persistent host, installs a build, changes
+credentials or authorizes real provider work.
+
+> **Binds:** implementation and qualification of this proposed caller-contract successor.
+> **Tier:** T0, proposal and evidence guidance.
+> **Check:** no enforcement by this record; Core/SelfTest, offline pressure and separately authorized native/field receipts establish their own evidence.
+> **Escape:** preserve frozen predecessors and failed controls; leave unavailable qualification UNKNOWN/NOT_RUN and repair defects in a separately identified successor.
+
+**Reconsideration trigger:** A separately adopted authority may introduce
+independently authenticated client capabilities. A label supplied by a client
+cannot establish that authority.

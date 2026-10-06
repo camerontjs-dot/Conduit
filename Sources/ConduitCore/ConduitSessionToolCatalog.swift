@@ -5,6 +5,31 @@ import Foundation
 /// Dispatch and runtime writes remain app-target responsibilities. Keeping the
 /// catalog here makes the caller-facing contract testable without AppKit.
 public enum ConduitSessionToolCatalog {
+    /// A comparison marker for caller-facing schema/description changes.
+    /// Matching it does not prove a hosted client refreshed its cached tools.
+    public static let catalogIdentity = "2026-10-03.1"
+    public static let serverVersion = "1.3"
+    public static let createTaskObjectiveDeliveryContract =
+        "delivered=no-resend;queued=no-resend;failed=resend-required"
+
+    public static var runtimeContractMetadata: [String: Any] {
+        [
+            "catalog_identity": catalogIdentity,
+            "server_version": serverVersion,
+            "create_task_objective_delivery": createTaskObjectiveDeliveryContract,
+            "tool_names": readToolNames + writeToolNames,
+            "write_tool_names": writeToolNames,
+        ]
+    }
+
+    /// Preserve the handler's disposition and evidence; append only the current
+    /// caller contract. Metadata never upgrades delivery into task acceptance.
+    public static func annotatingRuntimeResult(_ payload: [String: Any]) -> [String: Any] {
+        var result = payload
+        result["mcp_contract"] = runtimeContractMetadata
+        return result
+    }
+
     /// The published catalog is deliberately independent of local write
     /// authorization. Some MCP clients snapshot tools/list and otherwise never
     /// discover a lifecycle action after the operator enables it. The server
@@ -396,7 +421,7 @@ public enum ConduitSessionToolCatalog {
         if !required.isEmpty { inputSchema["required"] = required }
         var result: [String: Any] = [
             "name": name,
-            "description": description,
+            "description": "\(description) [Conduit MCP catalog \(catalogIdentity)]",
             "annotations": annotations,
             "inputSchema": inputSchema,
         ]
