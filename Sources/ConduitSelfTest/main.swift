@@ -3837,6 +3837,10 @@ do {
             && packet([40, 30]).validationReasons(maximumTokens: 69) == [budgetReason])
 }
 
+runThreadUnseenOutputChecks { name, condition in
+    check(name, condition)
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
