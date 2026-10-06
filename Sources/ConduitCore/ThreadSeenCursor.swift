@@ -11,6 +11,7 @@ public struct ThreadSeenObservation: Equatable, Sendable {
     public let applicationIsActive: Bool
     public let windowIsKey: Bool
     public let windowIsVisible: Bool
+    public let windowIsOcclusionVisible: Bool
     public let visibleLatestRevision: ThreadOutputRevisionIdentity?
 
     public init(
@@ -19,6 +20,7 @@ public struct ThreadSeenObservation: Equatable, Sendable {
         applicationIsActive: Bool,
         windowIsKey: Bool,
         windowIsVisible: Bool,
+        windowIsOcclusionVisible: Bool,
         visibleLatestRevision: ThreadOutputRevisionIdentity?
     ) {
         self.taskSessionID = taskSessionID
@@ -26,6 +28,7 @@ public struct ThreadSeenObservation: Equatable, Sendable {
         self.applicationIsActive = applicationIsActive
         self.windowIsKey = windowIsKey
         self.windowIsVisible = windowIsVisible
+        self.windowIsOcclusionVisible = windowIsOcclusionVisible
         self.visibleLatestRevision = visibleLatestRevision
     }
 }
@@ -66,7 +69,8 @@ public enum ThreadSeenCursor {
             }
             guard observation.applicationIsActive,
                   observation.windowIsKey,
-                  observation.windowIsVisible
+                  observation.windowIsVisible,
+                  observation.windowIsOcclusionVisible
             else {
                 return .unchanged
             }
