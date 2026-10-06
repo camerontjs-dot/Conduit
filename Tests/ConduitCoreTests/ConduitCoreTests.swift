@@ -357,7 +357,7 @@ final class HostEnvelopeTests: XCTestCase {
             prompt: "say hello",
             context: HostEnvelope.Context(
                 taskSessionID: "TASK-1",
-                projectPath: "/Users/admin/Desktop/MainFrame",
+                projectPath: "/Users/example/Desktop/MainFrame",
                 agentName: "Grok",
                 surface: "conversation",
                 tmuxSessionName: "conduit-mainframe-grok-1",
@@ -423,7 +423,7 @@ final class ConversationDisplayTextTests: XCTestCase {
         LSP
         LSPs are disabled
         Build · Big Pickle · 3.8s
-        /Users/admin/Desktop/MainFrame
+        /Users/example/Desktop/MainFrame
         """
         let text = ConversationDisplayText.workstationDerived(raw)
         XCTAssertTrue(text.contains("opencode built-in"))
@@ -484,7 +484,7 @@ final class AgentSlashCatalogTests: XCTestCase {
     func testLooksLikeSlashCommandAcceptsCompact() {
         XCTAssertTrue(AgentSlashCatalog.looksLikeSlashCommand("/compact"))
         XCTAssertTrue(AgentSlashCatalog.looksLikeSlashCommand("  /model opus  "))
-        XCTAssertFalse(AgentSlashCatalog.looksLikeSlashCommand("/Users/admin/file"))
+        XCTAssertFalse(AgentSlashCatalog.looksLikeSlashCommand("/Users/example/file"))
         XCTAssertFalse(AgentSlashCatalog.looksLikeSlashCommand("hello"))
         XCTAssertFalse(AgentSlashCatalog.looksLikeSlashCommand("/"))
     }
@@ -590,9 +590,9 @@ final class GitReviewParserTests: XCTestCase {
     }
 
     func testDetectsAbsolutePaths() {
-        let text = "Wrote /Users/admin/Desktop/MainFrame/00_inbox/note.md and ignored relative paths."
+        let text = "Wrote /Users/example/Desktop/MainFrame/00_inbox/note.md and ignored relative paths."
         let paths = ProjectedPathDetector.detectAbsolutePaths(in: text)
-        XCTAssertTrue(paths.contains("/Users/admin/Desktop/MainFrame/00_inbox/note.md"))
+        XCTAssertTrue(paths.contains("/Users/example/Desktop/MainFrame/00_inbox/note.md"))
     }
 }
 

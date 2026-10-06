@@ -1602,7 +1602,7 @@ withTempDir { root in
     check("slash catalog recognizes /compact",
           AgentSlashCatalog.looksLikeSlashCommand("/compact"))
     check("slash catalog rejects absolute paths",
-          AgentSlashCatalog.looksLikeSlashCommand("/Users/admin/x") == false)
+          AgentSlashCatalog.looksLikeSlashCommand("/Users/example/x") == false)
     check(
         "slash catalog matches /com to compact",
         AgentSlashCatalog.matches(query: "/com", projectPath: nil)
