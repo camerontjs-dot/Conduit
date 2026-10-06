@@ -65,7 +65,7 @@ docs/QUICK_START.md | 30_projects | intentional MainFrame integration contract
 docs/MIGRATION_2026-08-29.md | 30_projects | intentional local-only boundary statement
 docs/MIGRATION_2026-08-29.md | 20_live | intentional local-only boundary statement
 Sources/ConduitCore/AgentSlashCatalog.swift | Users/... | intentional synthetic path fixture
-Sources/ConduitSelfTest/main.swift | Users/admin | intentional synthetic path fixture
+Sources/ConduitSelfTest/main.swift | Users/example | intentional synthetic path fixture
 Sources/ConduitSelfTest/main.swift | Users/someone | intentional synthetic path fixture
-Tests/ConduitCoreTests/ConduitCoreTests.swift | Users/admin | intentional synthetic path fixture
+Tests/ConduitCoreTests/ConduitCoreTests.swift | Users/example | intentional synthetic path fixture
 Tests/ConduitCoreTests/ConduitSessionListTests.swift | Users/someone | intentional synthetic path fixture
