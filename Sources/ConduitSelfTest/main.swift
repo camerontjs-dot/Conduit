@@ -3841,6 +3841,10 @@ runThreadUnseenOutputChecks { name, condition in
     check(name, condition)
 }
 
+runThreadSeenCursorChecks { name, condition in
+    check(name, condition)
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
