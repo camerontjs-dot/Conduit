@@ -12,6 +12,7 @@ the following for the same task:
 - the application is active;
 - the owning window is key;
 - the owning window is visible;
+- AppKit reports the window as occlusion-visible;
 - the exact latest unseen output revision is the revision actually visible.
 
 Task selection, task existence, task-row hover/focus, provider output state,
@@ -26,7 +27,7 @@ newer unseen revision.
 This slice does not:
 
 - detect actual viewport visibility;
-- read AppKit window state;
+- read AppKit window state or occlusion state;
 - persist or reload a cursor;
 - change the task rail;
 - add badges or unseen counts;
