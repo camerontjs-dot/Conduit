@@ -37,6 +37,7 @@ func runThreadSeenCursorChecks(_ check: (String, Bool) -> Void) {
         applicationIsActive: true,
         windowIsKey: true,
         windowIsVisible: true,
+        windowIsOcclusionVisible: true,
         visibleLatestRevision: revised
     )
 
@@ -92,6 +93,23 @@ func runThreadSeenCursorChecks(_ check: (String, Bool) -> Void) {
                 applicationIsActive: true,
                 windowIsKey: true,
                 windowIsVisible: true,
+                visibleLatestRevision: revised
+            )
+        ) == .unchanged
+    )
+
+    check(
+        "seen cursor occluded window does not advance",
+        ThreadSeenCursor.decide(
+            taskSessionID: taskID,
+            unseenState: .unseen(revised),
+            observation: ThreadSeenObservation(
+                taskSessionID: taskID,
+                surface: .conversation,
+                applicationIsActive: true,
+                windowIsKey: true,
+                windowIsVisible: true,
+                windowIsOcclusionVisible: false,
                 visibleLatestRevision: revised
             )
         ) == .unchanged
