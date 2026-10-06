@@ -61,6 +61,7 @@ func runThreadSeenCursorChecks(_ check: (String, Bool) -> Void) {
                 applicationIsActive: true,
                 windowIsKey: true,
                 windowIsVisible: true,
+                windowIsOcclusionVisible: true,
                 visibleLatestRevision: first
             )
         ) == .unchanged
@@ -77,6 +78,7 @@ func runThreadSeenCursorChecks(_ check: (String, Bool) -> Void) {
                 applicationIsActive: true,
                 windowIsKey: true,
                 windowIsVisible: true,
+                windowIsOcclusionVisible: true,
                 visibleLatestRevision: revised
             )
         ) == .unchanged
@@ -93,6 +95,7 @@ func runThreadSeenCursorChecks(_ check: (String, Bool) -> Void) {
                 applicationIsActive: true,
                 windowIsKey: true,
                 windowIsVisible: true,
+                windowIsOcclusionVisible: true,
                 visibleLatestRevision: revised
             )
         ) == .unchanged
@@ -126,6 +129,7 @@ func runThreadSeenCursorChecks(_ check: (String, Bool) -> Void) {
                 applicationIsActive: false,
                 windowIsKey: true,
                 windowIsVisible: true,
+                windowIsOcclusionVisible: true,
                 visibleLatestRevision: revised
             )
         ) == .unchanged
