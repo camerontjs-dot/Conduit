@@ -3845,6 +3845,10 @@ runThreadSeenCursorChecks { name, condition in
     check(name, condition)
 }
 
+runThreadSeenViewportChecks { name, condition in
+    check(name, condition)
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
