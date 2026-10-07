@@ -52,6 +52,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The latest rendered Conversation answer now carries a read-time viewport probe
+  for an ephemeral, exact-revision observation. It checks real scroll clipping
+  and owning AppKit window facts; it does not store a seen cursor or add badges.
+
 - Task-rail thread recognition now shows conversation-aware recency and bounded
   retained prompt/output previews on pointer hover or keyboard focus. Persisted,
   live, missing and diagnostic source states remain distinct, and high-frequency

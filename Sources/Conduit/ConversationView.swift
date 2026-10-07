@@ -707,12 +707,18 @@ struct ConversationView: View {
                         foreground: palette.text,
                         lineSpacing: layout.lineSpacing
                     )
+                    .background {
+                        outputViewportProbe(output, event: event)
+                    }
                 } else {
                     ConversationSelectableDocument(
                         text: split.answer,
                         foreground: palette.text,
                         lineSpacing: layout.lineSpacing
                     )
+                    .background {
+                        outputViewportProbe(output, event: event)
+                    }
                 }
                 if interactiveMenu {
                     interactiveMenuPanel(options: menuOptions)
@@ -727,6 +733,51 @@ struct ConversationView: View {
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Only a rendered answer document can supply tail geometry. Empty output,
+    /// thinking-only cards, provider activity and the global footer cannot.
+    @ViewBuilder
+    private func outputViewportProbe(
+        _ output: AgentVisibleOutput,
+        event: SessionPresentationEvent
+    ) -> some View {
+        if let taskID = runtime.descriptor.taskSessionID,
+           event.id == runtime.presentationEvents.last(where: {
+               if case .agentOutput = $0.kind { return true }
+               return false
+           })?.id {
+            ConversationViewportProbe(
+                taskSessionID: taskID,
+                revision: ThreadUnseenOutput.revisionIdentity(event: event, output: output),
+                currentContext: { [weak runtime, weak model] in
+                    guard let runtime, let model,
+                          runtime.descriptor.taskSessionID == taskID,
+                          model.selectedTaskSessionID == taskID,
+                          model.selectedTaskRuntime === runtime
+                    else { return nil }
+                    let source: ThreadRecognitionSourceState =
+                        model.selectedTaskConversationDiagnostics.isEmpty
+                            ? .retained(.boundedRetainedWindow)
+                            : .unavailable(.sourceHasDiagnostics)
+                    let state = ThreadUnseenOutput.project(
+                        taskSessionID: taskID,
+                        events: runtime.presentationEvents,
+                        source: source,
+                        lastSeenRevision: nil
+                    )
+                    let latest: ThreadOutputRevisionIdentity?
+                    if case .unseen(let identity) = state { latest = identity }
+                    else { latest = nil }
+                    return ConversationViewportContext(
+                        taskSessionID: taskID,
+                        surface: runtime.selectedSurface,
+                        latestRevision: latest
+                    )
+                }
+            )
+            .accessibilityHidden(true)
+        }
     }
 
     private func preservedThinkingBlock(_ text: String) -> some View {
