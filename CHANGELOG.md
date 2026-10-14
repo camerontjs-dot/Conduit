@@ -27,6 +27,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Contained filesystem observations preserve missing-file classification across macOS root aliases without weakening symlink or outside-root refusals.
+
 - Proposal context validation now rejects integer overflow and underflow in
   supplied token estimates without terminating the process. Unrepresentable
   totals remain invalid even at the largest budget; ordinary totals, negative
@@ -51,6 +53,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   for Conduit's actual checks, exact candidate identities and negative evidence.
 
 ### Added
+
+- `conduit_read_filesystem` adds bounded root-scoped directory listing, ordinary UTF-8 file reads and exact path metadata through Explorer Core, with explicit missing, unsafe, oversized and changed-file refusals. It does not enable Session API writes.
+- Descriptor-relative, no-follow Explorer reads retain path containment and refuse binary/special-file text interpretation.
 
 - Task-rail thread recognition now shows conversation-aware recency and bounded
   retained prompt/output previews on pointer hover or keyboard focus. Persisted,

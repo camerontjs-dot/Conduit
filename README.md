@@ -133,6 +133,11 @@ evidence rules and independent agent CLIs retain their authority.
 
 ### Local operations
 
+- Authenticated external filesystem inspection through
+  [`conduit_read_filesystem`](docs/FILESYSTEM_READ_API.md): bounded immediate
+  directory listing, exact ordinary UTF-8 reads, and live source metadata over
+  Explorer Core, with explicit failures and separate Session API write authority.
+
 - Conduit Doctor for CLI paths, versions, MainFrame structure, tmux, microphone, and speech permissions
 - Resource Deck for memory use, largest processes, loaded Ollama models, and one-click Ollama unloading
 - Native settings stored in `~/.conduit/config.json`

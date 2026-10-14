@@ -46,6 +46,13 @@ public enum MainframeExplorerVisualKind: String, CaseIterable, Sendable {
 }
 
 public enum MainframeExplorerVisualClassifier {
+    /// Shared reader eligibility for known binary/media extensions. SVG is
+    /// ordinary XML text. Unknown extensions still require UTF-8/content checks.
+    public static func isKnownNonText(fileName: String) -> Bool {
+        let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
+        return binaryExtensions.contains(ext) || (assetExtensions.contains(ext) && ext != "svg")
+    }
+
     public static func classify(_ node: MainframeExplorerNode) -> MainframeExplorerVisualKind {
         if node.kind == .symbolicLink { return .symbolicLink }
         if node.kind == .directory { return classifyDirectory(node) }
