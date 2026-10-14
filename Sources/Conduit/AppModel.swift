@@ -6469,7 +6469,8 @@ final class AppModel: ObservableObject {
             attachmentPaths: [],
             renderedPayload: text
         )
-        runtime.selectedSurface = .conversation
+        // API delivery records task events without switching the human UI
+        // Raw/Conversation presentation of this session.
         // A structured host that has not finished starting used to refuse the
         // prompt outright and tell the caller to send it again. That made
         // create_task(objective:) undeliverable on every structured backend:
