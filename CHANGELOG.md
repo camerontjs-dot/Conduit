@@ -27,6 +27,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Hosted Session API delivery no longer changes the human-selected task.
+  A different project open in the macOS UI cannot inject a project-mismatch
+  error after an authorized ChatGPT prompt was accepted for another task.
+  Human UI project-selection guards remain unchanged.
+
 - Proposal context validation now rejects integer overflow and underflow in
   supplied token estimates without terminating the process. Unrepresentable
   totals remain invalid even at the largest budget; ordinary totals, negative

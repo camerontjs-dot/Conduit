@@ -6460,7 +6460,9 @@ final class AppModel: ObservableObject {
         to runtime: TerminalRuntime,
         origin: ConduitSessionOrigin
     ) -> [String: Any] {
-        _ = selectSession(runtime)
+        // Hosted delivery targets an admitted task, independent of the human
+        // UI project selection. Do not redirect the operator UI selected task
+        // or capture a spurious project-mismatch error after acceptance.
         let eventID = runtime.recordPrompt(
             origin: origin.promptOrigin,
             text: text,
