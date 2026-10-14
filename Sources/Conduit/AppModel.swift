@@ -6460,14 +6460,17 @@ final class AppModel: ObservableObject {
         to runtime: TerminalRuntime,
         origin: ConduitSessionOrigin
     ) -> [String: Any] {
-        _ = selectSession(runtime)
+        // Hosted delivery targets an admitted task, independent of the human
+        // UI project selection. Do not redirect the operator UI selected task
+        // or capture a spurious project-mismatch error after acceptance.
         let eventID = runtime.recordPrompt(
             origin: origin.promptOrigin,
             text: text,
             attachmentPaths: [],
             renderedPayload: text
         )
-        runtime.selectedSurface = .conversation
+        // API delivery records task events without switching the human UI
+        // Raw/Conversation presentation of this session.
         // A structured host that has not finished starting used to refuse the
         // prompt outright and tell the caller to send it again. That made
         // create_task(objective:) undeliverable on every structured backend:
