@@ -7,7 +7,7 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 18)
+        XCTAssertEqual(names.count, 19)
         XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 7)
     }
 
