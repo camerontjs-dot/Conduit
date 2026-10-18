@@ -1390,7 +1390,7 @@ final class AppModel: ObservableObject {
                     "--top-k", "\(cappedTopK)",
                     "--json",
                     "--envelope",
-                    "--nominations",
+                    "--nominations", "--nomination-scope", scope.rawValue,
                     "--no-intent",
                 ],
                 timeout: 90
@@ -1429,6 +1429,11 @@ final class AppModel: ObservableObject {
     func expandMindGraphNomination(
         _ nomination: MindGraphNomination
     ) async -> Result<MindGraphExpansion, MindGraphQueryError> {
+        do {
+            _ = try MindGraphExpansionBinding.validateRequest(nomination.expansionHandle, scope: nomination.scope.rawValue)
+        } catch {
+            return .failure(.invalidJSON("Expansion origin does not match the selected scope."))
+        }
         guard let binary = MindGraphQuerySupport.resolveBinary(
             mainframeRoot: settings.mainframeRoot
         ) else {
@@ -1446,7 +1451,7 @@ final class AppModel: ObservableObject {
                     "expand-nomination",
                     nomination.expansionHandle,
                     "--db", db.path,
-                    "--json",
+                    "--json", "--scope", nomination.scope.rawValue,
                 ],
                 timeout: 45
             )
@@ -1461,6 +1466,10 @@ final class AppModel: ObservableObject {
         }
 
         do {
+            guard let payload = MindGraphQuerySupport.extractJSONValue(from: Data(result.output.utf8)) else {
+                return .failure(.invalidJSON("Expansion response was invalid."))
+            }
+            try MindGraphExpansionBinding.validateResponse(payload, upstreamHandle: nomination.expansionHandle)
             let expansion = try MindGraphQuerySupport.decodeExpansion(
                 from: Data(result.output.utf8)
             )
@@ -4246,7 +4255,7 @@ final class AppModel: ObservableObject {
                 [
                     "query", askedQuestion, "--db", db.path,
                     "--top-k", "8", "--json", "--envelope",
-                    "--nominations", "--no-intent",
+                    "--nominations", "--nomination-scope", scope, "--no-intent",
                 ],
                 timeout: 45
             )
@@ -4282,85 +4291,40 @@ final class AppModel: ObservableObject {
                 ).prefix(500).description
             }
             return payload
+
         case .expandMindGraphNomination(let expansionHandle, let scope):
-            let trimmedHandle = expansionHandle.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            guard !trimmedHandle.isEmpty else {
-                return ["error": "expansion_handle is empty"]
+            let requested = expansionHandle.trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                _ = try MindGraphExpansionBinding.validateRequest(requested, scope: scope)
+            } catch {
+                return ["error": "MindGraph expansion origin is invalid or does not match the selected scope"]
             }
-            guard ConduitSessionAPI.allowsMindGraphScope(scope) else {
-                return ["error": "scope must be knowledge or projects"]
-            }
-            guard let binary = MindGraphQuerySupport.resolveBinary(
-                mainframeRoot: settings.mainframeRoot
-            ) else {
+            guard let binary = MindGraphQuerySupport.resolveBinary(mainframeRoot: settings.mainframeRoot) else {
                 return ["error": "mindgraph binary not found"]
             }
-            let parsedScope = scope == "projects"
-                ? MindGraphScope.projects
-                : MindGraphScope.knowledge
+            guard let parsedScope = MindGraphScope(rawValue: scope) else {
+                return ["error": "scope must be knowledge or projects"]
+            }
             let db = MindGraphQuerySupport.databaseURL(for: parsedScope)
             let result = SubprocessRunner.run(
                 binary.path,
-                [
-                    "expand-nomination", trimmedHandle,
-                    "--db", db.path,
-                    "--json",
-                ],
+                ["expand-nomination", requested, "--db", db.path, "--json", "--scope", scope],
                 timeout: 45
             )
-            guard result.status == 0 else {
-                return [
-                    "scope": scope,
-                    "exit_code": result.status,
-                    "error": "MindGraph expansion failed closed",
-                ]
+            guard !result.timedOut, result.status == 0 else {
+                return ["scope": scope, "exit_code": result.status, "error": "MindGraph expansion failed closed"]
             }
             do {
-                let expansion = try MindGraphQuerySupport.decodeExpansion(
-                    from: Data(result.output.utf8)
+                guard let bytes = MindGraphQuerySupport.extractJSONValue(from: Data(result.output.utf8)) else {
+                    return ["error": "MindGraph expansion response was invalid"]
+                }
+                var payload = try MindGraphExpansionBinding.agentResponse(
+                    bytes, expansionHandle: requested, scope: scope
                 )
-                guard expansion.trustProfile == nil
-                    || expansion.trustProfile == parsedScope.trustProfile else {
-                    return [
-                        "scope": scope,
-                        "exit_code": result.status,
-                        "error": "MindGraph expansion trust scope did not match requested scope",
-                    ]
-                }
-                var expansionPayload: [String: Any] = [
-                    "scope": scope,
-                    "exit_code": result.status,
-                    "authority": "source-backed expansion; context only, not verification",
-                    "expansion_handle": expansion.expansionHandle,
-                    "doc_id": expansion.docID,
-                    "chunk_index": expansion.chunkIndex,
-                    "display_path": expansion.displayPath,
-                    "title": expansion.title,
-                    "chunk_text": expansion.chunkText,
-                    "freshness": expansion.freshness,
-                    "citation_class": expansion.citationClass,
-                ]
-                if let contentHash = expansion.contentHash {
-                    expansionPayload["content_hash"] = contentHash
-                }
-                if let contentHashMatch = expansion.contentHashMatch {
-                    expansionPayload["content_hash_match"] = contentHashMatch
-                }
-                if let rawStatus = expansion.rawStatus {
-                    expansionPayload["raw_status"] = rawStatus
-                }
-                if let trustProfile = expansion.trustProfile {
-                    expansionPayload["trust_profile"] = trustProfile
-                }
-                return expansionPayload
+                payload["exit_code"] = result.status
+                return payload
             } catch {
-                return [
-                    "scope": scope,
-                    "exit_code": result.status,
-                    "error": "MindGraph expansion response was invalid",
-                ]
+                return ["scope": scope, "exit_code": result.status, "error": "MindGraph expansion response failed identity validation"]
             }
         case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
             return sessionAPICreateTask(
@@ -8013,6 +7977,79 @@ final class TerminalRuntime: ObservableObject, Identifiable {
               ) ?? EnvironmentResolver.shared.resolve("codex")
         else { return }
         controller.attachRemoteTUI(executable: executable, socketPath: socketPath)
+    }
+}
+#endif
+
+
+#if os(macOS) && DEBUG
+// Opt-in test seam, not an MCP tool or an installed-app mutation surface.
+extension AppModel {
+    static func repair88RequireIsolatedHome() throws -> URL {
+        let env = ProcessInfo.processInfo.environment
+        guard env["CONDUIT_REPAIR88_APP_TESTS"] == "1",
+              let configured = env["CONDUIT_QUALIFICATION_HOME"] else {
+            throw MindGraphExpansionBinding.BindingError("Explicit isolated qualification home required.")
+        }
+        let expected = URL(fileURLWithPath: configured).resolvingSymlinksInPath()
+        let actual = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath()
+        guard expected == actual,
+              FileManager.default.fileExists(atPath: expected.appendingPathComponent(".repair88-isolated-fixture").path) else {
+            throw MindGraphExpansionBinding.BindingError("Refusing qualification in a non-isolated home.")
+        }
+        return expected
+    }
+
+    func repair88SeedRecordedTask(root: URL) throws {
+        _ = try Self.repair88RequireIsolatedHome()
+        guard sessions.isEmpty, taskSessions.isEmpty else {
+            throw MindGraphExpansionBinding.BindingError("Qualification requires a fresh isolated app model.")
+        }
+        let id = TaskSessionID()
+        let event = TaskSessionEvent(
+            taskSessionID: id, authority: .conduitRecorded,
+            kind: .created(TaskSessionMetadata(
+                workspace: .root(RootWorkspaceScopeSnapshot(rootURL: root)),
+                agentName: "Qualification recorded worker", defaultTitle: "Populated context isolation"
+            ))
+        )
+        guard let snapshot = TaskSessionProjection.project(taskSessionID: id, events: [event]) else {
+            throw MindGraphExpansionBinding.BindingError("Could not seed recorded task fixture.")
+        }
+        taskSessions = [snapshot]
+        selectedTaskSessionID = id
+    }
+
+    /// Capture actual model inputs and the production Context IDE/handoff
+    /// projections, not a parallel fake list. No timestamps are normalized.
+    func repair88ContextState() throws -> Data {
+        _ = try Self.repair88RequireIsolatedHome()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let bundle = ContextIDEBridge.buildBundle(
+            title: "Populated context isolation", mainframeRoot: settings.mainframeRoot,
+            scopePath: selectedProject?.path, candidates: contextCandidates,
+            selectedIDs: selectedContextIDs
+        )
+        let assembled = ContextBundleBuilder().assemble(
+            documents: contextCandidates.filter { selectedContextIDs.contains($0.id) }
+        )
+        let handoff = AgentContextHandoffRenderer.render(
+            AgentContextHandoff(objective: "Populated context isolation", bundle: bundle)
+        )
+        let payload: [String: Any] = [
+            "selected_context": selectedContextIDs.sorted(),
+            "context_preview": contextPreview,
+            "context_bundle": try JSONSerialization.jsonObject(with: encoder.encode(bundle)),
+            "assembled": assembled.markdown,
+            "handoff": handoff,
+            "composer": composerText,
+            "attachment_paths": attachments.map { $0.url.path },
+            "tasks": try JSONSerialization.jsonObject(with: encoder.encode(taskSessions)),
+            "selected_task": selectedTaskSessionID?.rawValue.uuidString as Any? ?? NSNull(),
+            "runtime_ids": sessions.map { $0.id.uuidString }.sorted(),
+        ]
+        return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     }
 }
 #endif

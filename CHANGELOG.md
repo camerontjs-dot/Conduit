@@ -107,6 +107,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Progressive MindGraph expansion now checks the original scope and independent
+  stored index identity. The published Core tool catalog exposes expansion.
+  Legacy exp1 handles must be requeried; unknown index binding fails closed.
+  The provider-scope evidence pin is refreshed only after confirming its guarded
+  provider code is unchanged. Populated-model isolation has an opt-in app test.
+
 - Fleet keeps every provider inventory row visible but reads expensive
   turn/runtime detail only for sessions with a current exact Conduit task
   association or current Conduit writer authority. Skipped historical/external
