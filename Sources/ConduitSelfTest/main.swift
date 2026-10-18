@@ -3900,6 +3900,18 @@ runThreadSeenCursorChecks { name, condition in
     check(name, condition)
 }
 
+runDirectCommandSelfChecks { name, condition in
+    check(name, condition)
+}
+
+runDirectFilesystemSelfChecks { name, condition in
+    check(name, condition)
+}
+
+runSessionControlFeedbackChecks { name, condition in
+    check(name, condition)
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")

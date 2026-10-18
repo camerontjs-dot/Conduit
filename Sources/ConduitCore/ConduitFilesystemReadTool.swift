@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// One bounded observation surface over Explorer's live filesystem authority.
 /// This type has no task, runtime, provider, index, or persistence dependency.
@@ -85,6 +86,8 @@ public enum ConduitFilesystemReadTool {
                 let snapshot = try scanner.readUTF8Snapshot(root: root, file: item, maxBytes: bytes, ordinaryTextOnly: true)
                 result["metadata"] = metadata(snapshot.facts)
                 result["text"] = snapshot.text
+                result["sha256"] = SHA256.hash(data: snapshot.bytes).map { String(format: "%02x", $0) }.joined()
+                result["hash_scope"] = "exact_observed_file_bytes"
                 result["encoding"] = "utf-8"
                 result["truncated"] = false
                 result["read_consistency"] = "metadata_unchanged_during_read"

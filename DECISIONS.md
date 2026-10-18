@@ -2106,3 +2106,117 @@ claimed. Shared Core hardening also protects UI reads from link ancestors.
 **Qualification boundary:** The exact candidate still needs installed/tunnel
 `tools/list` and benign filesystem calls with task/runtime and write authority
 preserved. Source tests cannot establish ChatGPT's cached catalog freshness.
+
+---
+
+## D-061: Direct operations bind project scope and durable operation identity
+
+**Status:** Proposed (2026-10-18; implemented development candidate; independent
+and installed qualification pending)
+
+**Context:** The ChatGPT-first Local Operator direction in
+[#51](https://github.com/camerontjs-dot/Conduit/issues/51),
+[#60](https://github.com/camerontjs-dot/Conduit/issues/60) and
+[#170](https://github.com/camerontjs-dot/Conduit/issues/170) requires ordinary
+local work without a model agent. PTY output does not establish a typed command
+exit. File retries also need an exact operation identity and current-byte
+precondition so a lost response does not silently perform a second mutation.
+
+**Decision:**
+
+1. Direct project search, file mutation and command operations bypass task
+   creation and resolve the exact registered project independently of the
+   desktop selection. The configured root must be ready and authorized; the
+   MainFrame root itself is not an eligible direct-operation project.
+2. Observation and mutation have distinct MCP names and risk classifications.
+   Status lookup is a read. File writes, command submission and cancellation
+   retain local Session API write admission, bounded caller-label admission
+   and fresh resource checks. The shared bearer/client label does not become
+   independent authentication for multiple clients.
+3. File writes accept only one bounded ordinary UTF-8 create or replacement.
+   Creation requires absence; replacement requires SHA-256 of the exact
+   observed raw bytes. Held directory descriptors, no-follow resolution and
+   repeated path/identity/hash checks reject observed changes. Hidden and
+   instruction paths, links, unsupported types and metadata remain unsupported.
+   Replacement preserves the observed preimage but remains optimistic
+   concurrency, with an explicit final external-writer race limitation.
+4. Durable reservations bind exact IDs before mutation or possible spawn.
+   Replays return historical outcomes; changed requests conflict. Missing,
+   corrupt or interrupted history stays unknown and never authorizes a second
+   operation. Retention is bounded and refuses new IDs rather than silently
+   pruning retry protection. Status never creates or repairs a receipt store.
+5. The typed command runner uses literal argv, an exact cwd identity, bounded
+   separate output and a dedicated process group. Its receipts distinguish
+   acceptance, launch, exit, cancellation request, observed cancellation,
+   capacity release and uncertainty. A recovered PID is never adopted as
+   authority to signal a process. Process-group absence does not prove that
+   descendants could not escape that group.
+6. Production command execution is unavailable in this source slice. The
+   public service constructor grants no executable authority; an internal
+   disposable-fixture constructor exists for real process tests. A local write
+   switch and cwd alone are not an effective filesystem/network/process
+   confinement policy. The owner must choose an execution profile, the product
+   must enforce it, and that profile must pass its own qualification before
+   production execution can be enabled.
+
+**Consequences:** Search and exact file edits have direct bounded source
+implementations. Command requests have a reviewable contract and native
+test fixtures, with an honest authority refusal in the application. No model
+fallback, global permission change or implicit agent task follows a refusal.
+See [command](docs/DIRECT_COMMAND_API.md),
+[file operation](docs/DIRECT_FILESYSTEM_OPERATIONS.md) and
+[search](docs/DIRECT_FILESYSTEM_SEARCH.md) contracts for exact limits and
+recovery behavior.
+
+**Qualification boundary:** Disposable native process/filesystem tests and
+authenticated response-path tests are development evidence. They do not
+establish an installed app, fresh ChatGPT catalog, end-to-end artifact
+acceptance or independent review. The frozen #168 → #123 → #128 qualification
+campaign remains separate. Source assembly does not authorize merge, release
+or replacement of the operator's installed app.
+
+---
+
+## D-062: Shared task state has action-scoped presentation feedback
+
+**Status:** Proposed (2026-10-18; implemented development candidate; independent
+and mounted multi-client qualification pending)
+
+**Context:** [#174](https://github.com/camerontjs-dot/Conduit/issues/174) requires
+shared tasks, runtimes, IDs, history and artifacts while the desktop and hosted
+client keep their own selection, drafts, navigation and error presentation.
+Checking only the immediate API entry point misses mutations in shared helpers
+and delayed callbacks. Runtime-creator identity also becomes incorrect when
+human and hosted prompts later use the same runtime.
+
+**Decision:** Shared control helpers carry an explicit `SessionControlOrigin`.
+Only operator UI actions update operator selection, navigation memory, composer,
+New Task scope, panels, status and modal errors. Hosted actions still update
+the actual shared task/runtime/history state. No temporary snapshot/restore of
+published presentation state is used, so observers do not see an intermediate
+hosted selection change.
+
+Prompt and interrupt event IDs acquire an immutable, ephemeral presentation
+origin at the trusted entry point. Delayed revisions and linked output follow
+that exact prompt, even when client actions interleave. Caller-visible origin
+labels cannot select the operator feedback path. Old or unlinked events without
+established provenance remain unattributed; shared retention diagnostics remain
+observable without creating an unrelated operator alert. Lifecycle work carries
+its explicit initiating origin through deferred close/history callbacks.
+
+Hosted slash delivery reuses its admitted event rather than recording a second
+composer prompt. Delayed terminal injection updates that event's delivery
+observation; it does not claim provider receipt or command completion. Task
+status exposes the current process's conversation-retention state separately
+from runtime readiness and artifact verification.
+
+**Consequences:** The API and desktop act on the same task truth while control
+presentation belongs to the initiating action. This policy grants no process,
+filesystem, client-authentication or approval authority. It does not replace
+the distinct shared-bearer, global-diagnostics or stale-target candidates.
+
+**Qualification boundary:** Pure feedback-ledger tests exercise interleaved
+event attribution; source-flow regressions inspect real shared-helper wiring.
+They do not establish a mounted two-client UI journey. #174's required
+independent Codex model and isolated exposure conditions still apply; source
+authors and source-exposed peer reviewers are not independent qualifiers.

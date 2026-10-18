@@ -57,6 +57,10 @@ final class ConduitSessionAPIServer {
     private let token: String
     private let allowWrites: Bool
     private let filesystemRoot: () -> URL?
+    private let projectFilesystemRoot: (String) -> URL?
+    private let directCommandService: ConduitDirectCommandService?
+    private let filesystemMutationService: ConduitFilesystemMutationService?
+    private let directWriteAdmission: (ConduitSessionCaller) -> [String: Any]?
     private var readiness: ConduitSessionAPIReadiness = .bootstrapping
     private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     private nonisolated static let maximumHeaderBytes = 16_384
@@ -76,11 +80,21 @@ final class ConduitSessionAPIServer {
         token: String,
         allowWrites: Bool = false,
         filesystemRoot: @escaping () -> URL? = { nil },
+        projectFilesystemRoot: @escaping (String) -> URL? = { _ in nil },
+        directCommandService: ConduitDirectCommandService? = nil,
+        filesystemMutationService: ConduitFilesystemMutationService? = nil,
+        directWriteAdmission: @escaping (ConduitSessionCaller) -> [String: Any]? = { _ in
+            ["error": "Direct-operation write admission is unavailable."]
+        },
         handle: @escaping (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     ) {
         self.token = token
         self.allowWrites = allowWrites
         self.filesystemRoot = filesystemRoot
+        self.projectFilesystemRoot = projectFilesystemRoot
+        self.directCommandService = directCommandService
+        self.filesystemMutationService = filesystemMutationService
+        self.directWriteAdmission = directWriteAdmission
         self.handle = handle
     }
 
@@ -374,7 +388,7 @@ final class ConduitSessionAPIServer {
         let id: Any = {
             switch payload["id"] {
             case .string(let value): return value
-            case .number(let value): return Int(value)
+            case .number(let value): return value.isFinite ? value as Any : NSNull()
             case .bool(let value): return value
             default: return NSNull()
             }
@@ -426,12 +440,72 @@ final class ConduitSessionAPIServer {
 
     private static func intArgument(_ value: CodexJSON?) -> Int? {
         guard let value else { return nil }
-        if case .number(let number) = value { return Int(number) }
+        if case .number(let number) = value { return Int(exactly: number) }
         if let raw = value.stringValue { return Int(raw) }
         return nil
     }
 
     private func callTool(name: String, arguments: CodexJSON) -> [String: Any] {
+        let directWrites = [
+            ConduitDirectCommandTool.executeName,
+            ConduitDirectCommandTool.cancelName,
+            ConduitFilesystemMutationService.writeToolName,
+        ]
+        if directWrites.contains(name) && !allowWrites {
+            return Self.directToolResult([
+                "status": "writes_disabled",
+                "error": "Write tools are disabled. Enable Session API writes in Conduit Settings.",
+            ])
+        }
+        let caller = ConduitSessionCaller(identity: peerIdentity, observedAt: peerObservedAt)
+        if let operation = [
+            ConduitDirectCommandTool.executeName: "execute",
+            ConduitDirectCommandTool.statusName: "status",
+            ConduitDirectCommandTool.cancelName: "cancel",
+        ][name] {
+            var admissionRefusal: [String: Any]?
+            var payload = ConduitDirectCommandTool.perform(
+                operation: operation,
+                arguments: arguments,
+                projectRoot: projectFilesystemRoot(arguments["project_slug"]?.stringValue ?? ""),
+                service: directCommandService
+            ) {
+                if let refusal = self.directWriteAdmission(caller) {
+                    admissionRefusal = refusal
+                    let admission = refusal["admission"] as? [String: Any]
+                    throw ConduitDirectCommandError(
+                        code: "admission_refused",
+                        detail: admission?["detail"] as? String
+                            ?? refusal["error"] as? String
+                            ?? "The existing Session API write/resource gate refused this operation."
+                    )
+                }
+            }
+            if let admissionRefusal { payload["admission"] = admissionRefusal }
+            return Self.directToolResult(payload)
+        }
+        if name == ConduitFilesystemMutationService.writeToolName
+            || name == ConduitFilesystemMutationService.statusToolName {
+            guard let filesystemMutationService else {
+                return Self.directToolResult([
+                    "status": "file_operation_service_unavailable",
+                    "error": "The bounded file-operation receipt service is unavailable.",
+                ])
+            }
+            let root = projectFilesystemRoot(arguments["project_slug"]?.stringValue ?? "")
+            if name == ConduitFilesystemMutationService.statusToolName {
+                return filesystemMutationService.status(arguments: arguments, root: root)
+            }
+            return filesystemMutationService.call(arguments: arguments, root: root) {
+                self.directWriteAdmission(caller)
+            }
+        }
+        if name == ConduitFilesystemSearchTool.name {
+            return ConduitFilesystemSearchTool.call(
+                arguments: arguments,
+                root: projectFilesystemRoot(arguments["project_slug"]?.stringValue ?? "")
+            )
+        }
         if name == ConduitFilesystemReadTool.name {
             // Observation bypasses the session command handler entirely.
             return ConduitFilesystemReadTool.call(arguments: arguments, root: filesystemRoot())
@@ -644,6 +718,15 @@ final class ConduitSessionAPIServer {
             result["structuredContent"] = payload
         }
         return result
+    }
+
+    private static func directToolResult(_ payload: [String: Any]) -> [String: Any] {
+        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return [
+            "isError": payload["error"] != nil,
+            "content": [["type": "text", "text": data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"]],
+            "structuredContent": payload,
+        ]
     }
 
     // These annotations intentionally describe only the current MCP operation.

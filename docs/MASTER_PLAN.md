@@ -18,6 +18,47 @@ This file records the original workspace foundation and component status.
 Source implementation, independent qualification, mounted acceptance and
 release remain separate.
 
+## Active completion train — 2026-10-18
+
+The current direction is **ChatGPT-first local operation**, with agent
+delegation used when it adds value. The sequencing authority is the
+[#60 update](https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-6158666100)
+and [#51 update](https://github.com/camerontjs-dot/Conduit/issues/51#issuecomment-6158659475):
+ordinary Shell use, direct filesystem observation, typed direct commands,
+bounded file/search/process/artifact actions, then installed end-to-end parity
+and a versioned release before retiring the external fallback.
+
+The direct-operation completion candidate combines the exact source inputs
+from [#172](https://github.com/camerontjs-dot/Conduit/pull/172) and
+[#173](https://github.com/camerontjs-dot/Conduit/pull/173), then adds project
+search, bounded create/replace, durable command receipts and action-scoped
+client presentation. Their original qualification evidence remains tied to
+their original identities. [#111](https://github.com/camerontjs-dot/Conduit/pull/111)
+was closed as a superseded route with its branch and inconclusive evidence
+retained; that administrative closure was not a qualification pass.
+
+| Owner or lane | Source disposition | Remaining gate |
+| --- | --- | --- |
+| Local Operator [#51](https://github.com/camerontjs-dot/Conduit/issues/51), Explorer [#54](https://github.com/camerontjs-dot/Conduit/issues/54) | Direct reads, literal project search and bounded UTF-8 create/replace are in the completion candidate. | Exact-source checks, independent review and installed authenticated-client acceptance. Broader move/delete/process/artifact surfaces remain separate scope. |
+| Typed commands [#170](https://github.com/camerontjs-dot/Conduit/issues/170) | Native runner, durable ID/status/cancel contract and disposable process fixtures are implemented. Production execution explicitly refuses. | Choose and enforce operator-granted execution authority, then independent and installed two-round command/artifact acceptance. |
+| Client control [#174](https://github.com/camerontjs-dot/Conduit/issues/174) | Explicit action origin propagates through shared helpers, slash delivery and delayed feedback. | Required independent Codex qualification and a mounted interleaved-client UI journey. Entitlement must be observed for the required model; a catalog listing is insufficient. |
+| Frozen qualification train | [#168](https://github.com/camerontjs-dot/Conduit/pull/168) → [#123](https://github.com/camerontjs-dot/Conduit/pull/123) → [#128](https://github.com/camerontjs-dot/Conduit/pull/128); [#169](https://github.com/camerontjs-dot/Conduit/pull/169) retains the packet. | Preserve exact source/apparatus identities and exposure stops. New source work does not advance this train. |
+| Runtime/execution truth | [#82](https://github.com/camerontjs-dot/Conduit/pull/82), [#126](https://github.com/camerontjs-dot/Conduit/pull/126), [#137](https://github.com/camerontjs-dot/Conduit/pull/137) contain separate queue, cleanup and metadata work. | Required isolation, provider/process observations and mounted qualification; source tests alone do not establish execution custody. |
+| Distinct control boundaries | [#130](https://github.com/camerontjs-dot/Conduit/pull/130), [#135](https://github.com/camerontjs-dot/Conduit/pull/135), [#146](https://github.com/camerontjs-dot/Conduit/pull/146), [#147](https://github.com/camerontjs-dot/Conduit/pull/147) remain separate stale-target, receipt, shared-bearer and diagnostics candidates. | Preserve their authority and acceptance boundaries; #174 does not implicitly complete them. |
+| Explorer journeys | [#119](https://github.com/camerontjs-dot/Conduit/pull/119) → [#124](https://github.com/camerontjs-dot/Conduit/pull/124) → [#125](https://github.com/camerontjs-dot/Conduit/pull/125), [#129](https://github.com/camerontjs-dot/Conduit/pull/129) → [#131](https://github.com/camerontjs-dot/Conduit/pull/131), and [#144](https://github.com/camerontjs-dot/Conduit/pull/144) retain source implementations. | Mounted editing/conflict/navigation/query-isolation journeys on their exact candidate sources. |
+| Workspace custody [#120](https://github.com/camerontjs-dot/Conduit/pull/120) | Source contract is implemented. | Actual runtime cwd, writer lease and reuse observations. |
+| Context delivery | [#132](https://github.com/camerontjs-dot/Conduit/pull/132) and [#140](https://github.com/camerontjs-dot/Conduit/pull/140) → [#148](https://github.com/camerontjs-dot/Conduit/pull/148) → [#150](https://github.com/camerontjs-dot/Conduit/pull/150) preserve their stack. | Destination/delivery acceptance remains distinct from source gates. #132's later gate receipt supersedes its stale pending body. |
+| Proposal and orchestration contracts | [#122](https://github.com/camerontjs-dot/Conduit/pull/122), [#127](https://github.com/camerontjs-dot/Conduit/pull/127), [#134](https://github.com/camerontjs-dot/Conduit/pull/134), [#138](https://github.com/camerontjs-dot/Conduit/pull/138) contain source contracts. | Live inputs, explicit approval and mounted integration; a proposal or selection grants no execution authority. |
+| MindGraph and hosted research | The guarded [#90](https://github.com/camerontjs-dot/Conduit/pull/90)/[#95](https://github.com/camerontjs-dot/Conduit/pull/95) consumer assembly is complete at child `cb7afad034a5d0903438aa9d998bc93c266b305f`, on its historical source line. The [#89](https://github.com/camerontjs-dot/Conduit/pull/89) → [#93](https://github.com/camerontjs-dot/Conduit/pull/93) → [#94](https://github.com/camerontjs-dot/Conduit/pull/94) chain retains distinct inputs, including #91/#92. | Consumer source gates and exact-pair qualification remain separate. Materialize the existing MindGraph #31 producer object `0d60e88f6ac2a5ca26fa870774181c21a7afd65a`; do not recreate the closed #29 kit or treat these lanes as duplicates of #123. |
+| Integration [#142](https://github.com/camerontjs-dot/Conduit/pull/142) | Explicit operator HOLD remains in effect. | Replan from live Conduit and MindGraph authority before integration. |
+| Field and operational evidence | Entitlement [#113](https://github.com/camerontjs-dot/Conduit/issues/113), research [#76](https://github.com/camerontjs-dot/Conduit/issues/76), transport [#66](https://github.com/camerontjs-dot/Conduit/issues/66), and incident [#44](https://github.com/camerontjs-dot/Conduit/issues/44) remain evidence-driven work. | Actual model eligibility, preserved failure cases, ordinary supervisor transport and incident reproduction; no inferred automatic wake or higher-concurrency acceptance. |
+
+The [#50 umbrella](https://github.com/camerontjs-dot/Conduit/issues/50) and
+[#52 field notes](https://github.com/camerontjs-dot/Conduit/issues/52) are ongoing
+owner records. An open item is not necessarily unfinished code, and an
+administrative closure is not product acceptance. Current owning issue/PR
+receipts override this dated planning snapshot when newer evidence arrives.
+
 ## Current daily-driver condition
 
 Cameron can stay in Conduit for the ordinary MainFrame loop when:

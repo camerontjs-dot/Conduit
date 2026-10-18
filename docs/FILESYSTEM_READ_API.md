@@ -39,10 +39,20 @@ A nominated exact path can still be recovered directly, including a file
 created since the last listing.
 
 `read` preserves line endings and never silently excerpts an oversized file.
+It returns `sha256` of the exact observed raw bytes and
+`hash_scope: exact_observed_file_bytes`; a BOM and CRLF bytes participate in
+that hash. This is the value used as a bounded file replacement precondition.
 Known media/archive/database extensions, invalid UTF-8, binary control
 characters, and non-regular objects such as FIFOs/devices/sockets are refused.
 Unknown extensions and extensionless files can pass the ordinary-text check.
 The policy is conservative: a control-bearing log can remain unsupported.
+
+The companion [search](DIRECT_FILESYSTEM_SEARCH.md) and
+[bounded write](DIRECT_FILESYSTEM_OPERATIONS.md) tools resolve an exact
+`project_slug` and use **project-relative** paths. This existing read tool uses
+**MainFrame-root-relative** paths. Establish the project's location through
+the root listing before forming a read path; do not assume the two bases are
+interchangeable or strip an unverified absolute prefix.
 
 ## Containment and observations
 

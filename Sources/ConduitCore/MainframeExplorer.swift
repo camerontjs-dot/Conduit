@@ -130,6 +130,8 @@ public struct MainframeExplorerDirectorySnapshot: Sendable {
 
 public struct MainframeExplorerTextSnapshot: Sendable {
     public let text: String
+    /// Exact descriptor-read bytes, retained for byte-identity preconditions.
+    public let bytes: Data
     public let facts: MainframeExplorerFileFacts
 }
 
@@ -406,7 +408,7 @@ public struct MainframeExplorerScanner: @unchecked Sendable {
             }) {
                 throw MainframeExplorerError.unsupportedFile(path)
             }
-            return MainframeExplorerTextSnapshot(text: text, facts: facts(path: path, info: after))
+            return MainframeExplorerTextSnapshot(text: text, bytes: data, facts: facts(path: path, info: after))
         }
     }
 

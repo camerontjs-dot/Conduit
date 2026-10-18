@@ -138,6 +138,15 @@ evidence rules and independent agent CLIs retain their authority.
   directory listing, exact ordinary UTF-8 reads, and live source metadata over
   Explorer Core, with explicit failures and separate Session API write authority.
 
+- [Direct project file search](docs/DIRECT_FILESYSTEM_SEARCH.md) with literal
+  matches, exact byte positions, bounded snippets and explicit partial results.
+- [Bounded UTF-8 create/replace operations](docs/DIRECT_FILESYSTEM_OPERATIONS.md)
+  with expected absence or a current-file hash, retained prior bytes, durable
+  retry identity and separate read-only status. Writes require local admission.
+- A [typed direct command contract](docs/DIRECT_COMMAND_API.md) with separate
+  status/cancellation and native development fixtures. Production command
+  execution is unavailable pending an enforceable operator-granted profile.
+
 - Conduit Doctor for CLI paths, versions, MainFrame structure, tmux, microphone, and speech permissions
 - Resource Deck for memory use, largest processes, loaded Ollama models, and one-click Ollama unloading
 - Native settings stored in `~/.conduit/config.json`
