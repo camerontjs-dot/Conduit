@@ -27,6 +27,26 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Hosted task creation, reconciliation, reconnect, close and lifecycle controls
+  preserve the human's project/task selection, navigation memory, New Task
+  scope, composer and panel state. Delayed delivery and persistence feedback
+  follow the exact initiating action when hosted and human prompts interleave.
+  Hosted slash commands reuse one prompt event and observe delayed delivery
+  instead of clearing the desktop composer or recording a duplicate prompt.
+  Task status exposes conversation-retention uncertainty without presenting
+  hosted failures as an unrelated desktop alert.
+
+- Session API numeric request identities retain large and fractional JSON
+  values without unsafe conversion to machine integers.
+
+- Contained filesystem observations preserve missing-file classification across macOS root aliases without weakening symlink or outside-root refusals.
+
+- Hosted Session API delivery no longer changes the human-selected task.
+  A different project open in the macOS UI cannot inject a project-mismatch
+  error after an authorized ChatGPT prompt was accepted for another task.
+  Human UI project-selection guards and Raw/Conversation pane selection
+  remain unchanged by hosted prompt delivery.
+
 - Proposal context validation now rejects integer overflow and underflow in
   supplied token estimates without terminating the process. Unrepresentable
   totals remain invalid even at the largest budget; ordinary totals, negative
@@ -51,6 +71,29 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   for Conduit's actual checks, exact candidate identities and negative evidence.
 
 ### Added
+
+- Direct project file search through `conduit_search_files` returns literal
+  UTF-8 matches with exact byte positions, bounded snippets, observed source
+  hashes and explicit traversal/output limits. Filesystem reads now also
+  return SHA-256 of the exact observed raw bytes, including BOM and line endings.
+
+- `conduit_write_file` and `conduit_file_operation_status` add bounded UTF-8
+  create/replace operations and durable retry receipts behind the existing
+  local write/resource gate. Creates require absence; replacements require
+  the expected raw-file hash and preserve observed prior bytes. Protected or
+  changed paths, unsupported metadata and uncertain historical outcomes refuse
+  or remain unknown; replacement is optimistic concurrency, not atomic
+  compare-and-swap against external writers.
+
+- Direct command request, status and cancellation contracts publish separate
+  read/write classifications, literal argv/cwd, bounded output and durable
+  operation identities. Native disposable tests exercise the runner's process
+  behavior. Production execution remains `execution_authority_unavailable`
+  until an operator-granted execution profile is implemented and qualified;
+  the Session API write switch does not grant arbitrary OS execution authority.
+
+- `conduit_read_filesystem` adds bounded root-scoped directory listing, ordinary UTF-8 file reads and exact path metadata through Explorer Core, with explicit missing, unsafe, oversized and changed-file refusals. It does not enable Session API writes.
+- Descriptor-relative, no-follow Explorer reads retain path containment and refuse binary/special-file text interpretation.
 
 - Task-rail thread recognition now shows conversation-aware recency and bounded
   retained prompt/output previews on pointer hover or keyboard focus. Persisted,

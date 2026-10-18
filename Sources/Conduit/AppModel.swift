@@ -165,11 +165,11 @@ final class AppModel: ObservableObject {
     let taskSidebarModel = TaskSidebarModel()
     /// Reconnect of a known task used to abort until history finished loading.
     /// Finish the reconnect automatically once the JSONL is in memory.
-    private var reconnectAfterHistoryLoad: Set<TaskSessionID> = []
+    private var reconnectAfterHistoryLoad: [TaskSessionID: SessionControlOrigin] = [:]
     /// Explicit MCP reconciliation of a known task also waits for its local
     /// conversation log, but must resume the same task rather than take the
     /// ordinary UI reconnect path.
-    private var reconcileAfterHistoryLoad: Set<TaskSessionID> = []
+    private var reconcileAfterHistoryLoad: [TaskSessionID: SessionControlOrigin] = [:]
     @Published private(set) var taskReconnectabilityObservation: ExternalReconnectabilityObservation = .notChecked {
         didSet { refreshTaskSidebarProjection() }
     }
@@ -367,9 +367,9 @@ final class AppModel: ObservableObject {
     /// which is what the create/reconcile/send paths already rely on when they
     /// scrape this property to build an error payload.
     ///
-    /// This covers failures raised synchronously while serving the call. An
-    /// error assigned later, from an async continuation the call started, is
-    /// outside the window and still reaches the operator's alert.
+    /// This fallback covers synchronous failures. Deferred task-control work
+    /// passes its explicit origin to reportControlError; conversation revisions
+    /// retain the exact initiating event's feedback origin across callbacks.
     var errorMessage: String? {
         get { sessionAPIServingDepth > 0 ? sessionAPICapturedError : operatorAlert }
         set {
@@ -380,6 +380,28 @@ final class AppModel: ObservableObject {
             }
         }
     }
+
+    private func reportControlStatus(
+        _ message: String,
+        origin: SessionControlOrigin
+    ) {
+        guard origin.updatesOperatorPresentation else { return }
+        statusMessage = message
+    }
+
+    private func reportControlError(
+        _ message: String,
+        origin: SessionControlOrigin
+    ) {
+        // During the synchronous request, the API error sink feeds the
+        // response payload. A deferred hosted continuation has no response
+        // open to receive a modal, so it stays out of the operator alert path.
+        guard origin.updatesOperatorPresentation || sessionAPIServingDepth > 0 else {
+            return
+        }
+        errorMessage = message
+    }
+
     @Published var isDropTargeted = false
 
     @Published var showDiagnostics = false
@@ -397,6 +419,16 @@ final class AppModel: ObservableObject {
     @Published private(set) var accountUsageError: String?
     @Published private(set) var sessionAPIAddress: String?
     private var sessionAPIServer: ConduitSessionAPIServer?
+    // Construction is inert. Only an admitted mutation can create a receipt
+    // store; command execution has no production authority in this slice.
+    private let directCommandService = ConduitDirectCommandService(
+        storeDirectory: AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("direct-commands-v1", isDirectory: true)
+    )
+    private let filesystemMutationService = ConduitFilesystemMutationService(
+        receiptDirectory: AdapterThreadStore.defaultDirectory()
+            .appendingPathComponent("direct-filesystem-v1", isDirectory: true)
+    )
     private var sessionAPIReadiness: ConduitSessionAPIReadiness = .bootstrapping
 
     /// Runtime ownership is separate from Session API and write authority.
@@ -564,6 +596,9 @@ final class AppModel: ObservableObject {
     /// live `sessions` array and is never persisted as project truth.
     private var lastSelectedSessionIDByProject: [String: UUID] = [:]
     private var explicitlyFinalizedRuntimeAttempts = Set<RuntimeAttemptID>()
+    /// Lifecycle work can finish after its initiating action. The late process
+    /// callback follows that action, regardless of who created the runtime.
+    private var runtimeControlOrigins: [RuntimeAttemptID: SessionControlOrigin] = [:]
     /// Direct PTY stops are asynchronous: keep admission occupied until the
     /// existing process callback proves the PTY actually exited.
     private var pendingDirectPTYStopAttempts = Set<RuntimeAttemptID>()
@@ -1225,7 +1260,10 @@ final class AppModel: ObservableObject {
         settings.mainframeRoot.flatMap { AgentUsageLog(mainframeRoot: $0) }
     }
 
-    private func bankObservedUsage(_ record: SessionUsageRecord) {
+    private func bankObservedUsage(
+        _ record: SessionUsageRecord,
+        origin: SessionControlOrigin = .operatorUI
+    ) {
         completedUsage.append(record)
         guard let usageLog else { return }
         do {
@@ -1233,16 +1271,22 @@ final class AppModel: ObservableObject {
         } catch {
             // Usage is diagnostic, never evidence — a failed write must not
             // interrupt a session close or a receipt.
-            statusMessage = "Usage note not written: \(error.localizedDescription)"
+            reportControlStatus(
+                "Usage note not written: \(error.localizedDescription)",
+                origin: origin
+            )
         }
     }
 
     private func handleUsageRecord(
         _ record: SessionUsageRecord,
         taskSessionID: TaskSessionID,
-        runtimeAttemptID: RuntimeAttemptID
+        runtimeAttemptID: RuntimeAttemptID,
+        origin: SessionControlOrigin = .operatorUI
     ) {
-        bankObservedUsage(record)
+        let effectiveOrigin: SessionControlOrigin =
+            runtimeControlOrigins.removeValue(forKey: runtimeAttemptID) ?? origin
+        bankObservedUsage(record, origin: effectiveOrigin)
         if pendingDirectPTYStopAttempts.remove(runtimeAttemptID) != nil {
             mcpAdmission?.markTaskEnded(taskSessionID)
         }
@@ -1269,7 +1313,7 @@ final class AppModel: ObservableObject {
                let tmuxName = runtime.descriptor.tmuxSessionName {
                 discoveredSessions.removeAll { $0.tmuxName == tmuxName }
                 taskReconnectabilityObservation = .notChecked
-                Task { await refreshDiscoveredSessions() }
+                Task { await refreshDiscoveredSessions(origin: effectiveOrigin) }
             }
         }
         _ = appendTaskEvent(
@@ -1278,7 +1322,8 @@ final class AppModel: ObservableObject {
                 occurredAt: record.endedAt,
                 authority: authority,
                 kind: .operationalStateChanged(state)
-            )
+            ),
+            origin: effectiveOrigin
         )
     }
 
@@ -1707,10 +1752,14 @@ final class AppModel: ObservableObject {
         taskSidebarModel.refresh(from: self)
     }
 
-    private func applyTaskSessionLoad(_ result: TaskSessionEventStoreLoadResult) {
+    private func applyTaskSessionLoad(
+        _ result: TaskSessionEventStoreLoadResult,
+        origin: SessionControlOrigin = .operatorUI
+    ) {
         taskSessions = result.snapshots
         taskSessionDiagnostics = result.diagnostics
-        if let selectedTaskSessionID,
+        if origin.updatesOperatorPresentation,
+           let selectedTaskSessionID,
            !result.snapshots.contains(where: { $0.id == selectedTaskSessionID }) {
             self.selectedTaskSessionID = nil
         }
@@ -1757,10 +1806,14 @@ final class AppModel: ObservableObject {
                     )
                 }
 
-                if self.reconcileAfterHistoryLoad.remove(taskSessionID) != nil {
-                    self.reconcileTask(taskSessionID)
-                } else if self.reconnectAfterHistoryLoad.remove(taskSessionID) != nil {
-                    self.reconnectTask(taskSessionID)
+                if let origin = self.reconcileAfterHistoryLoad.removeValue(
+                    forKey: taskSessionID
+                ) {
+                    self.reconcileTask(taskSessionID, origin: origin)
+                } else if let origin = self.reconnectAfterHistoryLoad.removeValue(
+                    forKey: taskSessionID
+                ) {
+                    self.reconnectTask(taskSessionID, origin: origin)
                 }
             }
         }
@@ -1768,8 +1821,12 @@ final class AppModel: ObservableObject {
 
     private func recordConversationRevision(
         _ event: SessionPresentationEvent,
-        taskSessionID: TaskSessionID
+        taskSessionID: TaskSessionID,
+        origin: SessionControlOrigin = .operatorUI
     ) {
+        let errorOrigin: SessionControlOrigin = sessionAPIServingDepth > 0
+            ? .sessionAPI
+            : origin
         setConversationRetentionState(.pending, for: taskSessionID)
         conversationPersistence.append(
             event,
@@ -1786,8 +1843,10 @@ final class AppModel: ObservableObject {
                         .failed(description),
                         for: taskSessionID
                     )
-                    self.errorMessage =
-                        "Conversation is visible but could not be retained locally: \(description)"
+                    self.reportControlError(
+                        "Conversation is visible but could not be retained locally: \(description)",
+                        origin: errorOrigin
+                    )
                     return
                 }
 
@@ -1802,7 +1861,8 @@ final class AppModel: ObservableObject {
                     let marked = self.appendTaskEvent(
                         .conversationRetentionEnabled(
                             taskSessionID: taskSessionID
-                        )
+                        ),
+                        origin: errorOrigin
                     )
                     if !marked {
                         self.retentionMarkerTasks.remove(taskSessionID)
@@ -1810,7 +1870,8 @@ final class AppModel: ObservableObject {
                 }
                 self.recordConversationActivityIfNeeded(
                     event,
-                    taskSessionID: taskSessionID
+                    taskSessionID: taskSessionID,
+                    origin: errorOrigin
                 )
             }
         }
@@ -1828,7 +1889,8 @@ final class AppModel: ObservableObject {
 
     private func recordConversationActivityIfNeeded(
         _ event: SessionPresentationEvent,
-        taskSessionID: TaskSessionID
+        taskSessionID: TaskSessionID,
+        origin: SessionControlOrigin = .operatorUI
     ) {
         let phase: String
         switch event.kind {
@@ -1852,28 +1914,36 @@ final class AppModel: ObservableObject {
         _ = appendTaskEvent(
             .conversationActivity(
                 taskSessionID: taskSessionID
-            )
+            ),
+            origin: origin
         )
     }
 
     @discardableResult
-    private func appendTaskEvent(_ event: TaskSessionEvent) -> Bool {
+    private func appendTaskEvent(
+        _ event: TaskSessionEvent,
+        origin: SessionControlOrigin = .operatorUI
+    ) -> Bool {
         do {
             try TaskSessionEventLog(
                 directory: taskSessionStore.directory,
                 taskSessionID: event.taskSessionID
             ).append(event)
-            applyTaskSessionLoad(taskSessionStore.load())
+            applyTaskSessionLoad(taskSessionStore.load(), origin: origin)
             return true
         } catch {
-            errorMessage = "Could not record task history: \(error.localizedDescription)"
+            reportControlError(
+                "Could not record task history: \(error.localizedDescription)",
+                origin: origin
+            )
             return false
         }
     }
 
     private func recordShellTelemetry(
         _ telemetry: ShellTelemetryEvent,
-        taskSessionID: TaskSessionID
+        taskSessionID: TaskSessionID,
+        origin: SessionControlOrigin = .operatorUI
     ) {
         _ = appendTaskEvent(
             TaskSessionEvent(
@@ -1881,7 +1951,8 @@ final class AppModel: ObservableObject {
                 occurredAt: telemetry.observation.observedAt.value ?? Date(),
                 authority: .shellHookObserved,
                 kind: .shellTelemetryRecorded(telemetry)
-            )
+            ),
+            origin: origin
         )
 
         guard telemetry.phase == .executionStarted
@@ -1912,7 +1983,8 @@ final class AppModel: ObservableObject {
                 occurredAt: Date(),
                 authority: .processObserved,
                 kind: .shellProcessObservationRecorded(observation)
-            )
+            ),
+            origin: origin
         )
     }
 
@@ -1940,7 +2012,8 @@ final class AppModel: ObservableObject {
         id: TaskSessionID,
         project: MainframeProject,
         agentName: String?,
-        defaultTitle: String
+        defaultTitle: String,
+        origin: SessionControlOrigin = .operatorUI
     ) -> Bool {
         if taskSessions.contains(where: { $0.id == id }) {
             return true
@@ -1955,7 +2028,8 @@ final class AppModel: ObservableObject {
                 taskSessionID: id,
                 authority: .conduitRecorded,
                 kind: .created(metadata)
-            )
+            ),
+            origin: origin
         )
     }
 
@@ -2045,17 +2119,40 @@ final class AppModel: ObservableObject {
         project: MainframeProject,
         taskSessionID requestedTaskSessionID: TaskSessionID? = nil
     ) -> TerminalRuntime? {
+        createTask(
+            agent: agent,
+            project: project,
+            taskSessionID: requestedTaskSessionID,
+            origin: .operatorUI
+        )
+    }
+
+    @discardableResult
+    private func createTask(
+        agent: AgentProfile,
+        project: MainframeProject,
+        taskSessionID requestedTaskSessionID: TaskSessionID?,
+        origin: SessionControlOrigin
+    ) -> TerminalRuntime? {
         guard enabledAgents.contains(where: { $0.id == agent.id }) else {
-            errorMessage = "That agent is not currently enabled."
+            reportControlError("That agent is not currently enabled.", origin: origin)
             return nil
         }
         guard let scannedProject = projects.first(where: { $0.id == project.id }) else {
-            errorMessage = "That workspace is not in the current MainFrame scan."
+            reportControlError(
+                "That workspace is not in the current MainFrame scan.",
+                origin: origin
+            )
             return nil
         }
-        selectProject(scannedProject)
-        UserDefaults.standard.set(scannedProject.id, forKey: Self.newTaskScopeStorageKey)
-        beginWorkSessionIfNeeded(scannedProject)
+        if origin.updatesOperatorPresentation {
+            selectProject(scannedProject)
+            UserDefaults.standard.set(
+                scannedProject.id,
+                forKey: Self.newTaskScopeStorageKey
+            )
+        }
+        beginWorkSessionIfNeeded(scannedProject, origin: origin)
         let instance = nextInstanceNumber(for: agent, in: scannedProject)
         let taskSessionID = requestedTaskSessionID ?? TaskSessionID()
         let hosted = hostedBackend(for: agent)
@@ -2072,9 +2169,10 @@ final class AppModel: ObservableObject {
             entry: .started(
                 agentName: agent.name,
                 requestedBackend: hosted.requested
-            )
+            ),
+            origin: origin
         )
-        if runtime != nil {
+        if runtime != nil, origin.updatesOperatorPresentation {
             showNewTask = false
             statusMessage = "Started a new \(agent.name) task in \(scannedProject.metadata.title)."
         }
@@ -2125,31 +2223,41 @@ final class AppModel: ObservableObject {
     }
 
     func reconnectTask(_ id: TaskSessionID) {
+        reconnectTask(id, origin: .operatorUI)
+    }
+
+    private func reconnectTask(
+        _ id: TaskSessionID,
+        origin: SessionControlOrigin
+    ) {
         if let runtime = sessions.first(where: {
             $0.descriptor.taskSessionID == id
                 && !$0.controller.lifecycle.isTerminal
         }) {
-            if let task = taskSessions.first(where: { $0.id == id }),
+            if origin.updatesOperatorPresentation,
+               let task = taskSessions.first(where: { $0.id == id }),
                let project = project(for: task) {
                 selectedProjectID = project.id
             }
-            _ = selectSession(runtime)
+            if origin.updatesOperatorPresentation {
+                _ = selectSession(runtime)
+            }
             return
         }
         guard let task = taskSessions.first(where: { $0.id == id }) else {
-            errorMessage = "That task is no longer in the local catalog."
+            reportControlError("That task is no longer in the local catalog.", origin: origin)
             return
         }
         if let discovered = reconnectableDiscoveredSession(for: task) {
             let explicitProject = project(for: task)
-            _ = resume(discovered, adoptingInto: explicitProject)
+            _ = resume(discovered, adoptingInto: explicitProject, origin: origin)
             return
         }
         if let project = project(for: task),
            let agent = agentProfile(named: task.metadata.agentName),
            agent.prefersStructuredHost {
-            selectProject(project)
-            beginWorkSessionIfNeeded(project)
+            if origin.updatesOperatorPresentation { selectProject(project) }
+            beginWorkSessionIfNeeded(project, origin: origin)
             _ = start(
                 descriptor: SessionDescriptor(
                     projectPath: project.path,
@@ -2162,37 +2270,51 @@ final class AppModel: ObservableObject {
                 entry: .started(
                     agentName: agent.name,
                     requestedBackend: "\(agent.preferredSessionBackend.requestedBackendDescription) resume"
-                )
+                ),
+                origin: origin
             )
             return
         }
-        errorMessage = "No identity-compatible tmux runtime was observed for this task. Refresh discovery or inspect the recovery details."
+        reportControlError(
+            "No identity-compatible tmux runtime was observed for this task. Refresh discovery or inspect the recovery details.",
+            origin: origin
+        )
     }
 
     /// Explicit MCP recovery for a task whose runtime was not provisioned.
     /// This reuses the durable task ID and, when recorded, the exact attempted
     /// tmux name. It never kills, replaces, or adopts an uncertain session.
     func reconcileTask(_ id: TaskSessionID) {
+        reconcileTask(id, origin: .operatorUI)
+    }
+
+    private func reconcileTask(
+        _ id: TaskSessionID,
+        origin: SessionControlOrigin
+    ) {
         if let runtime = sessionAPILiveRuntime(for: id) {
-            _ = selectSession(runtime)
+            if origin.updatesOperatorPresentation { _ = selectSession(runtime) }
             return
         }
         guard let task = taskSessions.first(where: { $0.id == id }) else {
-            errorMessage = "That task is no longer in the local catalog."
+            reportControlError("That task is no longer in the local catalog.", origin: origin)
             return
         }
         guard task.operationalState != nil else {
-            errorMessage = "That task has no runtime attempt to reconcile."
+            reportControlError("That task has no runtime attempt to reconcile.", origin: origin)
             return
         }
         if conversationHistoryByTask[id] == nil {
-            reconcileAfterHistoryLoad.insert(id)
+            reconcileAfterHistoryLoad[id] = origin
             loadConversationHistory(for: id)
-            statusMessage = "Loading this task's local history before reconciliation."
+            reportControlStatus(
+                "Loading this task's local history before reconciliation.",
+                origin: origin
+            )
             return
         }
         if let discovered = reconnectableDiscoveredSession(for: task) {
-            _ = resume(discovered, adoptingInto: project(for: task))
+            _ = resume(discovered, adoptingInto: project(for: task), origin: origin)
             return
         }
         let retryableProvisioningState: Bool = {
@@ -2209,9 +2331,15 @@ final class AppModel: ObservableObject {
         else {
             if case .runtimeProvisioningFailed(_, _, _, let recoverable)? = task.operationalState,
                !recoverable {
-                errorMessage = "This task's provisioning failure is not marked recoverable."
+                reportControlError(
+                    "This task's provisioning failure is not marked recoverable.",
+                    origin: origin
+                )
             } else {
-                errorMessage = "No identity-compatible runtime was observed for this task. Refresh discovery before retrying."
+                reportControlError(
+                    "No identity-compatible runtime was observed for this task. Refresh discovery before retrying.",
+                    origin: origin
+                )
             }
             return
         }
@@ -2224,8 +2352,8 @@ final class AppModel: ObservableObject {
         default:
             targetSessionName = nil
         }
-        selectProject(project)
-        beginWorkSessionIfNeeded(project)
+        if origin.updatesOperatorPresentation { selectProject(project) }
+        beginWorkSessionIfNeeded(project, origin: origin)
         _ = start(
             descriptor: SessionDescriptor(
                 projectPath: project.path,
@@ -2249,7 +2377,8 @@ final class AppModel: ObservableObject {
                     ? "direct PTY retry"
                     : "safe durable runtime reconciliation"
             ),
-            requiresDurableSession: targetSessionName != nil
+            requiresDurableSession: targetSessionName != nil,
+            origin: origin
         )
     }
 
@@ -2275,17 +2404,24 @@ final class AppModel: ObservableObject {
     }
 
     func leaveTask(_ id: TaskSessionID) {
+        leaveTask(id, origin: .operatorUI)
+    }
+
+    private func leaveTask(
+        _ id: TaskSessionID,
+        origin: SessionControlOrigin
+    ) {
         guard let runtime = sessions.first(where: {
             $0.descriptor.taskSessionID == id
                 && !$0.controller.lifecycle.isTerminal
         }) else {
-            statusMessage = "This task has no open runtime to leave."
+            reportControlStatus("This task has no open runtime to leave.", origin: origin)
             return
         }
         // Leaving is an explicit lifecycle verb, so it releases the admission
         // slot. A runtime that merely detached or died on its own does not.
         mcpAdmission?.markTaskEnded(id)
-        closeSession(runtime)
+        closeSession(runtime, origin: origin)
     }
 
     func endTask(_ id: TaskSessionID) {
@@ -2498,6 +2634,19 @@ final class AppModel: ObservableObject {
         _ discovered: DiscoveredSession,
         adoptingInto explicitProject: MainframeProject? = nil
     ) -> TerminalRuntime? {
+        resume(
+            discovered,
+            adoptingInto: explicitProject,
+            origin: .operatorUI
+        )
+    }
+
+    @discardableResult
+    private func resume(
+        _ discovered: DiscoveredSession,
+        adoptingInto explicitProject: MainframeProject?,
+        origin: SessionControlOrigin
+    ) -> TerminalRuntime? {
         let taskSessionID: TaskSessionID
         switch discovered.taskSessionBinding {
         case .valid(let existing):
@@ -2507,7 +2656,10 @@ final class AppModel: ObservableObject {
             // fresh ID with its explicit tmux name is the reviewed adoption.
             taskSessionID = TaskSessionID()
         case .malformed(let rawValue):
-            errorMessage = "Did not resume \(discovered.tmuxName): its task binding is malformed (\(rawValue)). Raw tmux state was left unchanged."
+            reportControlError(
+                "Did not resume \(discovered.tmuxName): its task binding is malformed (\(rawValue)). Raw tmux state was left unchanged.",
+                origin: origin
+            )
             return nil
         }
 
@@ -2516,7 +2668,10 @@ final class AppModel: ObservableObject {
             guard let knownProject = projects.first(where: {
                 $0.path.standardizedFileURL == discoveredPath.standardizedFileURL
             }) else {
-                errorMessage = "That durable session belongs to \(discoveredPath.path), which is not in the current MainFrame project scan. Refresh projects or choose the correct root before resuming."
+                reportControlError(
+                    "That durable session belongs to \(discoveredPath.path), which is not in the current MainFrame project scan. Refresh projects or choose the correct root before resuming.",
+                    origin: origin
+                )
                 return nil
             }
             project = knownProject
@@ -2525,7 +2680,10 @@ final class AppModel: ObservableObject {
                   let knownProject = projects.first(where: {
                       $0.id == explicitProject.id
                   }) else {
-                errorMessage = "This legacy tmux session has no recorded project. Choose a MainFrame scope explicitly before adopting it."
+                reportControlError(
+                    "This legacy tmux session has no recorded project. Choose a MainFrame scope explicitly before adopting it.",
+                    origin: origin
+                )
                 return nil
             }
             project = knownProject
@@ -2533,29 +2691,37 @@ final class AppModel: ObservableObject {
         if case .valid(let boundTaskID) = discovered.taskSessionBinding,
            let localTask = taskSessions.first(where: { $0.id == boundTaskID }) {
             guard task(localTask, belongsTo: project) else {
-                errorMessage = "Did not reconnect \(discovered.tmuxName): its task history belongs to \(localTask.metadata.workspace.fallbackTitle), not \(project.metadata.title). Nothing was attached or rewritten."
+                reportControlError(
+                    "Did not reconnect \(discovered.tmuxName): its task history belongs to \(localTask.metadata.workspace.fallbackTitle), not \(project.metadata.title). Nothing was attached or rewritten.",
+                    origin: origin
+                )
                 return nil
             }
             if let recordedAgent = localTask.metadata.agentName,
                let discoveredAgent = discovered.agentName,
                recordedAgent != discoveredAgent {
-                errorMessage = "Did not reconnect \(discovered.tmuxName): tmux reports \(discoveredAgent), while its task history records \(recordedAgent). Nothing was attached or rewritten."
+                reportControlError(
+                    "Did not reconnect \(discovered.tmuxName): tmux reports \(discoveredAgent), while its task history records \(recordedAgent). Nothing was attached or rewritten.",
+                    origin: origin
+                )
                 return nil
             }
         }
         // Resolve all deterministic identity conflicts before navigation
         // changes. The explicit Resume action may then reveal the target
         // project while the attach itself remains separately guarded.
-        selectProject(project)
+        if origin.updatesOperatorPresentation { selectProject(project) }
         if let open = sessions.first(where: {
             $0.descriptor.tmuxSessionName == discovered.tmuxName
         }) {
             if !open.controller.lifecycle.isTerminal {
-                guard selectSession(open) else { return nil }
-                statusMessage = "That session is already open."
+                if origin.updatesOperatorPresentation {
+                    guard selectSession(open) else { return nil }
+                    reportControlStatus("That session is already open.", origin: origin)
+                }
                 return open
             }
-            removeSessionTab(open)
+            removeSessionTab(open, origin: origin)
         }
         // Resuming an unidentified session cannot invent an agent for it. The
         // placeholder below is a display label only — `recordsIdentity: false`
@@ -2572,7 +2738,7 @@ final class AppModel: ObservableObject {
                 kind: .shell
             )
 
-        beginWorkSessionIfNeeded(project)
+        beginWorkSessionIfNeeded(project, origin: origin)
         let runtime = start(
             descriptor: SessionDescriptor(
                 projectPath: project.path,
@@ -2591,12 +2757,14 @@ final class AppModel: ObservableObject {
                 tmuxSessionName: discovered.tmuxName,
                 attachedElsewhere: discovered.attachedClients > 0
             ),
-            requiresDurableSession: true
+            requiresDurableSession: true,
+            origin: origin
         )
         guard let runtime else { return nil }
-        statusMessage = discovered.attachedClients > 0
+        let resumeStatus = discovered.attachedClients > 0
             ? "Resumed \(discovered.tmuxName) — another client is also attached."
             : "Resumed \(discovered.tmuxName)."
+        reportControlStatus(resumeStatus, origin: origin)
         return runtime
     }
 
@@ -2628,7 +2796,8 @@ final class AppModel: ObservableObject {
         project: MainframeProject,
         backendLabel: String,
         entry: SessionEntry,
-        requiresDurableSession: Bool = false
+        requiresDurableSession: Bool = false,
+        origin: SessionControlOrigin = .operatorUI
     ) -> TerminalRuntime? {
         var descriptor = descriptor
         let useDurableSession = !descriptor.agent.prefersStructuredHost
@@ -2654,16 +2823,19 @@ final class AppModel: ObservableObject {
             id: taskSessionID,
             project: project,
             agentName: recordedAgentName,
-            defaultTitle: defaultTitle
+            defaultTitle: defaultTitle,
+            origin: origin
         ) else {
             return nil
         }
         if taskWasAlreadyKnown,
            conversationHistoryByTask[taskSessionID] == nil {
-            reconnectAfterHistoryLoad.insert(taskSessionID)
+            reconnectAfterHistoryLoad[taskSessionID] = origin
             loadConversationHistory(for: taskSessionID)
-            statusMessage =
-                "Loading this task's local conversation history, then reconnecting."
+            reportControlStatus(
+                "Loading this task's local conversation history, then reconnecting.",
+                origin: origin
+            )
             return nil
         }
         descriptor.taskSessionID = taskSessionID
@@ -2679,7 +2851,8 @@ final class AppModel: ObservableObject {
                         tmuxSessionName: descriptor.tmuxSessionName
                     )
                 )
-            )
+            ),
+            origin: origin
         ) else {
             return nil
         }
@@ -2691,19 +2864,22 @@ final class AppModel: ObservableObject {
             entry: entry,
             runtimeAttemptID: runtimeAttemptID,
             priorEvents: priorConversation,
+            controlOrigin: origin,
             recordShellTelemetry: { [weak self] telemetry in
                 guard telemetry.runtimeAttemptID == runtimeAttemptID.rawValue.uuidString else {
                     return
                 }
                 self?.recordShellTelemetry(
                     telemetry,
-                    taskSessionID: taskSessionID
+                    taskSessionID: taskSessionID,
+                    origin: .unattributed
                 )
             },
-            recordEventRevision: { [weak self] event in
+            recordEventRevision: { [weak self] event, eventOrigin in
                 self?.recordConversationRevision(
                     event,
-                    taskSessionID: taskSessionID
+                    taskSessionID: taskSessionID,
+                    origin: eventOrigin
                 )
             }
         )
@@ -2712,12 +2888,15 @@ final class AppModel: ObservableObject {
                 self?.handleUsageRecord(
                     record,
                     taskSessionID: taskSessionID,
-                    runtimeAttemptID: runtimeAttemptID
+                    runtimeAttemptID: runtimeAttemptID,
+                    origin: .unattributed
                 )
             }
         }
         sessions.append(runtime)
-        _ = selectSession(runtime)
+        if origin.updatesOperatorPresentation {
+            _ = selectSession(runtime)
+        }
         // After durable reattach, rebuild any incomplete turn projection from
         // the live pane (missed paint while Conduit was away).
         if case .resumed = entry,
@@ -2743,7 +2922,10 @@ final class AppModel: ObservableObject {
             )
             Task { @MainActor [weak self, weak runtime] in
                 guard let self, let runtime else { return }
-                self.statusMessage = "Starting \(descriptor.agent.name) on \(backend.displayName)…"
+                self.reportControlStatus(
+                    "Starting \(descriptor.agent.name) on \(backend.displayName)…",
+                    origin: origin
+                )
                 if let failure = await runtime.startStructuredAdapterIfNeeded() {
                     runtime.stopStructuredAdapter()
                     switch StructuredAdapterStartFailurePolicy.disposition(
@@ -2762,26 +2944,36 @@ final class AppModel: ObservableObject {
                                         recoverable: true
                                     )
                                 )
-                            )
+                            ),
+                            origin: origin
                         )
-                        self.statusMessage =
-                            "\(descriptor.agent.name) provider session is already controlled elsewhere; Conduit left the original session unchanged."
-                        self.errorMessage = failure
+                        self.reportControlStatus(
+                            "\(descriptor.agent.name) provider session is already controlled elsewhere; Conduit left the original session unchanged.",
+                            origin: origin
+                        )
+                        self.reportControlError(failure, origin: origin)
                         self.mcpAdmission?.markTaskEnded(taskSessionID)
-                        self.removeSessionTab(runtime)
+                        self.removeSessionTab(runtime, origin: origin)
                         return
                     case .fallbackAllowed:
-                        self.statusMessage =
-                            "\(descriptor.agent.name) \(backend.displayName) failed (\(failure)). Falling back to PTY."
+                        self.reportControlStatus(
+                            "\(descriptor.agent.name) \(backend.displayName) failed (\(failure)). Falling back to PTY.",
+                            origin: origin
+                        )
                         runtime.controller.preparePTYFallback()
                         runtime.controller.startIfNeeded()
                         if let issue = runtime.controller.launchIssue {
-                            self.errorMessage = issue.localizedDescription
+                            self.reportControlError(
+                                issue.localizedDescription,
+                                origin: origin
+                            )
                         }
                     }
                 } else {
-                    self.statusMessage =
-                        "\(descriptor.agent.name) is running on \(backend.displayName)."
+                    self.reportControlStatus(
+                        "\(descriptor.agent.name) is running on \(backend.displayName).",
+                        origin: origin
+                    )
                 }
             }
         } else {
@@ -2800,10 +2992,11 @@ final class AppModel: ObservableObject {
                             recoverable: true
                         )
                     )
-                )
+                ),
+                origin: origin
             )
-            errorMessage = issue.localizedDescription
-            removeSessionTab(runtime)
+            reportControlError(issue.localizedDescription, origin: origin)
+            removeSessionTab(runtime, origin: origin)
             return nil
         }
         _ = appendTaskEvent(
@@ -2813,7 +3006,8 @@ final class AppModel: ObservableObject {
                 kind: .operationalStateChanged(
                     .runtimeOpened(runtimeAttemptID)
                 )
-            )
+            ),
+            origin: origin
         )
         if runtime.controller.usesTmux {
             noteDurableRuntimeAvailable(runtime)
@@ -2824,7 +3018,8 @@ final class AppModel: ObservableObject {
                 backend: backendLabel,
                 at: Date()
             ),
-            for: project
+            for: project,
+            origin: origin
         )
         return runtime
     }
@@ -2862,6 +3057,12 @@ final class AppModel: ObservableObject {
     /// Refreshes the list of durable tmux sessions. Discovery is read-only —
     /// it never creates, kills, or renames anything.
     func refreshDiscoveredSessions() async {
+        await refreshDiscoveredSessions(origin: .operatorUI)
+    }
+
+    private func refreshDiscoveredSessions(
+        origin: SessionControlOrigin
+    ) async {
         guard let tmux = EnvironmentResolver.shared.resolve("tmux") else {
             discoveryNote = "tmux was not found on PATH, so no durable sessions could be listed."
             taskReconnectabilityObservation = .failed(observedAt: Date())
@@ -2902,7 +3103,7 @@ final class AppModel: ObservableObject {
             }
         }
         if case .succeeded = taskReconnectabilityObservation {
-            reconcileInterruptedTaskSessions()
+            reconcileInterruptedTaskSessions(origin: origin)
         }
     }
 
@@ -2910,7 +3111,9 @@ final class AppModel: ObservableObject {
     /// runtime and a positively bound durable runtime lets Conduit record that
     /// a previously-open attempt was interrupted. Failed or malformed
     /// discovery remains unknown and never becomes negative evidence.
-    private func reconcileInterruptedTaskSessions() {
+    private func reconcileInterruptedTaskSessions(
+        origin: SessionControlOrigin = .operatorUI
+    ) {
         let liveTaskIDs = Set(sessions.compactMap(\.descriptor.taskSessionID))
         let candidates = TaskSessionRestartReconciler.interruptionCandidates(
             taskSessions: taskSessions,
@@ -2925,7 +3128,8 @@ final class AppModel: ObservableObject {
                     kind: .operationalStateChanged(
                         .interrupted(candidate.runtimeAttemptID)
                     )
-                )
+                ),
+                origin: origin
             )
         }
     }
@@ -2954,12 +3158,20 @@ final class AppModel: ObservableObject {
     /// Detach (tmux durable) or terminate (PTY). Tab leaves the UI; tmux work
     /// may keep running and will reconnect if the same agent is launched again.
     func closeSession(_ runtime: TerminalRuntime) {
+        closeSession(runtime, origin: .operatorUI)
+    }
+
+    private func closeSession(
+        _ runtime: TerminalRuntime,
+        origin: SessionControlOrigin
+    ) {
         let keptRunning = runtime.controller.usesTmux
         explicitlyFinalizedRuntimeAttempts.insert(runtime.runtimeAttemptID)
         // Persist a deterministic closure before direct PTY termination can
         // deallocate the runtime and its weak lifecycle callback.
         runtime.closeAgentOutputCapture()
         runtime.stopAppServer()
+        runtimeControlOrigins[runtime.runtimeAttemptID] = origin
         runtime.controller.closeSession()
         if let taskID = runtime.descriptor.taskSessionID {
             let state: TaskSessionOperationalState = keptRunning
@@ -2970,19 +3182,26 @@ final class AppModel: ObservableObject {
                     taskSessionID: taskID,
                     authority: keptRunning ? .conduitRecorded : .operatorAsserted,
                     kind: .operationalStateChanged(state)
-                )
+                ),
+                origin: origin
             )
         }
-        recordSessionClosed(runtime, endedHard: false)
+        recordSessionClosed(runtime, endedHard: false, origin: origin)
         if keptRunning {
             noteDurableRuntimeAvailable(runtime)
-            Task { await refreshDiscoveredSessions() }
+            Task { await refreshDiscoveredSessions(origin: origin) }
         }
-        removeSessionTab(runtime)
+        removeSessionTab(runtime, origin: origin)
         if keptRunning {
-            statusMessage = "Detached \(runtime.descriptor.agent.name). Reconnect it from task history."
+            reportControlStatus(
+                "Detached \(runtime.descriptor.agent.name). Reconnect it from task history.",
+                origin: origin
+            )
         } else {
-            statusMessage = "Closed \(runtime.descriptor.agent.name) session."
+            reportControlStatus(
+                "Closed \(runtime.descriptor.agent.name) session.",
+                origin: origin
+            )
         }
     }
 
@@ -3006,6 +3225,14 @@ final class AppModel: ObservableObject {
     /// agent on this project starts fresh (no reconnect to a stuck shell).
     @discardableResult
     func endSession(_ runtime: TerminalRuntime) -> Bool {
+        endSession(runtime, origin: .operatorUI)
+    }
+
+    @discardableResult
+    private func endSession(
+        _ runtime: TerminalRuntime,
+        origin: SessionControlOrigin
+    ) -> Bool {
         let wasTmux = runtime.controller.usesTmux
         let wasStructured = runtime.usesStructuredHost
         let waitsForObservedDirectPTYExit = !wasTmux && !wasStructured
@@ -3021,6 +3248,9 @@ final class AppModel: ObservableObject {
 
         runtime.closeAgentOutputCapture()
         runtime.stopAppServer()
+        if !waitsForObservedDirectPTYExit {
+            runtimeControlOrigins[runtime.runtimeAttemptID] = origin
+        }
         let runtimeEnded = runtime.controller.endSession(
             hostedAdapterAlreadyStopped: wasStructured
         )
@@ -3028,19 +3258,26 @@ final class AppModel: ObservableObject {
         if waitsForObservedDirectPTYExit {
             let request = runtime.controller.lastDirectPTYStopRequest
             if request.accepted {
+                runtimeControlOrigins[runtime.runtimeAttemptID] = origin
                 // Keep the task/runtime live until SwiftTerm's still-active
                 // waitpid-backed process monitor produces the observed exit.
-                statusMessage =
-                    "Stop requested for \(runtime.descriptor.agent.name); waiting for process exit observation."
+                reportControlStatus(
+                    "Stop requested for \(runtime.descriptor.agent.name); waiting for process exit observation.",
+                    origin: origin
+                )
             } else {
                 pendingDirectPTYStopAttempts.remove(runtime.runtimeAttemptID)
                 switch request {
                 case .signalFailed(let pid, let code):
-                    errorMessage =
-                        "Could not signal direct PTY PID \(pid) (errno \(code)); runtime remains live."
+                    reportControlError(
+                        "Could not signal direct PTY PID \(pid) (errno \(code)); runtime remains live.",
+                        origin: origin
+                    )
                 default:
-                    errorMessage =
-                        "Could not identify a live direct PTY process to stop; runtime remains live."
+                    reportControlError(
+                        "Could not identify a live direct PTY process to stop; runtime remains live.",
+                        origin: origin
+                    )
                 }
             }
             return false
@@ -3057,10 +3294,11 @@ final class AppModel: ObservableObject {
                         ? .operatorAsserted
                         : .conduitRecorded,
                     kind: .operationalStateChanged(state)
-                )
+                ),
+                origin: origin
             )
         }
-        recordSessionClosed(runtime, endedHard: runtimeEnded)
+        recordSessionClosed(runtime, endedHard: runtimeEnded, origin: origin)
         if let tmuxName {
             if runtimeEnded {
                 discoveredSessions.removeAll { $0.tmuxName == tmuxName }
@@ -3068,14 +3306,17 @@ final class AppModel: ObservableObject {
             } else {
                 noteDurableRuntimeAvailable(runtime)
             }
-            Task { await refreshDiscoveredSessions() }
+            Task { await refreshDiscoveredSessions(origin: origin) }
         }
-        removeSessionTab(runtime)
+        removeSessionTab(runtime, origin: origin)
         if runtimeEnded {
-            statusMessage = "Ended \(runtime.descriptor.agent.name) session."
+            reportControlStatus("Ended \(runtime.descriptor.agent.name) session.", origin: origin)
         } else {
-            statusMessage = "Left the \(runtime.descriptor.agent.name) client."
-            errorMessage = "Conduit could not confirm that tmux ended the underlying runtime. It remains available for explicit reconnection until a successful observation proves otherwise."
+            reportControlStatus("Left the \(runtime.descriptor.agent.name) client.", origin: origin)
+            reportControlError(
+                "Conduit could not confirm that tmux ended the underlying runtime. It remains available for explicit reconnection until a successful observation proves otherwise.",
+                origin: origin
+            )
         }
         return runtimeEnded
     }
@@ -3139,7 +3380,11 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func recordSessionClosed(_ runtime: TerminalRuntime, endedHard: Bool) {
+    private func recordSessionClosed(
+        _ runtime: TerminalRuntime,
+        endedHard: Bool,
+        origin: SessionControlOrigin = .operatorUI
+    ) {
         let controller = runtime.controller
         if let project = projects.first(where: { $0.path == runtime.descriptor.projectPath }) {
             appendEvent(
@@ -3151,12 +3396,16 @@ final class AppModel: ObservableObject {
                     live: false,
                     at: Date()
                 ),
-                for: project
+                for: project,
+                origin: origin
             )
         }
     }
 
-    private func removeSessionTab(_ runtime: TerminalRuntime) {
+    private func removeSessionTab(
+        _ runtime: TerminalRuntime,
+        origin: SessionControlOrigin = .operatorUI
+    ) {
         // Dropping the tab drops the last strong reference to the runtime, and
         // the hold-expiry Task holds it weakly, so anything still held here
         // would never be resolved: the durable prompt event would stay
@@ -3173,16 +3422,18 @@ final class AppModel: ObservableObject {
             loadConversationHistory(for: taskSessionID)
         }
         sessions.removeAll { $0.id == runtime.id }
-        let staleProjectIDs = lastSelectedSessionIDByProject.compactMap { projectID, rememberedID in
-            rememberedID == runtime.id ? projectID : nil
-        }
-        for projectID in staleProjectIDs {
-            lastSelectedSessionIDByProject[projectID] = nil
-        }
-        if activeSessionID == runtime.id {
-            // Task-first navigation keeps the just-left task selected so its
-            // detached/closed history remains visible. Reconnection is explicit.
-            activeSessionID = nil
+        if origin.updatesOperatorPresentation {
+            let staleProjectIDs = lastSelectedSessionIDByProject.compactMap { projectID, rememberedID in
+                rememberedID == runtime.id ? projectID : nil
+            }
+            for projectID in staleProjectIDs {
+                lastSelectedSessionIDByProject[projectID] = nil
+            }
+            if activeSessionID == runtime.id {
+                // Task-first navigation keeps the just-left task selected so its
+                // detached/closed history remains visible. Reconnection is explicit.
+                activeSessionID = nil
+            }
         }
     }
 
@@ -3305,17 +3556,26 @@ final class AppModel: ObservableObject {
     /// input with Enter so builtins/skills actually run (not chat-pasted).
     private func sendSlashCommand(
         _ command: String,
-        via runtime: TerminalRuntime
+        via runtime: TerminalRuntime,
+        origin: SessionControlOrigin = .operatorUI,
+        existingEventID: UUID? = nil
     ) {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !runtime.controller.lifecycle.isTerminal else {
-            errorMessage = "No live agent session for slash commands."
+            if let existingEventID {
+                runtime.updatePromptDelivery(eventID: existingEventID, to: .failed)
+            }
+            reportControlError("No live agent session for slash commands.", origin: origin)
             return
         }
-        let eventID = runtime.recordPrompt(
+        // A hosted send already recorded the caller's prompt. Reuse that
+        // exact event so delayed delivery cannot leave an orphaned queue item
+        // or fabricate a second prompt attributed to the human composer.
+        let eventID = existingEventID ?? runtime.recordPrompt(
             text: trimmed,
             attachmentPaths: [],
-            renderedPayload: trimmed
+            renderedPayload: trimmed,
+            controlOrigin: origin
         )
         let baseline = runtime.controller.currentCaptureBaseline()
         runtime.beginAgentOutputCapture(
@@ -3324,17 +3584,23 @@ final class AppModel: ObservableObject {
             baseline: baseline
         )
         runtime.controller.armConversationCapture(from: baseline)
-        runtime.controller.injectSlashCommand(trimmed)
-        runtime.updatePromptDelivery(eventID: eventID, to: .delivered)
+        runtime.controller.injectSlashCommand(trimmed) { [weak runtime] delivered in
+            runtime?.updatePromptDelivery(
+                eventID: eventID,
+                to: delivered ? .delivered : .failed
+            )
+        }
         // Catch the command result without waiting on the paste queue.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak runtime] in
             runtime?.controller.refreshConversationCapture()
         }
-        runtime.selectedSurface = .conversation
-        composerText = ""
-        attachments = []
-        noteComposerSendFlash()
-        statusMessage = "Ran \(trimmed) as a CLI command."
+        if origin.updatesOperatorPresentation {
+            runtime.selectedSurface = .conversation
+            composerText = ""
+            attachments = []
+            noteComposerSendFlash()
+            statusMessage = "Ran \(trimmed) as a CLI command."
+        }
     }
 
     /// Builds the terminal delivery string. CLI agents receive a compact
@@ -3726,6 +3992,13 @@ final class AppModel: ObservableObject {
     }
 
     func beginWorkSessionIfNeeded(_ project: MainframeProject) {
+        beginWorkSessionIfNeeded(project, origin: .operatorUI)
+    }
+
+    private func beginWorkSessionIfNeeded(
+        _ project: MainframeProject,
+        origin: SessionControlOrigin
+    ) {
         guard workSessions[project.id] == nil else { return }
         let id = UUID().uuidString
         let log = WorkSessionEventLog(directory: worklogDirectory, sessionID: id)
@@ -3749,7 +4022,10 @@ final class AppModel: ObservableObject {
                 at: work.startedAt
             ))
         } catch {
-            errorMessage = "Could not start the work session event log: \(error.localizedDescription)"
+            reportControlError(
+                "Could not start the work session event log: \(error.localizedDescription)",
+                origin: origin
+            )
         }
     }
 
@@ -3883,12 +4159,19 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func appendEvent(_ event: WorkSessionEvent, for project: MainframeProject) {
+    private func appendEvent(
+        _ event: WorkSessionEvent,
+        for project: MainframeProject,
+        origin: SessionControlOrigin = .operatorUI
+    ) {
         guard let work = workSessions[project.id] else { return }
         do {
             try work.log.append(event)
         } catch {
-            errorMessage = "Could not record a work session event: \(error.localizedDescription)"
+            reportControlError(
+                "Could not record a work session event: \(error.localizedDescription)",
+                origin: origin
+            )
         }
     }
 
@@ -4015,6 +4298,35 @@ final class AppModel: ObservableObject {
         sessionAPIServer?.setReadiness(readiness)
     }
 
+    /// Hosted direct operations resolve their exact project independently of
+    /// the human's selected project, task, pane and navigation state.
+    private func sessionAPIProjectFilesystemRoot(_ slug: String) -> URL? {
+        guard sessionAPIReadiness.isReady, !rootAccessNeedsAuthorization,
+              !slug.isEmpty, slug.utf8.count <= 128, !slug.utf8.contains(0),
+              let root = settings.mainframeRoot else { return nil }
+        let matches = projects.filter { $0.slug == slug && !$0.isMainframeRoot }
+        guard matches.count == 1, let project = matches.first,
+              let facts = try? MainframeExplorerScanner().fileFacts(root: root, item: project.path),
+              facts.kind == .directory, !facts.relativePath.isEmpty else { return nil }
+        return project.path
+    }
+
+    private func sessionAPIDirectWriteAdmission(_ caller: ConduitSessionCaller) -> [String: Any]? {
+        guard sessionAPIReadiness.isReady, !rootAccessNeedsAuthorization else {
+            return ["error": "Conduit project authority is not ready."]
+        }
+        let decision = sessionAPIAdmission.admitWrite(
+            callerIdentity: caller.identity,
+            resources: sessionAPIResourceSnapshot()
+        )
+        guard decision.shouldExecute else {
+            var payload = sessionAPIAdmissionRefusal(decision)
+            payload["authority"] = "admission decision; no direct operation was admitted"
+            return payload
+        }
+        return nil
+    }
+
     func syncSessionAPI() {
         sessionAPIServer?.stop()
         sessionAPIServer = nil
@@ -4024,7 +4336,21 @@ final class AppModel: ObservableObject {
         rebuildMCPAdmission()
         let server = ConduitSessionAPIServer(
             token: token,
-            allowWrites: settings.enableSessionAPIWrites
+            allowWrites: settings.enableSessionAPIWrites,
+            filesystemRoot: { [weak self] in
+                guard let self, self.sessionAPIReadiness.isReady,
+                      !self.rootAccessNeedsAuthorization else { return nil }
+                return self.settings.mainframeRoot
+            },
+            projectFilesystemRoot: { [weak self] slug in
+                self?.sessionAPIProjectFilesystemRoot(slug)
+            },
+            directCommandService: directCommandService,
+            filesystemMutationService: filesystemMutationService,
+            directWriteAdmission: { [weak self] caller in
+                guard let self else { return ["error": "Conduit is not ready."] }
+                return self.sessionAPIDirectWriteAdmission(caller)
+            }
         ) { [weak self] command, caller in
             self?.sessionAPIPayload(command, caller: caller)
                 ?? ["error": "Conduit is not ready."]
@@ -6036,6 +6362,16 @@ final class AppModel: ObservableObject {
             }
         }
 
+        let retentionState: String
+        switch conversationRetentionStateByTask[task.id] {
+        case .legacyPreRetention?: retentionState = "legacy_pre_retention"
+        case .loading?: retentionState = "loading"
+        case .pending?: retentionState = "pending"
+        case .persisted?: retentionState = "persisted"
+        case .missingExpected?: retentionState = "missing_expected"
+        case .failed?: retentionState = "failed"
+        case nil: retentionState = "unknown"
+        }
         var payload: [String: Any] = [
             "taskSessionID": task.id.rawValue.uuidString,
             "title": task.displayTitle,
@@ -6049,6 +6385,11 @@ final class AppModel: ObservableObject {
             "live": isLive,
             "ready": ready,
             "recoverable": recoverable,
+            "conversation_retention": [
+                "state": retentionState,
+                "authority": "current_process_retention_observation",
+                "verification": "last observed retention state; not a fresh disk read or artifact verification",
+            ],
         ]
         if let failure {
             payload["failure"] = failure
@@ -6282,7 +6623,8 @@ final class AppModel: ObservableObject {
         guard let runtime = createTask(
             agent: agent,
             project: project,
-            taskSessionID: taskID
+            taskSessionID: taskID,
+            origin: .sessionAPI
         ) else {
             guard let task = taskSessions.first(where: { $0.id == taskID }) else {
                 return [
@@ -6385,7 +6727,7 @@ final class AppModel: ObservableObject {
                 hasCompatibleDiscoveredRuntime:
                     reconnectableDiscoveredSession(for: task) != nil
             )
-        reconcileTask(taskID)
+        reconcileTask(taskID, origin: .sessionAPI)
         guard let current = taskSessions.first(where: { $0.id == taskID }) else {
             return ["error": "task disappeared during reconciliation", "taskSessionID": rawID]
         }
@@ -6443,7 +6785,7 @@ final class AppModel: ObservableObject {
         defer { admission.markPromptFinished(reservationID: reservationID) }
 
         if sessionAPILiveRuntime(for: taskID) == nil {
-            reconnectTask(taskID)
+            reconnectTask(taskID, origin: .sessionAPI)
         }
         guard let runtime = sessionAPILiveRuntime(for: taskID) else {
             return [
@@ -6460,14 +6802,18 @@ final class AppModel: ObservableObject {
         to runtime: TerminalRuntime,
         origin: ConduitSessionOrigin
     ) -> [String: Any] {
-        _ = selectSession(runtime)
+        // Hosted delivery targets an admitted task, independent of the human
+        // UI project selection. Do not redirect the operator UI selected task
+        // or capture a spurious project-mismatch error after acceptance.
         let eventID = runtime.recordPrompt(
             origin: origin.promptOrigin,
             text: text,
             attachmentPaths: [],
-            renderedPayload: text
+            renderedPayload: text,
+            controlOrigin: .sessionAPI
         )
-        runtime.selectedSurface = .conversation
+        // API delivery records task events without switching the human UI
+        // Raw/Conversation presentation of this session.
         // A structured host that has not finished starting used to refuse the
         // prompt outright and tell the caller to send it again. That made
         // create_task(objective:) undeliverable on every structured backend:
@@ -6514,7 +6860,12 @@ final class AppModel: ObservableObject {
             ]
         }
         if AgentSlashCatalog.looksLikeSlashCommand(text) {
-            sendSlashCommand(text, via: runtime)
+            sendSlashCommand(
+                text,
+                via: runtime,
+                origin: .sessionAPI,
+                existingEventID: eventID
+            )
             return [
                 "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
                 "delivered": false,
@@ -6929,7 +7280,7 @@ final class AppModel: ObservableObject {
 
         switch operation {
         case .abortTurn:
-            let interruptionEventID = runtime.recordInterruptRequest()
+            let interruptionEventID = runtime.recordInterruptRequest(controlOrigin: .sessionAPI)
             runtime.interruptStructuredAdapter()
             return [
                 "taskSessionID": rawID,
@@ -6945,7 +7296,7 @@ final class AppModel: ObservableObject {
             // Planner support currently limits this to durable tmux or an
             // OpenCode client whose lease can be released without stopping the
             // shared/external provider host.
-            leaveTask(taskID)
+            leaveTask(taskID, origin: .sessionAPI)
             return [
                 "taskSessionID": rawID,
                 "operation": operation.rawValue,
@@ -6961,7 +7312,7 @@ final class AppModel: ObservableObject {
             if !waitsForObservedDirectPTYExit {
                 mcpAdmission?.markTaskEnded(taskID)
             }
-            let runtimeEnded = endSession(runtime)
+            let runtimeEnded = endSession(runtime, origin: .sessionAPI)
             let processTreeReconciliation = sessionAPIReconcileProcessTree(
                 taskID: taskID,
                 runtime: runtime,
@@ -7065,7 +7416,7 @@ final class AppModel: ObservableObject {
             taskID: taskID,
             operation: .abortTurn
         ).flatMap { sessionAPILifecycleJSONObject($0) }
-        let interruptionEventID = runtime.recordInterruptRequest()
+        let interruptionEventID = runtime.recordInterruptRequest(controlOrigin: .sessionAPI)
         if runtime.usesStructuredHost {
             runtime.interruptStructuredAdapter()
         } else {
@@ -7123,7 +7474,7 @@ final class AppModel: ObservableObject {
             taskID: taskID,
             operation: lifecycleOperation
         ).flatMap { sessionAPILifecycleJSONObject($0) }
-        leaveTask(taskID)
+        leaveTask(taskID, origin: .sessionAPI)
         var payload: [String: Any] = [
             "taskSessionID": rawID,
             "closed": true,
@@ -7242,7 +7593,8 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         let baseline: RawDerivedSnapshot
     }
 
-    private let recordEventRevision: ((SessionPresentationEvent) -> Void)?
+    private let recordEventRevision: ((SessionPresentationEvent, SessionControlOrigin) -> Void)?
+    private var controlFeedback = SessionControlFeedbackLedger()
     private var activeOutputCapture: ActiveOutputCapture?
     private let reductionQueue = DispatchQueue(
         label: "dev.camerontjs.conduit.raw-derived-reduction",
@@ -7262,8 +7614,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         entry: SessionEntry,
         runtimeAttemptID: RuntimeAttemptID = RuntimeAttemptID(),
         priorEvents: [SessionPresentationEvent] = [],
+        controlOrigin: SessionControlOrigin = .operatorUI,
         recordShellTelemetry: ((ShellTelemetryEvent) -> Void)? = nil,
-        recordEventRevision: ((SessionPresentationEvent) -> Void)? = nil
+        recordEventRevision: ((SessionPresentationEvent, SessionControlOrigin) -> Void)? = nil
     ) {
         self.id = descriptor.id
         self.runtimeAttemptID = runtimeAttemptID
@@ -7277,7 +7630,8 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         self.recordEventRevision = recordEventRevision
         let opening = SessionPresentation.openingEvent(entry)
         self.presentationEvents = priorEvents + [opening]
-        recordEventRevision?(opening)
+        controlFeedback.record(eventID: opening.id, origin: controlOrigin)
+        recordPresentationRevision(opening)
         controller.onRenderedOutput = { [weak self] capture in
             self?.recordRenderedOutput(capture)
         }
@@ -7373,12 +7727,17 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         controller.refreshConversationCapture()
     }
 
+    private func recordPresentationRevision(_ event: SessionPresentationEvent) {
+        recordEventRevision?(event, controlFeedback.origin(for: event))
+    }
+
     @discardableResult
     func recordPrompt(
         origin: PromptOrigin = .composer,
         text: String,
         attachmentPaths: [String],
-        renderedPayload: String
+        renderedPayload: String,
+        controlOrigin: SessionControlOrigin = .operatorUI
     ) -> UUID {
         let event = SessionPresentation.promptEvent(
             origin: origin,
@@ -7387,7 +7746,8 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             renderedPayload: renderedPayload
         )
         presentationEvents.append(event)
-        recordEventRevision?(event)
+        controlFeedback.record(eventID: event.id, origin: controlOrigin)
+        recordPresentationRevision(event)
         return event.id
     }
 
@@ -7401,7 +7761,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             to: delivery
         )
         if let event = presentationEvents.first(where: { $0.id == eventID }) {
-            recordEventRevision?(event)
+            recordPresentationRevision(event)
         }
         if delivery == .failed {
             closeAgentOutputCapture()
@@ -7409,10 +7769,11 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     }
 
     @discardableResult
-    func recordInterruptRequest() -> UUID {
+    func recordInterruptRequest(controlOrigin: SessionControlOrigin = .operatorUI) -> UUID {
         let event = SessionPresentation.interruptRequestEvent()
         presentationEvents.append(event)
-        recordEventRevision?(event)
+        controlFeedback.record(eventID: event.id, origin: controlOrigin)
+        recordPresentationRevision(event)
         return event.id
     }
 
@@ -7478,7 +7839,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             in: presentationEvents,
             event: closed
         )
-        recordEventRevision?(closed)
+        recordPresentationRevision(closed)
         activeOutputCapture = nil
         activeOutputEventID = nil
         isAwaitingAgentOutput = false
@@ -7599,7 +7960,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
                 || elapsed >= outputPersistenceInterval
                 || characterDelta >= 4_096
         else { return }
-        recordEventRevision?(event)
+        recordPresentationRevision(event)
         lastPersistedOutputAt = now
         lastPersistedOutputText = output.text
     }
@@ -7631,7 +7992,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             in: presentationEvents,
             event: settled
         )
-        recordEventRevision?(settled)
+        recordPresentationRevision(settled)
         lastPersistedOutputAt = Date()
         lastPersistedOutputText = output.text
     }
@@ -8106,7 +8467,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         )
         activeOutputEventID = event.id
         isAwaitingAgentOutput = state == .live
-        recordEventRevision?(event)
+        recordPresentationRevision(event)
         if state == .closed {
             activeOutputCapture = nil
             isAwaitingAgentOutput = false

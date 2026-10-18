@@ -7,8 +7,42 @@ final class ConduitSessionToolCatalogTests: XCTestCase {
             .compactMap { $0["name"] as? String }
         XCTAssertEqual(names, ConduitSessionToolCatalog.readToolNames + ConduitSessionToolCatalog.writeToolNames)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(names.count, 18)
-        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 7)
+        XCTAssertEqual(names.count, 25)
+        XCTAssertTrue(ConduitSessionToolCatalog.readToolNames.contains(ConduitFilesystemReadTool.name))
+        XCTAssertEqual(ConduitSessionToolCatalog.writeToolNames.count, 10)
+    }
+
+    func testDirectOperationCatalogSeparatesObservationFromMutationAndPublishesBounds() throws {
+        for name in [ConduitFilesystemSearchTool.name, ConduitDirectCommandTool.statusName,
+                     ConduitFilesystemMutationService.statusToolName] {
+            XCTAssertTrue(ConduitSessionToolCatalog.readToolNames.contains(name))
+            let tool = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: name))
+            XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, true)
+        }
+        for name in [ConduitDirectCommandTool.executeName, ConduitDirectCommandTool.cancelName,
+                     ConduitFilesystemMutationService.writeToolName] {
+            XCTAssertTrue(ConduitSessionToolCatalog.writeToolNames.contains(name))
+            let tool = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: name))
+            XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, false)
+            XCTAssertEqual((tool["inputSchema"] as? [String: Any])?["additionalProperties"] as? Bool, false)
+        }
+        let command = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: ConduitDirectCommandTool.executeName))
+        XCTAssertTrue((command["description"] as? String)?.contains("execution_authority_unavailable") == true)
+        let commandFields = try XCTUnwrap((command["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
+        XCTAssertEqual((commandFields["timeout_ms"] as? [String: Any])?["maximum"] as? Int,
+                       ConduitDirectCommandService.maximumTimeoutMilliseconds)
+        XCTAssertEqual((commandFields["max_output_bytes"] as? [String: Any])?["maximum"] as? Int,
+                       ConduitDirectCommandService.maximumOutputBytes)
+        XCTAssertNil(commandFields["operation"])
+        XCTAssertNil(commandFields["root"])
+        XCTAssertNil(commandFields["environment"])
+        let file = try XCTUnwrap(ConduitSessionToolCatalog.tool(named: ConduitFilesystemMutationService.writeToolName))
+        let schema = try XCTUnwrap(file["inputSchema"] as? [String: Any])
+        XCTAssertEqual(schema["required"] as? [String], ["operation_id", "project_slug", "path", "text"])
+        let alternatives = try XCTUnwrap(schema["oneOf"] as? [[String: Any]])
+        XCTAssertEqual(alternatives.compactMap { $0["required"] as? [String] }, [["expected_absent"], ["expected_sha256"]])
+        let fields = try XCTUnwrap(schema["properties"] as? [String: Any])
+        XCTAssertEqual((fields["text"] as? [String: Any])?["maxLength"] as? Int, ConduitFilesystemMutationService.maximumBytes)
     }
 
     func testRequiredArgumentsAndDescriptionsRemainActionable() throws {
