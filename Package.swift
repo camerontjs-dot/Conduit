@@ -35,6 +35,7 @@ let package = Package(
                 .copy("Resources/AgentSprites")
             ]
         ),
+        .testTarget(name: "ConduitAppTests", dependencies: ["Conduit", "ConduitCore"]),
         .testTarget(
             name: "ConduitCoreTests",
             dependencies: ["ConduitCore"]

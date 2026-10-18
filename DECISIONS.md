@@ -2056,3 +2056,20 @@ frozen selector evaluation demonstrates that a smaller or different projection
 preserves required-context selection. Revisit the projection boundary if a
 future consumer requires a separately justified combined full-text contract.
 
+## D-058 repair addendum: explicit exp2 index binding
+
+Status: proposed successor to the blocked #86 / MindGraph #23 pair.
+
+The collision receipt showed that trust labels and echoed scope were insufficient.
+The consumer now binds the original request alias, independently named producer
+index, document/chunk/path/namespace and known hash before returning text. exp1
+must be requeried. Handles remain unauthenticated locators, not storage custody
+or authorization. Only the Core catalog is authoritative for tools/list.
+
+The provider inventory/adoption functions are byte-preserved against the failed
+predecessor before the final AppModel digest is repinned. No conformance gate is
+removed and no evidence pins refresh automatically during tests.
+
+The opt-in populated-model test exercises real AppModel context, bundle/handoff
+rendering and recorded task state. It does not prove non-admission for a live
+provider queue; that remains an installed qualification acceptance case.

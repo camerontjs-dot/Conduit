@@ -275,7 +275,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_query_mindgraph",
-            "Semantic search over the operator's local MindGraph index. scope selects knowledge or projects. Results are ranked nominations, not evidence; not_citable documents remain separate from results.",
+            "Search one local MindGraph scope and return compact nominations with exact previews and exp2 expansion handles. Full chunks are withheld. Use conduit_expand_mindgraph_nomination with the same scope for selected sources. Retrieval and expansion do not verify claims or attach source to another worker.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "question": property("string", "Free-text search phrase. Empty questions are refused."),
@@ -286,6 +286,17 @@ public enum ConduitSessionToolCatalog {
                 ],
             ],
             required: ["question", "scope"]
+        ),
+
+        tool(
+            "conduit_expand_mindgraph_nomination",
+            "Expand an exp2 handle from conduit_query_mindgraph using the same scope. The original scope and stored index identity are checked independently before source text is returned. Legacy exp1, malformed, stale, missing or cross-index handles fail closed. Expansion adds context, not verification. This read does not attach material to another worker.",
+            annotations: localReadOnlyAnnotations,
+            properties: [
+                "expansion_handle": property("string", "Exact exp2 expansion_handle from the compact nomination."),
+                "scope": ["type": "string", "enum": ["knowledge", "projects"], "description": "The original query scope."],
+            ],
+            required: ["expansion_handle", "scope"]
         ),
     ]
 

@@ -33,6 +33,8 @@ func withTempDir(_ body: (URL) throws -> Void) {
     }
 }
 
+for (name, result) in mindGraphBindingSelfTests() { check(name, result) }
+
 // MARK: - FrontmatterParser
 
 let frontmatter = FrontmatterParser.parse("""
