@@ -124,6 +124,36 @@ public enum ConduitSessionAPI {
     public static let loopbackPort = 8750
     public static let loopbackPath = "/mcp"
 
+    /// One shared local bearer-token authorization domain, not authenticated
+    /// per-client identities. A durable retry namespace cannot derive from
+    /// mutable clientInfo. Sharing one token means sharing retry-key custody.
+    public static let replayAuthorityScope = "conduit-session-api-local-write-authority-v1"
+
+    /// The immediate structured-send result is not inferred from whether an
+    /// API call completed. A failed local send is an explicit API error;
+    /// provider-side acceptance can remain unproven.
+    public static func structuredPromptResult(
+        taskSessionID: String,
+        eventID: String,
+        delivered: Bool,
+        backend: String,
+        origin: ConduitSessionOrigin
+    ) -> [String: Any] {
+        var payload: [String: Any] = [
+            "taskSessionID": taskSessionID,
+            "eventID": eventID,
+            "delivered": delivered,
+            "delivery": delivered ? "delivered" : "failed",
+            "backend": backend,
+            "origin": origin.rawValue,
+            "authority": "prompt recorded; not verification",
+        ]
+        if !delivered {
+            payload["error"] = "Structured prompt send failed locally. Provider acceptance is not established; inspect task events before retrying."
+        }
+        return payload
+    }
+
     public static func isWrite(_ command: ConduitSessionCommand) -> Bool {
         switch command {
         case .listProjects, .listSessions, .listAdapters, .listProviderSessions,

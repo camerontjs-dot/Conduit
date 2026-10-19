@@ -18,8 +18,8 @@ final class SessionAPIReplayTransportTests: XCTestCase {
         let envelope = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text[range.upperBound...].utf8)) as? [String: Any])
         return try XCTUnwrap(envelope["result"] as? [String: Any])
     }
-    private func initialize(_ server: ConduitSessionAPIServer) throws {
-        _ = try request(server, method: "initialize", params: ["clientInfo": ["name": "fixture", "version": "1"]])
+    private func initialize(_ server: ConduitSessionAPIServer, clientName: String = "fixture") throws {
+        _ = try request(server, method: "initialize", params: ["clientInfo": ["name": clientName, "version": "1"]])
     }
     private func payload(_ response: [String: Any]) throws -> [String: Any] {
         let content = try XCTUnwrap(response["content"] as? [[String: Any]])
@@ -48,7 +48,7 @@ final class SessionAPIReplayTransportTests: XCTestCase {
                     operation = "conduit_send_prompt"; key = supplied ?? ""; fields = [id, text, origin.rawValue]
                 default: XCTFail("unexpected command"); return [:]
                 }
-                return journal.perform(caller: caller.identity, operation: operation, key: key, fields: fields) {
+                return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope, operation: operation, key: key, fields: fields) {
                     admissions += 1
                     let now = Date()
                     let resources = ConduitResourceSnapshot(
@@ -93,6 +93,79 @@ final class SessionAPIReplayTransportTests: XCTestCase {
         XCTAssertEqual(effects, 2)
         XCTAssertEqual(admissions, 2)
     }
+    func testInterveningClientInitializeCannotBypassOriginalKeyedSend() async throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent(".build").appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let journal = try SessionAPIReplayJournal(directory: root.appendingPathComponent("journal"))
+        let taskID = UUID().uuidString
+        let eventID = UUID().uuidString
+        var dispatches = 0
+        var seenClientLabels: [String?] = []
+        let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, caller in
+            seenClientLabels.append(caller.identity)
+            guard case .sendPrompt(let id, let text, let origin, let key) = command else {
+                XCTFail("unexpected command"); return [:]
+            }
+            return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope,
+                                   operation: "conduit_send_prompt", key: key ?? "",
+                                   fields: [id, text, origin.rawValue]) {
+                dispatches += 1
+                return ["taskSessionID": taskID, "eventID": eventID,
+                        "delivered": false, "delivery": "queued"]
+            }
+        }
+        let requestA: [String: Any] = ["name": "conduit_send_prompt",
+            "arguments": ["taskSessionID": taskID, "text": "exact prompt",
+                          "idempotency_key": "same-key"]]
+        try initialize(server, clientName: "client-A")
+        let first = try payload(request(server, method: "tools/call", params: requestA))
+        XCTAssertEqual(first["eventID"] as? String, eventID)
+        XCTAssertEqual(dispatches, 1)
+
+        // Exact adversarial sequence: B overwrites clientInfo, then A retries.
+        try initialize(server, clientName: "client-B")
+        let replay = try payload(request(server, method: "tools/call", params: requestA))
+        XCTAssertEqual(replay["deduplicated"] as? Bool, true)
+        XCTAssertEqual(replay["taskSessionID"] as? String, taskID)
+        XCTAssertEqual(replay["eventID"] as? String, eventID)
+        XCTAssertEqual(dispatches, 1)
+        XCTAssertEqual(seenClientLabels, ["client-A/1", "client-B/1"])
+
+        // Clients with one bearer share one durable retry-key namespace.
+        let changed: [String: Any] = ["name": "conduit_send_prompt",
+            "arguments": ["taskSessionID": taskID, "text": "different prompt",
+                          "idempotency_key": "same-key"]]
+        let conflict = try payload(request(server, method: "tools/call", params: changed))
+        XCTAssertEqual(conflict["replay_state"] as? String, "conflict")
+        XCTAssertEqual(dispatches, 1)
+    }
+
+    func testImmediateStructuredRefusalIsAnMCPError() async throws {
+        let task = UUID().uuidString, event = UUID().uuidString
+        let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, _ in
+            guard case .sendPrompt = command else { XCTFail("unexpected command"); return [:] }
+            return ConduitSessionAPI.structuredPromptResult(
+                taskSessionID: task, eventID: event, delivered: false,
+                backend: "fixture", origin: .chatgpt
+            )
+        }
+        try initialize(server)
+        let response = try request(server, method: "tools/call", params: [
+            "name": "conduit_send_prompt",
+            "arguments": ["taskSessionID": task, "text": "second concurrent prompt"]
+        ])
+        XCTAssertEqual(response["isError"] as? Bool, true)
+        let result = try payload(response)
+        XCTAssertEqual(result["eventID"] as? String, event)
+        XCTAssertEqual(result["delivery"] as? String, "failed")
+        XCTAssertEqual(result["delivered"] as? Bool, false)
+        XCTAssertNotNil(result["error"] as? String)
+    }
+
     func testPromptSchemaKeepsExactOptionalKeyAndRefusesWrongType() async throws {
         var commands: [ConduitSessionCommand] = []
         let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, _ in

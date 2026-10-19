@@ -4670,7 +4670,7 @@ final class AppModel: ObservableObject {
                 sessionAPIReplayJournal = try SessionAPIReplayJournal(directory:
                     AdapterThreadStore.defaultDirectory().appendingPathComponent("session-api-replay-v1"))
             }
-            return sessionAPIReplayJournal!.perform(caller: caller.identity,
+            return sessionAPIReplayJournal!.perform(caller: ConduitSessionAPI.replayAuthorityScope,
                 operation: operation, key: key, fields: fields) {
                 self.sessionAPIExecute(command, caller: caller)
             }
@@ -6865,14 +6865,13 @@ final class AppModel: ObservableObject {
                 eventID: eventID,
                 to: delivered ? .delivered : .failed
             )
-            return [
-                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
-                "eventID": eventID.uuidString,
-                "delivered": delivered,
-                "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
-                "origin": origin.rawValue,
-                "authority": "prompt recorded; not verification",
-            ]
+            return ConduitSessionAPI.structuredPromptResult(
+                taskSessionID: runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                eventID: eventID.uuidString,
+                delivered: delivered,
+                backend: runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
+                origin: origin
+            )
         }
         if AgentSlashCatalog.looksLikeSlashCommand(text) {
             sendSlashCommand(

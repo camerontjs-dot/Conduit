@@ -25,6 +25,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- A second MCP client's initialize no longer redirects durable keyed retry
+  lookup into a different clientInfo-named namespace. Clients sharing the
+  local API bearer authority share conservative retry-key custody.
+  Immediate structured-provider send failures now return an explicit MCP
+  error and original prompt event ID instead of a non-error result.
+
+
 ### Changed
 
 - Keyed Session API create and prompt requests now retain private intent/outcome

@@ -18,7 +18,8 @@ class SessionAPIReplayContract(unittest.TestCase):
 
     def test_boundary_journals_before_dispatch_and_admission_has_no_memory_dedupe(self):
         boundary = section('private func sessionAPIPayload(', 'private func sessionAPIExecute(')
-        self.assertIn('sessionAPIReplayJournal!.perform(caller: caller.identity', boundary)
+        self.assertIn('sessionAPIReplayJournal!.perform(caller: ConduitSessionAPI.replayAuthorityScope', boundary)
+        self.assertNotIn('sessionAPIReplayJournal!.perform(caller: caller.identity', boundary)
         self.assertIn('self.sessionAPIExecute(command, caller: caller)', boundary)
         self.assertIn('?.path.path', boundary)
         create = section('private func sessionAPICreateTask(', 'private func sessionAPIReconcileTask(')
@@ -34,3 +35,12 @@ class SessionAPIReplayContract(unittest.TestCase):
         execute = section('private func sessionAPIExecute(', 'private func sessionAPIDispatch(')
         self.assertIn('payload["ancillary_warnings"] = sessionAPIAncillaryWarnings', execute)
         self.assertIn('payload["error"] = raised', execute)  # authoritative errors survive
+
+    def test_structured_send_failure_is_explicitly_reported(self):
+        body = section('if runtime.structuredIsReady {', 'if AgentSlashCatalog.looksLikeSlashCommand(text) {')
+        self.assertIn('runtime.updatePromptDelivery(', body)
+        self.assertIn('ConduitSessionAPI.structuredPromptResult(', body)
+        helper = (ROOT / 'Sources/ConduitCore/ConduitSessionAPI.swift').read_text()
+        self.assertIn('if !delivered {', helper)
+        self.assertIn('payload["error"]', helper)
+        self.assertIn('Provider acceptance is not established', helper)

@@ -2229,8 +2229,7 @@ separate from MainFrame history. Caller identity, exact operation and exact key
 select a receipt; length-framed request fields bind its fingerprint. Create
 includes project slug and resolved project path. Prompt includes durable task
 UUID, exact text and origin. Only hashes and a bounded acceptance snapshot are
-stored, never prompt/objective text, raw errors, or credentials. Caller identity
-remains the existing shared-listener client identity, not authentication isolation.
+stored, never prompt/objective text, raw errors, or credentials. The journal uses the stable local bearer authorization domain, not the mutable listener-global clientInfo label. Clients sharing the same bearer share retry-key custody, so repeated keys replay or conflict instead of dispatching twice. This is still one operator authority and not per-client authentication; admission-rate labeling uses untrusted clientInfo and does not isolate clients.
 
 The journal checks replay before admission, synchronizes intent before dispatch,
 and synchronizes outcome before returning success. The admission controller
@@ -2255,3 +2254,10 @@ reconcile operation. A specifically ancillary work-log append failure is a visib
 warning, while authoritative mutation/delivery errors retain the API error path.
 Source and injected transport tests qualify these boundaries; installed runtime,
 provider delivery, and mounted UI acceptance require separate authorization.
+
+Follow-up to the independent review (19 October 2026): another client's MCP
+initialize must not change the namespace of an accepted keyed request. Bind
+the journal to the immutable local API write authority, not the last received
+clientInfo name. A synchronous structured-adapter send failure now produces
+an explicit API error and original prompt event ID. Provider-side acceptance
+remains unproven, so clients must inspect events before retrying.
