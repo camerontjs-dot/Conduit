@@ -2285,3 +2285,44 @@ transport seams. Real provider HTTP/SSE ordering, live StreamJSON concurrency,
 crash/relaunch identity and installed client behavior are unqualified until
 separate acceptance evidence exists. No permission, tool-admission, token,
 provider writer-authority or installed-app change is granted here.
+
+
+## D-065: OpenCode SSE requires HTTP-bound message identity
+
+D-064's local prompt ownership is insufficient when provider events carry only
+session identity. An OpenCode request now retains its initiating prompt-event ID
+through the asynchronous POST. Only a response containing `info.id`, matching
+`info.sessionID`, and `info.role == assistant` binds a provider message to that
+prompt. Reuse of an already bound message in the same client/session is rejected.
+The request body and endpoint remain unchanged; no provider request-ID field or
+acceptance event is invented. A local UUID is never presented as a provider ID.
+
+SSE must name both that session and that assistant message. Conflicting nested IDs,
+unknown IDs, session-only idle/completion/error/permission events, closed-message
+replays, and stopped-client callbacks have no output or completion authority.
+Mapper effects carry the proven prompt/session/message identity; TerminalRuntime
+checks the originating client and exact prompt owner before applying them. Activity
+presentation uses the same gate. A matched assistant error is a failure, even if it
+also carries a completion timestamp. HTTP 2xx establishes delivery, not completion.
+
+The synchronous message endpoint may emit SSE before returning. Buffer at most
+2,048 decoded events / 2 MiB per pending request and replay them in order only after
+the response binds the message. Refusal or stop discards the buffer. Overflow
+withholds all output/completion for that request and reports UNKNOWN, rather than
+presenting a partial replay as a complete answer. Missing or mismatched response
+identity also reports UNKNOWN; the accepted turn remains unresolved until stopped.
+
+This deliberately supports only the returned assistant message. Other assistant
+messages in a multi-message turn, pre-response permission prompts, reconnects with
+missing SSE, and responses without the supported identity cannot be attributed
+from session timing or a guessed parent relationship. Early output is delayed until
+HTTP settles. These limitations can block an interactive provider turn; they must
+be resolved with separately authorized protocol evidence before expanding support.
+The HTTP response's text or completion fields are not synthesized into SSE events.
+
+Evidence in this repair is synthetic HTTP/SSE decoding through the real client,
+mapper and runtime, plus static local protocol inspection. The installed binary's
+embedded SDK confirms the message POST endpoint and optional request `messageID`,
+but does not establish a server acceptance contract or live ordering. No optional
+request `messageID` is sent by this repair. Actual provider responses, multi-message
+behavior, live permission flow and installed-app behavior remain unqualified.

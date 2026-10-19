@@ -209,27 +209,19 @@ final class StructuredAdapterTests: XCTestCase {
         XCTAssertEqual(mapper.accumulatedText, "")
     }
 
-    func testOpenCodeSSECompletion() {
+    func testOpenCodeSessionOnlyCompletionHasNoAuthority() {
         var mapper = OpenCodeEventMapper()
-        let started = mapper.apply(
-            .object([
-                "type": .string("session.created"),
-                "properties": .object(["id": .string("ses_abc")]),
-            ])
-        )
-        XCTAssertEqual(started, [.sessionStarted(id: "ses_abc")])
-        _ = mapper.apply(
-            .object([
-                "type": .string("message.part.updated"),
-                "properties": .object([
-                    "part": .object(["text": .string("hello")]),
-                ]),
-            ])
-        )
-        let done = mapper.apply(
-            .object(["type": .string("session.idle")])
-        )
-        XCTAssertTrue(done.contains(.turnCompleted(status: "completed")))
+        mapper.sessionID = "ses_abc"
+        XCTAssertTrue(mapper.apply(.object(["type": .string("session.idle"),
+            "properties": .object(["sessionID": .string("ses_abc")])])).isEmpty)
+        XCTAssertNil(mapper.lastTurnStatus)
+        XCTAssertNotNil(mapper.identityDiagnostic)
+    }
+
+    private func accept(_ mapper: inout OpenCodeEventMapper, session: String, message: String) {
+        XCTAssertTrue(mapper.accept(.object(["info": .object([
+            "id": .string(message), "sessionID": .string(session), "role": .string("assistant")
+        ])]), promptEventID: UUID()))
     }
 
     /// Replays the real OpenCode stream captured on 2026-08-20 for a one-word
@@ -240,6 +232,7 @@ final class StructuredAdapterTests: XCTestCase {
     private func replayCapturedPongTurn() -> (OpenCodeEventMapper, [StructuredAdapterEffect]) {
         var mapper = OpenCodeEventMapper()
         mapper.sessionID = "ses_fnHzVi"
+        accept(&mapper, session: "ses_fnHzVi", message: "msg_asst_6nkayH")
         var effects: [StructuredAdapterEffect] = []
         let events: [CodexJSON] = [
             .object([
@@ -327,7 +320,13 @@ final class StructuredAdapterTests: XCTestCase {
             ]),
         ]
         for event in events {
-            effects.append(contentsOf: mapper.apply(event))
+            // Older capture excerpts omitted session IDs; restore the fixture's
+            // known session explicitly, never infer it in the production mapper.
+            guard case .object(var fields) = event,
+                  case .object(var properties) = fields["properties"] else { continue }
+            properties["sessionID"] = .string("ses_fnHzVi")
+            fields["properties"] = .object(properties)
+            effects.append(contentsOf: mapper.apply(.object(fields)))
         }
         return (mapper, effects)
     }
@@ -372,9 +371,11 @@ final class StructuredAdapterTests: XCTestCase {
         // carrying `field: "text"` exactly like the answer does.
         var mapper = OpenCodeEventMapper()
         mapper.sessionID = "ses_local"
+        accept(&mapper, session: "ses_local", message: "msg_asst")
         func snapshot(_ partID: String, _ kind: String, _ text: String?) {
             var part: [String: CodexJSON] = [
                 "id": .string(partID),
+                "sessionID": .string("ses_local"),
                 "messageID": .string("msg_asst"),
                 "type": .string(kind),
             ]
@@ -393,7 +394,8 @@ final class StructuredAdapterTests: XCTestCase {
                     "properties": .object([
                         "field": .string("text"),
                         "partID": .string(partID),
-                        "messageID": .string("msg_asst"),
+                        "sessionID": .string("ses_local"),
+                "messageID": .string("msg_asst"),
                         "delta": .string(text),
                     ]),
                 ])
