@@ -7,6 +7,96 @@ import ConduitCore
 /// AppModel startup, providers, or installed app participate in this fixture.
 @MainActor
 final class SessionAPIReplayTransportTests: XCTestCase {
+    private final class FakeObserver: ProviderSessionObserving {
+        let providerID = "fixture"
+        var listedSessionID = "ses_existing"
+        var observedSessionID = "ses_existing"
+        var listCalls = 0
+        var observeCalls = 0
+
+        func listSessions(
+            bindingResolver: ((String) -> ProviderObservationBinding?)?
+        ) throws -> [WorkerLineage] {
+            listCalls += 1
+            return [
+                makeWorker(
+                    sessionID: listedSessionID,
+                    binding: bindingResolver?(listedSessionID)
+                )
+            ]
+        }
+
+        func observeSession(
+            providerSessionID: String,
+            binding: ProviderObservationBinding?
+        ) throws -> WorkerLineage {
+            observeCalls += 1
+            return makeWorker(
+                sessionID: observedSessionID,
+                binding: binding
+            )
+        }
+
+        private func makeWorker(
+            sessionID: String,
+            binding: ProviderObservationBinding?
+        ) -> WorkerLineage {
+            let observed = SupervisionObservationStamp(
+                authority: .providerObserved,
+                freshness: .unknown,
+                observedAt: .known(
+                    Date(timeIntervalSince1970: 1_797_000_000)
+                )
+            )
+            return WorkerLineage(
+                conduitTaskID: binding.map {
+                    .known($0.conduitTaskID)
+                } ?? .unknown,
+                runtimeAttemptID: binding?.runtimeAttemptID.map {
+                    .known($0)
+                } ?? .unknown,
+                runtime: .known("fixture"),
+                adapter: .known("fixture_read_only"),
+                providerHostID: .unknown,
+                providerSessionID: .known(sessionID),
+                turns: [
+                    ProviderTurnLineage(
+                        turnID: .known("turn-1"),
+                        state: .completed,
+                        model: .known(
+                            ProviderModelIdentity(
+                                providerID: "fixture-model-provider",
+                                modelID: "fixture-model"
+                            )
+                        ),
+                        observation: observed
+                    )
+                ],
+                workspace: WorkerWorkspaceLineage(
+                    projectSlug: .unknown,
+                    cwd: .known("/tmp/fixture"),
+                    repositoryRoot: .unknown,
+                    worktree: .unknown
+                ),
+                process: WorkerProcessLineage(
+                    launcherPID: .unknown,
+                    processGroupID: .unknown,
+                    parentPID: .unknown
+                ),
+                origin: .unknown,
+                relationship: .discovered,
+                writerControllerID: .unknown,
+                terminal: WorkerTerminalState(
+                    receipt: .unknown,
+                    verification: .unknown,
+                    objectiveAcceptance: .unknown
+                ),
+                observation: observed,
+                providerSpecific: .unknown
+            )
+        }
+    }
+
     private func request(_ server: ConduitSessionAPIServer, method: String,
                          params: [String: Any]) throws -> [String: Any] {
         let body = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 1,
@@ -26,6 +116,83 @@ final class SessionAPIReplayTransportTests: XCTestCase {
         let text = try XCTUnwrap(content.first?["text"] as? String)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
     }
+    func testSharedBearerBudgetSurvivesInitializeLabelChange() async throws {
+        let controller = MCPAdmissionController(policy: .conduitSessionAPI(writesEnabled: true))
+        var stamp = Date(timeIntervalSince1970: 1_797_000_000)
+        var labels: [String?] = []
+        let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { _, caller in
+            labels.append(caller.identity)
+            let resources = ConduitResourceSnapshot(
+                availablePhysicalMemoryBytes: .known(value: 16_000_000_000, observedAt: stamp),
+                ownedProcessTreeRSSBytes: .known(value: 0, observedAt: stamp),
+                persistenceQueueCount: .known(value: 0, observedAt: stamp),
+                persistenceQueueBytes: .known(value: 0, observedAt: stamp),
+                promptQueueDepth: .known(value: 0, observedAt: stamp))
+            let decision = controller.admitWrite(callerIdentity: caller.identity, resources: resources, now: stamp)
+            return ["code": decision.code.rawValue]
+        }
+        let params: [String: Any] = ["name": "conduit_adopt_provider_session", "arguments": [
+            "provider": "opencode", "provider_session_id": "synthetic", "controller_id": "fixture"]]
+        func call() throws -> String? {
+            try payload(request(server, method: "tools/call", params: params))["code"] as? String
+        }
+        XCTAssertEqual(try call(), "caller_identity_required")
+        try initialize(server, clientName: "A")
+        for _ in 0..<30 { XCTAssertEqual(try call(), "admitted") }
+        try initialize(server, clientName: "B")
+        XCTAssertEqual(try call(), "caller_write_rate_limited")
+        XCTAssertEqual(labels.first!, nil)
+        XCTAssertEqual(labels[1], "A/1")
+        XCTAssertEqual(labels.last!, "B/1")
+        stamp = stamp.addingTimeInterval(61)
+        XCTAssertEqual(try call(), "admitted")
+    }
+
+    func testAdoptionAdmissionGuardsOwnershipThroughSyntheticTransport() async throws {
+        enum Denied: Error { case admission }
+        for refusal in ["writes_disabled", "caller_identity_required", "resource_unknown", "caller_write_rate_limited"] {
+            var policy = MCPAdmissionPolicy.conduitSessionAPI(writesEnabled: refusal != "writes_disabled")
+            policy.perCallerWriteLimit = 1
+            let controller = MCPAdmissionController(policy: policy)
+            let registry = ProviderSessionAuthorityRegistry()
+            let coordinator = ProviderSessionAuthorityCoordinator(observer: FakeObserver(), registry: registry)
+            let now = Date()
+            let healthy = ConduitResourceSnapshot(
+                availablePhysicalMemoryBytes: .known(value: 16_000_000_000, observedAt: now),
+                ownedProcessTreeRSSBytes: .known(value: 0, observedAt: now),
+                persistenceQueueCount: .known(value: 0, observedAt: now),
+                persistenceQueueBytes: .known(value: 0, observedAt: now),
+                promptQueueDepth: .known(value: 0, observedAt: now))
+            if refusal == "caller_write_rate_limited" {
+                XCTAssertTrue(controller.admitWrite(callerIdentity: "A", resources: healthy, now: now).shouldExecute)
+            }
+            let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, caller in
+                guard case .adoptProviderSession(_, let session, let owner) = command else {
+                    XCTFail("unexpected command"); return [:]
+                }
+                var code = "not_checked"
+                do {
+                    _ = try coordinator.adoptSession(providerSessionID: session, controllerID: owner, admitWrite: {
+                        let decision = controller.admitWrite(callerIdentity: caller.identity,
+                            resources: refusal == "resource_unknown" ? .unknown : healthy, now: now)
+                        code = decision.code.rawValue
+                        if !decision.shouldExecute { throw Denied.admission }
+                    })
+                    XCTFail("denied adoption executed")
+                } catch { }
+                return ["error": code]
+            }
+            if refusal != "caller_identity_required" { try initialize(server, clientName: "B") }
+            let before = try registry.snapshot(providerID: "fixture", providerSessionID: "ses_existing")
+            let result = try payload(request(server, method: "tools/call", params: [
+                "name": "conduit_adopt_provider_session", "arguments": ["provider": "opencode",
+                    "provider_session_id": "ses_existing", "controller_id": "B"]]))
+            XCTAssertEqual(result["error"] as? String, refusal)
+            XCTAssertEqual(try registry.snapshot(providerID: "fixture", providerSessionID: "ses_existing"), before)
+            XCTAssertEqual(try coordinator.observeSession(providerSessionID: "ses_existing").authority, before)
+        }
+    }
+
     func testCreateAndPromptReplayAcrossServerJournalAndControllerRecreation() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(".build").appendingPathComponent(UUID().uuidString)

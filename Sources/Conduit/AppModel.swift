@@ -4767,7 +4767,8 @@ final class AppModel: ObservableObject {
             return sessionAPIAdoptProviderSession(
                 provider: provider,
                 providerSessionID: providerSessionID,
-                controllerID: controllerID
+                controllerID: controllerID,
+                caller: caller
             )
         case .sessionStatus(let rawID):
             guard let uuid = UUID(uuidString: rawID),
@@ -6098,7 +6099,8 @@ final class AppModel: ObservableObject {
     private func sessionAPIAdoptProviderSession(
         provider: String,
         providerSessionID: String,
-        controllerID: String
+        controllerID: String,
+        caller: ConduitSessionCaller
     ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
@@ -6118,13 +6120,20 @@ final class AppModel: ObservableObject {
         }
 
         let coordinator = sessionAPIOpenCodeAuthorityCoordinator()
+        var admissionRefusal: [String: Any]?
         do {
             let result = try coordinator.adoptSession(
                 providerSessionID: providerSessionID,
                 controllerID: requestedController,
                 binding: sessionAPIProviderBinding(
                     providerSessionID: providerSessionID
-                )
+                ),
+                admitWrite: {
+                    if let refusal = self.sessionAPIDirectWriteAdmission(caller) {
+                        admissionRefusal = refusal
+                        throw NSError(domain: "ConduitSessionAPIAdmission", code: 1)
+                    }
+                }
             )
             guard var worker = sessionAPIWorkerLineageObject(
                 result.observation.worker
@@ -6168,6 +6177,7 @@ final class AppModel: ObservableObject {
 
             return payload
         } catch {
+            if let admissionRefusal { return admissionRefusal }
             return [
                 "error": error.localizedDescription,
                 "provider": "opencode",

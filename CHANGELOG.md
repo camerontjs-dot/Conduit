@@ -27,6 +27,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Session API mutations now share one bearer-authority rate budget; changing the observed MCP client label cannot replenish it. Missing required initialization still fails closed.
+- Provider-session adoption now validates the request and observed identity before write admission, and checks readiness, resources, caller metadata, and rate limits before changing writer ownership. Read-only observation and writer collisions retain their semantics.
+
+### Fixed
+
 - A second MCP client's initialize no longer redirects durable keyed retry
   lookup into a different clientInfo-named namespace. Clients sharing the
   local API bearer authority share conservative retry-key custody.

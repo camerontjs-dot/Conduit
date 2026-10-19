@@ -887,7 +887,7 @@ public final class MCPAdmissionController: @unchecked Sendable {
     }
 
     /// Admission for non-create, non-prompt MCP mutations such as explicit
-    /// reconcile/end operations. It consumes the caller's write-rate budget.
+    /// reconcile/end operations. It consumes the shared bearer write-rate budget.
     public func admitWrite(
         callerIdentity: String?,
         resources: ConduitResourceSnapshot,
@@ -1004,17 +1004,15 @@ public final class MCPAdmissionController: @unchecked Sendable {
     }
 
     private func callerDigest(_ callerIdentity: String?) -> String? {
-        if let callerIdentity,
-           !callerIdentity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return ConduitSafetyHash.digest(
-                namespace: "mcp-rate-caller",
-                bytes: callerIdentity.utf8
-            )
+        // clientInfo is an observed display label, never authenticated authority.
+        // All MCP mutations share the listener's single bearer write budget.
+        if policy.requireCallerIdentity,
+           callerIdentity?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            return nil
         }
-        if policy.requireCallerIdentity { return nil }
         return ConduitSafetyHash.digest(
-            namespace: "mcp-rate-caller",
-            bytes: "anonymous".utf8
+            namespace: "mcp-rate-authority",
+            bytes: ConduitSessionAPI.replayAuthorityScope.utf8
         )
     }
 
@@ -1033,7 +1031,7 @@ public final class MCPAdmissionController: @unchecked Sendable {
            bucket.creates.count >= policy.perCallerCreateLimit {
             return rejection(
                 .callerCreateRateLimited,
-                "Caller create-rate limit reached; retry after the current window.",
+                "Shared bearer create-rate limit reached; retry after the current window.",
                 retryAfterSeconds: retryAfter(
                     timestamps: bucket.creates,
                     now: now
@@ -1043,7 +1041,7 @@ public final class MCPAdmissionController: @unchecked Sendable {
         if bucket.writes.count >= policy.perCallerWriteLimit {
             return rejection(
                 .callerWriteRateLimited,
-                "Caller write-rate limit reached; retry after the current window.",
+                "Shared bearer write-rate limit reached; retry after the current window.",
                 retryAfterSeconds: retryAfter(
                     timestamps: bucket.writes,
                     now: now

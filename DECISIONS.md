@@ -2261,3 +2261,27 @@ the journal to the immutable local API write authority, not the last received
 clientInfo name. A synchronous structured-adapter send failure now produces
 an explicit API error and original prompt event ID. Provider-side acceptance
 remains unproven, so clients must inspect events before retrying.
+
+
+## D-064: Session API mutation budgets follow shared bearer authority
+
+**Date:** 2026-10-19
+
+MCP HTTP has one shared bearer and listener-global initialize metadata. The
+observed clientInfo label is display metadata, not an authenticated client
+identity. All MCPAdmissionController create, prompt and ordinary write budgets
+use ConduitSessionAPI.replayAuthorityScope, including reconcile, interrupt,
+lifecycle, close, direct writes and provider-session adoption. Existing policy
+field and decision-code names remain compatible; their caller rate limits now
+apply to the shared authority. Required missing/blank/oversized caller metadata
+still fails closed; changing a label does not create an independent allowance.
+
+Adoption observes and validates the exact provider identity and controller before
+invoking write admission, then claims the Core registry only if admitted. The
+Session API supplies the same readiness/resource/identity/rate gate used by direct
+writes. Invalid requests do not consume admission; denied requests cannot change
+ownership. Read-only observe has no admission charge, and admitted competing
+claims still return writer collision without replacement or provider activity.
+The coordinator's optional callback preserves non-API callers; API wiring must
+supply it. These are synthetic source/transport guarantees, not installed-app or
+real-provider qualification.
