@@ -11,6 +11,12 @@ func runSessionAPIReplayChecks(_ check: (String, Bool) -> Void) {
                                                 attributes: [.posixPermissions: 0o700])
         let directory = root.appendingPathComponent("journal")
         var journal: SessionAPIReplayJournal? = try .init(directory: directory)
+        for index in 0..<2049 {
+            _ = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "denied-\(index)", fields: [], admission: { _ in
+                ["error": "known pre-dispatch refusal"]
+            })
+        }
+        check("known refusals leave no replay receipts", try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["owner"])
         let task = UUID().uuidString, event = UUID().uuidString
         let original = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "key", fields: ["prompt"]) {
             ["taskSessionID": task, "eventID": event, "delivery": "queued", "delivered": false]

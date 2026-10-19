@@ -4671,9 +4671,9 @@ final class AppModel: ObservableObject {
                     AdapterThreadStore.defaultDirectory().appendingPathComponent("session-api-replay-v1"))
             }
             return sessionAPIReplayJournal!.perform(caller: ConduitSessionAPI.replayAuthorityScope,
-                operation: operation, key: key, fields: fields) {
-                self.sessionAPIExecute(command, caller: caller)
-            }
+                operation: operation, key: key, fields: fields, admission: { beginDispatch in
+                self.sessionAPIExecute(command, caller: caller, beginDispatch: beginDispatch)
+            })
         } catch {
             return ["error": "Private replay journal unavailable; no dispatch was attempted.",
                     "replay_state": "unavailable", "outcome": "UNKNOWN"]
@@ -4681,14 +4681,15 @@ final class AppModel: ObservableObject {
     }
 
     private func sessionAPIExecute(
-        _ command: ConduitSessionCommand, caller: ConduitSessionCaller
+        _ command: ConduitSessionCommand, caller: ConduitSessionCaller,
+        beginDispatch: () -> Bool = { true }
     ) -> [String: Any] {
         sessionAPIServingDepth += 1
         let priorWarnings = sessionAPIAncillaryWarnings
         sessionAPIAncillaryWarnings = []
         let captured = sessionAPICapturedError
         sessionAPICapturedError = nil
-        var payload = sessionAPIDispatch(command, caller: caller)
+        var payload = sessionAPIDispatch(command, caller: caller, beginDispatch: beginDispatch)
         let raised = sessionAPICapturedError
         if !sessionAPIAncillaryWarnings.isEmpty {
             payload["ancillary_warnings"] = sessionAPIAncillaryWarnings
@@ -4708,7 +4709,8 @@ final class AppModel: ObservableObject {
 
     private func sessionAPIDispatch(
         _ command: ConduitSessionCommand,
-        caller: ConduitSessionCaller = .unidentified
+        caller: ConduitSessionCaller = .unidentified,
+        beginDispatch: () -> Bool = { true }
     ) -> [String: Any] {
         switch command {
         case .listProjects:
@@ -4845,7 +4847,8 @@ final class AppModel: ObservableObject {
                 agentName: agentName,
                 projectSlug: projectSlug,
                 objective: objective,
-                caller: caller
+                caller: caller,
+                beginDispatch: beginDispatch
             )
         case .reconcileTask(let rawID):
             return sessionAPIReconcileTask(taskSessionID: rawID, caller: caller)
@@ -4854,7 +4857,8 @@ final class AppModel: ObservableObject {
                 taskSessionID: rawID,
                 text: text,
                 origin: origin,
-                caller: caller
+                caller: caller,
+                beginDispatch: beginDispatch
             )
         case .lifecyclePreflight(let rawID, let operation):
             return sessionAPILifecyclePreflight(
@@ -6596,7 +6600,8 @@ final class AppModel: ObservableObject {
         agentName: String,
         projectSlug: String,
         objective: String,
-        caller: ConduitSessionCaller
+        caller: ConduitSessionCaller,
+        beginDispatch: () -> Bool
     ) -> [String: Any] {
         // Gate, agent, and project are one decision, evaluated in ConduitCore
         // so the refusal contract and its ordering are testable without AppKit
@@ -6647,6 +6652,7 @@ final class AppModel: ObservableObject {
             }
         }
 
+        guard beginDispatch() else { return [:] }
         let taskID = TaskSessionID()
         guard let runtime = createTask(
             agent: agent,
@@ -6780,7 +6786,8 @@ final class AppModel: ObservableObject {
         taskSessionID rawID: String,
         text: String,
         origin: ConduitSessionOrigin,
-        caller: ConduitSessionCaller
+        caller: ConduitSessionCaller,
+        beginDispatch: () -> Bool
     ) -> [String: Any] {
         guard settings.enableSessionAPIWrites else {
             return ["error": "write tools are disabled"]
@@ -6817,6 +6824,7 @@ final class AppModel: ObservableObject {
         // way; a queued PTY write is still tracked by the runtime's own depth.
         defer { admission.markPromptFinished(reservationID: reservationID) }
 
+        guard beginDispatch() else { return [:] }
         return sessionAPIDeliver(trimmed, to: runtime, origin: origin)
     }
 

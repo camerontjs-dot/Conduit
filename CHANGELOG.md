@@ -27,6 +27,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Known pre-dispatch Session API create/send refusals no longer consume durable replay capacity. Intent is synchronized after admission and before the first possible effect; uncertain or accepted requests remain protected against redispatch.
+
+### Fixed
+
 - Session API mutations now share one bearer-authority rate budget; changing the observed MCP client label cannot replenish it. Missing required initialization still fails closed.
 - Provider-session adoption now validates the request and observed identity before write admission, and checks readiness, resources, caller metadata, and rate limits before changing writer ownership. Read-only observation and writer collisions retain their semantics.
 

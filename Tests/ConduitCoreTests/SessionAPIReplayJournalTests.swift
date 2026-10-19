@@ -21,6 +21,103 @@ final class SessionAPIReplayJournalTests: XCTestCase {
         ["taskSessionID": UUID().uuidString, "eventID": UUID().uuidString,
          "delivered": false, "delivery": "queued"]
     }
+    func testDistinctKnownRefusalsDoNotExhaustCapacity() throws {
+        try fixture { url in
+            let journal = try SessionAPIReplayJournal(directory: url)
+            var refusals = 0
+            for index in 0..<2049 {
+                _ = journal.perform(caller: "caller", operation: "conduit_send_prompt", key: "denied-\(index)", fields: [], admission: { _ in
+                    refusals += 1
+                    return ["error": "admission denied"]
+                })
+            }
+            XCTAssertEqual(refusals, 2049)
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: url.path), ["owner"])
+        }
+    }
+    func testTwoThousandRateRefusalsDoNotReserveJournal() throws {
+        try fixture { url in
+            let journal = try SessionAPIReplayJournal(directory: url)
+            var policy = MCPAdmissionPolicy.conduitSessionAPI(writesEnabled: true)
+            policy.perCallerWriteLimit = 1
+            let controller = MCPAdmissionController(policy: policy)
+            let now = Date(), task = TaskSessionID()
+            let resources = ConduitResourceSnapshot(
+                availablePhysicalMemoryBytes: .known(value: 16_000_000_000, observedAt: now),
+                ownedProcessTreeRSSBytes: .known(value: 0, observedAt: now),
+                persistenceQueueCount: .unknown, persistenceQueueBytes: .unknown,
+                promptQueueDepth: .known(value: 0, observedAt: now))
+            let first = controller.admitPrompt(callerIdentity: "caller", taskSessionID: task, resources: resources, now: now)
+            XCTAssertTrue(first.shouldExecute)
+            XCTAssertTrue(controller.cancelPrompt(reservationID: try XCTUnwrap(first.reservationID)))
+            for index in 0..<2049 {
+                let response = journal.perform(caller: "caller", operation: "conduit_send_prompt", key: "rate-\(index)", fields: [], admission: { _ in
+                    let decision = controller.admitPrompt(callerIdentity: "caller", taskSessionID: task, resources: resources, now: now)
+                    XCTAssertEqual(decision.code, .callerWriteRateLimited)
+                    return ["error": decision.detail]
+                })
+                XCTAssertEqual(response["replay_state"] as? String, "not_dispatched")
+            }
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: url.path), ["owner"])
+        }
+    }
+    func testAdmissionCheckpointCrashBoundariesAndUnknownConflict() throws {
+        try fixture { url in
+            var journal: SessionAPIReplayJournal? = try .init(directory: url)
+            var admissions = 0
+            func invoke(_ fields: [String], checkpoint: Bool) -> [String: Any] {
+                journal!.perform(caller: "caller", operation: "conduit_send_prompt", key: "same", fields: fields, admission: { begin in
+                    admissions += 1
+                    if checkpoint { XCTAssertTrue(begin()) }
+                    return ["error": "identical error text"]
+                })
+            }
+            XCTAssertEqual(invoke([], checkpoint: false)["replay_state"] as? String, "not_dispatched")
+            journal = nil // Crash after refusal: no removal phase or receipt exists.
+            journal = try .init(directory: url)
+            XCTAssertEqual(invoke([], checkpoint: true)["replay_state"] as? String, "unknown")
+            journal = nil // Crash after intent, before a trustworthy outcome.
+            journal = try .init(directory: url)
+            XCTAssertEqual(invoke([], checkpoint: false)["replay_state"] as? String, "unknown")
+            XCTAssertEqual(invoke(["changed"], checkpoint: false)["replay_state"] as? String, "conflict")
+            XCTAssertEqual(admissions, 2)
+        }
+    }
+    func testCheckpointSyncFailureCancelsExactReservationAndNeverDispatches() throws {
+        for failingSync in [1, 2] {
+            try fixture { url in
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+                var syncs = 0
+                var journal: SessionAPIReplayJournal? = try .init(directory: url, capacity: 2, synchronize: { fd in
+                    syncs += 1
+                    return syncs == failingSync ? -1 : fsync(fd)
+                })
+                let controller = MCPAdmissionController(policy: .conduitSessionAPI(writesEnabled: true))
+                let now = Date()
+                let resources = ConduitResourceSnapshot(
+                    availablePhysicalMemoryBytes: .known(value: 16_000_000_000, observedAt: now),
+                    ownedProcessTreeRSSBytes: .known(value: 0, observedAt: now),
+                    persistenceQueueCount: .unknown, persistenceQueueBytes: .unknown,
+                    promptQueueDepth: .known(value: 0, observedAt: now))
+                var cancelled = false
+                let response = journal!.perform(caller: "caller", operation: "conduit_create_task", key: "key", fields: [], admission: { begin in
+                    let decision = controller.admitCreate(callerIdentity: "caller", dedupeIdentity: nil, resources: resources)
+                    guard let reservation = decision.reservationID else { XCTFail("missing reservation"); return [:] }
+                    defer { cancelled = controller.cancelCreate(reservationID: reservation) }
+                    guard begin() else { return [:] }
+                    XCTFail("failed sync allowed dispatch")
+                    return [:]
+                })
+                XCTAssertEqual(response["replay_state"] as? String, "unavailable")
+                XCTAssertTrue(cancelled)
+                journal = nil
+                journal = try .init(directory: url)
+                XCTAssertEqual(journal!.perform(caller: "caller", operation: "conduit_create_task", key: "key", fields: [], admission: { _ in
+                    XCTFail("uncertain intent readmitted"); return [:]
+                })["replay_state"] as? String, "unknown")
+            }
+        }
+    }
     func testCreateReplayWithKnownPriorTaskAndRecreatedAdmissionController() throws {
         try fixture { url in
             let task = TaskSessionID()
@@ -35,13 +132,14 @@ final class SessionAPIReplayJournalTests: XCTestCase {
                 promptQueueDepth: .known(value: 0, observedAt: now))
             var admissions = 0
             func create() -> [String: Any] {
-                journal!.perform(caller: "caller", operation: "conduit_create_task", key: "create", fields: ["agent", "project", "/fixture/project", "objective"]) {
+                journal!.perform(caller: "caller", operation: "conduit_create_task", key: "create", fields: ["agent", "project", "/fixture/project", "objective"], admission: { begin in
                     admissions += 1
                     let decision = controller.admitCreate(callerIdentity: "caller", dedupeIdentity: nil, resources: resources)
                     XCTAssertTrue(decision.shouldExecute)
+                    guard begin() else { XCTFail("checkpoint failed"); return [:] }
                     if let id = decision.reservationID { controller.commitCreate(reservationID: id, taskSessionID: task) }
                     return ["taskSessionID": task.rawValue.uuidString, "objective_delivery_state": "queued"]
-                }
+                })
             }
             XCTAssertNil(create()["error"])
             journal = nil

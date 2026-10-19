@@ -71,6 +71,19 @@ public final class SessionAPIReplayJournal {
     /// rate budget) is spent on replay/conflict/unknown/storage refusal.
     public func perform(caller: String?, operation: String, key: String,
                         fields: [String], action: () -> [String: Any]) -> [String: Any] {
+        perform(caller: caller, operation: operation, key: key, fields: fields, admission: { beginDispatch in
+            guard beginDispatch() else { return [:] }
+            return action()
+        })
+    }
+
+    /// Admission may refuse without creating intent. The synchronous caller MUST
+    /// check beginDispatch immediately before its first possible task/event/effect.
+    /// A false checkpoint forbids dispatch; reservation cleanup remains the
+    /// caller's responsibility. The checkpoint synchronizes intent exactly once.
+    /// Neither errors nor missing task IDs are evidence of no effect afterward.
+    public func perform(caller: String?, operation: String, key: String,
+                        fields: [String], admission: (_ beginDispatch: () -> Bool) -> [String: Any]) -> [String: Any] {
         mutex.lock(); defer { mutex.unlock() }
         do {
             guard let caller, !caller.isEmpty else { throw Failure.unavailable }
@@ -118,12 +131,32 @@ public final class SessionAPIReplayJournal {
             guard !names.contains(outcomeName) else { throw Failure.unknown }
             guard names.filter({ $0.hasSuffix(".intent") }).count < capacity else { throw Failure.capacity }
             let reservation = UUID()
-            try write(Receipt(version: 1, identity: identity, fingerprint: fingerprint,
-                              reservation: reservation, outcome: nil), name: intentName)
-            let payload = action()
+            var attempted = false
+            var checkpointFailure: Error?
+            let payload = admission {
+                guard !attempted else {
+                    checkpointFailure = Failure.unknown
+                    return false
+                }
+                attempted = true
+                do {
+                    try self.write(Receipt(version: 1, identity: identity, fingerprint: fingerprint,
+                                           reservation: reservation, outcome: nil), name: intentName)
+                    return true
+                } catch {
+                    checkpointFailure = error
+                    return false
+                }
+            }
+            if let checkpointFailure { throw checkpointFailure }
+            guard attempted else {
+                var refused = payload
+                refused["replay_state"] = "not_dispatched"
+                return refused
+            }
             let result = Self.snapshot(payload)
             // No trustworthy identity means we cannot promise a completed replay.
-            // Leave the intent intact even for refusal; a new key is required.
+            // After the checkpoint, retain intent even when the action reports refusal.
             do {
                 _ = try Self.restore(result)
                 if operation == "conduit_send_prompt", result["eventID"] == nil { throw Failure.unknown }
