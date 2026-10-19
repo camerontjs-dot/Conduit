@@ -205,7 +205,7 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "ae8429c56e34b280d0d0de806aa8a7b89e96b4b844d2a3645147ea81f72debd7"
+        "sha256": "c87fae8a256acb21b72e1a183f78a74457a2a78171c9b020b967622659f020cf"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current direct-operation source candidate; source inspection only, not a provider runtime or qualification observation",
@@ -360,7 +360,7 @@
     "OPENCODE-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/OpenCodeHTTPClient.swift",
-        "sha256": "cddd5d926526d9705dbe9cf237bd3ce1471e146ddb4eddd51fcc0bed32b7fac0"
+        "sha256": "8ab17ea92452fd035149fdb4a8c03fc4b2c9a10a635009e026ee9c7cfae01d78"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",

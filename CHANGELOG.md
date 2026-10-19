@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Refused overlapping structured prompts retain their own failed event without
+  closing or taking ownership of the running prompt's output and feedback.
+- OpenCode prompts stay queued until HTTP acceptance, then update the exact
+  prompt to delivered or failed. Late responses after shutdown cannot rewrite
+  prompt delivery; an unobserved acceptance remains explicitly unknown.
+
 - A second MCP client's initialize no longer redirects durable keyed retry
   lookup into a different clientInfo-named namespace. Clients sharing the
   local API bearer authority share conservative retry-key custody.
