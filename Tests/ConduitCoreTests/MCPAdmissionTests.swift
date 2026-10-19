@@ -236,12 +236,12 @@ final class MCPAdmissionTests: XCTestCase {
         )
     }
 
-    func testRateBudgetIsPerCaller() {
+    func testRateBudgetIsSharedAcrossObservedLabels() {
         let controller = MCPAdmissionController(policy: policy(perCallerCreateLimit: 1))
         _ = create(controller, caller: "chatgpt-developer-mode/1.0")
         XCTAssertEqual(
-            create(controller, caller: "conduit-preflight/1.0").outcome,
-            .admitted
+            create(controller, caller: "conduit-preflight/1.0").code,
+            .callerCreateRateLimited
         )
     }
 

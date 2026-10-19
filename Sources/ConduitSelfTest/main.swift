@@ -33,6 +33,7 @@ func withTempDir(_ body: (URL) throws -> Void) {
     }
 }
 
+runAdmissionGovernanceChecks { name, result in check(name, result) }
 runSessionAPIReplayChecks { name, result in check(name, result) }
 
 // MARK: - Retained thread recognition (UX-A)
@@ -2924,8 +2925,8 @@ do {
         let controller = MCPAdmissionController(policy: policy(perCallerCreateLimit: 1))
         _ = create(controller, caller: "chatgpt-developer-mode/1.0")
         check(
-            "rate budget is tracked per caller identity",
-            create(controller, caller: "conduit-preflight/1.0").outcome == .admitted
+            "rate budget is shared across observed labels",
+            create(controller, caller: "conduit-preflight/1.0").code == .callerCreateRateLimited
         )
     }
 

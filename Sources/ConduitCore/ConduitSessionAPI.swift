@@ -47,9 +47,9 @@ public struct ConduitSessionSnapshot: Equatable, Sendable {
 ///
 /// The listener holds one bearer token and speaks MCP `2024-11-05`, which has
 /// no per-request session header, so identity is the `clientInfo` from the most
-/// recent `initialize` on this listener. That bounds the total write rate
-/// through the MCP surface; it is not proof of per-caller isolation between two
-/// clients sharing the token.
+/// recent `initialize` on this listener. This is display metadata only. Admission
+/// uses one shared bearer authority budget, never this mutable label. There is
+/// no authenticated per-client isolation between clients sharing the token.
 public struct ConduitSessionCaller: Equatable, Sendable {
     public let identity: String?
     public let observedAt: Date?
