@@ -2303,3 +2303,11 @@ Crashes before intent cannot have dispatched; crashes during/after intent retain
 UNKNOWN. There is no refusal-removal transaction or tombstone to recover.
 Existing pending receipts, including old refusals without proof, are never pruned.
 Accepted queued work retains its original task/event identity on completed replay.
+
+Follow-up source review boundary (19 October 2026): the former public
+action-only journal helper was removed because it could not distinguish a
+provable pre-admission refusal from a potentially accepted operation before
+reserving durable intent. Core/transport/selftest fixtures now must explicitly
+call the typed admission callback and cross beginDispatch before any effect.
+Only the typed checkpoint contract is supported; no unsafe compatibility
+surface remains. The previously reviewed failed source commit stays retained.

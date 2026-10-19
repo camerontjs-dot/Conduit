@@ -215,7 +215,7 @@ final class SessionAPIReplayTransportTests: XCTestCase {
                     operation = "conduit_send_prompt"; key = supplied ?? ""; fields = [id, text, origin.rawValue]
                 default: XCTFail("unexpected command"); return [:]
                 }
-                return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope, operation: operation, key: key, fields: fields) {
+                return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope, operation: operation, key: key, fields: fields, admission: { beginDispatch in
                     admissions += 1
                     let now = Date()
                     let resources = ConduitResourceSnapshot(
@@ -228,15 +228,20 @@ final class SessionAPIReplayTransportTests: XCTestCase {
                         ? controller.admitCreate(callerIdentity: caller.identity, dedupeIdentity: nil, resources: resources)
                         : controller.admitPrompt(callerIdentity: caller.identity, taskSessionID: task,
                             observedTaskQueueDepth: 0, resources: resources)
-                    XCTAssertTrue(decision.shouldExecute)
-                    if let reservation = decision.reservationID {
-                        if operation == "conduit_create_task" { controller.commitCreate(reservationID: reservation, taskSessionID: task) }
-                        else { controller.markPromptFinished(reservationID: reservation) }
+                    guard decision.shouldExecute, let reservation = decision.reservationID else {
+                        return ["error": "fixture admission refused without an effect"]
                     }
+                    guard beginDispatch() else {
+                        if operation == "conduit_create_task" { controller.cancelCreate(reservationID: reservation) }
+                        else { controller.cancelPrompt(reservationID: reservation) }
+                        return ["error": "intent persistence unavailable; no effect"]
+                    }
+                    if operation == "conduit_create_task" { controller.commitCreate(reservationID: reservation, taskSessionID: task) }
+                    else { controller.markPromptFinished(reservationID: reservation) }
                     effects += 1
                     return ["taskSessionID": task.rawValue.uuidString, "eventID": event,
                             "delivered": false, "delivery": "queued", "ancillary_warnings": ["fixture warning"]]
-                }
+                })
             }
         }
         let create: [String: Any] = ["name": "conduit_create_task", "arguments": ["agent": "fixture", "project_slug": "project", "objective": "secret", "idempotency_key": "create-key"]]
@@ -329,11 +334,12 @@ final class SessionAPIReplayTransportTests: XCTestCase {
             }
             return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope,
                                    operation: "conduit_send_prompt", key: key ?? "",
-                                   fields: [id, text, origin.rawValue]) {
+                                   fields: [id, text, origin.rawValue], admission: { beginDispatch in
+                guard beginDispatch() else { return ["error": "intent persistence unavailable"] }
                 dispatches += 1
                 return ["taskSessionID": taskID, "eventID": eventID,
                         "delivered": false, "delivery": "queued"]
-            }
+            })
         }
         let requestA: [String: Any] = ["name": "conduit_send_prompt",
             "arguments": ["taskSessionID": taskID, "text": "exact prompt",

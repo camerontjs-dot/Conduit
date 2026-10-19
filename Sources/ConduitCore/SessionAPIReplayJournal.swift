@@ -67,15 +67,10 @@ public final class SessionAPIReplayJournal {
 
     deinit { close(owner); close(directory) }
 
-    /// The action includes admission and dispatch. No action (and therefore no
-    /// rate budget) is spent on replay/conflict/unknown/storage refusal.
-    public func perform(caller: String?, operation: String, key: String,
-                        fields: [String], action: () -> [String: Any]) -> [String: Any] {
-        perform(caller: caller, operation: operation, key: key, fields: fields, admission: { beginDispatch in
-            guard beginDispatch() else { return [:] }
-            return action()
-        })
-    }
+    // Deliberately no action-only overload: it previously synchronized intent
+    // before the action could perform admission, so pure refusals filled the
+    // private journal. Every caller must prove admission before invoking the
+    // synchronous beginDispatch checkpoint at its first possible effect.
 
     /// Admission may refuse without creating intent. The synchronous caller MUST
     /// check beginDispatch immediately before its first possible task/event/effect.

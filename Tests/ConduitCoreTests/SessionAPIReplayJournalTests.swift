@@ -15,7 +15,10 @@ final class SessionAPIReplayJournalTests: XCTestCase {
                       fields: [String] = ["project", "prompt secret"],
                       action: () -> [String: Any]) -> [String: Any] {
         journal.perform(caller: "caller", operation: "conduit_send_prompt", key: key,
-                        fields: fields, action: action)
+                        fields: fields, admission: { beginDispatch in
+            guard beginDispatch() else { return ["error": "intent persistence unavailable"] }
+            return action()
+        })
     }
     private var result: [String: Any] {
         ["taskSessionID": UUID().uuidString, "eventID": UUID().uuidString,
@@ -213,9 +216,10 @@ final class SessionAPIReplayJournalTests: XCTestCase {
             }["replay_state"] as? String, "conflict")
             var effects = 0
             for (caller, operation) in [("other", "conduit_send_prompt"), ("caller", "conduit_create_task")] {
-                _ = journal.perform(caller: caller, operation: operation, key: "key", fields: ["project"]) {
+                _ = journal.perform(caller: caller, operation: operation, key: "key", fields: ["project"], admission: { beginDispatch in
+                    guard beginDispatch() else { return ["error": "intent persistence unavailable"] }
                     effects += 1; return self.result
-                }
+                })
             }
             XCTAssertEqual(effects, 2)
         }

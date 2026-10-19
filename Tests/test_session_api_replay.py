@@ -57,3 +57,8 @@ class SessionAPIReplayContract(unittest.TestCase):
             self.assertLess(checkpoint, body.index(effect))
         delivery = section('private func sessionAPIDeliver(', 'if runtime.structuredIsReady {')
         self.assertIn('let eventID = runtime.recordPrompt(', delivery)
+
+    def test_no_action_only_public_replay_overload(self):
+        journal = (ROOT / 'Sources/ConduitCore/SessionAPIReplayJournal.swift').read_text()
+        self.assertNotIn('fields: [String], action: () -> [String: Any]', journal)
+        self.assertIn('admission: (_ beginDispatch: () -> Bool) -> [String: Any]', journal)

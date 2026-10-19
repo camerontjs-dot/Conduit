@@ -18,20 +18,23 @@ func runSessionAPIReplayChecks(_ check: (String, Bool) -> Void) {
         }
         check("known refusals leave no replay receipts", try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["owner"])
         let task = UUID().uuidString, event = UUID().uuidString
-        let original = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "key", fields: ["prompt"]) {
-            ["taskSessionID": task, "eventID": event, "delivery": "queued", "delivered": false]
-        }
+        let original = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "key", fields: ["prompt"], admission: { beginDispatch in
+            guard beginDispatch() else { return ["error": "intent persistence unavailable"] }
+            return ["taskSessionID": task, "eventID": event, "delivery": "queued", "delivered": false]
+        })
         check("replay journal records original acceptance", original["error"] == nil)
         journal = nil
         journal = try .init(directory: directory)
         var effects = 0
-        let replay = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "key", fields: ["prompt"]) {
+        let replay = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "key", fields: ["prompt"], admission: { beginDispatch in
+            guard beginDispatch() else { return ["error": "intent persistence unavailable"] }
             effects += 1; return [:]
-        }
+        })
         check("replay survives reconstruction without dispatch", effects == 0 && replay["eventID"] as? String == event)
-        let conflict = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "key", fields: ["changed"]) {
+        let conflict = journal!.perform(caller: "fixture", operation: "conduit_send_prompt", key: "key", fields: ["changed"], admission: { beginDispatch in
+            guard beginDispatch() else { return ["error": "intent persistence unavailable"] }
             effects += 1; return [:]
-        }
+        })
         check("replay conflicts fail closed", effects == 0 && conflict["replay_state"] as? String == "conflict")
     } catch { check("replay journal fixture: \(error)", false) }
 }

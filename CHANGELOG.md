@@ -27,6 +27,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Removed the unsafe action-only replay-journal helper. All callers now use
+  explicit admission and the durable checkpoint before the first possible
+  effect; this prevents future callers from filling receipts with refused work.
+
 - Known pre-dispatch Session API create/send refusals no longer consume durable replay capacity. Intent is synchronized after admission and before the first possible effect; uncertain or accepted requests remain protected against redispatch.
 
 ### Fixed
