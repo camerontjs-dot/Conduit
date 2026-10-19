@@ -261,6 +261,9 @@ final class OpenCodeHTTPClient: ObservableObject {
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
 
+    private var pendingPrompt: (id: UUID, completion: (Result<Void, Error>) -> Void)?
+    private var promptTransport: ((String) async throws -> Void)?
+
     private let cwd: URL
     private let model: String?
     private let resumeSessionID: String?
@@ -285,6 +288,15 @@ final class OpenCodeHTTPClient: ObservableObject {
         self.cwd = cwd
         self.model = model
         self.resumeSessionID = resumeSessionID
+    }
+
+    /// In-process transport injection; no lease, listener, or provider is started.
+    init(cwd: URL, promptTransport: @escaping (String) async throws -> Void) {
+        self.cwd = cwd
+        self.model = nil
+        self.resumeSessionID = nil
+        self.promptTransport = promptTransport
+        self.isReady = true
     }
 
     func start(executable: String) async throws {
@@ -329,10 +341,31 @@ final class OpenCodeHTTPClient: ObservableObject {
         startSSE(base: base, password: lease.password)
     }
 
-    func sendTurn(text: String) throws {
-        guard isReady, let sessionID, let lease, let base = lease.baseURL else {
-            throw ClientError.notReady
+    func sendTurn(text: String, completion: @escaping (Result<Void, Error>) -> Void) throws {
+        guard isReady, !stopped else { throw ClientError.notReady }
+        guard pendingPrompt == nil, !isTurnActive else {
+            throw ClientError.protocolError("an OpenCode turn is already running")
         }
+        let request: () async throws -> Void
+        if let promptTransport {
+            request = { try await promptTransport(text) }
+        } else {
+            guard let sessionID, let lease, let base = lease.baseURL else {
+                throw ClientError.notReady
+            }
+            let split = OpenCodeHTTPContract.splitModel(model)
+            let body = OpenCodeHTTPContract.promptBody(
+                text: text, providerID: split?.providerID, modelID: split?.modelID
+            )
+            request = { [self] in
+                _ = try await postJSON(
+                    OpenCodeHTTPContract.messageURL(base: base, sessionID: sessionID),
+                    password: lease.password, body: body
+                )
+            }
+        }
+        let requestID = UUID()
+        pendingPrompt = (requestID, completion)
         mapper.resetTurn()
         conversationActivities.removeAll(keepingCapacity: true)
         activityIndexByID.removeAll(keepingCapacity: true)
@@ -343,22 +376,17 @@ final class OpenCodeHTTPClient: ObservableObject {
         lastTurnStatus = nil
         lastError = nil
         turnFailure = nil
-        let split = OpenCodeHTTPContract.splitModel(model)
-        let body = OpenCodeHTTPContract.promptBody(
-            text: text,
-            providerID: split?.providerID,
-            modelID: split?.modelID
-        )
         Task { [weak self] in
-            do {
-                _ = try await self?.postJSON(
-                    OpenCodeHTTPContract.messageURL(base: base, sessionID: sessionID),
-                    password: lease.password,
-                    body: body
-                )
-            } catch {
-                self?.emit(.failed(error.localizedDescription))
+            let result: Result<Void, Error>
+            do { try await request(); result = .success(()) }
+            catch { result = .failure(error) }
+            guard let self, self.pendingPrompt?.id == requestID else { return }
+            let completion = self.pendingPrompt?.completion
+            self.pendingPrompt = nil
+            if case .failure(let error) = result {
+                self.emit(.failed(error.localizedDescription))
             }
+            completion?(result)
         }
     }
 
@@ -393,11 +421,16 @@ final class OpenCodeHTTPClient: ObservableObject {
 
     func stop() {
         stopped = true
+        let pending = pendingPrompt
+        pendingPrompt = nil
+        pending?.completion(.failure(ClientError.protocolError(
+            "OpenCode stopped before HTTP acceptance was observed; provider acceptance is unknown."
+        )))
         sseTask?.cancel()
         sseTask = nil
         isReady = false
         isTurnActive = false
-        OpenCodeServeLease.shared.release()
+        if lease != nil { OpenCodeServeLease.shared.release() }
         lease = nil
     }
 
@@ -515,7 +548,10 @@ final class OpenCodeHTTPClient: ObservableObject {
         OpenCodeServeLease.applyAuth(&request, password: password)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+        guard let http = response as? HTTPURLResponse else {
+            throw ClientError.protocolError("OpenCode acceptance is unknown: no HTTP response.")
+        }
+        if !(200..<300).contains(http.statusCode) {
             let snippet = String(data: data, encoding: .utf8) ?? ""
             throw ClientError.protocolError("OpenCode HTTP \(http.statusCode): \(snippet.prefix(240))")
         }

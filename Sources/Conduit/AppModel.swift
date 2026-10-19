@@ -3503,12 +3503,8 @@ final class AppModel: ObservableObject {
         }
         let agentName = runtime.controller.descriptor.agent.name
         if runtime.structuredIsReady {
-            let delivered = runtime.sendStructuredPrompt(text: assembled)
-            runtime.updatePromptDelivery(
-                eventID: eventID,
-                to: delivered ? .delivered : .failed
-            )
-            if !delivered {
+            let delivery = runtime.deliverStructuredPrompt(eventID: eventID, text: assembled)
+            if delivery == .failed {
                 if composerText.isEmpty && attachments.isEmpty {
                     composerText = savedText
                     attachments = savedAttachments
@@ -6860,15 +6856,22 @@ final class AppModel: ObservableObject {
             ]
         }
         if runtime.structuredIsReady {
-            let delivered = runtime.sendStructuredPrompt(text: text)
-            runtime.updatePromptDelivery(
-                eventID: eventID,
-                to: delivered ? .delivered : .failed
-            )
+            let delivery = runtime.deliverStructuredPrompt(eventID: eventID, text: text)
+            if delivery == .queued {
+                return [
+                    "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                    "eventID": eventID.uuidString,
+                    "delivered": false,
+                    "delivery": "queued",
+                    "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
+                    "origin": origin.rawValue,
+                    "authority": "Conduit owns delivery pending HTTP provider acceptance. Do not resend. Read conduit_session_events for the exact prompt outcome; acceptance does not establish turn completion.",
+                ]
+            }
             return ConduitSessionAPI.structuredPromptResult(
                 taskSessionID: runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
                 eventID: eventID.uuidString,
-                delivered: delivered,
+                delivered: delivery == .delivered,
                 backend: runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
                 origin: origin
             )
@@ -7612,6 +7615,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
     private let recordEventRevision: ((SessionPresentationEvent, SessionControlOrigin) -> Void)?
     private var controlFeedback = SessionControlFeedbackLedger()
     private var activeOutputCapture: ActiveOutputCapture?
+    private var structuredPromptEventID: UUID?
     private let reductionQueue = DispatchQueue(
         label: "dev.camerontjs.conduit.raw-derived-reduction",
         qos: .userInitiated
@@ -7779,7 +7783,8 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         if let event = presentationEvents.first(where: { $0.id == eventID }) {
             recordPresentationRevision(event)
         }
-        if delivery == .failed {
+        if delivery == .failed,
+           activeOutputCapture?.promptEventID == eventID || structuredPromptEventID == eventID {
             closeAgentOutputCapture()
         }
     }
@@ -8103,16 +8108,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         holdExpiry?.cancel()
         holdExpiry = nil
         for prompt in pending {
-            let delivered = sendStructuredPrompt(text: prompt.text)
-            resolve(
-                prompt,
-                with: delivered
-                    ? .delivered
-                    : .refused(
-                        "\(descriptor.agent.name) refused the prompt Conduit "
-                            + "was holding for it"
-                    )
-            )
+            deliverStructuredPrompt(eventID: prompt.eventID, text: prompt.text)
         }
     }
 
@@ -8222,17 +8218,56 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         pendingStructuredApproval = nil
     }
 
-    func sendStructuredPrompt(text: String) -> Bool {
+    /// Bind output before invoking the adapter (which may emit synchronously).
+    /// A refused overlap restores the owner; recording a prompt alone never owns output.
+    @discardableResult
+    func deliverStructuredPrompt(eventID: UUID, text: String,
+                                 send: (() throws -> Void)? = nil) -> PromptDeliveryState {
+        let previousOwner = structuredPromptEventID
+        structuredPromptEventID = eventID
+        let state: PromptDeliveryState
+        do {
+            if let send {
+                try send()
+                state = .delivered
+            } else if let openCode {
+                try openCode.sendTurn(text: text) { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success:
+                        self.updatePromptDelivery(eventID: eventID, to: .delivered)
+                    case .failure(let error):
+                        self.updatePromptDelivery(eventID: eventID, to: .failed)
+                        self.conversationCaptureNotice = error.localizedDescription
+                    }
+                }
+                state = .queued
+            } else {
+                state = sendStructuredPrompt(text: text) ? .delivered : .failed
+            }
+        } catch {
+            conversationCaptureNotice = error.localizedDescription
+            state = .failed
+        }
+        if state == .failed {
+            structuredPromptEventID = previousOwner
+        } else if let outputID = activeOutputEventID,
+                  let outputEvent = presentationEvents.first(where: { $0.id == outputID }),
+                  case .agentOutput(let output) = outputEvent.kind,
+                  output.promptEventID != eventID {
+            closeAgentOutputCapture()
+        }
+        updatePromptDelivery(eventID: eventID, to: state)
+        return state
+    }
+
+    private func sendStructuredPrompt(text: String) -> Bool {
         if appServer != nil {
             return sendAppServerPrompt(text: text)
         }
         do {
             if let grokACP {
                 try grokACP.sendTurn(text: text)
-                return true
-            }
-            if let openCode {
-                try openCode.sendTurn(text: text)
                 return true
             }
             if let streamJSON {
@@ -8369,7 +8404,8 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
     }
 
-    private func wireStructured(_ client: OpenCodeHTTPClient) {
+    func wireStructured(_ client: OpenCodeHTTPClient) {
+        openCode = client
         client.onEffect = { [weak self] effect in
             self?.applyStructuredEffect(effect, backend: .httpServer)
         }
@@ -8399,7 +8435,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
     }
 
-    private func applyStructuredEffect(
+    func applyStructuredEffect(
         _ effect: StructuredAdapterEffect,
         backend: AgentSessionBackend
     ) {
@@ -8450,15 +8486,13 @@ final class TerminalRuntime: ObservableObject, Identifiable {
 
     private func upsertAdapterOutput(text: String, state: AgentOutputState) {
         conversationCaptureNotice = nil
-        let promptID = presentationEvents.last(where: {
-            if case .userPrompt = $0.kind { return true }
-            return false
-        })?.id
+        let promptID = structuredPromptEventID
         let event: SessionPresentationEvent
         if let eventID = activeOutputEventID,
            let previous = presentationEvents.first(where: { $0.id == eventID }),
            case .agentOutput(let previousOutput) = previous.kind,
-           previousOutput.extraction == .structuredAdapter {
+           previousOutput.extraction == .structuredAdapter,
+           previousOutput.promptEventID == promptID {
             event = SessionPresentation.agentOutputEvent(
                 promptEventID: previousOutput.promptEventID ?? promptID,
                 text: text,

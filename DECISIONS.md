@@ -2261,3 +2261,27 @@ the journal to the immutable local API write authority, not the last received
 clientInfo name. A synchronous structured-adapter send failure now produces
 an explicit API error and original prompt event ID. Provider-side acceptance
 remains unproven, so clients must inspect events before retrying.
+
+
+## D-064: Structured prompt event ownership and provider HTTP delivery truth
+
+Structured output is owned by the exact prompt that the provider accepted, not
+by the most recent prompt in the conversation. A synchronously refused
+overlapping prompt records its own failed delivery without ending another
+active prompt's output capture or reassigning later output and feedback.
+Effect capture checks exact prompt-event identities across adapter callbacks.
+
+For OpenCode HTTP, dispatching an asynchronous request does not establish
+provider acceptance. The original Conduit API response reports queued and
+retains the exact prompt-event ID until its HTTP outcome is observed.
+An accepted HTTP 2xx response advances that event's delivery to delivered;
+a refused/failed HTTP request advances it to failed. Neither transport success
+nor a quiet output period proves agent turn completion. An unresolved request
+during adapter stop records failure with provider acceptance explicitly
+unknown; late callbacks must not rewrite a different prompt event.
+
+This decision only describes Conduit-owned recording and injected synthetic
+transport seams. Real provider HTTP/SSE ordering, live StreamJSON concurrency,
+crash/relaunch identity and installed client behavior are unqualified until
+separate acceptance evidence exists. No permission, tool-admission, token,
+provider writer-authority or installed-app change is granted here.
