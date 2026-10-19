@@ -352,6 +352,8 @@ final class AppModel: ObservableObject {
     /// Depth of the Session API call currently being served, if any.
     private var sessionAPIServingDepth = 0
     private var sessionAPICapturedError: String?
+    private var sessionAPIAncillaryWarnings: [String] = []
+    private var sessionAPIReplayJournal: SessionAPIReplayJournal?
 
     /// The error channel shared by the Mac UI and the Session API.
     ///
@@ -4022,10 +4024,12 @@ final class AppModel: ObservableObject {
                 at: work.startedAt
             ))
         } catch {
-            reportControlError(
-                "Could not start the work session event log: \(error.localizedDescription)",
-                origin: origin
-            )
+            let warning = "Could not start the work session event log: \(error.localizedDescription)"
+            if origin == .sessionAPI {
+                sessionAPIAncillaryWarnings.append(warning)
+            } else {
+                reportControlStatus(warning, origin: origin)
+            }
         }
     }
 
@@ -4644,11 +4648,52 @@ final class AppModel: ObservableObject {
             ]
         }
 
+        // Replay lookup precedes dispatch/admission. Readiness and the local
+        // write gate still govern access to retained results.
+        var replay: (String, String, [String])?
+        switch command {
+        case .createTask(let agent, let project, let objective, let key):
+            if let key {
+                replay = ("conduit_create_task", key, [agent, project,
+                    projects.first(where: { $0.slug == project })?.path.path ?? "unresolved", objective])
+            }
+        case .sendPrompt(let task, let text, let origin, let key):
+            if let key { replay = ("conduit_send_prompt", key, [task.lowercased(), text, origin.rawValue]) }
+        default: break
+        }
+        guard let (operation, key, fields) = replay else {
+            return sessionAPIExecute(command, caller: caller)
+        }
+        guard settings.enableSessionAPIWrites else { return ["error": "write tools are disabled"] }
+        do {
+            if sessionAPIReplayJournal == nil {
+                sessionAPIReplayJournal = try SessionAPIReplayJournal(directory:
+                    AdapterThreadStore.defaultDirectory().appendingPathComponent("session-api-replay-v1"))
+            }
+            return sessionAPIReplayJournal!.perform(caller: ConduitSessionAPI.replayAuthorityScope,
+                operation: operation, key: key, fields: fields) {
+                self.sessionAPIExecute(command, caller: caller)
+            }
+        } catch {
+            return ["error": "Private replay journal unavailable; no dispatch was attempted.",
+                    "replay_state": "unavailable", "outcome": "UNKNOWN"]
+        }
+    }
+
+    private func sessionAPIExecute(
+        _ command: ConduitSessionCommand, caller: ConduitSessionCaller
+    ) -> [String: Any] {
         sessionAPIServingDepth += 1
+        let priorWarnings = sessionAPIAncillaryWarnings
+        sessionAPIAncillaryWarnings = []
         let captured = sessionAPICapturedError
         sessionAPICapturedError = nil
         var payload = sessionAPIDispatch(command, caller: caller)
         let raised = sessionAPICapturedError
+        if !sessionAPIAncillaryWarnings.isEmpty {
+            payload["ancillary_warnings"] = sessionAPIAncillaryWarnings
+        }
+        sessionAPIAncillaryWarnings = priorWarnings
         sessionAPICapturedError = captured
         sessionAPIServingDepth -= 1
         if let raised, !raised.isEmpty {
@@ -4794,17 +4839,16 @@ final class AppModel: ObservableObject {
                     "MindGraph output was not a JSON array; raw output retained"
             }
             return payload
-        case .createTask(let agentName, let projectSlug, let objective, let idempotencyKey):
+        case .createTask(let agentName, let projectSlug, let objective, _):
             return sessionAPICreateTask(
                 agentName: agentName,
                 projectSlug: projectSlug,
                 objective: objective,
-                idempotencyKey: idempotencyKey,
                 caller: caller
             )
         case .reconcileTask(let rawID):
             return sessionAPIReconcileTask(taskSessionID: rawID, caller: caller)
-        case .sendPrompt(let rawID, let text, let origin):
+        case .sendPrompt(let rawID, let text, let origin, _):
             return sessionAPISendPrompt(
                 taskSessionID: rawID,
                 text: text,
@@ -6542,7 +6586,6 @@ final class AppModel: ObservableObject {
         agentName: String,
         projectSlug: String,
         objective: String,
-        idempotencyKey: String?,
         caller: ConduitSessionCaller
     ) -> [String: Any] {
         // Gate, agent, and project are one decision, evaluated in ConduitCore
@@ -6575,37 +6618,12 @@ final class AppModel: ObservableObject {
         // and project, so a typo can never burn create-rate budget or hold a
         // capacity reservation.
         let admission = sessionAPIAdmission
-        let dedupe = idempotencyKey.map { key in
-            MCPCreateDedupeIdentity(
-                idempotencyKey: key,
-                requestFingerprint: MCPCreateDedupeIdentity.fingerprint(
-                    canonicalComponents: [
-                        "conduit_create_task",
-                        agent.name,
-                        project.slug,
-                        ConduitSafetyHash.digest(
-                            namespace: "mcp-create-objective",
-                            text: objective
-                        ),
-                    ]
-                )
-            )
-        }
+        // Durable boundary owns keyed replay; this controller only owns budget.
         let decision = admission.admitCreate(
             callerIdentity: caller.identity,
-            dedupeIdentity: dedupe,
+            dedupeIdentity: nil,
             resources: sessionAPIResourceSnapshot()
         )
-        if decision.code == .duplicateCompleted,
-           let existingID = decision.taskSessionID,
-           let existing = taskSessions.first(where: { $0.id == existingID }) {
-            var payload = sessionAPITaskPayload(for: existing)
-            payload["origin"] = ConduitSessionOrigin.chatgpt.rawValue
-            payload["deduplicated"] = true
-            payload["authority"] =
-                "an identical create already completed; the original task is returned and no second runtime was started"
-            return payload
-        }
         guard decision.shouldExecute,
               let reservationID = decision.reservationID else {
             return sessionAPIAdmissionRefusal(decision)
@@ -6688,6 +6706,7 @@ final class AppModel: ObservableObject {
             to: runtime,
             origin: .chatgpt
         )
+        if let eventID = sent["eventID"] { payload["objective_event_id"] = eventID }
         // sessionAPIDeliver already distinguishes a refused objective from one
         // it accepted and will write asynchronously, but only `delivered` and
         // `error` used to be forwarded. Dropping the queued marker made a PTY
@@ -6763,6 +6782,10 @@ final class AppModel: ObservableObject {
         guard let taskID = sessionAPITaskID(rawID) else {
             return ["error": "invalid taskSessionID"]
         }
+        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
+            return ["error": "No live runtime; reconcile first with conduit_reconcile_task, then inspect status before sending.",
+                    "taskSessionID": rawID]
+        }
         let admission = sessionAPIAdmission
         let decision = admission.admitPrompt(
             callerIdentity: caller.identity,
@@ -6784,16 +6807,6 @@ final class AppModel: ObservableObject {
         // way; a queued PTY write is still tracked by the runtime's own depth.
         defer { admission.markPromptFinished(reservationID: reservationID) }
 
-        if sessionAPILiveRuntime(for: taskID) == nil {
-            reconnectTask(taskID, origin: .sessionAPI)
-        }
-        guard let runtime = sessionAPILiveRuntime(for: taskID) else {
-            return [
-                "error": errorMessage
-                    ?? "no live runtime; create a new task or reconnect in Conduit",
-                "taskSessionID": rawID,
-            ]
-        }
         return sessionAPIDeliver(trimmed, to: runtime, origin: origin)
     }
 
@@ -6834,6 +6847,7 @@ final class AppModel: ObservableObject {
             runtime.holdPromptUntilReady(eventID: eventID, text: text)
             return [
                 "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                "eventID": eventID.uuidString,
                 "delivered": false,
                 "delivery": "queued",
                 "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
@@ -6851,13 +6865,13 @@ final class AppModel: ObservableObject {
                 eventID: eventID,
                 to: delivered ? .delivered : .failed
             )
-            return [
-                "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
-                "delivered": delivered,
-                "backend": runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
-                "origin": origin.rawValue,
-                "authority": "prompt recorded; not verification",
-            ]
+            return ConduitSessionAPI.structuredPromptResult(
+                taskSessionID: runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                eventID: eventID.uuidString,
+                delivered: delivered,
+                backend: runtime.descriptor.agent.preferredSessionBackend.workSessionLabel,
+                origin: origin
+            )
         }
         if AgentSlashCatalog.looksLikeSlashCommand(text) {
             sendSlashCommand(
@@ -6868,6 +6882,7 @@ final class AppModel: ObservableObject {
             )
             return [
                 "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+                "eventID": eventID.uuidString,
                 "delivered": false,
                 "delivery": "queued",
                 "backend": AgentSessionBackend.pty.workSessionLabel,
@@ -6892,6 +6907,7 @@ final class AppModel: ObservableObject {
         }
         return [
             "taskSessionID": runtime.descriptor.taskSessionID?.rawValue.uuidString ?? "",
+            "eventID": eventID.uuidString,
             // Queued, not delivered. The terminal write completes after this
             // response is serialized, and its real result is recorded on the
             // durable prompt event, which can still turn out to be `failed`.
