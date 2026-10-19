@@ -596,10 +596,17 @@ final class ConduitSessionAPIServer {
                 ?? arguments["projectSlug"]?.stringValue
                 ?? ""
             let objective = arguments["objective"]?.stringValue ?? ""
-            let idempotencyKey = (
-                arguments["idempotency_key"]?.stringValue
-                    ?? arguments["idempotencyKey"]?.stringValue
-            )?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let idempotencyKey = arguments["idempotency_key"]?.stringValue
+                ?? arguments["idempotencyKey"]?.stringValue
+            for field in ["idempotency_key", "idempotencyKey"] {
+                if let supplied = arguments[field], supplied.stringValue == nil {
+                    return Self.directToolResult(["error": "idempotency key must be a string"])
+                }
+            }
+            if let snake = arguments["idempotency_key"]?.stringValue,
+               let camel = arguments["idempotencyKey"]?.stringValue, snake != camel {
+                return Self.directToolResult(["error": "conflicting idempotency key aliases"])
+            }
             if agent.isEmpty || projectSlug.isEmpty {
                 command = nil
             } else {
@@ -607,9 +614,7 @@ final class ConduitSessionAPIServer {
                     agent: agent,
                     projectSlug: projectSlug,
                     objective: objective,
-                    idempotencyKey: (idempotencyKey?.isEmpty ?? true)
-                        ? nil
-                        : idempotencyKey
+                    idempotencyKey: idempotencyKey
                 )
             }
         case "conduit_reconcile_task":
@@ -619,9 +624,13 @@ final class ConduitSessionAPIServer {
                 command = nil
             }
         case "conduit_send_prompt":
+            if let supplied = arguments["idempotency_key"], supplied.stringValue == nil {
+                return Self.directToolResult(["error": "idempotency_key must be a string"])
+            }
             if let id = arguments["taskSessionID"]?.stringValue,
                let text = arguments["text"]?.stringValue {
-                command = .sendPrompt(taskSessionID: id, text: text, origin: .chatgpt)
+                command = .sendPrompt(taskSessionID: id, text: text, origin: .chatgpt,
+                    idempotencyKey: arguments["idempotency_key"]?.stringValue)
             } else {
                 command = nil
             }
@@ -1001,11 +1010,11 @@ final class ConduitSessionAPIServer {
                     ],
                     "objective": [
                         "type": "string",
-                        "description": "Optional first prompt. A structured runtime that is still starting refuses it and hands the retry back to you; a PTY runtime accepts it and writes asynchronously. Check objective_delivery_state to tell those apart. Omit it and send the first prompt explicitly if you want one clear delivery point.",
+                        "description": "Optional first prompt. A starting structured runtime holds it until ready; a PTY accepts it for asynchronous delivery. Check objective_delivery_state. Never resend a queued objective.",
                     ],
                     "idempotency_key": [
                         "type": "string",
-                        "description": "Optional. Pass a stable key to make a retried create safe: an identical repeat returns the original task instead of starting a second one. Use a fresh key when you genuinely want another task.",
+                        "description": "Optional exact retry key. Completed private receipts return original identity; incomplete receipts block as UNKNOWN. Changed fields conflict. Unkeyed creates are non-idempotent.",
                     ],
                 ],
                 "required": ["agent", "project_slug"],
@@ -1013,7 +1022,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_send_prompt",
-            "description": "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. This does not approve agent tools or permissions. The reply is not in this response — read it with conduit_session_events once the agent has produced output.",
+            "description": "Add and deliver one message to an existing live Conduit task. If no runtime is live, reconcile first using conduit_reconcile_task; send never starts a runtime. Origin is recorded as ChatGPT. This does not approve agent tools or permissions. The reply is not in this response — read it with conduit_session_events once the agent has produced output.",
             "annotations": ConduitSessionAPIServer.nonDestructiveStateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -1021,6 +1030,10 @@ final class ConduitSessionAPIServer {
                     "taskSessionID": [
                         "type": "string",
                         "description": "Task id from conduit_create_task, or the taskSessionID field of any conduit_list_sessions row.",
+                    ],
+                    "idempotency_key": [
+                        "type": "string",
+                        "description": "Optional exact retry key. Completed private receipts return original task/event identity; incomplete receipts block as UNKNOWN. Unkeyed prompts are non-idempotent.",
                     ],
                     "text": [
                         "type": "string",

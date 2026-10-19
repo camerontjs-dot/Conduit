@@ -92,7 +92,7 @@ public enum ConduitSessionCommand: Equatable, Sendable {
         idempotencyKey: String?
     )
     case reconcileTask(taskSessionID: String)
-    case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin)
+    case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin, idempotencyKey: String? = nil)
     case lifecyclePreflight(
         taskSessionID: String,
         operation: LifecycleOperation

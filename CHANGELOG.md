@@ -25,6 +25,16 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Changed
+
+- Keyed Session API create and prompt requests now retain private intent/outcome
+  receipts across restarts. Replays return original task/event identities without
+  spending admission budget; incomplete or unsafe receipts block as UNKNOWN.
+  Unkeyed requests remain non-idempotent. Prompt keys are optional.
+- Hosted sends without a live runtime refuse with a reconcile-first instruction
+  and never schedule startup. Ancillary work-log failures remain visible as
+  `ancillary_warnings`, without turning accepted work into an API error or modal.
+
 ### Fixed
 
 - Hosted task creation, reconciliation, reconnect, close and lifecycle controls

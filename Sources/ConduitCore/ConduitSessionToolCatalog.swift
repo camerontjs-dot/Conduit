@@ -410,16 +410,17 @@ public enum ConduitSessionToolCatalog {
                 "agent": property("string", "Enabled profile name or command from conduit_list_adapters. An unlisted or disabled profile is refused."),
                 "project_slug": property("string", "Existing project slug from conduit_list_projects; it sets the session working directory."),
                 "objective": property("string", "Optional first prompt. A structured runtime is normally still starting when this returns; Conduit holds the objective and delivers it when the runtime reports ready, which is what objective_delivery_state queued means. Do not resend a queued objective."),
-                "idempotency_key": property("string", "Optional stable key for a safe repeated create. An identical repeat returns the original task."),
+                "idempotency_key": property("string", "Optional exact retry key scoped to caller and operation. Completed private receipts return original task identity without dispatch; incomplete or unavailable receipts block as UNKNOWN. Changed fields conflict. Unkeyed creates are non-idempotent."),
             ],
             required: ["agent", "project_slug"]
         ),
         tool(
             "conduit_send_prompt",
-            "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. Read the later response with conduit_session_events; this call is not agent completion. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
+            "Add and deliver one message to an existing live Conduit task. With no live runtime, reconcile first using conduit_reconcile_task; send never starts a runtime. Origin is recorded as ChatGPT. Read the later response with conduit_session_events; this call is not agent completion. This action is always advertised so clients retain a stable catalog; Conduit refuses it unless the operator enables Session API writes locally.",
             annotations: nonDestructiveStateChangingAnnotations,
             properties: [
                 "taskSessionID": property("string", "Task id from conduit_create_task or conduit_list_sessions."),
+                "idempotency_key": property("string", "Optional exact retry key. A completed private receipt returns original task/event identity without dispatch; incomplete receipts block as UNKNOWN. Unkeyed prompts are non-idempotent."),
                 "text": property("string", "Message delivered as one prompt. A second prompt queues behind an active turn rather than interrupting it. If the runtime is still starting, Conduit holds this prompt and delivers it on ready rather than refusing it."),
             ],
             required: ["taskSessionID", "text"]

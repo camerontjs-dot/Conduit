@@ -123,7 +123,8 @@ class HostedControlPresentationContract(unittest.TestCase):
             "    /// Explicit MCP recovery",
         )
 
-        self.assertIn("reconnectTask(taskID, origin: .sessionAPI)", send)
+        self.assertNotIn("reconnectTask(", send)
+        self.assertIn("reconcile first with conduit_reconcile_task", send)
         self.assertIn("if origin.updatesOperatorPresentation", reconnect)
         self.assertNotIn("selectSession(", deliver)
         self.assertNotIn("runtime.selectedSurface = .conversation", deliver)

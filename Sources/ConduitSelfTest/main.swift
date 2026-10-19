@@ -33,6 +33,8 @@ func withTempDir(_ body: (URL) throws -> Void) {
     }
 }
 
+runSessionAPIReplayChecks { name, result in check(name, result) }
+
 // MARK: - Retained thread recognition (UX-A)
 
 runThreadRecognitionSelfChecks { name, result in

@@ -2220,3 +2220,38 @@ event attribution; source-flow regressions inspect real shared-helper wiring.
 They do not establish a mounted two-client UI journey. #174's required
 independent Codex model and isolated exposure conditions still apply; source
 authors and source-exposed peer reviewers are not independent qualifiers.
+
+## D-063: Session API keyed replay uses private durable intent receipts
+
+Keyed `conduit_create_task` and `conduit_send_prompt` use an application-owned
+`session-api-replay-v1` directory under AdapterThreadStore's app-state directory,
+separate from MainFrame history. Caller identity, exact operation and exact key
+select a receipt; length-framed request fields bind its fingerprint. Create
+includes project slug and resolved project path. Prompt includes durable task
+UUID, exact text and origin. Only hashes and a bounded acceptance snapshot are
+stored, never prompt/objective text, raw errors, or credentials. Caller identity
+remains the existing shared-listener client identity, not authentication isolation.
+
+The journal checks replay before admission, synchronizes intent before dispatch,
+and synchronizes outcome before returning success. The admission controller
+continues to own rates/capacity, not persistent replay. Unkeyed requests preserve
+legacy non-idempotent behavior. A completed replay returns original task/event
+identity and acceptance state, not current delivery or provider completion.
+Missing/partial/corrupt outcomes, missing reservations, disk failures and unsafe
+storage block as UNKNOWN; they never authorize retry. Refusals without a trusted
+result also retain their intent. Reconciliation and a deliberate new request are
+required; no automatic pruning or recovery is inferred.
+
+The private directory requires owner-only mode 0700; files require 0600, current
+UID and a single link. Descriptor traversal refuses symlinks. A lifetime exclusive
+owner lock and per-instance mutex prevent competing owners/concurrent dispatch.
+Storage is bounded to 2,048 intents and outcomes of at most 16 KiB each; full
+storage blocks new keyed requests without deleting uncertain intent. This is
+process-restart protection under filesystem synchronization semantics, not proof
+against malicious same-UID modification or physical media failure.
+
+Hosted prompt refusal never initiates reconnect. Startup remains the explicit
+reconcile operation. A specifically ancillary work-log append failure is a visible
+warning, while authoritative mutation/delivery errors retain the API error path.
+Source and injected transport tests qualify these boundaries; installed runtime,
+provider delivery, and mounted UI acceptance require separate authorization.
