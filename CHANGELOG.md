@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- OpenCode SSE output and completion now require the assistant message identity
+  returned by the exact prompt HTTP request. Delayed events from an older prompt
+  cannot contaminate or complete a queued or refused prompt. Early SSE is buffered
+  until identity is proven; missing identity is reported as UNKNOWN, and HTTP
+  acceptance alone never completes a turn.
+
 - Refused overlapping structured prompts retain their own failed event without
   closing or taking ownership of the running prompt's output and feedback.
 - OpenCode prompts stay queued until HTTP acceptance, then update the exact

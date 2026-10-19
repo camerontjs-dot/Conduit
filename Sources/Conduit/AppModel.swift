@@ -8231,7 +8231,7 @@ final class TerminalRuntime: ObservableObject, Identifiable {
                 try send()
                 state = .delivered
             } else if let openCode {
-                try openCode.sendTurn(text: text) { [weak self] result in
+                try openCode.sendTurn(text: text, promptEventID: eventID) { [weak self] result in
                     guard let self else { return }
                     switch result {
                     case .success:
@@ -8406,11 +8406,33 @@ final class TerminalRuntime: ObservableObject, Identifiable {
 
     func wireStructured(_ client: OpenCodeHTTPClient) {
         openCode = client
-        client.onEffect = { [weak self] effect in
-            self?.applyStructuredEffect(effect, backend: .httpServer)
+        client.onEffect = { [weak self, weak client] effect in
+            guard let self, let client, self.openCode === client else { return }
+            // Unidentified effects have no output or completion authority.
+            switch effect {
+            case .sessionStarted, .failed:
+                self.applyStructuredEffect(effect, backend: .httpServer)
+            default: break
+            }
         }
-        client.onFailed = { [weak self] message in
-            self?.conversationCaptureNotice = message
+        client.onRequestEffect = { [weak self, weak client] identified in
+            guard let self, let client, self.openCode === client,
+                  identified.identity.promptEventID == self.structuredPromptEventID,
+                  identified.identity.sessionID == client.sessionID else { return }
+            switch identified.effect {
+            case .upsertOutput(let text, let state):
+                self.upsertAdapterOutput(text: text, state: state, promptEventID: identified.identity.promptEventID)
+            default:
+                self.applyStructuredEffect(identified.effect, backend: .httpServer)
+            }
+        }
+        client.onIdentityDiagnostic = { [weak self, weak client] message in
+            guard let self, let client, self.openCode === client else { return }
+            self.conversationCaptureNotice = message
+        }
+        client.onFailed = { [weak self, weak client] message in
+            guard let self, let client, self.openCode === client else { return }
+            self.conversationCaptureNotice = message
         }
         client.onExited = { [weak self] in
             self?.controller.markAdapterExited()
@@ -8484,9 +8506,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
         }
     }
 
-    private func upsertAdapterOutput(text: String, state: AgentOutputState) {
+    private func upsertAdapterOutput(text: String, state: AgentOutputState, promptEventID: UUID? = nil) {
         conversationCaptureNotice = nil
-        let promptID = structuredPromptEventID
+        let promptID = promptEventID ?? structuredPromptEventID
         let event: SessionPresentationEvent
         if let eventID = activeOutputEventID,
            let previous = presentationEvents.first(where: { $0.id == eventID }),
