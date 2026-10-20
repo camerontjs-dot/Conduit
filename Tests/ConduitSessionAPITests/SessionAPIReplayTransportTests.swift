@@ -215,7 +215,7 @@ final class SessionAPIReplayTransportTests: XCTestCase {
                     operation = "conduit_send_prompt"; key = supplied ?? ""; fields = [id, text, origin.rawValue]
                 default: XCTFail("unexpected command"); return [:]
                 }
-                return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope, operation: operation, key: key, fields: fields) {
+                return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope, operation: operation, key: key, fields: fields, admission: { beginDispatch in
                     admissions += 1
                     let now = Date()
                     let resources = ConduitResourceSnapshot(
@@ -228,15 +228,20 @@ final class SessionAPIReplayTransportTests: XCTestCase {
                         ? controller.admitCreate(callerIdentity: caller.identity, dedupeIdentity: nil, resources: resources)
                         : controller.admitPrompt(callerIdentity: caller.identity, taskSessionID: task,
                             observedTaskQueueDepth: 0, resources: resources)
-                    XCTAssertTrue(decision.shouldExecute)
-                    if let reservation = decision.reservationID {
-                        if operation == "conduit_create_task" { controller.commitCreate(reservationID: reservation, taskSessionID: task) }
-                        else { controller.markPromptFinished(reservationID: reservation) }
+                    guard decision.shouldExecute, let reservation = decision.reservationID else {
+                        return ["error": "fixture admission refused without an effect"]
                     }
+                    guard beginDispatch() else {
+                        if operation == "conduit_create_task" { controller.cancelCreate(reservationID: reservation) }
+                        else { controller.cancelPrompt(reservationID: reservation) }
+                        return ["error": "intent persistence unavailable; no effect"]
+                    }
+                    if operation == "conduit_create_task" { controller.commitCreate(reservationID: reservation, taskSessionID: task) }
+                    else { controller.markPromptFinished(reservationID: reservation) }
                     effects += 1
                     return ["taskSessionID": task.rawValue.uuidString, "eventID": event,
                             "delivered": false, "delivery": "queued", "ancillary_warnings": ["fixture warning"]]
-                }
+                })
             }
         }
         let create: [String: Any] = ["name": "conduit_create_task", "arguments": ["agent": "fixture", "project_slug": "project", "objective": "secret", "idempotency_key": "create-key"]]
@@ -260,6 +265,56 @@ final class SessionAPIReplayTransportTests: XCTestCase {
         XCTAssertEqual(effects, 2)
         XCTAssertEqual(admissions, 2)
     }
+    func testDeniedKeysThroughTransportLeaveCapacityForAcceptedQueuedRequest() async throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent(".build").appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("journal")
+        let journal = try SessionAPIReplayJournal(directory: directory)
+        let task = TaskSessionID(), event = UUID().uuidString
+        let controller = MCPAdmissionController(policy: .conduitSessionAPI(writesEnabled: true))
+        var healthy = false, admissions = 0, effects = 0
+        let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, caller in
+            guard case .sendPrompt(_, let text, _, let key) = command else { return [:] }
+            return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope, operation: "conduit_send_prompt", key: key ?? "", fields: [text], admission: { begin in
+                admissions += 1
+                let now = Date()
+                let resources = ConduitResourceSnapshot(
+                    availablePhysicalMemoryBytes: .known(value: 16_000_000_000, observedAt: now),
+                    ownedProcessTreeRSSBytes: .known(value: 0, observedAt: now),
+                    persistenceQueueCount: .unknown, persistenceQueueBytes: .unknown,
+                    promptQueueDepth: .known(value: 0, observedAt: now))
+                let decision = controller.admitPrompt(callerIdentity: caller.identity, taskSessionID: task, resources: healthy ? resources : .unknown)
+                guard let reservation = decision.reservationID, decision.shouldExecute else {
+                    return ["error": decision.detail]
+                }
+                defer { controller.markPromptFinished(reservationID: reservation) }
+                guard begin() else { return [:] }
+                effects += 1
+                return ["taskSessionID": task.rawValue.uuidString, "eventID": event, "delivery": "queued", "delivered": false]
+            })
+        }
+        func send(_ key: String, text: String = "prompt") throws -> [String: Any] {
+            try payload(request(server, method: "tools/call", params: ["name": "conduit_send_prompt", "arguments": ["taskSessionID": task.rawValue.uuidString, "text": text, "idempotency_key": key]]))
+        }
+        // Missing initialize/caller identity is an admission refusal, not intent.
+        XCTAssertEqual(try send("no-init")["replay_state"] as? String, "not_dispatched")
+        try initialize(server)
+        for index in 0..<2049 {
+            XCTAssertEqual(try send("denied-\(index)")["replay_state"] as? String, "not_dispatched")
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["owner"])
+        healthy = true
+        XCTAssertEqual(try send("accepted")["eventID"] as? String, event)
+        let spent = admissions
+        healthy = false
+        XCTAssertEqual(try send("accepted")["deduplicated"] as? Bool, true)
+        XCTAssertEqual(try send("accepted", text: "changed")["replay_state"] as? String, "conflict")
+        XCTAssertEqual(admissions, spent)
+        XCTAssertEqual(effects, 1)
+    }
     func testInterveningClientInitializeCannotBypassOriginalKeyedSend() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
@@ -279,11 +334,12 @@ final class SessionAPIReplayTransportTests: XCTestCase {
             }
             return journal.perform(caller: ConduitSessionAPI.replayAuthorityScope,
                                    operation: "conduit_send_prompt", key: key ?? "",
-                                   fields: [id, text, origin.rawValue]) {
+                                   fields: [id, text, origin.rawValue], admission: { beginDispatch in
+                guard beginDispatch() else { return ["error": "intent persistence unavailable"] }
                 dispatches += 1
                 return ["taskSessionID": taskID, "eventID": eventID,
                         "delivered": false, "delivery": "queued"]
-            }
+            })
         }
         let requestA: [String: Any] = ["name": "conduit_send_prompt",
             "arguments": ["taskSessionID": taskID, "text": "exact prompt",
@@ -331,6 +387,34 @@ final class SessionAPIReplayTransportTests: XCTestCase {
         XCTAssertEqual(result["delivery"] as? String, "failed")
         XCTAssertEqual(result["delivered"] as? Bool, false)
         XCTAssertNotNil(result["error"] as? String)
+    }
+
+    func testMalformedSuppliedOptionalObjectiveIsRefusedBeforeTaskDispatch() async throws {
+        var commands: [ConduitSessionCommand] = []
+        let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, _ in
+            commands.append(command)
+            return ["taskSessionID": UUID().uuidString]
+        }
+        server.setReadiness(.ready)
+        try initialize(server)
+        let invalid: [Any] = [42, true, NSNull(), ["unexpected": "object"], ["array"]]
+        for value in invalid {
+            let response = try request(server, method: "tools/call", params: [
+                "name": "conduit_create_task",
+                "arguments": ["agent": "fixture", "project_slug": "fixture", "objective": value]
+            ])
+            XCTAssertEqual(response["isError"] as? Bool, true, "invalid optional objective type must refuse")
+            XCTAssertNotNil(try payload(response)["error"])
+        }
+        XCTAssertTrue(commands.isEmpty, "invalid supplied objective may not create a task")
+        let omitted = try request(server, method: "tools/call", params: [
+            "name": "conduit_create_task",
+            "arguments": ["agent": "fixture", "project_slug": "fixture"]
+        ])
+        XCTAssertEqual(omitted["isError"] as? Bool, false)
+        XCTAssertEqual(commands, [.createTask(
+            agent: "fixture", projectSlug: "fixture", objective: "", idempotencyKey: nil
+        )])
     }
 
     func testPromptSchemaKeepsExactOptionalKeyAndRefusesWrongType() async throws {

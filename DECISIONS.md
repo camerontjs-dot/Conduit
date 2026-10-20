@@ -2285,3 +2285,29 @@ claims still return writer collision without replacement or provider activity.
 The coordinator's optional callback preserves non-API callers; API wiring must
 supply it. These are synthetic source/transport guarantees, not installed-app or
 real-provider qualification.
+
+
+### D-063 amendment — admission checkpoint (2026-10-19)
+
+Keyed create/send validate the replay store and resolve replay/conflict before
+admission. Admission runs synchronously under the journal lock and AppModel actor.
+Only its explicit `beginDispatch` checkpoint creates and synchronizes intent,
+immediately before `createTask` or `sessionAPIDeliver` (whose first acceptance
+marker is `recordPrompt`). Precondition/caller/resource/rate refusals never cross
+that checkpoint and therefore create no receipt. Error text is not proof.
+
+Create cancellation and prompt completion defers are installed before the
+checkpoint; a failed file/directory sync cancels that exact capacity reservation
+without dispatch. Already spent rate budget is deliberately not refunded.
+Crashes before intent cannot have dispatched; crashes during/after intent retain
+UNKNOWN. There is no refusal-removal transaction or tombstone to recover.
+Existing pending receipts, including old refusals without proof, are never pruned.
+Accepted queued work retains its original task/event identity on completed replay.
+
+Follow-up source review boundary (19 October 2026): the former public
+action-only journal helper was removed because it could not distinguish a
+provable pre-admission refusal from a potentially accepted operation before
+reserving durable intent. Core/transport/selftest fixtures now must explicitly
+call the typed admission callback and cross beginDispatch before any effect.
+Only the typed checkpoint contract is supported; no unsafe compatibility
+surface remains. The previously reviewed failed source commit stays retained.

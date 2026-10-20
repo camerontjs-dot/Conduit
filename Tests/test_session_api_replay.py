@@ -20,7 +20,7 @@ class SessionAPIReplayContract(unittest.TestCase):
         boundary = section('private func sessionAPIPayload(', 'private func sessionAPIExecute(')
         self.assertIn('sessionAPIReplayJournal!.perform(caller: ConduitSessionAPI.replayAuthorityScope', boundary)
         self.assertNotIn('sessionAPIReplayJournal!.perform(caller: caller.identity', boundary)
-        self.assertIn('self.sessionAPIExecute(command, caller: caller)', boundary)
+        self.assertIn('self.sessionAPIExecute(command, caller: caller, beginDispatch: beginDispatch)', boundary)
         self.assertIn('?.path.path', boundary)
         create = section('private func sessionAPICreateTask(', 'private func sessionAPIReconcileTask(')
         self.assertIn('dedupeIdentity: nil', create)
@@ -44,3 +44,21 @@ class SessionAPIReplayContract(unittest.TestCase):
         self.assertIn('if !delivered {', helper)
         self.assertIn('payload["error"]', helper)
         self.assertIn('Provider acceptance is not established', helper)
+
+    def test_checkpoint_is_after_admission_cleanup_before_first_effect(self):
+        for start, end, admission, cleanup, effect in [
+            ('private func sessionAPICreateTask(', 'private func sessionAPIReconcileTask(', 'admission.admitCreate', 'admission.cancelCreate', 'guard let runtime = createTask'),
+            ('private func sessionAPISendPrompt(', 'private func sessionAPIDeliver(', 'admission.admitPrompt', 'defer { admission.markPromptFinished', 'return sessionAPIDeliver(trimmed'),
+        ]:
+            body = section(start, end)
+            checkpoint = body.index('guard beginDispatch() else { return [:] }')
+            self.assertLess(body.index(admission), checkpoint)
+            self.assertLess(body.index(cleanup), checkpoint)
+            self.assertLess(checkpoint, body.index(effect))
+        delivery = section('private func sessionAPIDeliver(', 'if runtime.structuredIsReady {')
+        self.assertIn('let eventID = runtime.recordPrompt(', delivery)
+
+    def test_no_action_only_public_replay_overload(self):
+        journal = (ROOT / 'Sources/ConduitCore/SessionAPIReplayJournal.swift').read_text()
+        self.assertNotIn('fields: [String], action: () -> [String: Any]', journal)
+        self.assertIn('admission: (_ beginDispatch: () -> Bool) -> [String: Any]', journal)
