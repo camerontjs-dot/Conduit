@@ -2326,3 +2326,23 @@ embedded SDK confirms the message POST endpoint and optional request `messageID`
 but does not establish a server acceptance contract or live ordering. No optional
 request `messageID` is sent by this repair. Actual provider responses, multi-message
 behavior, live permission flow and installed-app behavior remain unqualified.
+
+
+D-065 follow-up (2026-10-19): a non-null `info.error` in the exact HTTP
+response closes that bound message as failed before buffered SSE can replay.
+The identified failure retains the originating prompt/session/message; HTTP 2xx
+still records transport delivery. This is an application failure, not transport
+refusal, and neither response text nor completion timestamps synthesize success.
+The OpenCode exit callback also requires the currently installed client instance.
+
+Raw SSE lines now have a 2 MiB byte limit before UTF-8 decoding, in addition to
+the existing pending-event count/byte limits. LF, CRLF, CR and an unterminated
+final line remain supported. Overflow invalidates the stream, discards buffered
+events and reports UNKNOWN; it never truncates a line or resumes at its suffix.
+This bounds Conduit's line accumulator, not URLSession's internal buffering.
+
+Duplicate `message.part.delta` delivery remains unresolved. The locally inspected
+embedded schema has sessionID, messageID, partID, field and delta, with no event
+identity or offset. Equal deltas can be legitimate repeated tokens; Conduit keeps
+them. Snapshot replacement and closed-message suppression are not exact delta
+deduplication. A reliable provider replay/offset contract is required to do more.

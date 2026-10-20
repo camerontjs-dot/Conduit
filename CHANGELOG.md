@@ -27,6 +27,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- OpenCode HTTP assistant errors now retain prompt/message identity and fail the
+  turn even when HTTP 200 or buffered SSE completion was observed. Replaced
+  clients cannot exit the current runtime. SSE lines are bounded to 2 MiB before
+  decoding; oversized streams withhold output/completion as UNKNOWN.
+
 - OpenCode SSE output and completion now require the assistant message identity
   returned by the exact prompt HTTP request. Delayed events from an older prompt
   cannot contaminate or complete a queued or refused prompt. Early SSE is buffered

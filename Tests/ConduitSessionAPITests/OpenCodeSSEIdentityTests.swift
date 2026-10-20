@@ -16,17 +16,21 @@ final class OpenCodeSSEIdentityTests: XCTestCase {
                 started?.fulfill()
             }
         }
-        func respond(_ status: Int, message: String?, session: String = "S") {
-            let body = message.map { "{\"info\":{\"id\":\"\($0)\",\"sessionID\":\"\(session)\",\"role\":\"assistant\"},\"parts\":[]}" } ?? "{}"
+        func respond(_ status: Int, message: String?, session: String = "S", applicationError: Bool = false) {
+            var body = message.map { "{\"info\":{\"id\":\"\($0)\",\"sessionID\":\"\(session)\",\"role\":\"assistant\"},\"parts\":[]}" } ?? "{}"
+            if applicationError { body = body.replacingOccurrences(of: "\"role\":\"assistant\"", with: "\"role\":\"assistant\",\"error\":{\"name\":\"APIError\",\"data\":{\"message\":\"fixture failure\"}}") }
             continuation?.resume(returning: (Data(body.utf8), HTTPURLResponse(url: request!.url!, statusCode: status, httpVersion: nil, headerFields: nil)!))
             continuation = nil
         }
     }
+    private func stream(_ client: OpenCodeHTTPClient, _ line: String) {
+        for byte in (line + "\r\n").utf8 { try! client.receiveSSEByte(byte) }
+    }
     private func part(_ client: OpenCodeHTTPClient, _ message: String, _ text: String, session: String = "S") {
-        client.receiveSSELine("data: {\"type\":\"message.part.updated\",\"properties\":{\"part\":{\"id\":\"part_\(message)\",\"messageID\":\"\(message)\",\"sessionID\":\"\(session)\",\"type\":\"text\",\"text\":\"\(text)\"}}}")
+        stream(client, "data: {\"type\":\"message.part.updated\",\"properties\":{\"part\":{\"id\":\"part_\(message)\",\"messageID\":\"\(message)\",\"sessionID\":\"\(session)\",\"type\":\"text\",\"text\":\"\(text)\"}}}")
     }
     private func done(_ client: OpenCodeHTTPClient, _ message: String, session: String = "S") {
-        client.receiveSSELine("data: {\"type\":\"message.updated\",\"properties\":{\"info\":{\"id\":\"\(message)\",\"sessionID\":\"\(session)\",\"role\":\"assistant\",\"time\":{\"completed\":1}}}}")
+        stream(client, "data: {\"type\":\"message.updated\",\"properties\":{\"info\":{\"id\":\"\(message)\",\"sessionID\":\"\(session)\",\"role\":\"assistant\",\"time\":{\"completed\":1}}}}")
     }
     private func outputs(_ runtime: TerminalRuntime) -> [AgentVisibleOutput] {
         runtime.presentationEvents.compactMap { if case .agentOutput(let output) = $0.kind { return output }; return nil }
@@ -143,6 +147,119 @@ final class OpenCodeSSEIdentityTests: XCTestCase {
             }
             client.stop()
         }
+    }
+
+    func testHTTP200AssistantErrorDefeatsBufferedCompletion() async throws {
+        let http = HTTP()
+        let client = OpenCodeHTTPClient(cwd: URL(fileURLWithPath: NSTemporaryDirectory()), sessionID: "S", httpTransport: http.send)
+        let runtime = TerminalRuntime(descriptor: SessionDescriptor(projectPath: URL(fileURLWithPath: NSTemporaryDirectory()), agent: AgentProfile(name: "Fixture", command: "fixture")), useDetachedSessions: false, entry: .started(agentName: "Fixture", requestedBackend: "fixture"))
+        runtime.wireStructured(client)
+        var effects: [OpenCodeRequestEffect] = []
+        let wired = client.onRequestEffect
+        client.onRequestEffect = { effects.append($0); wired?($0) }
+        http.started = expectation(description: "POST started")
+        let id = runtime.recordPrompt(text: "error", attachmentPaths: [], renderedPayload: "error")
+        XCTAssertEqual(runtime.deliverStructuredPrompt(eventID: id, text: "error"), .queued)
+        await fulfillment(of: [http.started!], timeout: 2)
+        part(client, "M", "must not succeed")
+        done(client, "M")
+        http.respond(200, message: "M", applicationError: true)
+        for _ in 0..<100 where client.isTurnActive { try await Task.sleep(nanoseconds: 1_000_000) }
+        XCTAssertTrue(outputs(runtime).isEmpty)
+        XCTAssertNotEqual(client.lastTurnStatus, "completed")
+        XCTAssertTrue(client.turnFailure?.contains("APIError") == true)
+        XCTAssertTrue(runtime.conversationCaptureNotice?.contains("APIError") == true)
+        XCTAssertEqual(effects.first?.identity.promptEventID, id)
+        XCTAssertEqual(effects.first?.identity.messageID, "M")
+        guard case .failed = effects.first?.effect else { return XCTFail("must emit identified application failure") }
+        guard case .userPrompt(let prompt) = runtime.presentationEvents.first(where: { $0.id == id })?.kind else { return XCTFail("lost prompt") }
+        XCTAssertEqual(prompt.delivery, .delivered, "HTTP 200 still means transport acceptance")
+        done(client, "M")
+        part(client, "M", "late")
+        XCTAssertTrue(outputs(runtime).isEmpty)
+        client.stop()
+    }
+
+    func testReplacedClientExitCannotCloseNewCapture() async throws {
+        let old = OpenCodeHTTPClient(cwd: URL(fileURLWithPath: NSTemporaryDirectory()), promptTransport: { _ in })
+        let http = HTTP()
+        let current = OpenCodeHTTPClient(cwd: URL(fileURLWithPath: NSTemporaryDirectory()), sessionID: "S", httpTransport: http.send)
+        let accepted = expectation(description: "new HTTP accepted")
+        let runtime = TerminalRuntime(descriptor: SessionDescriptor(projectPath: URL(fileURLWithPath: NSTemporaryDirectory()), agent: AgentProfile(name: "Fixture", command: "fixture")), useDetachedSessions: false, entry: .started(agentName: "Fixture", requestedBackend: "fixture"), recordEventRevision: { event, _ in
+            if case .userPrompt(let prompt) = event.kind, prompt.delivery == .delivered { accepted.fulfill() }
+        })
+        runtime.wireStructured(old)
+        let staleExit = old.onExited
+        runtime.wireStructured(current)
+        runtime.controller.markAdapterHosted()
+        http.started = expectation(description: "new POST")
+        let id = runtime.recordPrompt(text: "new", attachmentPaths: [], renderedPayload: "new")
+        XCTAssertEqual(runtime.deliverStructuredPrompt(eventID: id, text: "new"), .queued)
+        await fulfillment(of: [http.started!], timeout: 2)
+        http.respond(200, message: "M")
+        await fulfillment(of: [accepted], timeout: 2)
+        part(current, "M", "new output")
+        XCTAssertEqual(outputs(runtime).last?.state, .live)
+        let lifecycle = runtime.controller.lifecycle
+        let events = runtime.presentationEvents
+        staleExit?()
+        XCTAssertEqual(runtime.controller.lifecycle, lifecycle)
+        XCTAssertEqual(runtime.presentationEvents, events)
+        done(current, "M")
+        XCTAssertEqual(outputs(runtime).last?.promptEventID, id)
+        XCTAssertEqual(outputs(runtime).last?.state, .closed)
+        current.onExited?()
+        XCTAssertNotEqual(runtime.controller.lifecycle, lifecycle, "current exit still works")
+        old.stop()
+        current.stop()
+    }
+
+    func testOversizeByteStreamWithholdsBufferedCompletionAfterHTTP() async throws {
+        let http = HTTP()
+        let client = OpenCodeHTTPClient(cwd: URL(fileURLWithPath: NSTemporaryDirectory()), sessionID: "S", httpTransport: http.send)
+        http.started = expectation(description: "POST started")
+        let accepted = expectation(description: "HTTP accepted")
+        var effects: [OpenCodeRequestEffect] = []
+        client.onRequestEffect = { effects.append($0) }
+        try client.sendTurn(text: "bounded") { result in
+            if case .failure(let error) = result { XCTFail("unexpected transport failure: \(error)") }
+            accepted.fulfill()
+        }
+        await fulfillment(of: [http.started!], timeout: 2)
+        part(client, "M", "early")
+        done(client, "M")
+        for _ in 0..<2_097_152 { try client.receiveSSEByte(0x61) }
+        XCTAssertThrowsError(try client.receiveSSEByte(0x61))
+        http.respond(200, message: "M")
+        await fulfillment(of: [accepted], timeout: 2)
+        XCTAssertTrue(effects.isEmpty)
+        XCTAssertNil(client.lastTurnStatus)
+        XCTAssertTrue(client.identityDiagnostic?.contains("UNKNOWN") == true)
+        client.stop()
+    }
+
+    func testHTTPErrorWithoutAnySSEStillRetainsFailureIdentity() async throws {
+        let http = HTTP()
+        let client = OpenCodeHTTPClient(cwd: URL(fileURLWithPath: NSTemporaryDirectory()), sessionID: "S", httpTransport: http.send)
+        http.started = expectation(description: "POST started")
+        let accepted = expectation(description: "HTTP accepted")
+        let failed = expectation(description: "application failed")
+        let id = UUID()
+        client.onRequestEffect = {
+            XCTAssertEqual($0.identity.promptEventID, id)
+            guard case .failed = $0.effect else { return XCTFail("not a failure") }
+            failed.fulfill()
+        }
+        try client.sendTurn(text: "error", promptEventID: id) { result in
+            if case .failure = result { XCTFail("application error is not transport refusal") }
+            accepted.fulfill()
+        }
+        await fulfillment(of: [http.started!], timeout: 2)
+        http.respond(200, message: "M", applicationError: true)
+        await fulfillment(of: [accepted, failed], timeout: 2)
+        XCTAssertFalse(client.isTurnActive)
+        XCTAssertNotNil(client.turnFailure)
+        client.stop()
     }
 
 }
