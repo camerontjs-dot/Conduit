@@ -48,4 +48,26 @@ final class OpenCodeIdentityTests: XCTestCase {
         guard case .failed = effects.first?.effect else { return XCTFail("error must not complete") }
         XCTAssertEqual(mapper.lastTurnStatus, "failed")
     }
+    func testResponseErrorClosesIdentityBeforeAnySSE() {
+        var mapper = OpenCodeEventMapper()
+        mapper.sessionID = "S"
+        let prompt = UUID()
+        let error = CodexJSON.parseLine(#"{"info":{"sessionID":"S","id":"M","role":"assistant","error":{"name":"APIError"},"time":{"completed":1}}}"#)!
+        XCTAssertTrue(mapper.accept(error, promptEventID: prompt))
+        XCTAssertEqual(mapper.responseFailure?.identity.promptEventID, prompt)
+        guard case .failed = mapper.responseFailure?.effect else { return XCTFail("missing failure") }
+        XCTAssertEqual(mapper.lastTurnStatus, "failed")
+        XCTAssertTrue(mapper.applyIdentified(event(#"{"type":"message.updated","properties":{"info":{"sessionID":"S","id":"M","role":"assistant","time":{"completed":1}}}}"#)).isEmpty)
+    }
+
+    func testIdenticalDeltasWithoutUniqueIdentityRemainRepeatedText() {
+        var mapper = OpenCodeEventMapper()
+        mapper.sessionID = "S"
+        XCTAssertTrue(mapper.accept(response, promptEventID: UUID()))
+        let delta = event(#"{"type":"message.part.delta","properties":{"sessionID":"S","messageID":"M","partID":"p","field":"text","delta":"ha"}}"#)
+        _ = mapper.applyIdentified(delta)
+        _ = mapper.applyIdentified(delta)
+        XCTAssertEqual(mapper.accumulatedText, "haha")
+    }
+
 }

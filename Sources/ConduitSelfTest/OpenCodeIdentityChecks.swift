@@ -20,4 +20,19 @@ func runOpenCodeIdentityChecks(_ check: (String, Bool) -> Void) {
     mapper.resetTurn()
     check("OpenCode old completion cannot close next prompt", mapper.applyIdentified(done).isEmpty)
     check("OpenCode reused response identity is rejected", !mapper.accept(response, promptEventID: UUID()))
+    let error = CodexJSON.parseLine(#"{"info":{"sessionID":"S","id":"E","role":"assistant","error":{"name":"APIError"}}}"#)!
+    check("OpenCode error response binds identity", mapper.accept(error, promptEventID: prompt))
+    check("OpenCode response error retains prompt", mapper.responseFailure?.identity.promptEventID == prompt)
+    check("OpenCode response error cannot complete", mapper.lastTurnStatus == "failed")
+    var decoder = OpenCodeSSELineDecoder(maximumLineBytes: 3)
+    do {
+        for byte in "abc".utf8 { _ = try decoder.append(byte) }
+        check("OpenCode exact line limit preserved", try decoder.append(13) == "abc")
+        check("OpenCode CRLF is one separator", try decoder.append(10) == nil)
+        for byte in "abcd".utf8 { _ = try decoder.append(byte) }
+        check("OpenCode oversized line refused", false)
+    } catch {
+        check("OpenCode oversized line discarded", decoder.bufferedByteCount == 0)
+    }
+
 }

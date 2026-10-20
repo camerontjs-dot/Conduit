@@ -256,6 +256,8 @@ final class OpenCodeHTTPClient: ObservableObject {
     private var bufferedEvents: [CodexJSON] = []
     private var bufferedBytes = 0
     private var bufferOverflow = false
+    private var sseLineDecoder = OpenCodeSSELineDecoder()
+    private var sseInvalid = false
 
     /// Optional presentation-only observation channel for structured activity.
     /// Runtime semantics do not depend on this callback.
@@ -320,6 +322,20 @@ final class OpenCodeHTTPClient: ObservableObject {
         self.httpTransport = httpTransport
         self.lease = OpenCodeServeLeaseRecord(pid: 0, url: "http://fixture.invalid", password: "", ownedByConduit: false)
         self.isReady = true
+    }
+
+    /// Shared by URLSession's byte stream and socket-free transport fixtures.
+    func receiveSSEByte(_ byte: UInt8) throws {
+        do {
+            if let line = try sseLineDecoder.append(byte) { receiveSSELine(line) }
+        } catch {
+            sseInvalid = true
+            mapper.resetTurn()
+            bufferedEvents.removeAll()
+            bufferedBytes = 0
+            reportUnknown("OpenCode output UNKNOWN: SSE line exceeded the 2 MiB byte limit; stream output and completion withheld.")
+            throw error
+        }
     }
 
     func receiveSSELine(_ line: String) {
@@ -430,6 +446,11 @@ final class OpenCodeHTTPClient: ObservableObject {
                 completion?(.success(()))
                 if !bound {
                     self.reportUnknown(self.mapper.identityDiagnostic!)
+                } else if let failure = self.mapper.responseFailure {
+                    self.emit(failure.effect, identity: failure.identity)
+                } else if self.sseInvalid {
+                    self.mapper.resetTurn()
+                    self.reportUnknown("OpenCode output UNKNOWN: SSE stream exceeded its line byte limit; output and completion withheld.")
                 } else if self.bufferOverflow {
                     self.mapper.resetTurn()
                     self.reportUnknown("OpenCode output identity UNKNOWN: pre-response SSE buffer exceeded its limit; output and completion withheld.")
@@ -521,11 +542,12 @@ final class OpenCodeHTTPClient: ObservableObject {
             OpenCodeServeLease.applyAuth(&request, password: password)
             do {
                 let (bytes, _) = try await URLSession.shared.bytes(for: request)
-                for try await line in bytes.lines {
-                    if Task.isCancelled { break }
-                    await MainActor.run {
-                        self?.receiveSSELine(line)
-                    }
+                for try await byte in bytes {
+                    if Task.isCancelled { return }
+                    try self?.receiveSSEByte(byte)
+                }
+                if !Task.isCancelled, let line = try self?.sseLineDecoder.finish() {
+                    self?.receiveSSELine(line)
                 }
             } catch {
                 if Task.isCancelled { return }
@@ -542,7 +564,7 @@ final class OpenCodeHTTPClient: ObservableObject {
     }
 
     private func handleEvent(_ json: CodexJSON) {
-        guard !stopped else { return }
+        guard !stopped, !sseInvalid else { return }
         if pendingPrompt != nil {
             // The synchronous message endpoint can stream before returning its
             // assistant info. Preserve ordering until the exact response binds it.

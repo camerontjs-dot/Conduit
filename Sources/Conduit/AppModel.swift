@@ -8434,8 +8434,9 @@ final class TerminalRuntime: ObservableObject, Identifiable {
             guard let self, let client, self.openCode === client else { return }
             self.conversationCaptureNotice = message
         }
-        client.onExited = { [weak self] in
-            self?.controller.markAdapterExited()
+        client.onExited = { [weak self, weak client] in
+            guard let self, let client, self.openCode === client else { return }
+            self.controller.markAdapterExited()
         }
         client.onReady = { [weak self] in
             self?.deliverHeldPrompts()

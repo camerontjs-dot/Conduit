@@ -163,6 +163,7 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
     public var lastTurnStatus: String?
     public private(set) var identity: OpenCodeRequestIdentity?
     public private(set) var identityDiagnostic: String?
+    public private(set) var responseFailure: OpenCodeRequestEffect?
     private var acceptedMessages: [String: Set<String>] = [:]
 
     /// Only the POST response's assistant info establishes ownership. A bare 2xx,
@@ -182,6 +183,14 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
         acceptedMessages[sessionID, default: []].insert(messageID)
         identity = OpenCodeRequestIdentity(promptEventID: promptEventID, sessionID: sessionID, messageID: messageID)
         identityDiagnostic = nil
+        if let error = info["error"], error != .null, let identity {
+            closedEmitted = true
+            turnActive = false
+            lastTurnStatus = "failed"
+            responseFailure = OpenCodeRequestEffect(identity: identity, effect: .failed(
+                "OpenCode assistant message reported an error: \(error)"
+            ))
+        }
         return true
     }
 
@@ -330,6 +339,7 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
     }
 
     public mutating func resetTurn() {
+        responseFailure = nil
         identity = nil
         identityDiagnostic = nil
         partOrder.removeAll()
@@ -423,5 +433,50 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
             )
         }
         return nil
+    }
+}
+
+/// Bounds raw SSE line bytes before UTF-8 decoding. SSE permits LF, CRLF and CR.
+/// An oversized line invalidates the stream; never truncate it into valid JSON.
+public struct OpenCodeSSELineDecoder: Sendable {
+    public enum DecodeError: Error { case lineTooLong }
+    public let maximumLineBytes: Int
+    public var bufferedByteCount: Int { bytes.count }
+    private var bytes: [UInt8] = []
+    private var afterCR = false
+    private var failed = false
+
+    public init(maximumLineBytes: Int = 2_097_152) {
+        precondition(maximumLineBytes > 0)
+        self.maximumLineBytes = maximumLineBytes
+    }
+
+    public mutating func append(_ byte: UInt8) throws -> String? {
+        guard !failed else { throw DecodeError.lineTooLong }
+        if afterCR {
+            afterCR = false
+            if byte == 10 { return nil }
+        }
+        if byte == 10 || byte == 13 {
+            afterCR = byte == 13
+            let line = String(decoding: bytes, as: UTF8.self)
+            bytes.removeAll(keepingCapacity: true)
+            return line
+        }
+        guard bytes.count < maximumLineBytes else {
+            bytes.removeAll(keepingCapacity: false)
+            failed = true
+            throw DecodeError.lineTooLong
+        }
+        bytes.append(byte)
+        return nil
+    }
+
+    public mutating func finish() throws -> String? {
+        guard !failed else { throw DecodeError.lineTooLong }
+        guard !bytes.isEmpty else { return nil }
+        let line = String(decoding: bytes, as: UTF8.self)
+        bytes.removeAll(keepingCapacity: false)
+        return line
     }
 }
