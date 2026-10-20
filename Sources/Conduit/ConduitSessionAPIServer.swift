@@ -595,6 +595,9 @@ final class ConduitSessionAPIServer {
             let projectSlug = arguments["project_slug"]?.stringValue
                 ?? arguments["projectSlug"]?.stringValue
                 ?? ""
+            if let supplied = arguments["objective"], supplied.stringValue == nil {
+                return Self.directToolResult(["error": "objective must be a string when supplied"])
+            }
             let objective = arguments["objective"]?.stringValue ?? ""
             let idempotencyKey = arguments["idempotency_key"]?.stringValue
                 ?? arguments["idempotencyKey"]?.stringValue

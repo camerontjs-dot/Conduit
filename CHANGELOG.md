@@ -27,6 +27,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Reject explicitly supplied non-string Session API create-task objectives before
+  any task admission or launch; an omitted optional objective remains permitted.
+
 - Removed the unsafe action-only replay-journal helper. All callers now use
   explicit admission and the durable checkpoint before the first possible
   effect; this prevents future callers from filling receipts with refused work.

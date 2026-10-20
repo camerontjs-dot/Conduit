@@ -389,6 +389,34 @@ final class SessionAPIReplayTransportTests: XCTestCase {
         XCTAssertNotNil(result["error"] as? String)
     }
 
+    func testMalformedSuppliedOptionalObjectiveIsRefusedBeforeTaskDispatch() async throws {
+        var commands: [ConduitSessionCommand] = []
+        let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, _ in
+            commands.append(command)
+            return ["taskSessionID": UUID().uuidString]
+        }
+        server.setReadiness(.ready)
+        try initialize(server)
+        let invalid: [Any] = [42, true, NSNull(), ["unexpected": "object"], ["array"]]
+        for value in invalid {
+            let response = try request(server, method: "tools/call", params: [
+                "name": "conduit_create_task",
+                "arguments": ["agent": "fixture", "project_slug": "fixture", "objective": value]
+            ])
+            XCTAssertEqual(response["isError"] as? Bool, true, "invalid optional objective type must refuse")
+            XCTAssertNotNil(try payload(response)["error"])
+        }
+        XCTAssertTrue(commands.isEmpty, "invalid supplied objective may not create a task")
+        let omitted = try request(server, method: "tools/call", params: [
+            "name": "conduit_create_task",
+            "arguments": ["agent": "fixture", "project_slug": "fixture"]
+        ])
+        XCTAssertEqual(omitted["isError"] as? Bool, false)
+        XCTAssertEqual(commands, [.createTask(
+            agent: "fixture", projectSlug: "fixture", objective: "", idempotencyKey: nil
+        )])
+    }
+
     func testPromptSchemaKeepsExactOptionalKeyAndRefusesWrongType() async throws {
         var commands: [ConduitSessionCommand] = []
         let server = ConduitSessionAPIServer(token: "fixture", allowWrites: true) { command, _ in
