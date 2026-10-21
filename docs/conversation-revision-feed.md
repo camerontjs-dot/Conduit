@@ -147,7 +147,12 @@ Redaction runs over the whole text before any cap or slice, so the page's
 capped text, without its trailing `\n[truncated]` marker, is an exact prefix
 of the expansion. It repeats until nothing
 changes, because one replacement can expose another token (a combining mark
-left after `]` creates a word boundary). The earlier export sanitized twice,
+left after `]` creates a word boundary). At most eight passes run. When the
+eighth pass still changed the text, another token may have just been exposed,
+so the whole text is replaced by `[redacted-withheld: redaction did not
+settle]` with `redacted: true`. The page record, change record, expansion and
+`sanitizeText` all use the same result, so none of them returns a partly
+redacted remainder, and the cost stays bounded. The earlier export sanitized twice,
 which caught that case by accident; it also sometimes redacted its own
 `[truncated]` marker when the cut fell after a key name. The new export does
 not touch the marker.
@@ -169,6 +174,10 @@ not touch the marker.
   already did. Large logs cost proportional time; no index or sidecar is
   introduced.
 - Expansion redacts and hashes the event's whole text on each slice.
+- Text whose redaction has not settled after eight passes is withheld in full,
+  including the ordinary text before the first key. Seven chained keys still
+  settle; eight do not, even though the eighth pass may have removed the last
+  one.
 - Already true before this change and not altered by it: structured adapter
   output is appended in full on every delta, so a long streamed reply makes
   the log grow with the square of its length; a delta record is applied to the

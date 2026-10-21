@@ -167,4 +167,41 @@ func runConversationRevisionFeedChecks(_ check: (String, Bool) -> Void) {
         record?.textCapped == true && record?.sourceTruncated == false
             && assembled == text && digestsMatch
     )
+
+    // Nine keys need nine changing passes; past the eight-pass bound the
+    // text is withheld from every export path rather than partly redacted.
+    let chained = String(repeating: "word ", count: 420)
+        + Array(repeating: "xai-abcdefgh", count: 9).joined(separator: "\u{301}")
+    let unsettledSource = ConduitSessionEventSource(
+        taskSessionID: taskID.rawValue.uuidString,
+        backend: .appServer,
+        sessionLifecycle: "closed",
+        runtimeState: "closed",
+        live: false,
+        ready: false,
+        events: [
+            SessionPresentation.agentOutputEvent(
+                promptEventID: nil,
+                text: chained,
+                state: .closed,
+                extraction: .structuredAdapter,
+                truncated: false,
+                id: outputID,
+                occurredAt: stamp
+            ),
+        ]
+    )
+    let unsettledRecord = ConduitSessionEventExport.page(source: unsettledSource).events.first
+    let unsettledExpansion = ConduitSessionEventExport.expand(
+        source: unsettledSource,
+        eventID: outputID.uuidString,
+        offset: 0,
+        limit: 32_000
+    )
+    check(
+        "redaction that does not settle within its bound withholds the text",
+        unsettledExpansion.text == ConduitSessionEventExport.unsettledRedactionText
+            && unsettledRecord?.text == unsettledExpansion.text
+            && unsettledRecord?.redacted == true && unsettledExpansion.redacted
+    )
 }

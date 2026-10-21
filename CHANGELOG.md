@@ -29,7 +29,10 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 - Session event export redaction now repeats until nothing changes, so a key
   exposed by redacting an earlier one (for example after a combining mark) is
-  no longer exported. Numeric Session API arguments that are fractional,
+  no longer exported. It runs at most eight passes; text that has not settled
+  by then is withheld as `[redacted-withheld: redaction did not settle]` on the
+  page, change feed and expansion alike, instead of returned with a key still
+  in it. Numeric Session API arguments that are fractional,
   non-finite or out of range no longer terminate the app.
 
 - Proposal context validation now rejects integer overflow and underflow in

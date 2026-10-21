@@ -580,6 +580,56 @@ final class ConversationRevisionFeedTests: XCTestCase {
         }
     }
 
+    func testRedactionThatDoesNotSettleWithinItsBoundWithholdsTheText() throws {
+        // Each pass replaces one key and exposes the next, so a chain of n
+        // keys needs n changing passes plus one quiet pass. Past the bound the
+        // remaining text is withheld on every export path instead of being
+        // returned as redacted. The prefix puts the chain beyond the record
+        // cap and inside one expansion slice.
+        let prefix = String(repeating: "word ", count: 420)
+        func chain(_ count: Int, _ joiner: String) -> String {
+            prefix + Array(repeating: "xai-abcdefgh", count: count).joined(separator: joiner)
+        }
+        for joiner in ["\u{301}", "\u{FE0F}"] {
+            let settled = ConduitSessionEventExport.redactText(chain(7, joiner))
+            XCTAssertTrue(settled.redacted)
+            XCTAssertTrue(settled.text.hasPrefix(prefix), "seven keys settle in eight passes")
+            XCTAssertFalse(settled.text.contains("xai-"))
+
+            for count in [8, 9] {
+                let text = chain(count, joiner)
+                try withLog { log in
+                    try log.append(output(outputID, text, .closed))
+                    let src = source(log)
+                    let page = ConduitSessionEventExport.page(
+                        source: src,
+                        options: ConduitSessionEventReadOptions(changesSince: "")
+                    )
+                    let record = try XCTUnwrap(page.events.first)
+                    let change = try XCTUnwrap(page.changes?.records.first?.event)
+                    let expansion = ConduitSessionEventExport.expand(
+                        source: src, eventID: outputID.uuidString, offset: 0, limit: 32_000
+                    )
+                    let sanitized = ConduitSessionEventExport.sanitizeText(text, limit: 32_000)
+
+                    for exported in [record.text, change.text, expansion.text, sanitized.text] {
+                        XCTAssertFalse(exported?.contains("xai-") == true, "\(count) keys, \(joiner.unicodeScalars.first!.value)")
+                    }
+                    XCTAssertTrue(record.redacted)
+                    XCTAssertTrue(change.redacted)
+                    XCTAssertTrue(expansion.redacted)
+                    XCTAssertTrue(sanitized.redacted)
+                    XCTAssertTrue(expansion.complete)
+                    XCTAssertEqual(record.text, expansion.text)
+                    XCTAssertEqual(change.text, expansion.text)
+                    XCTAssertEqual(sanitized.text, expansion.text)
+                    XCTAssertEqual(expansion.text, ConduitSessionEventExport.unsettledRedactionText)
+                    XCTAssertFalse(record.textCapped)
+                }
+            }
+        }
+    }
+
     func testChangeRecordsOmitTheLiveTurnStatusOfOtherTurns() throws {
         try withLog { log in
             try log.append(output(outputID, "turn one", .closed))
