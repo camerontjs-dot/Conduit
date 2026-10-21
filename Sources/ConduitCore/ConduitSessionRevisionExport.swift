@@ -29,6 +29,53 @@ public struct ConduitSessionEventReadOptions: Equatable, Sendable {
 
     public static let none = ConduitSessionEventReadOptions()
 
+    /// Reads the optional arguments of one `conduit_session_events` call.
+    ///
+    /// A client-supplied number never traps: values that are fractional,
+    /// non-finite or outside `Int` read as absent. A string argument sent
+    /// with another JSON type keeps its JSON text, so validation reports it
+    /// as invalid instead of treating it as omitted. A present offset that is
+    /// not a whole number becomes -1, which expansion reports as
+    /// `invalid_offset` rather than restarting at 0. JSON null reads as
+    /// omitted.
+    public init(arguments: CodexJSON) {
+        func value(_ key: String) -> CodexJSON? {
+            guard let value = arguments[key], value != .null else { return nil }
+            return value
+        }
+        func text(_ key: String) -> String? {
+            guard let value = value(key) else { return nil }
+            if let raw = value.stringValue { return raw }
+            return Self.jsonText(value)
+        }
+        self.init(
+            changesSince: text("changes_since"),
+            changeLimit: value("change_limit").flatMap(Self.integer),
+            expandEventID: text("expand_event_id"),
+            expandOffset: value("expand_offset").map { Self.integer($0) ?? -1 },
+            expandLimit: value("expand_limit").flatMap(Self.integer)
+        )
+    }
+
+    /// Whole-number argument without trapping on hostile input.
+    public static func integer(_ value: CodexJSON) -> Int? {
+        if case .number(let number) = value { return Int(exactly: number) }
+        if let raw = value.stringValue { return Int(raw) }
+        return nil
+    }
+
+    private static func jsonText(_ value: CodexJSON) -> String {
+        let object = value.jsonObject()
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: [object],
+            options: [.fragmentsAllowed]
+        ),
+              let text = String(data: data, encoding: .utf8),
+              text.count >= 2
+        else { return "<invalid>" }
+        return String(text.dropFirst().dropLast())
+    }
+
     /// The change feed reads the durable log; the timeline may not.
     public var needsDurableRevisions: Bool { changesSince != nil }
 }
@@ -72,8 +119,8 @@ public struct ConduitSessionTimelineSource: Equatable, Sendable {
     }
 }
 
-/// One changed event in a change-feed page: the event's value as of the last
-/// revision the page covers, with its presentation and revision identities.
+/// One changed event in a change-feed page: its latest retained value at read
+/// time with that value's revision identity and its presentation position.
 public struct ConduitSessionChangeRecord: Equatable, Sendable {
     public var event: ConduitSessionEventRecord
     /// Presentation position (`v1:` timeline cursor); fixed by first appearance.
@@ -99,7 +146,7 @@ public struct ConduitSessionChangeFeed: Equatable, Sendable {
     public static let defaultLimit = 20
     public static let maxLimit = 50
     public static let authorityNote =
-        "durable Conduit conversation revisions in write order; not provider history, not verification. Apply a page, then store next_change_cursor."
+        "durable Conduit conversation revisions in write order; not provider history, not verification. Records carry each changed event's latest retained value; apply by revision_sequence (newer wins), then store next_change_cursor."
 
     public var since: String
     public var state: ConversationRevisionWindowState
@@ -123,7 +170,7 @@ public struct ConduitSessionChangeFeed: Equatable, Sendable {
             "source": [
                 "kind": ConduitSessionTimelineSourceKind.durableLog.rawValue,
                 "coverage": coverage.rawValue,
-                "applied_revisions": appliedRevisionCount,
+                "applied_revisions_total": appliedRevisionCount,
                 "rejected_records_in_page": rejectedRecordsInPage,
                 "rejected_kinds_in_page": rejectedKindsInPage,
                 "unterminated_tail_bytes": unterminatedTailBytes,
@@ -249,34 +296,48 @@ extension ConduitSessionEventExport {
             limit: clampChangeLimit(limit)
         )
 
-        // Coalesce: one record per event, valued at its last revision here,
-        // ordered by that revision's sequence.
-        var lastRevisionByEvent: [UUID: ConversationEventRevision] = [:]
+        // Coalesce: one record per event changed in this window. Each record
+        // carries the event's latest deliverable value and revision, which
+        // can be later than next_change_cursor; a later page may repeat it.
+        // Values come from the read's one replay, never a per-page re-read.
+        var latestRevisionByEvent: [UUID: ConversationEventRevision] = [:]
+        for revision in durable.deliverableRevisions {
+            latestRevisionByEvent[revision.eventID] = revision
+        }
+        var changedEvents: [UUID] = []
         var firstSeenEvents = Set<UUID>()
         for revision in window.revisions {
-            lastRevisionByEvent[revision.eventID] = revision
+            if !changedEvents.contains(revision.eventID) {
+                changedEvents.append(revision.eventID)
+            }
             if revision.eventRevision == 1 {
                 firstSeenEvents.insert(revision.eventID)
             }
         }
-        let records = lastRevisionByEvent.values
-            .sorted { $0.sequence < $1.sequence }
-            .compactMap { revision -> ConduitSessionChangeRecord? in
-                guard let value = window.values[revision.eventID] else {
-                    return nil
-                }
-                return ConduitSessionChangeRecord(
+        let records = changedEvents
+            .compactMap { id -> (ConversationEventRevision, SessionPresentationEvent)? in
+                guard let latest = latestRevisionByEvent[id],
+                      let value = durable.deliverableEvents[id]
+                else { return nil }
+                return (latest, value)
+            }
+            .sorted { $0.0.sequence < $1.0.sequence }
+            .map { latest, value in
+                ConduitSessionChangeRecord(
+                    // turn_status describes the live runtime's current turn,
+                    // not a retained revision, so change records omit it.
                     event: record(
                         event: value,
-                        index: revision.timelineIndex,
+                        index: latest.timelineIndex,
                         source: source,
-                        textLimit: textLimit
+                        textLimit: textLimit,
+                        includeTurnStatus: false
                     ),
-                    timelineCursor: encodeCursor(revision.timelineIndex),
-                    revisionSequence: revision.sequence,
-                    eventRevision: revision.eventRevision,
-                    firstSeenInPage: firstSeenEvents.contains(revision.eventID),
-                    recordedAt: revision.recordedAt
+                    timelineCursor: encodeCursor(latest.timelineIndex),
+                    revisionSequence: latest.sequence,
+                    eventRevision: latest.eventRevision,
+                    firstSeenInPage: firstSeenEvents.contains(latest.eventID),
+                    recordedAt: latest.recordedAt
                 )
             }
         let rejectedKinds = Array(

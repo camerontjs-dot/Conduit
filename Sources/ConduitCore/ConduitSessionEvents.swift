@@ -715,16 +715,25 @@ public enum ConduitSessionEventExport {
     static func redactText(_ text: String) -> (text: String, redacted: Bool) {
         var redacted = false
         var working = text
-        for pattern in secretPatterns {
-            let replaced = pattern.stringByReplacingMatches(
-                in: working,
-                range: NSRange(working.startIndex..<working.endIndex, in: working),
-                withTemplate: "[redacted]"
-            )
-            if replaced != working {
-                redacted = true
-                working = replaced
+        // Repeat until nothing changes. A replacement can expose a later
+        // token: a combining mark after a replaced key now follows "]", so a
+        // word boundary appears before the next key. The earlier export ran
+        // the patterns twice by accident and caught that case.
+        for _ in 0..<maximumRedactionPasses {
+            var changed = false
+            for pattern in secretPatterns {
+                let replaced = pattern.stringByReplacingMatches(
+                    in: working,
+                    range: NSRange(working.startIndex..<working.endIndex, in: working),
+                    withTemplate: "[redacted]"
+                )
+                if replaced != working {
+                    redacted = true
+                    changed = true
+                    working = replaced
+                }
             }
+            if !changed { break }
         }
 
         var kept: [String] = []
@@ -771,7 +780,8 @@ public enum ConduitSessionEventExport {
         event: SessionPresentationEvent,
         index: Int,
         source: ConduitSessionEventSource,
-        textLimit: Int
+        textLimit: Int,
+        includeTurnStatus: Bool = true
     ) -> ConduitSessionEventRecord {
         switch event.kind {
         case .sessionOpened(let entry):
@@ -812,7 +822,9 @@ public enum ConduitSessionEventExport {
 
         case .agentOutput(let output):
             let turnStatus: String?
-            if output.extraction == .structuredAdapter, output.state == .closed {
+            if includeTurnStatus,
+               output.extraction == .structuredAdapter,
+               output.state == .closed {
                 turnStatus = source.adapter?.lastTurnStatus ?? "completed"
             } else {
                 turnStatus = nil
@@ -1102,6 +1114,8 @@ public enum ConduitSessionEventExport {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
+
+    private static let maximumRedactionPasses = 8
 
     private static let secretPatterns: [NSRegularExpression] = {
         let patterns = [

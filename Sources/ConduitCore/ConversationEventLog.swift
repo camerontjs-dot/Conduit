@@ -441,27 +441,27 @@ public struct ConversationEventLog: Equatable, Sendable {
                 url: url
             ) else {
                 return ConversationRevisionReadResult(
-                    taskSessionID: taskSessionID,
-                    url: url,
                     coverage: .missing,
                     data: Data(),
                     completePrefixBytes: 0,
                     revisions: [],
                     events: [],
-                    diagnostics: []
+                    deliverableEvents: [:],
+                    diagnostics: [],
+                    diagnosticLineOffsets: [:]
                 )
             }
             data = lockedData
         } catch {
             return ConversationRevisionReadResult(
-                taskSessionID: taskSessionID,
-                url: url,
                 coverage: .unreadable,
                 data: Data(),
                 completePrefixBytes: 0,
                 revisions: [],
                 events: [],
-                diagnostics: [unreadableDiagnostic(error)]
+                deliverableEvents: [:],
+                diagnostics: [unreadableDiagnostic(error)],
+                diagnosticLineOffsets: [:]
             )
         }
 
@@ -471,24 +471,74 @@ public struct ConversationEventLog: Equatable, Sendable {
             url: url,
             collectRevisions: true
         )
-        let coverage: ConversationSourceCoverage
-        if !replay.diagnostics.isEmpty {
-            coverage = .partial
-        } else if replay.revisions.isEmpty {
-            coverage = .empty
+        // The feed never delivers an applied record that still lacks its
+        // newline. Only then does the deliverable projection differ from the
+        // full one, and only then is the prefix replayed a second time.
+        let deliverableEvents: [UUID: SessionPresentationEvent]
+        if let last = replay.revisions.last, !last.newlineTerminated {
+            deliverableEvents = Self.replay(
+                data.prefix(replay.completePrefixBytes),
+                taskSessionID: taskSessionID,
+                url: url,
+                collectRevisions: false
+            ).latestEvents
         } else {
-            coverage = .complete
+            deliverableEvents = replay.latestEvents
         }
         return ConversationRevisionReadResult(
-            taskSessionID: taskSessionID,
-            url: url,
-            coverage: coverage,
+            coverage: Self.coverage(of: replay),
             data: data,
             completePrefixBytes: replay.completePrefixBytes,
             revisions: replay.revisions,
             events: replay.firstSeenOrder.compactMap { replay.latestEvents[$0] },
+            deliverableEvents: deliverableEvents,
+            diagnostics: replay.diagnostics,
+            diagnosticLineOffsets: replay.diagnosticLineOffsets
+        )
+    }
+
+    /// The `read()` projection plus coverage, without revision positions or a
+    /// retained copy of the source. For callers that only show a timeline.
+    public func readWithCoverage() -> ConversationCoverageReadResult {
+        let data: Data
+        do {
+            guard let lockedData = try Self.readLockedData(
+                directory: directory,
+                fileName: url.lastPathComponent,
+                url: url
+            ) else {
+                return ConversationCoverageReadResult(
+                    coverage: .missing,
+                    events: [],
+                    diagnostics: []
+                )
+            }
+            data = lockedData
+        } catch {
+            return ConversationCoverageReadResult(
+                coverage: .unreadable,
+                events: [],
+                diagnostics: [unreadableDiagnostic(error)]
+            )
+        }
+        let replay = Self.replay(
+            data,
+            taskSessionID: taskSessionID,
+            url: url,
+            collectRevisions: false
+        )
+        return ConversationCoverageReadResult(
+            coverage: Self.coverage(of: replay),
+            events: replay.firstSeenOrder.compactMap { replay.latestEvents[$0] },
             diagnostics: replay.diagnostics
         )
+    }
+
+    private static func coverage(of replay: Replay) -> ConversationSourceCoverage {
+        if !replay.diagnostics.isEmpty { return .partial }
+        // Every applied record creates or revises an event, so no events
+        // means no applied records.
+        return replay.firstSeenOrder.isEmpty ? .empty : .complete
     }
 
     private func unreadableDiagnostic(
@@ -501,17 +551,18 @@ public struct ConversationEventLog: Equatable, Sendable {
         )
     }
 
-    struct Replay {
+    private struct Replay {
         var firstSeenOrder: [UUID] = []
         var latestEvents: [UUID: SessionPresentationEvent] = [:]
         var diagnostics: [ConversationEventLogDiagnostic] = []
+        var diagnosticLineOffsets: [Int: Int] = [:]
         var revisions: [ConversationEventRevision] = []
         var completePrefixBytes = 0
     }
 
-    /// Validates and projects records in file order. Shared by `read()`,
-    /// `readRevisions()` and prefix projections so they cannot diverge.
-    static func replay(
+    /// Validates and projects records in file order. Shared by every reader
+    /// so `read()`, `readWithCoverage()` and `readRevisions()` cannot diverge.
+    private static func replay(
         _ data: Data,
         taskSessionID: TaskSessionID,
         url: URL,
@@ -540,6 +591,7 @@ public struct ConversationEventLog: Equatable, Sendable {
         var revisions: [ConversationEventRevision] = []
         var timelineIndexByEvent: [UUID: Int] = [:]
         var revisionCountByEvent: [UUID: Int] = [:]
+        var diagnosticLineOffsets: [Int: Int] = [:]
         var completePrefixBytes = 0
 
         for (index, rawLine) in lines.enumerated() {
@@ -553,6 +605,14 @@ public struct ConversationEventLog: Equatable, Sendable {
             let terminated = rawLine.endIndex < data.endIndex
             if terminated {
                 completePrefixBytes = lineEnd + 1
+            }
+            // Remember where each rejected line starts so a reader can scope
+            // rejections to a byte range without rescanning the source.
+            let diagnosticsBeforeLine = diagnostics.count
+            defer {
+                if diagnostics.count > diagnosticsBeforeLine {
+                    diagnosticLineOffsets[index + 1] = lineStart
+                }
             }
 
             var line = Data(rawLine)
@@ -705,6 +765,7 @@ public struct ConversationEventLog: Equatable, Sendable {
             firstSeenOrder: firstSeenOrder,
             latestEvents: latestEvents,
             diagnostics: diagnostics,
+            diagnosticLineOffsets: diagnosticLineOffsets,
             revisions: revisions,
             completePrefixBytes: completePrefixBytes
         )

@@ -81,7 +81,7 @@ final class ConversationRevisionFeedTests: XCTestCase {
 
     // MARK: Pagination, catch-up and convergence
 
-    func testBudgetPagesConvergeOnProjectionAndIntermediateValuesMatchTheirPrefix() throws {
+    func testBudgetPagesCarryLatestValuesAndConvergeOnProjection() throws {
         try withLog { log in
             try log.append(prompt(promptID, "one", .queued))
             try log.append(output(outputID, "partial", .live))
@@ -92,15 +92,19 @@ final class ConversationRevisionFeedTests: XCTestCase {
             var replica = ConduitSessionChangeReplica()
             let page1 = changes(log, since: replica.cursor, limit: 2)
             XCTAssertTrue(page1.hasMoreChanges)
-            // Page 1 stops before the first revision of a third event, so the
-            // prompt it carries is the delivered revision recorded before it.
-            XCTAssertEqual(page1.records.map(\.event.eventID), [outputID, promptID].map(\.uuidString))
-            XCTAssertEqual(page1.records.first?.event.text, "partial")
+            // Page 1 consumes revisions 1-3 and stops before the third event.
+            // Its records carry each event's latest value, so the output is
+            // already "partial done" (revision 5), ahead of the page cursor.
+            XCTAssertEqual(page1.records.map(\.event.eventID), [promptID, outputID].map(\.uuidString))
+            XCTAssertEqual(page1.records.map(\.revisionSequence), [3, 5])
+            XCTAssertEqual(page1.records.last?.event.text, "partial done")
             XCTAssertEqual(replica.apply(page1), .applied(records: 2))
 
+            // Page 2 consumes revisions 4-5 and repeats revision 5.
             let page2 = changes(log, since: replica.cursor, limit: 2)
             XCTAssertFalse(page2.hasMoreChanges)
             XCTAssertEqual(page2.records.map(\.event.eventID), [laterID, outputID].map(\.uuidString))
+            XCTAssertEqual(page2.records.map(\.revisionSequence), [4, 5])
             XCTAssertEqual(replica.apply(page2), .applied(records: 2))
 
             let projection = log.read().events
@@ -275,6 +279,39 @@ final class ConversationRevisionFeedTests: XCTestCase {
             let next = changes(log, since: try XCTUnwrap(feed.nextChangeCursor))
             XCTAssertEqual(next.records.map(\.event.eventID), [outputID, laterID].map(\.uuidString))
             XCTAssertEqual(next.unterminatedTailBytes, 0)
+        }
+    }
+
+    func testUnterminatedTailRevisionOfDeliveredEventIsNotInItsValue() throws {
+        try withLog { log in
+            try log.append(output(outputID, "kept", .live))
+            try appendRaw(try rawRecordLine(output(outputID, "kept+tail", .live)), to: log.url)
+
+            XCTAssertEqual(log.read().events.first.flatMap(text), "kept+tail")
+            let feed = changes(log, since: "")
+            XCTAssertEqual(feed.records.map(\.event.text), ["kept"])
+            XCTAssertEqual(feed.records.map(\.revisionSequence), [1])
+
+            try log.append(prompt(laterID, "later", .queued))
+            let next = changes(log, since: try XCTUnwrap(feed.nextChangeCursor))
+            XCTAssertEqual(next.records.map(\.event.text), ["kept+tail", "later"])
+        }
+    }
+
+    func testCoverageOnlyReadMatchesRevisionReadCoverage() throws {
+        try withTemporaryDirectory { root in
+            let log = ConversationEventLog(directory: root.appendingPathComponent("h"), taskSessionID: taskID)
+            XCTAssertEqual(log.readWithCoverage().coverage, .missing)
+            try log.append(prompt(promptID, "a", .queued))
+            XCTAssertEqual(log.readWithCoverage().coverage, .complete)
+            try appendRaw(Data("torn".utf8), to: log.url)
+            let light = log.readWithCoverage()
+            let full = log.readRevisions()
+            XCTAssertEqual(light.coverage, .partial)
+            XCTAssertEqual(light.coverage, full.coverage)
+            XCTAssertEqual(light.events, full.events)
+            XCTAssertEqual(light.events, log.read().events)
+            XCTAssertEqual(light.diagnostics, full.diagnostics)
         }
     }
 
@@ -523,7 +560,100 @@ final class ConversationRevisionFeedTests: XCTestCase {
         XCTAssertNil(feed.nextChangeCursor)
     }
 
+    // MARK: Review regressions
+
+    func testRedactionRunsToAFixedPointAcrossExposedTokens() {
+        // Replacing the first key leaves a combining mark after "]", which
+        // creates a word boundary before the second key.
+        for joiner in ["\u{301}", "\u{FE0F}"] {
+            let text = "xai-abcdefgh\(joiner)sk-abcdefgh"
+            let event = output(outputID, text, .closed)
+            let src = source(events: [event], durable: nil, kind: .durableLog)
+            let record = ConduitSessionEventExport.page(source: src).events.first
+            XCTAssertEqual(record?.redacted, true)
+            XCTAssertFalse(record?.text?.contains("sk-abcdefgh") == true, joiner)
+            XCTAssertFalse(record?.text?.contains("xai-abcdefgh") == true, joiner)
+            let expansion = ConduitSessionEventExport.expand(
+                source: src, eventID: outputID.uuidString, offset: 0, limit: nil
+            )
+            XCTAssertFalse(expansion.text?.contains("sk-abcdefgh") == true, joiner)
+        }
+    }
+
+    func testChangeRecordsOmitTheLiveTurnStatusOfOtherTurns() throws {
+        try withLog { log in
+            try log.append(output(outputID, "turn one", .closed))
+            let durable = log.readRevisions()
+            let src = ConduitSessionEventSource(
+                taskSessionID: taskID.rawValue.uuidString,
+                backend: .appServer,
+                sessionLifecycle: "running",
+                runtimeState: "ready",
+                live: true,
+                ready: true,
+                events: durable.events,
+                adapter: ConduitSessionAdapterSnapshot(lastTurnStatus: "failed", turnFailure: "boom"),
+                durableRevisions: durable
+            )
+            let page = ConduitSessionEventExport.page(
+                source: src,
+                options: ConduitSessionEventReadOptions(changesSince: "")
+            )
+            XCTAssertNil(page.changes?.records.first?.event.turnStatus)
+            XCTAssertNil(page.changes?.records.first?.jsonObject()["turn_status"])
+            // The v1 record keeps its existing behaviour.
+            XCTAssertEqual(page.events.first?.turnStatus, "failed")
+        }
+    }
+
+    func testArgumentParsingNeverTrapsAndReportsMalformedValues() {
+        func options(_ object: [String: CodexJSON]) -> ConduitSessionEventReadOptions {
+            ConduitSessionEventReadOptions(arguments: .object(object))
+        }
+        let hostile = options([
+            "change_limit": .number(1e300),
+            "expand_limit": .number(.infinity),
+            "expand_offset": .number(.nan),
+            "changes_since": .number(0),
+            "expand_event_id": .number(42),
+        ])
+        XCTAssertNil(hostile.changeLimit)
+        XCTAssertNil(hostile.expandLimit)
+        XCTAssertEqual(hostile.expandOffset, -1)
+        XCTAssertEqual(hostile.changesSince, "0")
+        XCTAssertEqual(hostile.expandEventID, "42")
+
+        let fractional = options(["expand_offset": .number(2000.9), "change_limit": .number(2.0)])
+        XCTAssertEqual(fractional.expandOffset, -1)
+        XCTAssertEqual(fractional.changeLimit, 2)
+
+        let text = options(["expand_offset": .string("8k"), "changes_since": .string("")])
+        XCTAssertEqual(text.expandOffset, -1)
+        XCTAssertEqual(text.changesSince, "")
+
+        let nulls = options(["changes_since": .null, "expand_offset": .null, "expand_event_id": .null])
+        XCTAssertEqual(nulls, .none)
+        XCTAssertEqual(options([:]), .none)
+
+        // A reported malformed value reaches validation instead of vanishing.
+        let src = source(events: [prompt(promptID, "go", .queued)], durable: nil, kind: .durableLog)
+        XCTAssertEqual(
+            ConduitSessionEventExport.expand(
+                source: src, eventID: promptID.uuidString,
+                offset: text.expandOffset, limit: nil
+            ).state,
+            .invalidOffset
+        )
+        XCTAssertNil(ConversationRevisionCursor.parse(hostile.changesSince ?? ""))
+    }
+
     // MARK: Helpers
+
+    private func text(_ event: SessionPresentationEvent) -> String? {
+        if case .agentOutput(let output) = event.kind { return output.text }
+        if case .userPrompt(let prompt) = event.kind { return prompt.text }
+        return nil
+    }
 
     private func changes(
         _ log: ConversationEventLog,

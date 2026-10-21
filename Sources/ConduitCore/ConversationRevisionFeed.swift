@@ -56,6 +56,23 @@ public struct ConversationEventRevision: Equatable, Sendable {
     }
 }
 
+/// `ConversationEventLog.read()` plus the source's coverage.
+public struct ConversationCoverageReadResult: Equatable, Sendable {
+    public let coverage: ConversationSourceCoverage
+    public let events: [SessionPresentationEvent]
+    public let diagnostics: [ConversationEventLogDiagnostic]
+
+    public init(
+        coverage: ConversationSourceCoverage,
+        events: [SessionPresentationEvent],
+        diagnostics: [ConversationEventLogDiagnostic]
+    ) {
+        self.coverage = coverage
+        self.events = events
+        self.diagnostics = diagnostics
+    }
+}
+
 public struct ConversationRevisionReadResult: Equatable, Sendable {
     public let coverage: ConversationSourceCoverage
     /// Bytes through the end of the last newline-terminated line.
@@ -64,79 +81,58 @@ public struct ConversationRevisionReadResult: Equatable, Sendable {
     public let revisions: [ConversationEventRevision]
     /// Identical to `ConversationEventLog.read().events` for the same bytes.
     public let events: [SessionPresentationEvent]
+    /// Latest value of each event over the complete prefix only. Equal to
+    /// `events` unless an applied final record still lacks its newline.
+    public let deliverableEvents: [UUID: SessionPresentationEvent]
     public let diagnostics: [ConversationEventLogDiagnostic]
+    /// Applied records wholly inside the complete prefix. A trailing record
+    /// without its newline is projected by `events` but is not yet part of
+    /// the prefix a cursor can bind, so the change feed does not deliver it.
+    public let deliverableRevisions: [ConversationEventRevision]
     private let data: Data
-    private let taskSessionID: TaskSessionID
-    private let url: URL
+    private let diagnosticLineOffsets: [Int: Int]
 
     public init(
-        taskSessionID: TaskSessionID,
-        url: URL,
         coverage: ConversationSourceCoverage,
         data: Data,
         completePrefixBytes: Int,
         revisions: [ConversationEventRevision],
         events: [SessionPresentationEvent],
-        diagnostics: [ConversationEventLogDiagnostic]
+        deliverableEvents: [UUID: SessionPresentationEvent],
+        diagnostics: [ConversationEventLogDiagnostic],
+        diagnosticLineOffsets: [Int: Int]
     ) {
-        self.taskSessionID = taskSessionID
-        self.url = url
         self.coverage = coverage
         self.data = data
         self.sourceBytes = data.count
-        self.completePrefixBytes = min(max(0, completePrefixBytes), data.count)
+        let prefix = min(max(0, completePrefixBytes), data.count)
+        self.completePrefixBytes = prefix
         self.revisions = revisions
         self.events = events
+        self.deliverableEvents = deliverableEvents
         self.diagnostics = diagnostics
-    }
-
-    /// Applied records wholly inside the complete prefix. A trailing record
-    /// without its newline is projected by `events` but is not yet part of
-    /// the prefix a cursor can bind, so the change feed does not deliver it.
-    public var deliverableRevisions: [ConversationEventRevision] {
-        revisions.filter { $0.newlineTerminated && $0.byteRange.upperBound < completePrefixBytes }
-    }
-
-    /// Latest valid value of each event as of the first `byteCount` bytes,
-    /// using the same validation as `ConversationEventLog.read()`.
-    public func projection(throughByte byteCount: Int) -> [UUID: SessionPresentationEvent] {
-        if byteCount >= sourceBytes {
-            return Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
+        self.diagnosticLineOffsets = diagnosticLineOffsets
+        self.deliverableRevisions = revisions.filter {
+            $0.newlineTerminated && $0.byteRange.upperBound < prefix
         }
-        return ConversationEventLog.replay(
-            data.prefix(max(0, byteCount)),
-            taskSessionID: taskSessionID,
-            url: url,
-            collectRevisions: false
-        ).latestEvents
     }
 
     /// SHA-256 over the first `byteCount` source bytes, or nil when the
     /// source is shorter than that.
     public func prefixDigest(byteCount: Int) -> String? {
         guard byteCount >= 0, byteCount <= data.count else { return nil }
-        let prefix = data.prefix(byteCount)
-        return SHA256.hash(data: prefix)
+        return SHA256.hash(data: data.prefix(byteCount))
             .map { String(format: "%02x", $0) }
             .joined()
     }
 
-    /// Rejected-record diagnostics for lines that start inside
-    /// `byteRange`. Diagnostics without a line (an unreadable source) are
-    /// always included.
+    /// Rejected-record diagnostics for lines that start inside `byteRange`.
+    /// Diagnostics without a line (an unreadable source) are always included.
     public func diagnostics(startingIn byteRange: Range<Int>) -> [ConversationEventLogDiagnostic] {
-        guard diagnostics.contains(where: { $0.lineNumber != nil }) else {
-            return diagnostics
-        }
-        // Line k (1-based) starts after the (k-1)th newline.
-        var lineStarts = [0]
-        for (offset, byte) in data.enumerated() where byte == UInt8(ascii: "\n") {
-            lineStarts.append(offset + 1)
-        }
-        return diagnostics.filter { diagnostic in
+        diagnostics.filter { diagnostic in
             guard let line = diagnostic.lineNumber else { return true }
-            guard line >= 1, line <= lineStarts.count else { return false }
-            return byteRange.contains(lineStarts[line - 1])
+            guard let start = diagnosticLineOffsets[line] else { return false }
+            return byteRange.contains(start)
         }
     }
 
@@ -231,9 +227,9 @@ public enum ConversationRevisionReconcileReason: String, Codable, Equatable, Sen
 
 /// Applied records after a cursor, bounded by a distinct-event budget.
 ///
-/// `nextCursor` covers exactly the records returned, so a reader that stores
-/// it only after applying them cannot skip a revision. `headCursor` covers
-/// every deliverable record at read time.
+/// `nextCursor` covers exactly the revisions this window consumed, so a reader
+/// that stores it only after applying them cannot skip one. `headCursor`
+/// covers every deliverable record at read time.
 public struct ConversationRevisionWindow: Equatable, Sendable {
     public let state: ConversationRevisionWindowState
     public let reconcileReason: ConversationRevisionReconcileReason?
@@ -244,8 +240,6 @@ public struct ConversationRevisionWindow: Equatable, Sendable {
     public let coverage: ConversationSourceCoverage
     public let rejectedRecordsInRange: [ConversationEventLogDiagnostic]
     public let unterminatedTailBytes: Int
-    /// Values of the selected events as of the last selected revision.
-    public let values: [UUID: SessionPresentationEvent]
 
     public static func select(
         from source: ConversationRevisionReadResult,
@@ -263,8 +257,7 @@ public struct ConversationRevisionWindow: Equatable, Sendable {
                 hasMore: false,
                 coverage: source.coverage,
                 rejectedRecordsInRange: source.diagnostics,
-                unterminatedTailBytes: 0,
-                values: [:]
+                unterminatedTailBytes: 0
             )
         }
 
@@ -287,8 +280,7 @@ public struct ConversationRevisionWindow: Equatable, Sendable {
                 hasMore: false,
                 coverage: source.coverage,
                 rejectedRecordsInRange: [],
-                unterminatedTailBytes: tailBytes,
-                values: [:]
+                unterminatedTailBytes: tailBytes
             )
         }
 
@@ -348,15 +340,7 @@ public struct ConversationRevisionWindow: Equatable, Sendable {
             rejectedRecordsInRange: source.diagnostics(
                 startingIn: cursor.byteOffset..<next.byteOffset
             ),
-            unterminatedTailBytes: tailBytes,
-            values: selected.isEmpty
-                ? [:]
-                : source.projection(throughByte: lastSelectedEnd(selected))
-                    .filter { selectedEvents.contains($0.key) }
+            unterminatedTailBytes: tailBytes
         )
-    }
-
-    private static func lastSelectedEnd(_ selected: [ConversationEventRevision]) -> Int {
-        (selected.last?.byteRange.upperBound ?? -1) + 1
     }
 }

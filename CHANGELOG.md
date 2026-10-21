@@ -27,6 +27,11 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Session event export redaction now repeats until nothing changes, so a key
+  exposed by redacting an earlier one (for example after a combining mark) is
+  no longer exported. Numeric Session API arguments that are fractional,
+  non-finite or out of range no longer terminate the app.
+
 - Proposal context validation now rejects integer overflow and underflow in
   supplied token estimates without terminating the process. Unrepresentable
   totals remain invalid even at the largest budget; ordinary totals, negative
@@ -53,17 +58,18 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 ### Added
 
 - `conduit_session_events` accepts an optional `changes_since` revision cursor.
-  The response's `changes` block lists durable conversation revisions in write
-  order, including revisions of events behind the reader's timeline cursor, and
-  refuses a mismatched or malformed cursor instead of restarting. It reports
-  whether the log is complete, partial, empty, missing or unreadable, and
-  `timeline_source` says whether the timeline came from the live runtime,
-  cached history or the durable log. The existing `v1` cursor is unchanged.
+  Its `changes` block reports every retained change in write order, including
+  revisions of events behind the reader's timeline cursor, each as the event's
+  latest value. A mismatched or malformed cursor is refused instead of
+  restarting. The feed reports whether the log is complete, partial, empty,
+  missing or unreadable, and `timeline_source` says whether the timeline came
+  from the live runtime, cached history or the durable log. The existing `v1`
+  cursor is unchanged.
 
-- Text shortened by Conduit's export cap can be recovered exactly with
-  `expand_event_id`, in slices that never split a character. Event records
-  now report `text_capped` and `source_truncated` separately; `truncated`
-  keeps its previous meaning.
+- Text shortened by Conduit's export cap can be recovered exactly, as the
+  same redacted text, with `expand_event_id`, in slices that never split a
+  character. Event records now report `text_capped` and `source_truncated`
+  separately; `truncated` keeps its previous meaning.
 
 - Task-rail thread recognition now shows conversation-aware recency and bounded
   retained prompt/output previews on pointer hover or keyboard focus. Persisted,

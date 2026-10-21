@@ -421,7 +421,9 @@ final class ConduitSessionAPIServer {
 
     private static func intArgument(_ value: CodexJSON?) -> Int? {
         guard let value else { return nil }
-        if case .number(let number) = value { return Int(number) }
+        // Int(Double) traps on NaN, infinity or a value outside Int's range;
+        // a client-supplied number must never terminate the app.
+        if case .number(let number) = value { return Int(exactly: number) }
         if let raw = value.stringValue { return Int(raw) }
         return nil
     }
@@ -499,13 +501,7 @@ final class ConduitSessionAPIServer {
                     taskSessionID: id,
                     cursor: cursor,
                     limit: limit,
-                    options: ConduitSessionEventReadOptions(
-                        changesSince: arguments["changes_since"]?.stringValue,
-                        changeLimit: Self.intArgument(arguments["change_limit"]),
-                        expandEventID: arguments["expand_event_id"]?.stringValue,
-                        expandOffset: Self.intArgument(arguments["expand_offset"]),
-                        expandLimit: Self.intArgument(arguments["expand_limit"])
-                    )
+                    options: ConduitSessionEventReadOptions(arguments: arguments)
                 )
             } else {
                 command = nil

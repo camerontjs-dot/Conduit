@@ -210,7 +210,7 @@ public enum ConduitSessionToolCatalog {
                         "properties": [
                             "kind": ["type": "string"],
                             "coverage": coverageSchema,
-                            "applied_revisions": ["type": "integer"],
+                            "applied_revisions_total": ["type": "integer"],
                             "rejected_records_in_page": ["type": "integer"],
                             "rejected_kinds_in_page": [
                                 "type": "array",
@@ -355,7 +355,7 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_session_events",
-            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated is set by either Conduit's text cap (text_capped, recoverable with expand_event_id) or truncation when the text was captured (source_truncated, not recoverable). The v1 cursor is a presentation position: a later revision of an earlier event keeps its position and does not advance it. To follow revisions, pass changes_since (empty to start) and store changes.next_change_cursor after applying each page. This is not verification.",
+            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated is set by either Conduit's text cap (text_capped, recoverable as the same redacted text with expand_event_id) or truncation when the text was captured (source_truncated, not recoverable). The v1 cursor is a presentation position: a later revision of an earlier event keeps its position and does not advance it. To learn of every change, pass changes_since (empty to start), apply each page's records by revision_sequence, then store changes.next_change_cursor. Change records carry each event's latest value. A response without a changes block comes from a Conduit that does not support it. This is not verification.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Durable Conduit task UUID."),

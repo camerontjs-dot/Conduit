@@ -2092,25 +2092,31 @@ Conduit's cap or capture caused it.
 3. Report source coverage as `complete`, `partial`, `empty`, `missing` or
    `unreadable`, and the timeline's source as live runtime, cached history or
    durable log.
-4. Coalesce several revisions of one event within a page to its value at the
-   last of them, valued from the log prefix the page covers. The log is never
-   compacted.
+4. Coalesce the revisions a page consumes to one record per event, carrying
+   that event's latest retained value and its revision sequence, all from the
+   request's single read. The log is never compacted.
 5. Separate `text_capped` from `source_truncated`, and serve exact expansion
    slices of the redacted text by Character offset with a digest of the full
    text.
 6. Keep all of this read-only: no reader path launches, resumes, prompts or
    reconnects a runtime.
+7. When the feed is requested and no runtime is live, serve the fresh durable
+   read as the timeline rather than possibly stale cached history.
 
-**Consequences:** An independent reader can follow every retained revision
-and distinguish missing, empty, partial and unreadable sources. Older clients
-see the same v1 page with two additive booleans per record. Each feed request
-reads the whole log once; no index or sidecar is introduced. The feed cannot
+**Consequences:** An independent reader learns of every retained change,
+including revisions behind its timeline position, receives each changed
+event's latest value, and can distinguish missing, empty, partial and
+unreadable sources. Intermediate values of a streamed output are not served. Older clients
+see the same v1 page with additive fields only. Redaction now runs to a fixed
+point. Each feed request reads the whole log once on the main actor; no index
+or sidecar is introduced. The feed cannot
 supply provider-native event identity, and cursor values are unauthenticated
 positions.
 
 **Qualification boundary:** Core tests and self-test checks establish the
-contract against owned temporary logs, including mutation checks that each
-named failure is detected. The installed app, a hosted ChatGPT client and
+contract against owned temporary logs. A separate mutation run, recorded on
+the implementing PR and not part of the repository, confirmed that the tests
+detect each named fault. The installed app, a hosted ChatGPT client and
 mounted UI were not exercised.
 
 **Reconsideration trigger:** Revisit if log sizes make whole-log reads costly

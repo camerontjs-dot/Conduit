@@ -6187,18 +6187,25 @@ final class AppModel: ObservableObject {
                 durableCoverage: durable?.coverage,
                 rejectedRecordCount: durable?.diagnostics.count
             )
+        } else if let durable {
+            // Cached history is a copy loaded earlier and can lag the log
+            // (an exited runtime's tab keeps it until removed). When the log
+            // was just read, serve that, so the timeline is never behind the
+            // head cursor returned with it.
+            eventSource = durable.events
+            timelineSource = ConduitSessionTimelineSource(
+                kind: .durableLog,
+                durableCoverage: durable.coverage,
+                rejectedRecordCount: durable.diagnostics.count
+            )
         } else if let cached = conversationHistoryByTask[task.id], !cached.isEmpty {
             eventSource = cached
-            timelineSource = ConduitSessionTimelineSource(
-                kind: .cachedHistory,
-                durableCoverage: durable?.coverage,
-                rejectedRecordCount: durable?.diagnostics.count
-            )
+            timelineSource = ConduitSessionTimelineSource(kind: .cachedHistory)
         } else {
-            let read = durable ?? ConversationEventLog(
+            let read = ConversationEventLog(
                 directory: conversationDirectory,
                 taskSessionID: task.id
-            ).readRevisions()
+            ).readWithCoverage()
             eventSource = read.events
             timelineSource = ConduitSessionTimelineSource(
                 kind: .durableLog,
