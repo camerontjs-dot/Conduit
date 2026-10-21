@@ -1,12 +1,29 @@
 # T3 Code adoption plan for Conduit and MainFrame
 
-Prepared 20 October 2026 (America/Toronto).
+Prepared 20 October 2026; finalized 21 October 2026 after local review (America/Toronto).
 
-**Status: proposed implementation plan, pending local review.** This planning change contains no product implementation and establishes no runtime qualification. The requested next action is to review this plan against live GitHub and the actual local implementation, revise it where evidence warrants, then implement the retained changes.
+**Status: finalized plan with linked implementation.** Every area below has a disposition recorded in [§0](#0-finalized-decisions-21-october-2026). Retained implementation is in separate Draft PRs: the revision feed in [#184](https://github.com/camerontjs-dot/Conduit/pull/184) and the first in-process service slice in [#185](https://github.com/camerontjs-dot/Conduit/pull/185). This planning change itself still contains no product implementation and establishes no runtime qualification.
 
 Primary coordination remains [Conduit #60](https://github.com/camerontjs-dot/Conduit/issues/60). The owner issues below retain their authority. This document is a bounded adoption proposal and source-review record, not a second live project dashboard.
 
 Local execution entry point: [review, finalize and implement](t3code-local-agent.md).
+
+## 0. Finalized decisions (21 October 2026)
+
+Local review used live GitHub, an owned worktree at maintained main `10a8d03852b1589a98f212d317c26463cda93c76` and the reader receipts listed in the PRs. Main had not moved since this plan was drafted. The operator's installed app was identified (`/Applications/Conduit.app` 0.3.0 build 3, executable SHA-256 `d90de0bb2e1afa49000fce6e97421136e1e1f1c53a291d0e3efcd94f6e4f23cc`, the qualified PR #102 baseline, with a live loopback listener) and was not launched, replaced or called.
+
+| Area | Disposition | Gap observed in live source | Existing work reused | Acceptance and evidence | Dependency or next action |
+| --- | --- | --- | --- | --- | --- |
+| 1. Request acceptance, effects, truthful completion | **Reuse existing; no new mechanism here** | Main has only an in-memory create ledger. A durable keyed replay journal exists only in Drafts #177 → #178 → #180; output truth fixes in #179 → #181 → #182. UNKNOWN intents have no resolution path, so a new key can duplicate accepted work. OpenCode delta identity stays unresolved. | #175 → #177 → #178 → #180 and #179 → #181 → #182, all rooted at #177 head `64d6b7c`. Heads `a4b6562` (#180) and `828498a` (#182) are macOS-CI green. Independent verdicts: #175 FAIL, #177 FAIL twice, #178 FAIL, #180 BLOCKED for behavior, #179 FAIL (repaired in #181), #182 PASS_BOUNDED_SOURCE. | The integration candidate must show: lost ACK returns the stored receipt; a conflicting key is refused; a crash after intent and before outcome reports UNKNOWN and never redispatches; a failed settlement write reports UNKNOWN; a refusal before any effect reports `not_dispatched`; an application error inside a 2xx response is a failure; a stale runtime callback cannot close or label its replacement; provider completion is not verification. | `git merge-tree` of `a4b6562` and `828498a` conflicts only in CHANGELOG, DECISIONS (both stacks add D-063/D-064) and the provider-conformance pins; AppModel and the self-test auto-merge. The #60 owner builds the reviewed integration candidate named in [checkpoint 6281289361](https://github.com/camerontjs-dot/Conduit/issues/60#issuecomment-6281289361), choosing the decision numbering, then runs macOS CI and the separately authorized two-client acceptance. |
+| 2. Revision-aware reads, snapshots, coverage | **Implemented (bounded)** in [#184](https://github.com/camerontjs-dot/Conduit/pull/184) | The `v1:<index>` cursor is a presentation position, so a revision of an earlier event never reached a reader past it. A missing log read exactly like an empty one. Text past the 2,000-character export cap was unrecoverable, and `truncated` did not say why. mainframe-live #86 separately found the default page projection lossy. | Append-only `ConversationEventLog`, the `ThreadRecognition` source-state vocabulary, and #147's idea of binding a cursor to a source prefix (not its code: #147 projects task metadata logs, is DIRTY against main and remains separate). | Opt-in `changes_since` revision cursor bound to the exact log prefix; named refusals for truncation, rewrite, a foreign log and mid-line offsets; coverage `complete/partial/empty/missing/unreadable`; `timeline_source`; `text_capped` versus `source_truncated`; exact Character-offset expansion with a digest. 18 XCTest cases, 6 self-test checks, 13 of 13 mutations killed. | Installed-app, hosted-client and mounted checks NOT_RUN. The v1 cursor and page are unchanged apart from two additive booleans. |
+| 3. Portable source-bound handoffs | **Defer** | No app path adds task conversation to a handoff bundle: the `.agentOutput`/`.task` kinds and `.taskHistory` authority have no producer. Handoffs go to the pasteboard, so Conduit can only know "prepared". | Context primitives on main (`ContextSet`, `ContextManifest`, `expanding()`, `AgentContextHandoffRenderer`); exact-source drafts #140 → #148 → #150. [#184](https://github.com/camerontjs-dot/Conduit/pull/184) already gives hosted consumers event identity, revision sequence, coverage and exact expansion. | When a producer exists: a manifest naming the source task and revision cursor, included revisions, omitted identities, expansion references and byte budgets, re-validated against a fresh read; delivery `prepared/delivered/unknown` with no reinjection after an uncertain send. | A #58 product decision to put task conversation in the Context Stack, and the #177-stack delivery truth for injected handoffs. |
+| 4. Coherent task view | **Defer** | The distinctions the view needs are partly new (`timeline_source`, coverage from [#184](https://github.com/camerontjs-dot/Conduit/pull/184)) and partly in unmerged drafts (journal states). | Conversation, Raw, Inspector and context surfaces; `ConversationRetentionState`. | Plan §5 distinctions in the native journey, with owned mounted evidence. | Mounted lanes stay paused under the frozen #168 → #123 → #128 order, and #168 owns the mounted Conversation viewport this would change. Start after the #168 disposition. |
+| 5. UI-independent service boundary | **Implemented (first in-process slice)** in [#185](https://github.com/camerontjs-dot/Conduit/pull/185) | The `conduit_session_events` read was assembled inside `AppModel`; its D-077 ordering rule had no AppKit-free test. | Issue #4 Phase B. Execution, lifecycle and admission are left in `AppModel` while #175 to #182 rework them. | `ConduitSessionReadService` runs without AppKit behind a read-only owner interface; a write racing the read is re-delivered, and reading the timeline first fails the test. Responses unchanged. | Process packaging is not chosen. GUI-restart survival is the #4 Phase C experiment. Admission and delivery move after the journal integration lands. |
+| 6. Provider capabilities and caller authority | **Reuse existing; reject a runtime registry now** | `conduit_list_adapters` reports declared surfaces only. The versioned provider-conformance matrix is evidence bound to versions observed on 23 September. | `provider-conformance-v1` (explicit unknown, unavailable and unsupported states); PTY turns stay ambiguous; caller authority in #146, #178 and #170. | Clients negotiate [#184](https://github.com/camerontjs-dot/Conduit/pull/184) by presence: an older server ignores the new arguments and omits `changes`, which a client treats as unsupported. | Publishing the matrix at runtime would present old observations as current without a re-probe, and a probe must not launch sessions. Revisit when the Session API adds steering, rollback or approval-option features. |
+| 7. Change review, checkpoints, restoration | **Defer read-only review; reject restoration now** | `GitWorkspaceInspector` gives snapshot, diff, history and blame, but no task-scoped base identity, so observed changes cannot be scoped to a task or separated from concurrent edits. | #120 `ExecutionWorkspace` (exact base SHA, one-writer lease), READY_FOR_FRESH_INDEPENDENT_WORKSPACE_FOUNDATION_QUALIFICATION. | Read-only "changes since task base, observed and not attributed" once a qualified base identity exists. | Restoration has no demonstrated need and would require lease ownership, matching identity and separate authorization. |
+| 8. MainFrame consumer and research | **No consumer now** | mainframe-live #72, #86, #114, later issues and Conduit #58 request no Conduit resume or handoff consumer; #72 and ADR-077 rule out a duplicate history store. | Direct file and Git workflows. | Not applicable. | [#184](https://github.com/camerontjs-dot/Conduit/pull/184)'s coverage and revision cursor are a candidate source contract for a future #86 successor, which keeps its own admission: #114 is not qualified and actor cells remain 0. |
+
+Upstream currency, checked 21 October: T3 Code `main` is `688ee52f0e8fcc6c0789f82d8145441b6663e7eb`, 101 commits after the pinned review commit, which is still its ancestor. Thirteen of the fifteen referenced paths are byte-identical, including every cursor, replay and handoff source. `threadRequests.ts` now declines approvals on send, and one replay regression test was removed from `threads-sync.test.ts`; neither changes what this plan adopted. Orchestrator delegate, stop and completion semantics changed in a file this plan does not reference and did not adopt.
 
 ## 1. Outcome and decision
 
@@ -108,6 +125,8 @@ The dependency order below is the starting recommendation. Local review may comb
 
 ### Step 0 — Review and finalize the retained plan
 
+**Disposition:** done; see §0.
+
 Inspect local repository roots, remotes, heads, worktrees and unrelated changes. Distinguish the installed operator application from maintained main, candidate code and the new plan. Read applicable host/repository instructions and live owner records. Use an owned worktree rather than tidying someone else's work.
 
 For each of the seven areas, record the adoption disposition, observed gap, relevant existing implementation, acceptance conditions and real dependencies. Resolve routine implementation choices directly. State the smallest open product/authority question only when evidence cannot resolve it.
@@ -115,6 +134,8 @@ For each of the seven areas, record the adoption disposition, observed gap, rele
 **Exit:** a revised plan and source starting point are recorded in this PR. Continue directly into eligible implementation; plan finalization is not the terminal task.
 
 ### Step 1 — Revision-aware reads and honest coverage
+
+**Disposition:** implemented in [#184](https://github.com/camerontjs-dot/Conduit/pull/184) (D-077). Contract: `docs/conversation-revision-feed.md` in that PR.
 
 **Purpose:** let an independent reader recover promised updates and distinguish complete, partial, unavailable and empty sources.
 
@@ -139,6 +160,8 @@ Keep the existing timeline cursor's meaning intact. Use an additive/versioned in
 
 ### Step 2 — Reconcile acceptance, effects and truthful outcomes
 
+**Disposition:** reuse the existing stacks; the acceptance list in §0 goes to the #60 integration candidate.
+
 **Purpose:** strengthen the existing request journal and output-ownership work using T3's failure cases.
 
 Compare durable intent, command identity, authorization, effect execution and result settlement in the current candidates. A refused-before-effect request and an accepted or possibly executed request require different recovery treatment.
@@ -161,6 +184,8 @@ Reuse or repair the appropriate existing stack. If a composition is necessary, r
 
 ### Step 3 — Provider capabilities, authority and compatibility
 
+**Disposition:** reuse; runtime capability registry rejected for now (§0, area 6).
+
 **Purpose:** make supported actions discoverable and enforceable without assuming uniform providers or synchronized clients.
 
 Compare existing capability fields against native identity strength, steering, interruption, request resumability, approval option IDs, history injection, workspace checkpointing, conversation rollback and enforcement.
@@ -174,6 +199,8 @@ Negotiate optional client features from actual runtime capabilities. Test older 
 **Exit:** one explicit supported/unsupported/unknown mapping drives the affected behavior, with targeted denial, stale-request and compatibility cases. No new provider is required merely to demonstrate the abstraction.
 
 ### Step 4 — Source-bound portable handoffs
+
+**Disposition:** deferred until a conversation-item producer exists (§0, area 3).
 
 **Purpose:** give a successor enough context to proceed and enough provenance to recover omitted material.
 
@@ -192,6 +219,8 @@ Do not imply that portable context restores provider-native tools, attachments, 
 **Exit:** a consumer can recover promised content and identify partial/missing history. This establishes a product contract, not improved model reasoning or lower token cost.
 
 ### Step 5 — One coherent task view
+
+**Disposition:** deferred behind the #168 disposition (§0, area 4).
 
 **Purpose:** reduce the effort required to understand and control a task.
 
@@ -212,6 +241,8 @@ Related reversible view and workflow changes may be explored together in an isol
 
 ### Step 6 — UI-independent service boundary
 
+**Disposition:** first in-process slice implemented in [#185](https://github.com/camerontjs-dot/Conduit/pull/185) (D-078); packaging deferred to #4 Phase C.
+
 **Purpose:** give native and external clients a consistent execution owner.
 
 Follow #4: first extract a narrow Core/service boundary that can be exercised independently of SwiftUI/AppKit, while preserving behavior. Keep one owner for task/runtime identity, admission, delivery and durable observations. Avoid parallel ownership in AppModel and a new service.
@@ -223,6 +254,8 @@ If a separate host is retained, test lifecycle, ownership, authentication, start
 **Exit:** the implemented boundary is identified precisely, with evidence for what it survives and explicit limits on process independence.
 
 ### Step 7 — Change review, checkpoints and constrained restoration
+
+**Disposition:** read-only review deferred to #120; restoration rejected for now (§0, area 7).
 
 **Purpose:** make work inspectable before adding restoration authority.
 
@@ -237,6 +270,8 @@ Filesystem restoration cannot promise reversal of external messages, services, c
 **Exit:** read-only change review has its own acceptance result. Any restore capability has separate authorization, negative controls, recovery evidence and limitations.
 
 ### Step 8 — Optional MainFrame consumer and separate research
+
+**Disposition:** no consumer now (§0, area 8).
 
 Where a concrete consumer needs it, add Conduit source references to existing MainFrame resume/handoff routes in a separately scoped MainFrame PR. Preserve direct file/Git workflows when Conduit is unavailable. Do not add a second event database, duplicate context compilation, force history preload or introduce a universal authority packet.
 

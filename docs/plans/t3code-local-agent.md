@@ -1,5 +1,7 @@
 # Local agent: review, finalize and implement the T3 Code adoption plan
 
+> Executed 21 October 2026. The finalized dispositions are in [§0 of the plan](t3code-adoption.md#0-finalized-decisions-21-october-2026); this prompt is kept as written.
+
 Act as my local engineering collaborator for Conduit and its bounded MainFrame interfaces.
 
 ## Objective and authority
