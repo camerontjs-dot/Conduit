@@ -2108,7 +2108,8 @@ including revisions behind its timeline position, receives each changed
 event's latest value, and can distinguish missing, empty, partial and
 unreadable sources. Intermediate values of a streamed output are not served. Older clients
 see the same v1 page with additive fields only. Redaction now runs to a fixed
-point. Each feed request reads the whole log once on the main actor; no index
+point within eight passes, and text that has not settled by then is withheld
+rather than exported partly redacted. Each feed request reads the whole log once on the main actor; no index
 or sidecar is introduced. The feed cannot
 supply provider-native event identity, and cursor values are unauthenticated
 positions.

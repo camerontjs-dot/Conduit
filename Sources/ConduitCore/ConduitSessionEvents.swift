@@ -711,6 +711,11 @@ public enum ConduitSessionEventExport {
         return (capped.text, capped.capped, redaction.redacted)
     }
 
+    /// Replaces the whole text when secret redaction did not settle within
+    /// its pass bound, so no unverified remainder is exported.
+    public static let unsettledRedactionText =
+        "[redacted-withheld: redaction did not settle]"
+
     /// Secret and reasoning-line redaction without any length cap.
     static func redactText(_ text: String) -> (text: String, redacted: Bool) {
         var redacted = false
@@ -719,6 +724,7 @@ public enum ConduitSessionEventExport {
         // token: a combining mark after a replaced key now follows "]", so a
         // word boundary appears before the next key. The earlier export ran
         // the patterns twice by accident and caught that case.
+        var settled = false
         for _ in 0..<maximumRedactionPasses {
             var changed = false
             for pattern in secretPatterns {
@@ -733,8 +739,15 @@ public enum ConduitSessionEventExport {
                     working = replaced
                 }
             }
-            if !changed { break }
+            if !changed {
+                settled = true
+                break
+            }
         }
+        // Only a pass that changed nothing shows no key remains. If the last
+        // allowed pass still changed the text, another key may have just been
+        // exposed, so withhold all of it rather than run an unbounded scan.
+        guard settled else { return (unsettledRedactionText, true) }
 
         var kept: [String] = []
         for line in working.split(separator: "\n", omittingEmptySubsequences: false) {
