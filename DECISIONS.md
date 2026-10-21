@@ -2122,3 +2122,46 @@ mounted UI were not exercised.
 **Reconsideration trigger:** Revisit if log sizes make whole-log reads costly
 enough to need an index, or if a provider exposes native event sequence that
 should be carried alongside Conduit's own.
+
+---
+
+## D-078: Session API conversation reads cross an in-process Core service boundary
+
+**Status:** Proposed (2026-10-21; first slice of issue #4 Phase B, T3 Code adoption plan Step 6)
+
+**Context:** Issue #4 asks for a UI-independent execution boundary that is
+proven in process before any helper, XPC, launch agent or daemon is chosen.
+The `conduit_session_events` read assembled its source inside `AppModel`, so
+the D-077 ordering rule (read the durable log before choosing the timeline)
+had no test that ran without AppKit. Execution, lifecycle and admission are
+being reworked in the open #175 to #182 drafts, so extracting those now would
+create a second owner beside them.
+
+**Decision:**
+
+1. `ConduitSessionReadService` in Core owns the ordering and projection of a
+   `conduit_session_events` read and runs without AppKit.
+2. The app supplies task state through `ConduitSessionReadOwner`, a read-only
+   interface: observation, live timeline, cached timeline and the durable log
+   handle. It has no requirement that can launch, resume, prompt, interrupt or
+   reconnect a runtime. `AppModel` remains the only holder of task, runtime
+   and admission state.
+3. Writes, lifecycle operations and admission stay in `AppModel` until the
+   journal and output drafts are integrated; their extraction is a later
+   slice.
+4. No process packaging is selected. An in-process boundary says nothing about
+   surviving a GUI restart.
+
+**Consequences:** The read ordering and source selection are tested with a
+fake owner, including a write landing between the durable read and the
+timeline. The response is unchanged for clients. The pattern gives later
+slices a place to move admission and delivery behind the same kind of owner
+interface without duplicating ownership.
+
+**Qualification boundary:** Core tests and a self-test check run the service
+against owned temporary logs. The installed app and a hosted client were not
+exercised. GUI termination and reconnection remain the #4 Phase C experiment.
+
+**Reconsideration trigger:** Revisit when the #175 to #182 integration lands
+and admission or delivery is ready to move, or if a second consumer needs the
+read without AppModel.

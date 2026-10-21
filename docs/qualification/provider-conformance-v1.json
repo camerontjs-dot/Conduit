@@ -205,16 +205,16 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "c934a830fcab6efadd4680e5b5c37b646444c7d49d4537ca7f6eee1163701b9b"
+        "sha256": "05b486ceb76b6bf07f26137c2d93a6be6c7ae008096e8e8f4da889c840e1b938"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
-      "freshness": "revision-feed candidate source snapshot; re-inspected read-only after changes limited to the conduit_session_events handler; not a provider runtime observation",
+      "freshness": "read-service candidate source snapshot; re-inspected read-only after moving the conduit_session_events read into a Core service; provider-session guards unchanged; not a provider runtime observation",
       "identity": {
         "path": "Sources/Conduit/AppModel.swift"
       },
       "kind": "source_test",
       "limitation": "The provider-session list/adoption surface is explicitly guarded to OpenCode; code inspection does not imply other provider behavior.",
-      "observed_at_utc": "2026-10-21T11:10:00Z",
+      "observed_at_utc": "2026-10-21T11:14:00Z",
       "procedure_id": "conduit-provider-inventory-and-adoption-scope-v1"
     },
     "CONFORMANCE-HARNESS": {

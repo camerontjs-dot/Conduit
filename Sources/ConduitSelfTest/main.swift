@@ -3849,6 +3849,10 @@ runConversationRevisionFeedChecks { name, condition in
     check(name, condition)
 }
 
+runConduitSessionReadServiceChecks { name, condition in
+    check(name, condition)
+}
+
 // MARK: - Summary
 
 print("\n\(passed) passed, \(failures.count) failed")
