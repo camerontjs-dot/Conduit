@@ -146,6 +146,10 @@ public enum ConduitSessionToolCatalog {
                         ],
                         "turn_status": ["type": "string"],
                         "content_digest": ["type": "string"],
+                        "text_capped": ["type": "boolean"],
+                        "source_truncated": ["type": "boolean"],
+                        "full_text_sha256": ["type": "string"],
+                        "text_continuation_offset": ["type": "integer"],
                     ],
                 ],
             ],
@@ -155,7 +159,95 @@ public enum ConduitSessionToolCatalog {
             "timeline_count": ["type": "integer"],
             "truncated": ["type": "boolean"],
             "authority": ["type": "string"],
+            "timeline_source": [
+                "type": "object",
+                "properties": [
+                    "kind": [
+                        "type": "string",
+                        "enum": ["live_runtime", "cached_history", "durable_log"],
+                    ],
+                    "durable_coverage": coverageSchema,
+                    "rejected_record_count": ["type": "integer"],
+                ],
+            ],
+            "changes": [
+                "type": "object",
+                "required": ["since", "state", "records", "has_more_changes", "source", "authority"],
+                "properties": [
+                    "since": ["type": "string"],
+                    "state": [
+                        "type": "string",
+                        "enum": ["ok", "invalid", "reconcile_required", "unavailable"],
+                    ],
+                    "reconcile_reason": [
+                        "type": "string",
+                        "enum": [
+                            "source_shorter_than_cursor",
+                            "prefix_digest_changed",
+                            "prefix_record_count_changed",
+                            "cursor_not_at_record_boundary",
+                        ],
+                    ],
+                    "records": [
+                        "type": "array",
+                        "items": [
+                            "type": "object",
+                            "properties": [
+                                "event_id": ["type": "string"],
+                                "timeline_cursor": ["type": "string"],
+                                "revision_sequence": ["type": "integer"],
+                                "event_revision": ["type": "integer"],
+                                "first_seen_in_page": ["type": "boolean"],
+                                "recorded_at": ["type": "string"],
+                            ],
+                        ],
+                    ],
+                    "next_change_cursor": ["type": "string"],
+                    "head_change_cursor": ["type": "string"],
+                    "has_more_changes": ["type": "boolean"],
+                    "source": [
+                        "type": "object",
+                        "properties": [
+                            "kind": ["type": "string"],
+                            "coverage": coverageSchema,
+                            "applied_revisions": ["type": "integer"],
+                            "rejected_records_in_page": ["type": "integer"],
+                            "rejected_kinds_in_page": [
+                                "type": "array",
+                                "items": ["type": "string"],
+                            ],
+                            "unterminated_tail_bytes": ["type": "integer"],
+                        ],
+                    ],
+                    "authority": ["type": "string"],
+                ],
+            ],
+            "expansion": [
+                "type": "object",
+                "required": ["event_id", "state", "offset", "complete"],
+                "properties": [
+                    "event_id": ["type": "string"],
+                    "state": [
+                        "type": "string",
+                        "enum": ["ok", "not_found", "invalid_offset"],
+                    ],
+                    "offset": ["type": "integer"],
+                    "next_offset": ["type": "integer"],
+                    "complete": ["type": "boolean"],
+                    "text": ["type": "string"],
+                    "total_characters": ["type": "integer"],
+                    "full_text_sha256": ["type": "string"],
+                    "source_truncated": ["type": "boolean"],
+                    "redacted": ["type": "boolean"],
+                    "timeline_source": ["type": "string"],
+                ],
+            ],
         ],
+    ]
+
+    private static let coverageSchema: [String: Any] = [
+        "type": "string",
+        "enum": ["complete", "partial", "empty", "missing", "unreadable"],
     ]
 
     private static let readTools: [[String: Any]] = [
@@ -263,12 +355,21 @@ public enum ConduitSessionToolCatalog {
         ),
         tool(
             "conduit_session_events",
-            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated means Conduit text-cap truncation only. This is not verification.",
+            "Read incremental, bounded Conversation events and an additive supervisory observation snapshot for one task. Cursor, authority, provider-thread continuity, runtime attempt, and output checkpoint are explicit. turn.state failed and checkpoint structured_failed mean the provider reported a failure and produced no result — never treat that as completion. interrupt_request means Conduit sent a request; it is not observed cancellation. truncated is set by either Conduit's text cap (text_capped, recoverable with expand_event_id) or truncation when the text was captured (source_truncated, not recoverable). The v1 cursor is a presentation position: a later revision of an earlier event keeps its position and does not advance it. To follow revisions, pass changes_since (empty to start) and store changes.next_change_cursor after applying each page. This is not verification.",
             annotations: localReadOnlyAnnotations,
             properties: [
                 "taskSessionID": property("string", "Durable Conduit task UUID."),
                 "cursor": property("string", "Monotonic cursor from a previous next_cursor. Omit to start at the beginning. Format v1:<index>."),
                 "limit": integerProperty("Maximum events to return. Default 20, hard cap 50.", maximum: 50),
+                "changes_since": property("string", "Optional. Revision cursor from a previous changes.next_change_cursor, or an empty string to start at the beginning of the durable conversation log. Returns changes: durable revisions in write order, including revisions of events behind the v1 cursor. An invalid or mismatched cursor is reported, never silently restarted."),
+                "change_limit": integerProperty("Maximum distinct changed events per changes page. Default 20, hard cap 50.", maximum: 50),
+                "expand_event_id": property("string", "Optional. Event ID whose complete redacted text to return in bounded slices as expansion."),
+                "expand_offset": [
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Character offset for expansion; use a previous expansion.next_offset or an event's text_continuation_offset. Default 0.",
+                ],
+                "expand_limit": integerProperty("Maximum characters per expansion slice. Default 8000, hard cap 32000.", maximum: 32_000),
             ],
             required: ["taskSessionID"],
             outputSchema: sessionEventsOutputSchema

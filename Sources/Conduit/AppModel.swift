@@ -4411,11 +4411,12 @@ final class AppModel: ObservableObject {
             return payload
         case .processTree(let rawID):
             return sessionAPIProcessTreeStatus(taskSessionID: rawID)
-        case .sessionEvents(let rawID, let cursor, let limit):
+        case .sessionEvents(let rawID, let cursor, let limit, let options):
             return sessionAPISessionEvents(
                 taskSessionID: rawID,
                 cursor: cursor,
-                limit: limit
+                limit: limit,
+                options: options
             )
         case .queryMindGraph(let question, let scope):
             let askedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -6132,7 +6133,8 @@ final class AppModel: ObservableObject {
     private func sessionAPISessionEvents(
         taskSessionID rawID: String,
         cursor: String?,
-        limit: Int?
+        limit: Int?,
+        options: ConduitSessionEventReadOptions = .none
     ) -> [String: Any] {
         guard let uuid = UUID(uuidString: rawID),
               let task = taskSessions.first(where: { $0.id.rawValue == uuid })
@@ -6166,16 +6168,43 @@ final class AppModel: ObservableObject {
                 directory: AdapterThreadStore.defaultDirectory()
             ).threadID(for: task.id)
         }()
+        // The change feed needs the durable log with its revision positions.
+        // Read it once, before choosing the timeline, so a live or cached
+        // timeline can only be at or ahead of the returned head cursor.
+        let durable: ConversationRevisionReadResult? =
+            options.needsDurableRevisions
+                ? ConversationEventLog(
+                    directory: conversationDirectory,
+                    taskSessionID: task.id
+                ).readRevisions()
+                : nil
         let eventSource: [SessionPresentationEvent]
+        let timelineSource: ConduitSessionTimelineSource
         if let live {
             eventSource = live.presentationEvents
+            timelineSource = ConduitSessionTimelineSource(
+                kind: .liveRuntime,
+                durableCoverage: durable?.coverage,
+                rejectedRecordCount: durable?.diagnostics.count
+            )
         } else if let cached = conversationHistoryByTask[task.id], !cached.isEmpty {
             eventSource = cached
+            timelineSource = ConduitSessionTimelineSource(
+                kind: .cachedHistory,
+                durableCoverage: durable?.coverage,
+                rejectedRecordCount: durable?.diagnostics.count
+            )
         } else {
-            eventSource = ConversationEventLog(
+            let read = durable ?? ConversationEventLog(
                 directory: conversationDirectory,
                 taskSessionID: task.id
-            ).read().events
+            ).readRevisions()
+            eventSource = read.events
+            timelineSource = ConduitSessionTimelineSource(
+                kind: .durableLog,
+                durableCoverage: read.coverage,
+                rejectedRecordCount: read.diagnostics.count
+            )
         }
         let source = ConduitSessionEventSource(
             taskSessionID: rawID,
@@ -6188,12 +6217,15 @@ final class AppModel: ObservableObject {
             adapter: adapter,
             runtimeAttemptID: sessionAPIRuntimeAttemptID(for: task, live: live),
             persistedThreadID: persistedThreadID,
-            observedAt: Date()
+            observedAt: Date(),
+            timelineSource: timelineSource,
+            durableRevisions: durable
         )
         return ConduitSessionEventExport.page(
             source: source,
             cursor: cursor,
-            limit: limit
+            limit: limit,
+            options: options
         ).jsonObject()
     }
 

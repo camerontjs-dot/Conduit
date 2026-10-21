@@ -52,6 +52,19 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- `conduit_session_events` accepts an optional `changes_since` revision cursor.
+  The response's `changes` block lists durable conversation revisions in write
+  order, including revisions of events behind the reader's timeline cursor, and
+  refuses a mismatched or malformed cursor instead of restarting. It reports
+  whether the log is complete, partial, empty, missing or unreadable, and
+  `timeline_source` says whether the timeline came from the live runtime,
+  cached history or the durable log. The existing `v1` cursor is unchanged.
+
+- Text shortened by Conduit's export cap can be recovered exactly with
+  `expand_event_id`, in slices that never split a character. Event records
+  now report `text_capped` and `source_truncated` separately; `truncated`
+  keeps its previous meaning.
+
 - Task-rail thread recognition now shows conversation-aware recency and bounded
   retained prompt/output previews on pointer hover or keyboard focus. Persisted,
   live, missing and diagnostic source states remain distinct, and high-frequency

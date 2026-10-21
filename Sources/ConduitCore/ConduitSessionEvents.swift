@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Live Codex adapter facts that can refine turn state without inventing it.
@@ -134,6 +135,12 @@ public struct ConduitSessionEventSource: Equatable, Sendable {
     public var runtimeAttemptID: RuntimeAttemptID?
     public var persistedThreadID: String?
     public var observedAt: Date
+    /// Where `events` came from. Nil keeps the page byte-compatible with
+    /// callers that do not report it.
+    public var timelineSource: ConduitSessionTimelineSource?
+    /// The durable conversation log read for this request, when one was
+    /// read. The change feed uses only this source.
+    public var durableRevisions: ConversationRevisionReadResult?
 
     public init(
         taskSessionID: String,
@@ -146,7 +153,9 @@ public struct ConduitSessionEventSource: Equatable, Sendable {
         adapter: ConduitSessionAdapterSnapshot? = nil,
         runtimeAttemptID: RuntimeAttemptID? = nil,
         persistedThreadID: String? = nil,
-        observedAt: Date = Date()
+        observedAt: Date = Date(),
+        timelineSource: ConduitSessionTimelineSource? = nil,
+        durableRevisions: ConversationRevisionReadResult? = nil
     ) {
         self.taskSessionID = taskSessionID
         self.backend = backend
@@ -159,6 +168,8 @@ public struct ConduitSessionEventSource: Equatable, Sendable {
         self.runtimeAttemptID = runtimeAttemptID
         self.persistedThreadID = persistedThreadID
         self.observedAt = observedAt
+        self.timelineSource = timelineSource
+        self.durableRevisions = durableRevisions
     }
 }
 
@@ -240,6 +251,16 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
     public var artifactRefs: [ConduitSessionArtifactRef]
     public var turnStatus: String?
     public var contentDigest: String
+    /// Conduit's export text cap shortened `text`. Recoverable through
+    /// expansion while the same revision is retained.
+    public var textCapped: Bool
+    /// The retained value itself was truncated when captured. Expansion
+    /// cannot recover what was never retained.
+    public var sourceTruncated: Bool
+    /// SHA-256 of the complete redacted text, present when `textCapped`.
+    public var fullTextSHA256: String?
+    /// Character offset at which expansion continues after `text`.
+    public var textContinuationOffset: Int?
 
     public init(
         cursor: String,
@@ -255,7 +276,11 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
         promptEventID: String? = nil,
         artifactRefs: [ConduitSessionArtifactRef] = [],
         turnStatus: String? = nil,
-        contentDigest: String
+        contentDigest: String,
+        textCapped: Bool = false,
+        sourceTruncated: Bool = false,
+        fullTextSHA256: String? = nil,
+        textContinuationOffset: Int? = nil
     ) {
         self.cursor = cursor
         self.eventID = eventID
@@ -271,6 +296,10 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
         self.artifactRefs = artifactRefs
         self.turnStatus = turnStatus
         self.contentDigest = contentDigest
+        self.textCapped = textCapped
+        self.sourceTruncated = sourceTruncated
+        self.fullTextSHA256 = fullTextSHA256
+        self.textContinuationOffset = textContinuationOffset
     }
 
     public func jsonObject() -> [String: Any] {
@@ -290,6 +319,12 @@ public struct ConduitSessionEventRecord: Equatable, Sendable {
         if let state { payload["state"] = state }
         if let promptEventID { payload["prompt_event_id"] = promptEventID }
         if let turnStatus { payload["turn_status"] = turnStatus }
+        payload["text_capped"] = textCapped
+        payload["source_truncated"] = sourceTruncated
+        if let fullTextSHA256 { payload["full_text_sha256"] = fullTextSHA256 }
+        if let textContinuationOffset {
+            payload["text_continuation_offset"] = textContinuationOffset
+        }
         return payload
     }
 }
@@ -342,6 +377,9 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
     public var runtimeAttemptID: RuntimeAttemptID?
     public var observation: ConduitSessionObservationSnapshot
     public var authority: String
+    public var timelineSource: ConduitSessionTimelineSource?
+    public var changes: ConduitSessionChangeFeed?
+    public var expansion: ConduitSessionTextExpansion?
 
     public init(
         taskSessionID: String,
@@ -356,7 +394,10 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
         truncated: Bool,
         runtimeAttemptID: RuntimeAttemptID? = nil,
         observation: ConduitSessionObservationSnapshot = ConduitSessionObservationSnapshot(),
-        authority: String = ConduitSessionEventPage.authorityNote
+        authority: String = ConduitSessionEventPage.authorityNote,
+        timelineSource: ConduitSessionTimelineSource? = nil,
+        changes: ConduitSessionChangeFeed? = nil,
+        expansion: ConduitSessionTextExpansion? = nil
     ) {
         self.taskSessionID = taskSessionID
         self.backend = backend
@@ -371,6 +412,9 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
         self.runtimeAttemptID = runtimeAttemptID
         self.observation = observation
         self.authority = authority
+        self.timelineSource = timelineSource
+        self.changes = changes
+        self.expansion = expansion
     }
 
     public func jsonObject() -> [String: Any] {
@@ -391,6 +435,11 @@ public struct ConduitSessionEventPage: Equatable, Sendable {
         if let runtimeAttemptID {
             payload["runtime_attempt_id"] = runtimeAttemptID.rawValue.uuidString
         }
+        if let timelineSource {
+            payload["timeline_source"] = timelineSource.jsonObject()
+        }
+        if let changes { payload["changes"] = changes.jsonObject() }
+        if let expansion { payload["expansion"] = expansion.jsonObject() }
         return payload
     }
 }
@@ -428,7 +477,8 @@ public enum ConduitSessionEventExport {
         source: ConduitSessionEventSource,
         cursor: String? = nil,
         limit: Int? = nil,
-        textLimit: Int = ConduitSessionEventPage.defaultTextLimit
+        textLimit: Int = ConduitSessionEventPage.defaultTextLimit,
+        options: ConduitSessionEventReadOptions = .none
     ) -> ConduitSessionEventPage {
         let parsed = parseCursor(cursor)
         let pageLimit = clampLimit(limit)
@@ -473,7 +523,24 @@ public enum ConduitSessionEventExport {
             timelineCount: count,
             truncated: records.contains(where: \.truncated),
             runtimeAttemptID: source.runtimeAttemptID,
-            observation: observationSnapshot(source: source, turn: turn)
+            observation: observationSnapshot(source: source, turn: turn),
+            timelineSource: source.timelineSource,
+            changes: options.changesSince.map {
+                changeFeed(
+                    source: source,
+                    since: $0,
+                    limit: options.changeLimit,
+                    textLimit: textLimit
+                )
+            },
+            expansion: options.expandEventID.map {
+                expand(
+                    source: source,
+                    eventID: $0,
+                    offset: options.expandOffset,
+                    limit: options.expandLimit
+                )
+            }
         )
     }
 
@@ -639,6 +706,13 @@ public enum ConduitSessionEventExport {
         _ text: String,
         limit: Int = ConduitSessionEventPage.defaultTextLimit
     ) -> (text: String, truncated: Bool, redacted: Bool) {
+        let redaction = redactText(text)
+        let capped = capText(redaction.text, limit: limit)
+        return (capped.text, capped.capped, redaction.redacted)
+    }
+
+    /// Secret and reasoning-line redaction without any length cap.
+    static func redactText(_ text: String) -> (text: String, redacted: Bool) {
         var redacted = false
         var working = text
         for pattern in secretPatterns {
@@ -667,19 +741,33 @@ public enum ConduitSessionEventExport {
             }
         }
         working = kept.joined(separator: "\n")
-
-        let boundedLimit = max(32, limit)
-        if working.count > boundedLimit {
-            return (
-                String(working.prefix(boundedLimit)) + "\n[truncated]",
-                true,
-                redacted
-            )
-        }
-        return (working, false, redacted)
+        return (working, redacted)
     }
 
-    private static func record(
+    /// Caps already-redacted text by Characters (extended grapheme clusters),
+    /// so a cap never splits a user-perceived character.
+    static func capText(
+        _ text: String,
+        limit: Int
+    ) -> (text: String, capped: Bool, keptCharacters: Int) {
+        let boundedLimit = max(32, limit)
+        if text.count > boundedLimit {
+            return (
+                String(text.prefix(boundedLimit)) + "\n[truncated]",
+                true,
+                boundedLimit
+            )
+        }
+        return (text, false, text.count)
+    }
+
+    static func sha256Hex(_ text: String) -> String {
+        SHA256.hash(data: Data(text.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static func record(
         event: SessionPresentationEvent,
         index: Int,
         source: ConduitSessionEventSource,
@@ -708,16 +796,14 @@ public enum ConduitSessionEventExport {
             )
 
         case .userPrompt(let prompt):
-            let sanitized = sanitizeText(prompt.text, limit: textLimit)
             return makeRecord(
                 event: event,
                 index: index,
                 kind: "user_prompt",
                 source: promptOriginLabel(prompt.origin),
-                text: sanitized.text,
+                text: prompt.text,
                 state: prompt.delivery.rawValue,
-                sourceTruncated: sanitized.truncated,
-                alreadyRedacted: sanitized.redacted,
+                sourceTruncated: false,
                 artifactRefs: prompt.attachmentPaths.map {
                     ConduitSessionArtifactRef(kind: "attachment", path: $0)
                 },
@@ -725,7 +811,6 @@ public enum ConduitSessionEventExport {
             )
 
         case .agentOutput(let output):
-            let sanitized = sanitizeText(output.text, limit: textLimit)
             let turnStatus: String?
             if output.extraction == .structuredAdapter, output.state == .closed {
                 turnStatus = source.adapter?.lastTurnStatus ?? "completed"
@@ -737,10 +822,9 @@ public enum ConduitSessionEventExport {
                 index: index,
                 kind: "agent_output",
                 source: output.extraction.rawValue,
-                text: sanitized.text,
+                text: output.text,
                 state: output.state.rawValue,
-                sourceTruncated: output.truncated || sanitized.truncated,
-                alreadyRedacted: sanitized.redacted,
+                sourceTruncated: output.truncated,
                 promptEventID: output.promptEventID?.uuidString,
                 artifactRefs: artifactRefs(from: output),
                 turnStatus: turnStatus,
@@ -769,21 +853,18 @@ public enum ConduitSessionEventExport {
         text: String?,
         state: String?,
         sourceTruncated: Bool,
-        alreadyRedacted: Bool = false,
         promptEventID: String? = nil,
         artifactRefs: [ConduitSessionArtifactRef] = [],
         turnStatus: String? = nil,
         textLimit: Int
     ) -> ConduitSessionEventRecord {
-        let sanitized: (text: String, truncated: Bool, redacted: Bool)
-        if let text {
-            sanitized = sanitizeText(text, limit: textLimit)
-        } else {
-            sanitized = ("", false, false)
-        }
-        let exportedText = text == nil ? nil : sanitized.text
-        let truncated = sourceTruncated || sanitized.truncated
-        let redacted = alreadyRedacted || sanitized.redacted
+        // Redact the whole retained text once, then cap it, so the exported
+        // prefix is exactly the prefix expansion serves.
+        let redaction = text.map(redactText) ?? (text: "", redacted: false)
+        let capped = capText(redaction.text, limit: textLimit)
+        let exportedText = text == nil ? nil : capped.text
+        let truncated = sourceTruncated || capped.capped
+        let redacted = redaction.redacted
         let digest = contentDigest(
             eventID: event.id.uuidString,
             kind: kind,
@@ -805,7 +886,11 @@ public enum ConduitSessionEventExport {
             promptEventID: promptEventID,
             artifactRefs: artifactRefs,
             turnStatus: turnStatus,
-            contentDigest: digest
+            contentDigest: digest,
+            textCapped: capped.capped,
+            sourceTruncated: sourceTruncated,
+            fullTextSHA256: capped.capped ? sha256Hex(redaction.text) : nil,
+            textContinuationOffset: capped.capped ? capped.keptCharacters : nil
         )
     }
 

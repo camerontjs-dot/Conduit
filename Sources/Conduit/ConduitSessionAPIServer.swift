@@ -498,7 +498,14 @@ final class ConduitSessionAPIServer {
                 command = .sessionEvents(
                     taskSessionID: id,
                     cursor: cursor,
-                    limit: limit
+                    limit: limit,
+                    options: ConduitSessionEventReadOptions(
+                        changesSince: arguments["changes_since"]?.stringValue,
+                        changeLimit: Self.intArgument(arguments["change_limit"]),
+                        expandEventID: arguments["expand_event_id"]?.stringValue,
+                        expandOffset: Self.intArgument(arguments["expand_offset"]),
+                        expandLimit: Self.intArgument(arguments["expand_limit"])
+                    )
                 )
             } else {
                 command = nil
