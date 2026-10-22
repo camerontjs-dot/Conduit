@@ -83,7 +83,12 @@ public enum ConduitSessionCommand: Equatable, Sendable {
     )
     case sessionStatus(taskSessionID: String)
     case processTree(taskSessionID: String)
-    case sessionEvents(taskSessionID: String, cursor: String?, limit: Int?)
+    case sessionEvents(
+        taskSessionID: String,
+        cursor: String?,
+        limit: Int?,
+        options: ConduitSessionEventReadOptions = .none
+    )
     case queryMindGraph(question: String, scope: String)
     case createTask(
         agent: String,

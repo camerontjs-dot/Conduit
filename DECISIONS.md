@@ -2065,3 +2065,61 @@ policy. Stable release still requires an installed-app rehearsal proving the
 exact candidate can start the configured tunnel, reach `readyz`, serve a benign
 ChatGPT read through the hosted path, stop its owned child, and leave an
 externally started tunnel untouched.
+
+---
+
+## D-077: Durable conversation revisions get their own cursor and coverage
+
+**Status:** Proposed (2026-10-21; T3 Code adoption plan Step 1)
+
+**Context:** The `v1:<index>` cursor on `conduit_session_events` is a
+presentation position. A revision of an earlier event keeps its position, so a
+reader past it never sees the revision; only the latest output state leaks
+through the supervisory snapshot. The durable log already keeps every revision
+in append order, but its reader exposes only the latest projected values, and
+a missing log reads exactly like an empty one. Text past the 2,000-character
+export cap could not be recovered, and `truncated` did not say whether
+Conduit's cap or capture caused it.
+
+**Decision:**
+
+1. Keep the v1 timeline cursor and its meaning unchanged.
+2. Add an opt-in revision cursor over the durable log only. Applied records
+   carry a 1-based sequence; the cursor binds the exact byte prefix it covers
+   by length, SHA-256 and record count. A mismatch is refused with a named
+   reason, never silently restarted. In-memory live state is not given a
+   sequence it does not have.
+3. Report source coverage as `complete`, `partial`, `empty`, `missing` or
+   `unreadable`, and the timeline's source as live runtime, cached history or
+   durable log.
+4. Coalesce the revisions a page consumes to one record per event, carrying
+   that event's latest retained value and its revision sequence, all from the
+   request's single read. The log is never compacted.
+5. Separate `text_capped` from `source_truncated`, and serve exact expansion
+   slices of the redacted text by Character offset with a digest of the full
+   text.
+6. Keep all of this read-only: no reader path launches, resumes, prompts or
+   reconnects a runtime.
+7. When the feed is requested and no runtime is live, serve the fresh durable
+   read as the timeline rather than possibly stale cached history.
+
+**Consequences:** An independent reader learns of every retained change,
+including revisions behind its timeline position, receives each changed
+event's latest value, and can distinguish missing, empty, partial and
+unreadable sources. Intermediate values of a streamed output are not served. Older clients
+see the same v1 page with additive fields only. Redaction now runs to a fixed
+point within eight passes, and text that has not settled by then is withheld
+rather than exported partly redacted. Each feed request reads the whole log once on the main actor; no index
+or sidecar is introduced. The feed cannot
+supply provider-native event identity, and cursor values are unauthenticated
+positions.
+
+**Qualification boundary:** Core tests and self-test checks establish the
+contract against owned temporary logs. A separate mutation run, recorded on
+the implementing PR and not part of the repository, confirmed that the tests
+detect each named fault. The installed app, a hosted ChatGPT client and
+mounted UI were not exercised.
+
+**Reconsideration trigger:** Revisit if log sizes make whole-log reads costly
+enough to need an index, or if a provider exposes native event sequence that
+should be carried alongside Conduit's own.

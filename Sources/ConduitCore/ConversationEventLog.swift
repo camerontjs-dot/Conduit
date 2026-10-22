@@ -385,6 +385,9 @@ public struct ConversationEventLog: Equatable, Sendable {
     /// File order establishes presentation order. A later valid full revision
     /// replaces the projected value for its event ID without moving that event.
     /// Invalid later revisions leave the last valid value intact.
+    ///
+    /// A missing log and a present empty log both read as no events and no
+    /// diagnostics here; `readRevisions()` keeps them distinct.
     public func read() -> ConversationEventLogReadResult {
         let data: Data
         do {
@@ -402,17 +405,182 @@ public struct ConversationEventLog: Equatable, Sendable {
         } catch {
             return ConversationEventLogReadResult(
                 events: [],
-                diagnostics: [
-                    ConversationEventLogDiagnostic(
-                        kind: .unreadableLog,
-                        fileURL: url,
-                        detail: error.localizedDescription
-                    )
-                ]
+                diagnostics: [unreadableDiagnostic(error)]
             )
         }
 
+        let replay = Self.replay(
+            data,
+            taskSessionID: taskSessionID,
+            url: url,
+            collectRevisions: false
+        )
+        return ConversationEventLogReadResult(
+            events: replay.firstSeenOrder.compactMap { replay.latestEvents[$0] },
+            diagnostics: replay.diagnostics
+        )
+    }
+
+    /// Reads every applied revision with its position in this source.
+    ///
+    /// The projection is identical to `read()`. In addition, each valid
+    /// record keeps its source sequence (1-based among applied records), its
+    /// byte range, the event's stable timeline index and the record's own
+    /// `recordedAt`. Coverage separates a missing source from a present empty
+    /// one, an unreadable source and one with rejected records.
+    ///
+    /// The returned `completePrefixBytes` ends after the last newline-terminated
+    /// line. Append-only operation never changes those bytes, so their digest
+    /// identifies the source generation a change cursor was issued against.
+    public func readRevisions() -> ConversationRevisionReadResult {
+        let data: Data
+        do {
+            guard let lockedData = try Self.readLockedData(
+                directory: directory,
+                fileName: url.lastPathComponent,
+                url: url
+            ) else {
+                return ConversationRevisionReadResult(
+                    coverage: .missing,
+                    data: Data(),
+                    completePrefixBytes: 0,
+                    revisions: [],
+                    events: [],
+                    deliverableEvents: [:],
+                    diagnostics: [],
+                    diagnosticLineOffsets: [:]
+                )
+            }
+            data = lockedData
+        } catch {
+            return ConversationRevisionReadResult(
+                coverage: .unreadable,
+                data: Data(),
+                completePrefixBytes: 0,
+                revisions: [],
+                events: [],
+                deliverableEvents: [:],
+                diagnostics: [unreadableDiagnostic(error)],
+                diagnosticLineOffsets: [:]
+            )
+        }
+
+        let replay = Self.replay(
+            data,
+            taskSessionID: taskSessionID,
+            url: url,
+            collectRevisions: true
+        )
+        // The feed never delivers an applied record that still lacks its
+        // newline. Only then does the deliverable projection differ from the
+        // full one, and only then is the prefix replayed a second time.
+        let deliverableEvents: [UUID: SessionPresentationEvent]
+        if let last = replay.revisions.last, !last.newlineTerminated {
+            deliverableEvents = Self.replay(
+                data.prefix(replay.completePrefixBytes),
+                taskSessionID: taskSessionID,
+                url: url,
+                collectRevisions: false
+            ).latestEvents
+        } else {
+            deliverableEvents = replay.latestEvents
+        }
+        return ConversationRevisionReadResult(
+            coverage: Self.coverage(of: replay),
+            data: data,
+            completePrefixBytes: replay.completePrefixBytes,
+            revisions: replay.revisions,
+            events: replay.firstSeenOrder.compactMap { replay.latestEvents[$0] },
+            deliverableEvents: deliverableEvents,
+            diagnostics: replay.diagnostics,
+            diagnosticLineOffsets: replay.diagnosticLineOffsets
+        )
+    }
+
+    /// The `read()` projection plus coverage, without revision positions or a
+    /// retained copy of the source. For callers that only show a timeline.
+    public func readWithCoverage() -> ConversationCoverageReadResult {
+        let data: Data
+        do {
+            guard let lockedData = try Self.readLockedData(
+                directory: directory,
+                fileName: url.lastPathComponent,
+                url: url
+            ) else {
+                return ConversationCoverageReadResult(
+                    coverage: .missing,
+                    events: [],
+                    diagnostics: []
+                )
+            }
+            data = lockedData
+        } catch {
+            return ConversationCoverageReadResult(
+                coverage: .unreadable,
+                events: [],
+                diagnostics: [unreadableDiagnostic(error)]
+            )
+        }
+        let replay = Self.replay(
+            data,
+            taskSessionID: taskSessionID,
+            url: url,
+            collectRevisions: false
+        )
+        return ConversationCoverageReadResult(
+            coverage: Self.coverage(of: replay),
+            events: replay.firstSeenOrder.compactMap { replay.latestEvents[$0] },
+            diagnostics: replay.diagnostics
+        )
+    }
+
+    private static func coverage(of replay: Replay) -> ConversationSourceCoverage {
+        if !replay.diagnostics.isEmpty { return .partial }
+        // Every applied record creates or revises an event, so no events
+        // means no applied records.
+        return replay.firstSeenOrder.isEmpty ? .empty : .complete
+    }
+
+    private func unreadableDiagnostic(
+        _ error: Error
+    ) -> ConversationEventLogDiagnostic {
+        ConversationEventLogDiagnostic(
+            kind: .unreadableLog,
+            fileURL: url,
+            detail: error.localizedDescription
+        )
+    }
+
+    private struct Replay {
+        var firstSeenOrder: [UUID] = []
+        var latestEvents: [UUID: SessionPresentationEvent] = [:]
+        var diagnostics: [ConversationEventLogDiagnostic] = []
+        var diagnosticLineOffsets: [Int: Int] = [:]
+        var revisions: [ConversationEventRevision] = []
+        var completePrefixBytes = 0
+    }
+
+    /// Validates and projects records in file order. Shared by every reader
+    /// so `read()`, `readWithCoverage()` and `readRevisions()` cannot diverge.
+    private static func replay(
+        _ data: Data,
+        taskSessionID: TaskSessionID,
+        url: URL,
+        collectRevisions: Bool
+    ) -> Replay {
         let decoder = Self.makeDecoder()
+        func diagnostic(
+            _ kind: ConversationEventLogDiagnosticKind,
+            lineNumber: Int,
+            detail: String
+        ) -> ConversationEventLogDiagnostic {
+            ConversationEventLogDiagnostic(
+                kind: kind,
+                fileURL: url,
+                lineNumber: lineNumber,
+                detail: detail
+            )
+        }
         let lines = data.split(
             separator: UInt8(ascii: "\n"),
             omittingEmptySubsequences: false
@@ -420,10 +588,31 @@ public struct ConversationEventLog: Equatable, Sendable {
         var firstSeenOrder: [UUID] = []
         var latestEvents: [UUID: SessionPresentationEvent] = [:]
         var diagnostics: [ConversationEventLogDiagnostic] = []
+        var revisions: [ConversationEventRevision] = []
+        var timelineIndexByEvent: [UUID: Int] = [:]
+        var revisionCountByEvent: [UUID: Int] = [:]
+        var diagnosticLineOffsets: [Int: Int] = [:]
+        var completePrefixBytes = 0
 
         for (index, rawLine) in lines.enumerated() {
             if index == lines.count - 1, rawLine.isEmpty {
                 continue
+            }
+            // Slices keep the source's absolute indices. A line followed by a
+            // newline is complete; only the final element can lack one.
+            let lineStart = rawLine.startIndex - data.startIndex
+            let lineEnd = rawLine.endIndex - data.startIndex
+            let terminated = rawLine.endIndex < data.endIndex
+            if terminated {
+                completePrefixBytes = lineEnd + 1
+            }
+            // Remember where each rejected line starts so a reader can scope
+            // rejections to a byte range without rescanning the source.
+            let diagnosticsBeforeLine = diagnostics.count
+            defer {
+                if diagnostics.count > diagnosticsBeforeLine {
+                    diagnosticLineOffsets[index + 1] = lineStart
+                }
             }
 
             var line = Data(rawLine)
@@ -471,14 +660,17 @@ public struct ConversationEventLog: Equatable, Sendable {
 
             let recordTaskSessionID: TaskSessionID
             let candidate: SessionPresentationEvent
+            let recordedAt: Date
             do {
                 if envelope.schemaVersion == Self.legacySchemaVersion {
                     let record = try decoder.decode(LegacyRecord.self, from: line)
                     recordTaskSessionID = record.taskSessionID
+                    recordedAt = record.recordedAt
                     candidate = record.event
                 } else {
                     let record = try decoder.decode(Record.self, from: line)
                     recordTaskSessionID = record.taskSessionID
+                    recordedAt = record.recordedAt
                     if let event = record.event,
                        record.agentOutputDelta == nil {
                         candidate = event
@@ -546,14 +738,36 @@ public struct ConversationEventLog: Equatable, Sendable {
                     continue
                 }
             } else {
+                timelineIndexByEvent[candidate.id] = firstSeenOrder.count
                 firstSeenOrder.append(candidate.id)
             }
             latestEvents[candidate.id] = candidate
+
+            if collectRevisions {
+                let eventRevision = (revisionCountByEvent[candidate.id] ?? 0) + 1
+                revisionCountByEvent[candidate.id] = eventRevision
+                revisions.append(
+                    ConversationEventRevision(
+                        sequence: revisions.count + 1,
+                        lineNumber: lineNumber,
+                        byteRange: lineStart..<lineEnd,
+                        newlineTerminated: terminated,
+                        timelineIndex: timelineIndexByEvent[candidate.id] ?? 0,
+                        eventRevision: eventRevision,
+                        recordedAt: recordedAt,
+                        eventID: candidate.id
+                    )
+                )
+            }
         }
 
-        return ConversationEventLogReadResult(
-            events: firstSeenOrder.compactMap { latestEvents[$0] },
-            diagnostics: diagnostics
+        return Replay(
+            firstSeenOrder: firstSeenOrder,
+            latestEvents: latestEvents,
+            diagnostics: diagnostics,
+            diagnosticLineOffsets: diagnosticLineOffsets,
+            revisions: revisions,
+            completePrefixBytes: completePrefixBytes
         )
     }
 
@@ -587,19 +801,6 @@ public struct ConversationEventLog: Equatable, Sendable {
                     truncated: delta.truncated
                 )
             )
-        )
-    }
-
-    private func diagnostic(
-        _ kind: ConversationEventLogDiagnosticKind,
-        lineNumber: Int,
-        detail: String
-    ) -> ConversationEventLogDiagnostic {
-        ConversationEventLogDiagnostic(
-            kind: kind,
-            fileURL: url,
-            lineNumber: lineNumber,
-            detail: detail
         )
     }
 
