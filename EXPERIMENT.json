@@ -1,0 +1,34 @@
+{
+  "schema_version": "conduit-experiment/v1",
+  "experiment_id": "CONDUIT-R3-GITHUB-ADMISSION-20261022-01",
+  "state": "designed",
+  "study_type": "exploratory",
+  "evidence_layer": "hosted_environment_preflight",
+  "candidate_id": "CONDUIT-DIRECT-20261022-R3",
+  "candidate_freeze_commit": "382290bded447ea805ac71ed7d57bebeaf65f471",
+  "candidate_tree": "0f9f7c174665a09eb0c6fc213d893e3be3111b79",
+  "artifact_id": 12427346536,
+  "question": "What admission requirements can a free standard GitHub macos-15 runner satisfy without installing or launching the frozen app or expanding privileges?",
+  "decision_sentence": "Proceed only to a separately identified continuation whose missing guest, transport, privacy and human observation requirements can be supplied within authorization; otherwise preserve BLOCKED.",
+  "primary_factor": "GitHub-hosted standard macos-15 environment",
+  "primary_metric": "observed prerequisite states; no aggregate product verdict",
+  "unit_of_analysis": "one fresh hosted runner",
+  "planned_n": 1,
+  "maximum_job_minutes": 10,
+  "protocol": "docs/qualification/r3-github-guest-probe.md",
+  "inputs": "Approved hosted artifact identities are constants in scripts/r3-guest-probe.py; no private fixtures or credentials imported",
+  "non_claims": [
+    "installed acceptance",
+    "production execution authority",
+    "human state preservation",
+    "fresh ChatGPT delivery",
+    "independent VM deletion observation"
+  ],
+  "lifecycle_receipts": "Private coordinator evidence; preserve this initial manifest and bind execution to exact published probe commit",
+  "input_sha256": {
+    ".github/workflows/r3-guest-probe.yml": "e973a87230459e7e285d7a048d1aade851d50821493608c03bc259ec42f4fc47",
+    "docs/qualification/r3-github-guest-probe.md": "62451fbbad84f1ea7eca8029fcbf0af4ba893ff3501807e21069350463cf686c",
+    "scripts/r3-guest-probe.py": "c4710e413b0eb48b61813e52590b55104b27b581eb6967560d0384a05d5161e6",
+    "scripts/test-r3-guest-probe.py": "67ac68faaeaa042745fea5b03dae3e9841ee59dfa3cac4849e4124746ae94b89"
+  }
+}

@@ -1,0 +1,35 @@
+name: R3 guest admission probe
+
+on:
+  push:
+    branches: [codex/r3-github-guest-probe-20261022]
+    paths:
+      - .github/workflows/r3-guest-probe.yml
+      - scripts/r3-guest-probe.py
+      - scripts/test-r3-guest-probe.py
+      - EXPERIMENT.json
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: r3-github-guest-admission
+  cancel-in-progress: false
+
+jobs:
+  admission:
+    if: github.repository == 'camerontjs-dot/Conduit' && github.event.repository.private == false
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check fail-closed probe controls
+        run: python3 scripts/test-r3-guest-probe.py
+      - name: Observe guest and verify approved artifact without launch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/r3-guest-probe.py
