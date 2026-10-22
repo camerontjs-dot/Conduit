@@ -13,6 +13,14 @@ spec.loader.exec_module(probe)
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_opaque_token_punctuation_and_header_injection(self):
+        value = "synthetic.token-with_punctuation/+=~"
+        self.assertEqual(probe.authorization_header(value), "Authorization: Bearer " + value + "\n")
+        for value in ["", "two words", "value\r\nX-Injected: yes", "value\x00", "caf\u00e9"]:
+            with self.subTest(value=value):
+                with self.assertRaises(probe.ProbeFailure):
+                    probe.authorization_header(value)
+
     def test_wrong_or_missing_artifact_identity_refused(self):
         good = {"id": probe.ARTIFACT, "name": "conduit-macos-arm64", "expired": False,
                 "digest": "sha256:" + probe.ENVELOPE,

@@ -36,7 +36,15 @@ Validation: `python3 scripts/test-r3-guest-probe.py`, scope/leak review, then th
 actual hosted job and its checkout identity. Original source and installed-client
 case results remain separate.
 
+Probe 01 at `c119f4837efb8b7d67a0f6e85803152b248b627f`, run 39798116574,
+failed before artifact download: an overly narrow token-character check
+reported `GITHUB_TOKEN_MISSING` despite a masked credential being present.
+Probe 02 preserves that failure and accepts opaque printable ASCII tokens via
+curl's header stdin, while rejecting whitespace/control/header injection.
+It also records missing GUI boolean fields as null rather than false. No
+credential content is inspected or published, and no trial gate is relaxed.
+
 > **Binds:** this one admission workflow and its coordinator.
 > **Tier:** T2 for implemented artifact/scope/runtime preconditions; T0 for broader coordination boundaries.
-> **Check:** fail-closed Python controls, job timeout and read-only token permissions; hosted receipt and coordinator readback.
+> **Check:** `python3 scripts/test-r3-guest-probe.py`, collector preconditions, job timeout and read-only token permissions; hosted receipt and coordinator readback.
 > **Escape:** preserve failed or blocked observation; no security relaxation, replacement artifact or full-trial claim.

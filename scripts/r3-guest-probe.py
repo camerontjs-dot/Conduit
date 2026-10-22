@@ -118,9 +118,13 @@ def observe_environment(scratch):
 import ApplicationServices
 import CoreGraphics
 let d = CGSessionCopyCurrentDictionary() as? [String: Any] ?? [:]
+func observedBool(_ key: String) -> Any {
+    if let value = d[key] as? Bool { return value }
+    return NSNull()
+}
 let v: [String: Any] = [
-    "on_console": d["kCGSessionOnConsoleKey"] as? Bool ?? false,
-    "login_done": d["kCGSessionLoginDoneKey"] as? Bool ?? false,
+    "on_console": observedBool("kCGSessionOnConsoleKey"),
+    "login_done": observedBool("kCGSessionLoginDoneKey"),
     "display_count": NSScreen.screens.count,
     "accessibility_trusted": AXIsProcessTrusted(),
     "screen_capture_preflight": CGPreflightScreenCaptureAccess()
@@ -143,15 +147,22 @@ print(String(data: data, encoding: .utf8)!)
     return env
 
 
+def authorization_header(token):
+    require(bool(token), "GITHUB_TOKEN_MISSING")
+    # The token is opaque. Accept printable ASCII, but never line breaks,
+    # whitespace or controls that could introduce another HTTP header.
+    require(re.fullmatch(r"[!-~]+", token) is not None, "GITHUB_TOKEN_INVALID_HEADER")
+    return "Authorization: Bearer " + token + "\n"
+
+
 def download(url, destination):
-    token = os.environ.get("GH_TOKEN", "")
-    require(re.fullmatch(r"[A-Za-z0-9_]+", token) is not None, "GITHUB_TOKEN_MISSING")
+    header = authorization_header(os.environ.get("GH_TOKEN", ""))
     # curl drops Authorization on cross-host redirects. No signed URL, token,
-    # config stdin or raw error text is printed or placed in the receipt.
-    run(["/usr/bin/curl", "--config", "-", "--fail", "--silent", "--show-error",
+    # header stdin or raw error text is printed or placed in the receipt.
+    run(["/usr/bin/curl", "--header", "@-", "--fail", "--silent", "--show-error",
          "--location", "--proto", "=https", "--proto-redir", "=https",
          "--max-time", "120", "--max-filesize", "16777216", "--output",
-         str(destination), url], input='header = "Authorization: Bearer ' + token + '"\n',
+         str(destination), url], input=header,
         timeout=130)
 
 
