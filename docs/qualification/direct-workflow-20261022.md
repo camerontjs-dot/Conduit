@@ -140,7 +140,7 @@ for the additional real-duration fixture, and `scripts/build-app.sh` for a local
 package. These commands do not run installed-client acceptance. The actual
 extended-duration run used Xcode's `swift test --jobs 2 --filter
 ConduitDirectWorkflow` with the opt-in environment flag; its raw invocation is
-retained separately. Run `scripts/probe-direct-execution-policy.py
+retained separately. Run `python3 scripts/probe-direct-execution-policy.py
 --output-directory <new-owned-directory>` only for the synthetic OS probe.
 
 The first separate signature-inspection attempt used a relative bundle path
@@ -148,6 +148,11 @@ and returned `No such process`. An absolute-path invocation verified the same
 bundle bytes without rebuilding or resigning; both observations are retained.
 Existing compiler warnings remain in the build log. GitHub owner/PR updates
 were not posted; this record is the prepared local reconciliation.
+
+R2 corrects only that Python invocation after R1 was frozen. Its 298 source,
+test and script files match the tested R1 source byte-for-byte. The original
+test executions and packaged binary stay bound to that source commit; R2
+records the exact comparison rather than claiming a new native run or build.
 
 > **Binds:** this development record and the linked deferred acceptance packet.
 > **Tier:** T0 documentation; machine tests enforce only the cases they run.
