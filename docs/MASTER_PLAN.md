@@ -18,6 +18,11 @@ This file records the original workspace foundation and component status.
 Source implementation, independent qualification, mounted acceptance and
 release remain separate.
 
+The [T3 Code adoption plan](plans/t3code-adoption.md) records a bounded
+source comparison and proposed additions within these owner lanes. Its
+[local-agent handoff](plans/t3code-local-agent.md) covers review, finalization
+and implementation; the plan does not establish qualification or release readiness.
+
 ## Current daily-driver condition
 
 Cameron can stay in Conduit for the ordinary MainFrame loop when:
@@ -402,3 +407,4 @@ reattachment, or whether the conversation-first layout works as a daily driver.
 Use Conduit for real work. Capture friction in `00_inbox`, then promote
 confirmed patterns into issues and phase plans. Features graduate only when
 they remove repeated friction or improve evidence, safety, or continuity.
+
