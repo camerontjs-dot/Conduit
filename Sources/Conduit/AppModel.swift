@@ -6136,11 +6136,50 @@ final class AppModel: ObservableObject {
         limit: Int?,
         options: ConduitSessionEventReadOptions = .none
     ) -> [String: Any] {
-        guard let uuid = UUID(uuidString: rawID),
-              let task = taskSessions.first(where: { $0.id.rawValue == uuid })
-        else {
+        // AppModel stays the only holder of task and runtime state; the Core
+        // read service owns the ordering and projection of the read.
+        let result = ConduitSessionReadService.events(
+            owner: sessionAPIReadOwner(),
+            taskSessionID: rawID,
+            cursor: cursor,
+            limit: limit,
+            options: options
+        )
+        switch result {
+        case .success(let page):
+            return page.jsonObject()
+        case .failure(.unknownTask):
             return ["error": "unknown task"]
         }
+    }
+
+    /// Read-only view of task state for Core Session API reads. Each closure
+    /// returns state AppModel already holds; none can start, resume, prompt,
+    /// interrupt or reconnect a runtime.
+    private func sessionAPIReadOwner() -> ConduitSessionClosureReadOwner {
+        let directory = conversationDirectory
+        return ConduitSessionClosureReadOwner(
+            observe: { [self] id in
+                guard let task = taskSessions.first(where: { $0.id == id }) else {
+                    return nil
+                }
+                return sessionAPITaskObservation(for: task)
+            },
+            live: { [self] id in
+                sessionAPILiveRuntime(for: id)?.presentationEvents
+            },
+            cached: { [self] id in
+                conversationHistoryByTask[id]
+            },
+            log: { id in
+                ConversationEventLog(directory: directory, taskSessionID: id)
+            }
+        )
+    }
+
+    private func sessionAPITaskObservation(
+        for task: TaskSessionSnapshot
+    ) -> ConduitSessionTaskObservation {
         let live = sessionAPILiveRuntime(for: task.id)
         let status = sessionAPITaskPayload(for: task)
         let backend: AgentSessionBackend = {
@@ -6168,72 +6207,16 @@ final class AppModel: ObservableObject {
                 directory: AdapterThreadStore.defaultDirectory()
             ).threadID(for: task.id)
         }()
-        // The change feed needs the durable log with its revision positions.
-        // Read it once, before choosing the timeline, so a live or cached
-        // timeline can only be at or ahead of the returned head cursor.
-        let durable: ConversationRevisionReadResult? =
-            options.needsDurableRevisions
-                ? ConversationEventLog(
-                    directory: conversationDirectory,
-                    taskSessionID: task.id
-                ).readRevisions()
-                : nil
-        let eventSource: [SessionPresentationEvent]
-        let timelineSource: ConduitSessionTimelineSource
-        if let live {
-            eventSource = live.presentationEvents
-            timelineSource = ConduitSessionTimelineSource(
-                kind: .liveRuntime,
-                durableCoverage: durable?.coverage,
-                rejectedRecordCount: durable?.diagnostics.count
-            )
-        } else if let durable {
-            // Cached history is a copy loaded earlier and can lag the log
-            // (an exited runtime's tab keeps it until removed). When the log
-            // was just read, serve that, so the timeline is never behind the
-            // head cursor returned with it.
-            eventSource = durable.events
-            timelineSource = ConduitSessionTimelineSource(
-                kind: .durableLog,
-                durableCoverage: durable.coverage,
-                rejectedRecordCount: durable.diagnostics.count
-            )
-        } else if let cached = conversationHistoryByTask[task.id], !cached.isEmpty {
-            eventSource = cached
-            timelineSource = ConduitSessionTimelineSource(kind: .cachedHistory)
-        } else {
-            let read = ConversationEventLog(
-                directory: conversationDirectory,
-                taskSessionID: task.id
-            ).readWithCoverage()
-            eventSource = read.events
-            timelineSource = ConduitSessionTimelineSource(
-                kind: .durableLog,
-                durableCoverage: read.coverage,
-                rejectedRecordCount: read.diagnostics.count
-            )
-        }
-        let source = ConduitSessionEventSource(
-            taskSessionID: rawID,
+        return ConduitSessionTaskObservation(
             backend: backend,
-            sessionLifecycle: status["lifecycle"] as? String ?? "unknown",
+            lifecycle: status["lifecycle"] as? String ?? "unknown",
             runtimeState: status["runtime_state"] as? String ?? "unknown",
             live: status["live"] as? Bool ?? false,
             ready: status["ready"] as? Bool ?? false,
-            events: eventSource,
             adapter: adapter,
             runtimeAttemptID: sessionAPIRuntimeAttemptID(for: task, live: live),
-            persistedThreadID: persistedThreadID,
-            observedAt: Date(),
-            timelineSource: timelineSource,
-            durableRevisions: durable
+            persistedThreadID: persistedThreadID
         )
-        return ConduitSessionEventExport.page(
-            source: source,
-            cursor: cursor,
-            limit: limit,
-            options: options
-        ).jsonObject()
     }
 
     private func sessionAPICreateTask(
