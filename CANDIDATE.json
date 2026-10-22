@@ -1,0 +1,291 @@
+{
+  "schema_version": "mainframe-candidate/v1",
+  "candidate_id": "CONDUIT-DIRECT-20261022-R3",
+  "project": "Conduit",
+  "owner_issue": 60,
+  "workflow_issues": [
+    170,
+    174
+  ],
+  "package_version": "0.3.0",
+  "bundle_version": "3",
+  "api_schema": "conduit-direct-command/v1",
+  "created_at": "2026-10-22T11:59:22.850583+00:00",
+  "source_commit": "0f5b8b87693cb5f1c83278557daeb8746eda5200",
+  "source_tree": "171a70941c19490843fd627545d98eb17bee4985",
+  "manifest_freeze_commit": {
+    "kind": "containing_git_commit",
+    "resolve": "git log -1 --format=%H -- CANDIDATE.json",
+    "full_hash_recorded_in": "private FINAL-RECEIPT.json"
+  },
+  "base_commit": "49d4f448910f8ef19c4f3b95fc15a9b91ed70df5",
+  "predecessor": {
+    "candidate_id": "CONDUIT-DIRECT-20261022-R2",
+    "source_commit": "aaca420f47f1c6d9f824f12788a727b61b00c45c",
+    "freeze_commit": "b7e3a008fede0a86ebf64c4970adb1ed9705ec36",
+    "preserved": true
+  },
+  "branch": "codex/direct-workflow-r3-20261022",
+  "lifecycle_state": "FROZEN_DEVELOPMENT_CANDIDATE",
+  "advancement_readiness": "NOT_AUTHORIZED_FOR_MERGE_INSTALL_OR_ENABLEMENT",
+  "production_execution": "execution_authority_unavailable",
+  "included_scope": [
+    "Reuse R2 implementation and merged #183-185 ancestry",
+    "Independent R2 Luna review, retained adverse reproduction, informed R3 repair review",
+    "Retain waitable child custody through TERM-to-KILL escalation; bounded read-only cleanup after reaping",
+    "Cancel/timeout TERM-ignoring descendant regressions and simultaneous retries/cancellation",
+    "Authenticated compact MCP instructions and command/task metadata for direct tools before model delegation",
+    "Native checks, local unlaunched package and 16-case installed-client packet"
+  ],
+  "excluded_scope": [
+    "Production execution-profile implementation or grant",
+    "Conduit model/provider launches or active UI operations",
+    "Merge, push, installation, privilege expansion or production enablement",
+    "Detached-descendant containment, automatic post-reap recovery or complete log spooling",
+    "Modification of frozen predecessors, existing ordinary checkout or global MainFrame policy"
+  ],
+  "review": {
+    "requested_model": "gpt-6-luna",
+    "requested_reasoning_effort": "high",
+    "context": "fresh bounded independent R2 review; informed repair follow-up",
+    "actual_runtime_identity": "UNKNOWN",
+    "actual_runtime_usage": "UNKNOWN",
+    "original_finding": "R2-CMD-001",
+    "severity": "P2",
+    "parent_reproduction": "cancel and timeout reproduced before repair",
+    "disposition": "ADDRESSED_FOR_REPRODUCED_SAME_GROUP_CASES",
+    "repair_review": "no additional supported defect; read-only source review, no reviewer test rerun"
+  },
+  "evidence": {
+    "full_native": {
+      "exit_code": 0,
+      "selfchecks_passed": 589,
+      "python_checks_passed": 33,
+      "xctest_executed": 817,
+      "xctest_passed": 814,
+      "xctest_skipped": 3,
+      "xctest_failures": 0,
+      "actual_long_command_seconds": 121.143,
+      "runtime_test_script_inputs_bound_to_source": 298
+    },
+    "selected_repair": {
+      "executed": 25,
+      "skipped": 1,
+      "failures": 0
+    },
+    "fresh_blind_or_equivalent_acceptance": "NOT_RUN",
+    "hosted_ci": "NOT_RUN",
+    "installed": "NOT_RUN",
+    "fresh_chatgpt_routing": "NOT_RUN",
+    "mounted_human_state": "NOT_RUN",
+    "os_policy_probe": "PRIOR_R2_ONLY_NOT_RERUN_OR_INTEGRATED"
+  },
+  "local_package": {
+    "source_commit": "0f5b8b87693cb5f1c83278557daeb8746eda5200",
+    "source_tree": "171a70941c19490843fd627545d98eb17bee4985",
+    "bundle_relative_path": "dist/Conduit.app",
+    "binary_sha256": "0b45fb5de587893ee6cd48ae28c16d9adf8651af5cff6c68784b6f7f36967a96",
+    "bundle_id": "dev.camerontjs.conduit",
+    "version": "0.3.0",
+    "build": "3",
+    "signature": "ad-hoc",
+    "signature_verify_exit": 0,
+    "signature_detail_exit": 0,
+    "installed": false,
+    "launched": false
+  },
+  "negative_evidence": {
+    "parent_red": {
+      "executed": 3,
+      "failed_assertions": 8,
+      "failed_cases": 2
+    },
+    "full_history_leak_scan": {
+      "exit_code": 1,
+      "inherited_commit": "c2ec1dba2",
+      "local_path_fixture_matches": 6,
+      "current_tree_path_secret_checks": "PASS",
+      "history_rewrite_or_waiver": "NONE"
+    }
+  },
+  "remaining_limits": [
+    "Descendants leaving original group are not confined",
+    "Late cancellation after reaping or cleanup-budget exhaustion can remain UNKNOWN with capacity retained",
+    "Injected persistence failure coverage at each command transition remains incomplete",
+    "MCP instructions are advisory, not enforced routing or evidence of ChatGPT behavior"
+  ],
+  "approval_dependent_decisions": [
+    "Select an enforceable OS execution mechanism and exact offline project/toolchain profile",
+    "Review implementation and qualify actual toolchain filesystem/network/subprocess boundaries",
+    "Authorize exact installation and separate installed/fresh-client/mounted acceptance"
+  ],
+  "receipt_location": "Separately retained private 2026-10-22 R2 Luna review and R3 repair packet",
+  "receipt_digests": [
+    {
+      "name": "preflight.json",
+      "sha256": "d9349df1e849aed3987ee7182dccae920dfb466e317663399d54fd40ae61fa13",
+      "bytes": 38544
+    },
+    {
+      "name": "luna/criteria.md",
+      "sha256": "2400f1492dd22660f00412c1430794acec368cbc202aeb406842c3806b893392",
+      "bytes": 3529
+    },
+    {
+      "name": "luna/criteria-freeze.json",
+      "sha256": "a7f0e65083ffdfc9cd8846eb4b9e5fef754b1e038456ff0d2fb6a776cfad5efb",
+      "bytes": 470
+    },
+    {
+      "name": "luna/REVIEW.md",
+      "sha256": "ab31a524341495807025a9d1c1b6e4dc10a9b38f84356bc12d476a883699ec25",
+      "bytes": 5324
+    },
+    {
+      "name": "luna/REVIEW.json",
+      "sha256": "4e36966efdaf85d7e01cc81b7ecd6c57c187a10932a481b6ae3efae78ca36ace",
+      "bytes": 4203
+    },
+    {
+      "name": "luna/repro-descendant-ignores-term.json",
+      "sha256": "9036a911803cff5977c123f030a90edc6b4cb2ca332064c60d6fbf1f30664f57",
+      "bytes": 500
+    },
+    {
+      "name": "luna/repro-descendant-ignores-term-test.swift",
+      "sha256": "ac495d3fa3b51600709cd71d1ca440974505ebb592dee7df4b5311e4e536ccd2",
+      "bytes": 1963
+    },
+    {
+      "name": "luna/repro-descendant-ignores-term.log",
+      "sha256": "f9275cd1e3d9d5e411fb9c001db0d8737c0b81e58e2bed0118862906e5ba5a02",
+      "bytes": 1614
+    },
+    {
+      "name": "luna/repro-descendant-ignores-term.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "name": "luna/final-direct-tests.log",
+      "sha256": "674c834f7de486c77fc6452713af8982e9f5ed4491c81ebfb5d6e44746286784",
+      "bytes": 10598
+    },
+    {
+      "name": "luna/final-direct-tests.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "name": "luna/FIX-REVIEW.md",
+      "sha256": "b4a2da76d5385a409b79833560dd91f7ea25e7584e5ace04b3b6b44d778b01a8",
+      "bytes": 5328
+    },
+    {
+      "name": "luna/FIX-REVIEW.json",
+      "sha256": "d17cfc131e201d24c24bf2befb26dc72339db61e0238b2486fb7a4b785645d23",
+      "bytes": 2661
+    },
+    {
+      "name": "review-artifact-verification.json",
+      "sha256": "b622162e795e71333c7e0e59d0c89e8b8dfacaa000477044911033ef913d7c29",
+      "bytes": 610
+    },
+    {
+      "name": "repair-review-source-binding.json",
+      "sha256": "944d0dccaf9a8335189bcb83cdb0ac57e3ccdd5677924e47209e88cc684871a6",
+      "bytes": 1078
+    },
+    {
+      "name": "client-guidance-test.log",
+      "sha256": "7ffec2f0faa426c63dffb6009ea5c2a15b781a8f173db678a388537709d1d45e",
+      "bytes": 68714
+    },
+    {
+      "name": "client-guidance-test-result.json",
+      "sha256": "871f1a66c647e95a13c2bb5c338137945370e278d248969d2767dde6c5b4f254",
+      "bytes": 466
+    },
+    {
+      "name": "cancellation-red.log",
+      "sha256": "305f75819a5dc048841d1711c4a17887ab13d31ae74b7c16ce2feaa9fee2a735",
+      "bytes": 4909
+    },
+    {
+      "name": "cancellation-red-result.json",
+      "sha256": "55ffa06bb5be1e82cc4f83403c1f79837bcb6bf4505a167152e254f82396d578",
+      "bytes": 489
+    },
+    {
+      "name": "cancellation-green.log",
+      "sha256": "c19e042691ae82c3a15acb581963d307dbbc75c8efcb8b9577e33fe133076d5b",
+      "bytes": 9310
+    },
+    {
+      "name": "cancellation-green-result.json",
+      "sha256": "2e09010e79ea92cfc26e28d7cf103fcb0c75e253ccf4cdcf9fa114d0311f0199",
+      "bytes": 495
+    },
+    {
+      "name": "full-native.log",
+      "sha256": "4c345b521bca7305b795ad9ea0342530e1be4ed33fdea00d0c9f5e670dbe2c8d",
+      "bytes": 257516
+    },
+    {
+      "name": "full-native-result.json",
+      "sha256": "a69ba670bb35e38f84973eacd40111417410fe9bc0dcf03826bd136a32566a05",
+      "bytes": 672
+    },
+    {
+      "name": "full-native-input-files.json",
+      "sha256": "923d1ea7653a7094221eed86ad657d2b8759a002cb755ef8734f0cd905fe6bbb",
+      "bytes": 36399
+    },
+    {
+      "name": "package-build.log",
+      "sha256": "280400dd818eae5e8ff7ddc44fc23271a7581cb63dafb0ed88d8dc63453c53a8",
+      "bytes": 2577
+    },
+    {
+      "name": "package-build-result.json",
+      "sha256": "9b9a2566301dcd31b2dfbc099050215a061d017fd875a9863ab361b64581a08a",
+      "bytes": 377
+    },
+    {
+      "name": "package-signature.log",
+      "sha256": "251652c395755faa05033b2db008a923f859fd177776ff37a544393db2b155fb",
+      "bytes": 981
+    },
+    {
+      "name": "package-identity.json",
+      "sha256": "858b11dcdd3859237f952d3067138a586df0881fc78ea6f3718f669d4d37cd75",
+      "bytes": 6302
+    },
+    {
+      "name": "leak-scan.log",
+      "sha256": "c48639c276394deec2bde3b2cf737f21937b2e0063359b595613aa4649d54b28",
+      "bytes": 1797
+    },
+    {
+      "name": "source-hygiene-result.json",
+      "sha256": "504a354279aa01b7073b4e2acdd539786a7f199d556f6754da6b8ceb74c06a7b",
+      "bytes": 3221
+    },
+    {
+      "name": "staged-source-check.json",
+      "sha256": "443aefe3d1fd5bbf79ee5fd0a63bdf2a26a8d51b44e1c4a0ea530761fa57410f",
+      "bytes": 1020
+    },
+    {
+      "name": "postflight-before-freeze.json",
+      "sha256": "42c151f177d1be26cdeb5bd4f7b99ce04babf2c0cc73680781ead9459b85d9a0",
+      "bytes": 21677
+    },
+    {
+      "name": "source-verification.json",
+      "sha256": "68be6b276a4305c0fa744e82a050d58d29c38a68ed401759901d5c1cf0a19f23",
+      "bytes": 692
+    }
+  ],
+  "reversibility": "Isolated local branch/worktree and delta Git bundle; predecessor remains preserved. Keep frozen; any new source changes require a successor."
+}

@@ -205,7 +205,7 @@
     "CONDUIT-API-SCOPE": {
       "artifact": {
         "path": "Sources/Conduit/AppModel.swift",
-        "sha256": "05b486ceb76b6bf07f26137c2d93a6be6c7ae008096e8e8f4da889c840e1b938"
+        "sha256": "eb39cacd4dc0e9f51092a12aa2fbb887df5fa66644200ec9674b8cde51200c7d"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "read-service candidate source snapshot; re-inspected read-only after moving the conduit_session_events read into a Core service; provider-session guards unchanged; not a provider runtime observation",
@@ -360,7 +360,7 @@
     "OPENCODE-ADAPTER": {
       "artifact": {
         "path": "Sources/Conduit/OpenCodeHTTPClient.swift",
-        "sha256": "cddd5d926526d9705dbe9cf237bd3ce1471e146ddb4eddd51fcc0bed32b7fac0"
+        "sha256": "df4dea63b5592533fb5ad254c3297d1c732d1d970e49b9ecff02fa00eda20f81"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
@@ -369,7 +369,7 @@
       },
       "kind": "source_test",
       "limitation": "Source establishes client request/event handling; direct capability claims use the OpenCode native probe or prior qualification.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-19T22:57:22Z",
       "procedure_id": "opencode-http-adapter-source-v1"
     },
     "OPENCODE-NATIVE": {
@@ -498,7 +498,7 @@
     "STRUCTURED-ADAPTER-TESTS": {
       "artifact": {
         "path": "Tests/ConduitCoreTests/StructuredAdapterTests.swift",
-        "sha256": "de95f897641533be8064f0129f90cc2afe8f0488f03a31d35bfde60abbedbd08"
+        "sha256": "5f7744dbc5e2fce98322ccec7250380a5b4f501a2fdab634185a6426bdbe38f8"
       },
       "authority": "read-only source and test inspection in the candidate checkout",
       "freshness": "current candidate source snapshot; not a provider runtime observation",
@@ -507,7 +507,7 @@
       },
       "kind": "source_test",
       "limitation": "These tests cover protocol mapping and adapter selection, not live provider permission events.",
-      "observed_at_utc": "2026-09-23T23:07:42Z",
+      "observed_at_utc": "2026-10-19T22:57:22Z",
       "procedure_id": "structured-adapter-unit-tests-v1"
     },
     "STRUCTURED-CATALOG": {

@@ -138,11 +138,88 @@ public struct OpenCodeServeLeaseRecord: Equatable, Sendable, Codable {
     }
 }
 
+/// A local prompt bound to the assistant message returned by its exact HTTP POST.
+/// No request ID is invented on the provider wire.
+public struct OpenCodeRequestIdentity: Equatable, Sendable {
+    public let promptEventID: UUID
+    public let sessionID: String
+    public let messageID: String
+}
+
+public struct OpenCodeRequestEffect: Equatable, Sendable {
+    public let identity: OpenCodeRequestIdentity
+    public let effect: StructuredAdapterEffect
+
+    public init(identity: OpenCodeRequestIdentity, effect: StructuredAdapterEffect) {
+        self.identity = identity
+        self.effect = effect
+    }
+}
+
 /// Maps OpenCode SSE / JSON events into Conversation effects.
 public struct OpenCodeEventMapper: Equatable, Sendable {
     public var sessionID: String?
     public var turnActive = false
     public var lastTurnStatus: String?
+    public private(set) var identity: OpenCodeRequestIdentity?
+    public private(set) var identityDiagnostic: String?
+    public private(set) var responseFailure: OpenCodeRequestEffect?
+    private var acceptedMessages: [String: Set<String>] = [:]
+
+    /// Only the POST response's assistant info establishes ownership. A bare 2xx,
+    /// user message, mismatched session, or reused message ID establishes none.
+    @discardableResult
+    public mutating func accept(_ response: CodexJSON, promptEventID: UUID) -> Bool {
+        resetTurn()
+        guard let sessionID,
+              let info = response["info"],
+              info["sessionID"]?.stringValue == sessionID,
+              info["role"]?.stringValue == "assistant",
+              let messageID = info["id"]?.stringValue, !messageID.isEmpty,
+              acceptedMessages[sessionID]?.contains(messageID) != true else {
+            identityDiagnostic = "OpenCode output identity UNKNOWN: HTTP response has no unique assistant message for this session."
+            return false
+        }
+        acceptedMessages[sessionID, default: []].insert(messageID)
+        identity = OpenCodeRequestIdentity(promptEventID: promptEventID, sessionID: sessionID, messageID: messageID)
+        identityDiagnostic = nil
+        if let error = info["error"], error != .null, let identity {
+            closedEmitted = true
+            turnActive = false
+            lastTurnStatus = "failed"
+            responseFailure = OpenCodeRequestEffect(identity: identity, effect: .failed(
+                "OpenCode assistant message reported an error: \(error)"
+            ))
+        }
+        return true
+    }
+
+    public func owns(_ json: CodexJSON) -> Bool {
+        guard let identity, !closedEmitted else { return false }
+        let properties = json["properties"] ?? json
+        let session = properties["sessionID"]?.stringValue
+            ?? properties["info"]?["sessionID"]?.stringValue
+            ?? properties["part"]?["sessionID"]?.stringValue
+        let message = properties["messageID"]?.stringValue
+            ?? properties["info"]?["id"]?.stringValue
+            ?? properties["part"]?["messageID"]?.stringValue
+        // Conflicting nested and outer IDs must not pass via fallback precedence.
+        let sessions = [properties["sessionID"]?.stringValue,
+                        properties["info"]?["sessionID"]?.stringValue,
+                        properties["part"]?["sessionID"]?.stringValue].compactMap { $0 }
+        let messages = [properties["messageID"]?.stringValue,
+                        properties["info"]?["id"]?.stringValue,
+                        properties["part"]?["messageID"]?.stringValue].compactMap { $0 }
+        return session == identity.sessionID && message == identity.messageID
+            && sessions.allSatisfy { $0 == identity.sessionID }
+            && messages.allSatisfy { $0 == identity.messageID }
+    }
+
+    public mutating func applyIdentified(_ json: CodexJSON) -> [OpenCodeRequestEffect] {
+        let effects = apply(json)
+        guard let identity else { return [] }
+        return effects.map { OpenCodeRequestEffect(identity: identity, effect: $0) }
+    }
 
     /// Text per `partID`, in first-seen order.
     ///
@@ -162,14 +239,6 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
     /// reasoning stream is indistinguishable from the reply.
     private var nonAnswerParts: Set<String> = []
 
-    /// `messageID` to role, learned from `message.updated`.
-    ///
-    /// A `message.part.updated` never carries a role, and OpenCode emits the
-    /// operator's own prompt as a part exactly like the model's reply. Without
-    /// this map the prompt is accumulated into agent output and handed back to
-    /// the caller as if the agent had said it.
-    private var roleByMessage: [String: String] = [:]
-
     /// Guards against re-emitting a closed turn.
     ///
     /// Completion is signalled more than once per turn — an assistant
@@ -180,12 +249,13 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
 
     public init() {}
 
-    /// Concatenated text of every part not known to belong to the operator.
+    /// Concatenated answer text for the HTTP-bound assistant message.
     public var accumulatedText: String {
         partOrder.compactMap { partText[$0] }.joined()
     }
 
     public mutating func apply(_ json: CodexJSON) -> [StructuredAdapterEffect] {
+        identityDiagnostic = nil
         let type = json["type"]?.stringValue
             ?? json["event"]?.stringValue
             ?? ""
@@ -193,28 +263,13 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
         if type == "server.connected" {
             return []
         }
-        // Resolve the session from a field that actually holds a session id.
-        // `info.id` is the *message* id on message events; reading it as the
-        // session made every `message.updated` look like it belonged to another
-        // session, so all of them were dropped — which is why roles were never
-        // learned and the operator's prompt came back as agent output. Only a
-        // `session.*` event may name its session in `id`.
-        let eventSession = properties["sessionID"]?.stringValue
-            ?? properties["info"]?["sessionID"]?.stringValue
-            ?? properties["part"]?["sessionID"]?.stringValue
-            ?? properties["session"]?["id"]?.stringValue
-            ?? (type.hasPrefix("session") ? OpenCodeHTTPContract.sessionID(in: properties) : nil)
-        if let bound = sessionID, let eventSession, eventSession != bound {
+        guard owns(json) else {
+            identityDiagnostic = "OpenCode SSE identity UNKNOWN or stale: event cannot be attributed to the accepted prompt."
             return []
         }
-        if type == "message.updated",
-           let id = properties["info"]?["id"]?.stringValue,
-           let role = properties["info"]?["role"]?.stringValue {
-            roleByMessage[id] = role
-        }
-        if sessionID == nil, let eventSession {
-            sessionID = eventSession
-            return [.sessionStarted(id: eventSession)]
+        if type == "message.updated", properties["info"]?["role"]?.stringValue != "assistant" {
+            identityDiagnostic = "OpenCode SSE identity UNKNOWN: accepted message has conflicting role."
+            return []
         }
         if type.contains("permission") {
             let id = properties["id"]?.stringValue
@@ -239,13 +294,8 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
         }
         if let fragment = Self.textFragment(in: properties, type: type) {
             if nonAnswerParts.contains(fragment.partID) { return [] }
-            // A part whose message is known to be the operator's is not agent
-            // output. Unknown messages are still accepted: OpenCode sends
-            // `message.updated` before that message's parts, so an unknown id
-            // means a shape we have not seen, and dropping it would silently
-            // lose real agent output.
-            let isOperator = fragment.messageID.flatMap { roleByMessage[$0] } == "user"
-            if !isOperator {
+            // Ownership and assistant role were proven by the POST response.
+            if fragment.messageID == identity?.messageID {
                 if partText[fragment.partID] == nil {
                     partOrder.append(fragment.partID)
                 }
@@ -260,6 +310,12 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
                 return [.upsertOutput(text: accumulatedText, state: .live)]
             }
             return []
+        }
+        if type == "message.updated", let error = properties["info"]?["error"], error != .null {
+            closedEmitted = true
+            turnActive = false
+            lastTurnStatus = "failed"
+            return [.failed("OpenCode assistant message reported an error: \(error)")]
         }
         if Self.isCompletion(type: type, json: properties) {
             // Completion is announced repeatedly; close the turn once.
@@ -283,14 +339,15 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
     }
 
     public mutating func resetTurn() {
+        responseFailure = nil
+        identity = nil
+        identityDiagnostic = nil
         partOrder.removeAll()
         partText.removeAll()
         nonAnswerParts.removeAll()
         turnActive = false
         closedEmitted = false
         lastTurnStatus = nil
-        // `roleByMessage` deliberately survives: it is per-session identity,
-        // not per-turn state, and late parts of a closed message still need it.
     }
 
     public static func parseSSELine(_ line: String) -> CodexJSON? {
@@ -301,15 +358,14 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
     }
 
     private static func isCompletion(type: String, json: CodexJSON) -> Bool {
-        if type == "session.idle" || type == "session.complete" { return true }
+        // A session-only event has no request completion authority.
         if type == "message.updated",
            json["info"]?["status"]?["complete"]?.boolValue == true {
             return true
         }
-        if json["info"]?["time"]?["completed"] != nil,
-           type.hasPrefix("session") || type.hasPrefix("message") {
-            return json["info"]?["time"]?["completed"] != nil
-                && json["info"]?["role"]?.stringValue != "user"
+        if type == "message.updated",
+           case .number = json["info"]?["time"]?["completed"] {
+            return json["info"]?["role"]?.stringValue == "assistant"
         }
         return false
     }
@@ -377,5 +433,50 @@ public struct OpenCodeEventMapper: Equatable, Sendable {
             )
         }
         return nil
+    }
+}
+
+/// Bounds raw SSE line bytes before UTF-8 decoding. SSE permits LF, CRLF and CR.
+/// An oversized line invalidates the stream; never truncate it into valid JSON.
+public struct OpenCodeSSELineDecoder: Sendable {
+    public enum DecodeError: Error { case lineTooLong }
+    public let maximumLineBytes: Int
+    public var bufferedByteCount: Int { bytes.count }
+    private var bytes: [UInt8] = []
+    private var afterCR = false
+    private var failed = false
+
+    public init(maximumLineBytes: Int = 2_097_152) {
+        precondition(maximumLineBytes > 0)
+        self.maximumLineBytes = maximumLineBytes
+    }
+
+    public mutating func append(_ byte: UInt8) throws -> String? {
+        guard !failed else { throw DecodeError.lineTooLong }
+        if afterCR {
+            afterCR = false
+            if byte == 10 { return nil }
+        }
+        if byte == 10 || byte == 13 {
+            afterCR = byte == 13
+            let line = String(decoding: bytes, as: UTF8.self)
+            bytes.removeAll(keepingCapacity: true)
+            return line
+        }
+        guard bytes.count < maximumLineBytes else {
+            bytes.removeAll(keepingCapacity: false)
+            failed = true
+            throw DecodeError.lineTooLong
+        }
+        bytes.append(byte)
+        return nil
+    }
+
+    public mutating func finish() throws -> String? {
+        guard !failed else { throw DecodeError.lineTooLong }
+        guard !bytes.isEmpty else { return nil }
+        let line = String(decoding: bytes, as: UTF8.self)
+        bytes.removeAll(keepingCapacity: false)
+        return line
     }
 }

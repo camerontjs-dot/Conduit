@@ -2166,3 +2166,399 @@ exercised. GUI termination and reconnection remain the #4 Phase C experiment.
 **Reconsideration trigger:** Revisit when the #175 to #182 integration lands
 and admission or delivery is ready to move, or if a second consumer needs the
 read without AppModel.
+
+## D-060: Hosted filesystem reads share Explorer authority
+
+**Status:** Accepted (2026-09-29; implementation candidate)
+
+**Context:** The hosted MCP catalog exposes runtime/session observation and
+MindGraph nominations but no general source-file inspection. MainFrame files
+remain authoritative as files; retrieval cannot substitute for that authority.
+
+**Decision:** Publish one read-only `conduit_read_filesystem` tool with `list`,
+`read` and `stat` operations over the authorized configured MainFrame root.
+Reuse and strengthen Explorer Core's scanner/reader with root-anchored
+`openat`/`O_NOFOLLOW` traversal and bounded descriptor reads. Link leaves are
+describable but never traversed. Known binary/media and non-ordinary text are
+explicitly unsupported; exact paths recover without a recursive index.
+
+The authenticated filesystem route bypasses the session-command handler. Its
+only AppModel dependency is the existing configured-root/readiness/authorization
+observation. It creates no document store, task, input, provider action, writer
+lease or execution slot and does not expand Session API write authority.
+
+**Binds:** hosted filesystem observation and shared Explorer path/read code.
+**Tier:** T1 (deterministic policy/transport regressions detect violations;
+installed hosted publication requires qualification).
+**Check:** `conduit-selftest` filesystem assertions, `ConduitFilesystemReadTests`, `ConduitFilesystemTransportTests`,
+existing Explorer regressions, `scripts/test.sh`, and exact-head hosted canary.
+**Escape:** explicit unsupported/unavailable/error results; retain Draft until
+installed/tunnel acceptance is established.
+
+**Consequences:** Supervisors can inspect live coordination and operational
+files directly while MindGraph remains a nominator. Relative paths are required;
+there is no arbitrary-root request, recursive Find, paging or filesystem write.
+Metadata and contents remain observations, not verified claims. Concurrent
+filesystem changes can invalidate an observation; no immutable snapshot is
+claimed. Shared Core hardening also protects UI reads from link ancestors.
+
+**Qualification boundary:** The exact candidate still needs installed/tunnel
+`tools/list` and benign filesystem calls with task/runtime and write authority
+preserved. Source tests cannot establish ChatGPT's cached catalog freshness.
+
+---
+
+## D-061: Direct operations bind project scope and durable operation identity
+
+**Status:** Proposed (2026-10-18; implemented development candidate; independent
+and installed qualification pending)
+
+**Context:** The ChatGPT-first Local Operator direction in
+[#51](https://github.com/camerontjs-dot/Conduit/issues/51),
+[#60](https://github.com/camerontjs-dot/Conduit/issues/60) and
+[#170](https://github.com/camerontjs-dot/Conduit/issues/170) requires ordinary
+local work without a model agent. PTY output does not establish a typed command
+exit. File retries also need an exact operation identity and current-byte
+precondition so a lost response does not silently perform a second mutation.
+
+**Decision:**
+
+1. Direct project search, file mutation and command operations bypass task
+   creation and resolve the exact registered project independently of the
+   desktop selection. The configured root must be ready and authorized; the
+   MainFrame root itself is not an eligible direct-operation project.
+2. Observation and mutation have distinct MCP names and risk classifications.
+   Status lookup is a read. File writes, command submission and cancellation
+   retain local Session API write admission, bounded caller-label admission
+   and fresh resource checks. The shared bearer/client label does not become
+   independent authentication for multiple clients.
+3. File writes accept only one bounded ordinary UTF-8 create or replacement.
+   Creation requires absence; replacement requires SHA-256 of the exact
+   observed raw bytes. Held directory descriptors, no-follow resolution and
+   repeated path/identity/hash checks reject observed changes. Hidden and
+   instruction paths, links, unsupported types and metadata remain unsupported.
+   Replacement preserves the observed preimage but remains optimistic
+   concurrency, with an explicit final external-writer race limitation.
+4. Durable reservations bind exact IDs before mutation or possible spawn.
+   Replays return historical outcomes; changed requests conflict. Missing,
+   corrupt or interrupted history stays unknown and never authorizes a second
+   operation. Retention is bounded and refuses new IDs rather than silently
+   pruning retry protection. Status never creates or repairs a receipt store.
+5. The typed command runner uses literal argv, an exact cwd identity, bounded
+   separate output and a dedicated process group. Its receipts distinguish
+   acceptance, launch, exit, cancellation request, observed cancellation,
+   capacity release and uncertainty. A recovered PID is never adopted as
+   authority to signal a process. Process-group absence does not prove that
+   descendants could not escape that group.
+6. Production command execution is unavailable in this source slice. The
+   public service constructor grants no executable authority; an internal
+   disposable-fixture constructor exists for real process tests. A local write
+   switch and cwd alone are not an effective filesystem/network/process
+   confinement policy. The owner must choose an execution profile, the product
+   must enforce it, and that profile must pass its own qualification before
+   production execution can be enabled.
+
+**Consequences:** Search and exact file edits have direct bounded source
+implementations. Command requests have a reviewable contract and native
+test fixtures, with an honest authority refusal in the application. No model
+fallback, global permission change or implicit agent task follows a refusal.
+See [command](docs/DIRECT_COMMAND_API.md),
+[file operation](docs/DIRECT_FILESYSTEM_OPERATIONS.md) and
+[search](docs/DIRECT_FILESYSTEM_SEARCH.md) contracts for exact limits and
+recovery behavior.
+
+**Qualification boundary:** Disposable native process/filesystem tests and
+authenticated response-path tests are development evidence. They do not
+establish an installed app, fresh ChatGPT catalog, end-to-end artifact
+acceptance or independent review. The frozen #168 → #123 → #128 qualification
+campaign remains separate. Source assembly does not authorize merge, release
+or replacement of the operator's installed app.
+
+---
+
+## D-062: Shared task state has action-scoped presentation feedback
+
+**Status:** Proposed (2026-10-18; implemented development candidate; independent
+and mounted multi-client qualification pending)
+
+**Context:** [#174](https://github.com/camerontjs-dot/Conduit/issues/174) requires
+shared tasks, runtimes, IDs, history and artifacts while the desktop and hosted
+client keep their own selection, drafts, navigation and error presentation.
+Checking only the immediate API entry point misses mutations in shared helpers
+and delayed callbacks. Runtime-creator identity also becomes incorrect when
+human and hosted prompts later use the same runtime.
+
+**Decision:** Shared control helpers carry an explicit `SessionControlOrigin`.
+Only operator UI actions update operator selection, navigation memory, composer,
+New Task scope, panels, status and modal errors. Hosted actions still update
+the actual shared task/runtime/history state. No temporary snapshot/restore of
+published presentation state is used, so observers do not see an intermediate
+hosted selection change.
+
+Prompt and interrupt event IDs acquire an immutable, ephemeral presentation
+origin at the trusted entry point. Delayed revisions and linked output follow
+that exact prompt, even when client actions interleave. Caller-visible origin
+labels cannot select the operator feedback path. Old or unlinked events without
+established provenance remain unattributed; shared retention diagnostics remain
+observable without creating an unrelated operator alert. Lifecycle work carries
+its explicit initiating origin through deferred close/history callbacks.
+
+Hosted slash delivery reuses its admitted event rather than recording a second
+composer prompt. Delayed terminal injection updates that event's delivery
+observation; it does not claim provider receipt or command completion. Task
+status exposes the current process's conversation-retention state separately
+from runtime readiness and artifact verification.
+
+**Consequences:** The API and desktop act on the same task truth while control
+presentation belongs to the initiating action. This policy grants no process,
+filesystem, client-authentication or approval authority. It does not replace
+the distinct shared-bearer, global-diagnostics or stale-target candidates.
+
+**Qualification boundary:** Pure feedback-ledger tests exercise interleaved
+event attribution; source-flow regressions inspect real shared-helper wiring.
+They do not establish a mounted two-client UI journey. #174's required
+independent Codex model and isolated exposure conditions still apply; source
+authors and source-exposed peer reviewers are not independent qualifiers.
+
+## D-063: Session API keyed replay uses private durable intent receipts
+
+Keyed `conduit_create_task` and `conduit_send_prompt` use an application-owned
+`session-api-replay-v1` directory under AdapterThreadStore's app-state directory,
+separate from MainFrame history. Caller identity, exact operation and exact key
+select a receipt; length-framed request fields bind its fingerprint. Create
+includes project slug and resolved project path. Prompt includes durable task
+UUID, exact text and origin. Only hashes and a bounded acceptance snapshot are
+stored, never prompt/objective text, raw errors, or credentials. The journal uses the stable local bearer authorization domain, not the mutable listener-global clientInfo label. Clients sharing the same bearer share retry-key custody, so repeated keys replay or conflict instead of dispatching twice. This is still one operator authority and not per-client authentication; admission-rate labeling uses untrusted clientInfo and does not isolate clients.
+
+The journal checks replay before admission, synchronizes intent before dispatch,
+and synchronizes outcome before returning success. The admission controller
+continues to own rates/capacity, not persistent replay. Unkeyed requests preserve
+legacy non-idempotent behavior. A completed replay returns original task/event
+identity and acceptance state, not current delivery or provider completion.
+Missing/partial/corrupt outcomes, missing reservations, disk failures and unsafe
+storage block as UNKNOWN; they never authorize retry. Refusals without a trusted
+result also retain their intent. Reconciliation and a deliberate new request are
+required; no automatic pruning or recovery is inferred.
+
+The private directory requires owner-only mode 0700; files require 0600, current
+UID and a single link. Descriptor traversal refuses symlinks. A lifetime exclusive
+owner lock and per-instance mutex prevent competing owners/concurrent dispatch.
+Storage is bounded to 2,048 intents and outcomes of at most 16 KiB each; full
+storage blocks new keyed requests without deleting uncertain intent. This is
+process-restart protection under filesystem synchronization semantics, not proof
+against malicious same-UID modification or physical media failure.
+
+Hosted prompt refusal never initiates reconnect. Startup remains the explicit
+reconcile operation. A specifically ancillary work-log append failure is a visible
+warning, while authoritative mutation/delivery errors retain the API error path.
+Source and injected transport tests qualify these boundaries; installed runtime,
+provider delivery, and mounted UI acceptance require separate authorization.
+
+Follow-up to the independent review (19 October 2026): another client's MCP
+initialize must not change the namespace of an accepted keyed request. Bind
+the journal to the immutable local API write authority, not the last received
+clientInfo name. A synchronous structured-adapter send failure now produces
+an explicit API error and original prompt event ID. Provider-side acceptance
+remains unproven, so clients must inspect events before retrying.
+
+
+## D-064: Session API mutation budgets follow shared bearer authority
+
+**Date:** 2026-10-19
+
+MCP HTTP has one shared bearer and listener-global initialize metadata. The
+observed clientInfo label is display metadata, not an authenticated client
+identity. All MCPAdmissionController create, prompt and ordinary write budgets
+use ConduitSessionAPI.replayAuthorityScope, including reconcile, interrupt,
+lifecycle, close, direct writes and provider-session adoption. Existing policy
+field and decision-code names remain compatible; their caller rate limits now
+apply to the shared authority. Required missing/blank/oversized caller metadata
+still fails closed; changing a label does not create an independent allowance.
+
+Adoption observes and validates the exact provider identity and controller before
+invoking write admission, then claims the Core registry only if admitted. The
+Session API supplies the same readiness/resource/identity/rate gate used by direct
+writes. Invalid requests do not consume admission; denied requests cannot change
+ownership. Read-only observe has no admission charge, and admitted competing
+claims still return writer collision without replacement or provider activity.
+The coordinator's optional callback preserves non-API callers; API wiring must
+supply it. These are synthetic source/transport guarantees, not installed-app or
+real-provider qualification.
+
+
+### D-063 amendment — admission checkpoint (2026-10-19)
+
+Keyed create/send validate the replay store and resolve replay/conflict before
+admission. Admission runs synchronously under the journal lock and AppModel actor.
+Only its explicit `beginDispatch` checkpoint creates and synchronizes intent,
+immediately before `createTask` or `sessionAPIDeliver` (whose first acceptance
+marker is `recordPrompt`). Precondition/caller/resource/rate refusals never cross
+that checkpoint and therefore create no receipt. Error text is not proof.
+
+Create cancellation and prompt completion defers are installed before the
+checkpoint; a failed file/directory sync cancels that exact capacity reservation
+without dispatch. Already spent rate budget is deliberately not refunded.
+Crashes before intent cannot have dispatched; crashes during/after intent retain
+UNKNOWN. There is no refusal-removal transaction or tombstone to recover.
+Existing pending receipts, including old refusals without proof, are never pruned.
+Accepted queued work retains its original task/event identity on completed replay.
+
+Follow-up source review boundary (19 October 2026): the former public
+action-only journal helper was removed because it could not distinguish a
+provable pre-admission refusal from a potentially accepted operation before
+reserving durable intent. Core/transport/selftest fixtures now must explicitly
+call the typed admission callback and cross beginDispatch before any effect.
+Only the typed checkpoint contract is supported; no unsafe compatibility
+surface remains. The previously reviewed failed source commit stays retained.
+
+## D-079: Structured prompt event ownership and provider HTTP delivery truth
+
+Structured output is owned by the exact prompt that the provider accepted, not
+by the most recent prompt in the conversation. A synchronously refused
+overlapping prompt records its own failed delivery without ending another
+active prompt's output capture or reassigning later output and feedback.
+Effect capture checks exact prompt-event identities across adapter callbacks.
+
+For OpenCode HTTP, dispatching an asynchronous request does not establish
+provider acceptance. The original Conduit API response reports queued and
+retains the exact prompt-event ID until its HTTP outcome is observed.
+An accepted HTTP 2xx response advances that event's delivery to delivered;
+a refused/failed HTTP request advances it to failed. Neither transport success
+nor a quiet output period proves agent turn completion. An unresolved request
+during adapter stop records failure with provider acceptance explicitly
+unknown; late callbacks must not rewrite a different prompt event.
+
+This decision only describes Conduit-owned recording and injected synthetic
+transport seams. Real provider HTTP/SSE ordering, live StreamJSON concurrency,
+crash/relaunch identity and installed client behavior are unqualified until
+separate acceptance evidence exists. No permission, tool-admission, token,
+provider writer-authority or installed-app change is granted here.
+
+
+## D-065: OpenCode SSE requires HTTP-bound message identity
+
+D-079's local prompt ownership is insufficient when provider events carry only
+session identity. An OpenCode request now retains its initiating prompt-event ID
+through the asynchronous POST. Only a response containing `info.id`, matching
+`info.sessionID`, and `info.role == assistant` binds a provider message to that
+prompt. Reuse of an already bound message in the same client/session is rejected.
+The request body and endpoint remain unchanged; no provider request-ID field or
+acceptance event is invented. A local UUID is never presented as a provider ID.
+
+SSE must name both that session and that assistant message. Conflicting nested IDs,
+unknown IDs, session-only idle/completion/error/permission events, closed-message
+replays, and stopped-client callbacks have no output or completion authority.
+Mapper effects carry the proven prompt/session/message identity; TerminalRuntime
+checks the originating client and exact prompt owner before applying them. Activity
+presentation uses the same gate. A matched assistant error is a failure, even if it
+also carries a completion timestamp. HTTP 2xx establishes delivery, not completion.
+
+The synchronous message endpoint may emit SSE before returning. Buffer at most
+2,048 decoded events / 2 MiB per pending request and replay them in order only after
+the response binds the message. Refusal or stop discards the buffer. Overflow
+withholds all output/completion for that request and reports UNKNOWN, rather than
+presenting a partial replay as a complete answer. Missing or mismatched response
+identity also reports UNKNOWN; the accepted turn remains unresolved until stopped.
+
+This deliberately supports only the returned assistant message. Other assistant
+messages in a multi-message turn, pre-response permission prompts, reconnects with
+missing SSE, and responses without the supported identity cannot be attributed
+from session timing or a guessed parent relationship. Early output is delayed until
+HTTP settles. These limitations can block an interactive provider turn; they must
+be resolved with separately authorized protocol evidence before expanding support.
+The HTTP response's text or completion fields are not synthesized into SSE events.
+
+Evidence in this repair is synthetic HTTP/SSE decoding through the real client,
+mapper and runtime, plus static local protocol inspection. The installed binary's
+embedded SDK confirms the message POST endpoint and optional request `messageID`,
+but does not establish a server acceptance contract or live ordering. No optional
+request `messageID` is sent by this repair. Actual provider responses, multi-message
+behavior, live permission flow and installed-app behavior remain unqualified.
+
+
+D-065 follow-up (2026-10-19): a non-null `info.error` in the exact HTTP
+response closes that bound message as failed before buffered SSE can replay.
+The identified failure retains the originating prompt/session/message; HTTP 2xx
+still records transport delivery. This is an application failure, not transport
+refusal, and neither response text nor completion timestamps synthesize success.
+The OpenCode exit callback also requires the currently installed client instance.
+
+Raw SSE lines now have a 2 MiB byte limit before UTF-8 decoding, in addition to
+the existing pending-event count/byte limits. LF, CRLF, CR and an unterminated
+final line remain supported. Overflow invalidates the stream, discards buffered
+events and reports UNKNOWN; it never truncates a line or resumes at its suffix.
+This bounds Conduit's line accumulator, not URLSession's internal buffering.
+
+Duplicate `message.part.delta` delivery remains unresolved. The locally inspected
+embedded schema has sessionID, messageID, partID, field and delta, with no event
+identity or offset. Equal deltas can be legitimate repeated tokens; Conduit keeps
+them. Snapshot replacement and closed-message suppression are not exact delta
+deduplication. A reliable provider replay/offset contract is required to do more.
+
+## D-080: Direct checks retain bounded diagnostics without granting execution authority
+
+The development successor to #175 on current main reuses its repair stacks and
+keeps the production `execution_authority_unavailable` refusal. Ordinary checks
+need final error output, more than a two-minute budget, and recovery after a
+lost response. The smallest source change adds opt-in prefix/suffix retention,
+byte-offset status pages that expose missing ranges, and a one-hour maximum
+asynchronous budget. The default budget stays ten seconds. A real 121-second
+fixture supports removal of the old two-minute limit; it does not establish
+reliable one-hour execution.
+
+Omitted tail fields preserve durable request identity and decoding of previous
+receipts. Existing clients retain the original prefix response unless they opt
+into paging. Missing output stays missing; no full-log or streaming guarantee
+is inferred. Full durable spooling is deferred because it needs a separate
+quota, retention and disclosure contract. Environment injection, interactive
+stdin, background services and provider orchestration are outside this change.
+
+An offline project-check profile is a recommendation awaiting owner selection,
+implementation and qualification. A disposable macOS policy probe demonstrates
+some filesystem, executable and network denials on one host; it is not wired
+into the application. A working directory, process group, tool allowlist or
+receipt log alone cannot supply OS containment. No caller field, environment
+switch or source-test initializer grants production authority. The installed
+packet remains NOT_RUN until separately authorized prerequisites exist.
+
+Reconsider full-log retention when real checks need omitted middle output;
+reconsider a longer cap only with workload evidence. Reconsider the proposed
+OS mechanism when the supported platform/toolchain cannot enforce its declared
+access profile. Preserve explicit refusal rather than fall back to an
+unrestricted executor. See the dated qualification record for evidence and
+the unresolved owner decisions; this ADR accepts only the local source/API
+design, not a production execution profile.
+
+## D-081: Direct client guidance is advisory; cancellation keeps child custody through escalation
+
+The R2 review reproduced a same-process-group cleanup failure: TERM ended the
+direct child, but a descendant ignoring TERM survived after its leader was
+reaped. The receipt correctly reported UNKNOWN but no longer had safe signal
+authority. R3 retains the waitable child through the existing TERM-to-KILL
+grace interval, checking ownership with `waitid(WNOWAIT)`. It then reaps and
+observes group absence within the original two-second cleanup budget. Signals
+after reaping or lost ownership remain prohibited. An unresolved group retains
+UNKNOWN and its capacity reservation; a recovered PID never becomes authority.
+This fixes the observed group case, not descendants that create another group.
+
+For ChatGPT and other MCP clients, authenticated initialization now publishes
+short direct-tool-first instructions. Command/task descriptions repeat the
+route: keep reasoning in the current conversation, inspect/edit/check/inspect
+with eligible tools, use compact byte pages and stable operation IDs, and use
+another model when its reasoning or independent review has a concrete benefit.
+Interactive Shell remains a PTY option needing its own authority. It cannot
+bypass `execution_authority_unavailable`. The existing global MainFrame policy
+is not copied into a new policy engine or changed by this product instruction.
+
+The MCP instruction field is advisory. Its delivery has transport tests; actual
+ChatGPT consumption and routing need fresh installed-client observations. Tool
+descriptions alone cannot enforce routing, just as logging, a cwd, or a Session
+API write switch cannot enforce filesystem/network/process confinement. The
+public command initializer and production refusal remain unchanged.
+
+Reconsider the cleanup design if supported platforms cannot preserve child
+custody, or a real workload needs detached-process management. Reconsider the
+instruction wording against observed fresh-client errors, not its mere presence
+in discovery. The [R3 record](docs/qualification/direct-workflow-20261022-r3.md)
+keeps review, source, hosted and installed evidence distinct. This accepts a
+development repair and client guidance, not production execution or rollout.

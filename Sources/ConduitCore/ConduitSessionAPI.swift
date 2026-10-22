@@ -47,9 +47,9 @@ public struct ConduitSessionSnapshot: Equatable, Sendable {
 ///
 /// The listener holds one bearer token and speaks MCP `2024-11-05`, which has
 /// no per-request session header, so identity is the `clientInfo` from the most
-/// recent `initialize` on this listener. That bounds the total write rate
-/// through the MCP surface; it is not proof of per-caller isolation between two
-/// clients sharing the token.
+/// recent `initialize` on this listener. This is display metadata only. Admission
+/// uses one shared bearer authority budget, never this mutable label. There is
+/// no authenticated per-client isolation between clients sharing the token.
 public struct ConduitSessionCaller: Equatable, Sendable {
     public let identity: String?
     public let observedAt: Date?
@@ -97,7 +97,7 @@ public enum ConduitSessionCommand: Equatable, Sendable {
         idempotencyKey: String?
     )
     case reconcileTask(taskSessionID: String)
-    case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin)
+    case sendPrompt(taskSessionID: String, text: String, origin: ConduitSessionOrigin, idempotencyKey: String? = nil)
     case lifecyclePreflight(
         taskSessionID: String,
         operation: LifecycleOperation
@@ -128,6 +128,36 @@ public enum ConduitSessionAPI {
     /// Loopback-only MCP listen address. Do not share with MindGraph :8000.
     public static let loopbackPort = 8750
     public static let loopbackPath = "/mcp"
+
+    /// One shared local bearer-token authorization domain, not authenticated
+    /// per-client identities. A durable retry namespace cannot derive from
+    /// mutable clientInfo. Sharing one token means sharing retry-key custody.
+    public static let replayAuthorityScope = "conduit-session-api-local-write-authority-v1"
+
+    /// The immediate structured-send result is not inferred from whether an
+    /// API call completed. A failed local send is an explicit API error;
+    /// provider-side acceptance can remain unproven.
+    public static func structuredPromptResult(
+        taskSessionID: String,
+        eventID: String,
+        delivered: Bool,
+        backend: String,
+        origin: ConduitSessionOrigin
+    ) -> [String: Any] {
+        var payload: [String: Any] = [
+            "taskSessionID": taskSessionID,
+            "eventID": eventID,
+            "delivered": delivered,
+            "delivery": delivered ? "delivered" : "failed",
+            "backend": backend,
+            "origin": origin.rawValue,
+            "authority": "prompt recorded; not verification",
+        ]
+        if !delivered {
+            payload["error"] = "Structured prompt send failed locally. Provider acceptance is not established; inspect task events before retrying."
+        }
+        return payload
+    }
 
     public static func isWrite(_ command: ConduitSessionCommand) -> Bool {
         switch command {

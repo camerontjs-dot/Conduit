@@ -56,6 +56,11 @@ final class ConduitSessionAPIServer {
     private nonisolated let connectionSlots = DispatchSemaphore(value: 8)
     private let token: String
     private let allowWrites: Bool
+    private let filesystemRoot: () -> URL?
+    private let projectFilesystemRoot: (String) -> URL?
+    private let directCommandService: ConduitDirectCommandService?
+    private let filesystemMutationService: ConduitFilesystemMutationService?
+    private let directWriteAdmission: (ConduitSessionCaller) -> [String: Any]?
     private var readiness: ConduitSessionAPIReadiness = .bootstrapping
     private let handle: (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     private nonisolated static let maximumHeaderBytes = 16_384
@@ -74,10 +79,22 @@ final class ConduitSessionAPIServer {
     init(
         token: String,
         allowWrites: Bool = false,
+        filesystemRoot: @escaping () -> URL? = { nil },
+        projectFilesystemRoot: @escaping (String) -> URL? = { _ in nil },
+        directCommandService: ConduitDirectCommandService? = nil,
+        filesystemMutationService: ConduitFilesystemMutationService? = nil,
+        directWriteAdmission: @escaping (ConduitSessionCaller) -> [String: Any]? = { _ in
+            ["error": "Direct-operation write admission is unavailable."]
+        },
         handle: @escaping (ConduitSessionCommand, ConduitSessionCaller) -> [String: Any]
     ) {
         self.token = token
         self.allowWrites = allowWrites
+        self.filesystemRoot = filesystemRoot
+        self.projectFilesystemRoot = projectFilesystemRoot
+        self.directCommandService = directCommandService
+        self.filesystemMutationService = filesystemMutationService
+        self.directWriteAdmission = directWriteAdmission
         self.handle = handle
     }
 
@@ -314,7 +331,9 @@ final class ConduitSessionAPIServer {
             ?? UUID().uuidString.lowercased()
     }
 
-    private func response(for request: Data) -> Data {
+    // Internal so deterministic transport tests exercise the actual bearer,
+    // catalog and dispatch path without taking the operator's listener port.
+    func response(for request: Data) -> Data {
         let text = String(decoding: request, as: UTF8.self)
         let headerEnd = text.range(of: "\r\n\r\n")?.upperBound
             ?? text.range(of: "\n\n")?.upperBound
@@ -369,7 +388,7 @@ final class ConduitSessionAPIServer {
         let id: Any = {
             switch payload["id"] {
             case .string(let value): return value
-            case .number(let value): return Int(value)
+            case .number(let value): return value.isFinite ? value as Any : NSNull()
             case .bool(let value): return value
             default: return NSNull()
             }
@@ -395,6 +414,7 @@ final class ConduitSessionAPIServer {
                     "protocolVersion": "2024-11-05",
                     "capabilities": ["tools": [String: Any]()],
                     "serverInfo": ["name": "conduit-session", "version": "1.2"],
+                    "instructions": ConduitSessionToolCatalog.clientInstructions,
                 ],
             ]
         case "ping":
@@ -429,6 +449,70 @@ final class ConduitSessionAPIServer {
     }
 
     private func callTool(name: String, arguments: CodexJSON) -> [String: Any] {
+        let directWrites = [
+            ConduitDirectCommandTool.executeName,
+            ConduitDirectCommandTool.cancelName,
+            ConduitFilesystemMutationService.writeToolName,
+        ]
+        if directWrites.contains(name) && !allowWrites {
+            return Self.directToolResult([
+                "status": "writes_disabled",
+                "error": "Write tools are disabled. Enable Session API writes in Conduit Settings.",
+            ])
+        }
+        let caller = ConduitSessionCaller(identity: peerIdentity, observedAt: peerObservedAt)
+        if let operation = [
+            ConduitDirectCommandTool.executeName: "execute",
+            ConduitDirectCommandTool.statusName: "status",
+            ConduitDirectCommandTool.cancelName: "cancel",
+        ][name] {
+            var admissionRefusal: [String: Any]?
+            var payload = ConduitDirectCommandTool.perform(
+                operation: operation,
+                arguments: arguments,
+                projectRoot: projectFilesystemRoot(arguments["project_slug"]?.stringValue ?? ""),
+                service: directCommandService
+            ) {
+                if let refusal = self.directWriteAdmission(caller) {
+                    admissionRefusal = refusal
+                    let admission = refusal["admission"] as? [String: Any]
+                    throw ConduitDirectCommandError(
+                        code: "admission_refused",
+                        detail: admission?["detail"] as? String
+                            ?? refusal["error"] as? String
+                            ?? "The existing Session API write/resource gate refused this operation."
+                    )
+                }
+            }
+            if let admissionRefusal { payload["admission"] = admissionRefusal }
+            return Self.directToolResult(payload)
+        }
+        if name == ConduitFilesystemMutationService.writeToolName
+            || name == ConduitFilesystemMutationService.statusToolName {
+            guard let filesystemMutationService else {
+                return Self.directToolResult([
+                    "status": "file_operation_service_unavailable",
+                    "error": "The bounded file-operation receipt service is unavailable.",
+                ])
+            }
+            let root = projectFilesystemRoot(arguments["project_slug"]?.stringValue ?? "")
+            if name == ConduitFilesystemMutationService.statusToolName {
+                return filesystemMutationService.status(arguments: arguments, root: root)
+            }
+            return filesystemMutationService.call(arguments: arguments, root: root) {
+                self.directWriteAdmission(caller)
+            }
+        }
+        if name == ConduitFilesystemSearchTool.name {
+            return ConduitFilesystemSearchTool.call(
+                arguments: arguments,
+                root: projectFilesystemRoot(arguments["project_slug"]?.stringValue ?? "")
+            )
+        }
+        if name == ConduitFilesystemReadTool.name {
+            // Observation bypasses the session command handler entirely.
+            return ConduitFilesystemReadTool.call(arguments: arguments, root: filesystemRoot())
+        }
         let command: ConduitSessionCommand?
         switch name {
         case "conduit_list_projects":
@@ -515,11 +599,21 @@ final class ConduitSessionAPIServer {
             let projectSlug = arguments["project_slug"]?.stringValue
                 ?? arguments["projectSlug"]?.stringValue
                 ?? ""
+            if let supplied = arguments["objective"], supplied.stringValue == nil {
+                return Self.directToolResult(["error": "objective must be a string when supplied"])
+            }
             let objective = arguments["objective"]?.stringValue ?? ""
-            let idempotencyKey = (
-                arguments["idempotency_key"]?.stringValue
-                    ?? arguments["idempotencyKey"]?.stringValue
-            )?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let idempotencyKey = arguments["idempotency_key"]?.stringValue
+                ?? arguments["idempotencyKey"]?.stringValue
+            for field in ["idempotency_key", "idempotencyKey"] {
+                if let supplied = arguments[field], supplied.stringValue == nil {
+                    return Self.directToolResult(["error": "idempotency key must be a string"])
+                }
+            }
+            if let snake = arguments["idempotency_key"]?.stringValue,
+               let camel = arguments["idempotencyKey"]?.stringValue, snake != camel {
+                return Self.directToolResult(["error": "conflicting idempotency key aliases"])
+            }
             if agent.isEmpty || projectSlug.isEmpty {
                 command = nil
             } else {
@@ -527,9 +621,7 @@ final class ConduitSessionAPIServer {
                     agent: agent,
                     projectSlug: projectSlug,
                     objective: objective,
-                    idempotencyKey: (idempotencyKey?.isEmpty ?? true)
-                        ? nil
-                        : idempotencyKey
+                    idempotencyKey: idempotencyKey
                 )
             }
         case "conduit_reconcile_task":
@@ -539,9 +631,13 @@ final class ConduitSessionAPIServer {
                 command = nil
             }
         case "conduit_send_prompt":
+            if let supplied = arguments["idempotency_key"], supplied.stringValue == nil {
+                return Self.directToolResult(["error": "idempotency_key must be a string"])
+            }
             if let id = arguments["taskSessionID"]?.stringValue,
                let text = arguments["text"]?.stringValue {
-                command = .sendPrompt(taskSessionID: id, text: text, origin: .chatgpt)
+                command = .sendPrompt(taskSessionID: id, text: text, origin: .chatgpt,
+                    idempotencyKey: arguments["idempotency_key"]?.stringValue)
             } else {
                 command = nil
             }
@@ -638,6 +734,15 @@ final class ConduitSessionAPIServer {
             result["structuredContent"] = payload
         }
         return result
+    }
+
+    private static func directToolResult(_ payload: [String: Any]) -> [String: Any] {
+        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return [
+            "isError": payload["error"] != nil,
+            "content": [["type": "text", "text": data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"]],
+            "structuredContent": payload,
+        ]
     }
 
     // These annotations intentionally describe only the current MCP operation.
@@ -912,11 +1017,11 @@ final class ConduitSessionAPIServer {
                     ],
                     "objective": [
                         "type": "string",
-                        "description": "Optional first prompt. A structured runtime that is still starting refuses it and hands the retry back to you; a PTY runtime accepts it and writes asynchronously. Check objective_delivery_state to tell those apart. Omit it and send the first prompt explicitly if you want one clear delivery point.",
+                        "description": "Optional first prompt. A starting structured runtime holds it until ready; a PTY accepts it for asynchronous delivery. Check objective_delivery_state. Never resend a queued objective.",
                     ],
                     "idempotency_key": [
                         "type": "string",
-                        "description": "Optional. Pass a stable key to make a retried create safe: an identical repeat returns the original task instead of starting a second one. Use a fresh key when you genuinely want another task.",
+                        "description": "Optional exact retry key. Completed private receipts return original identity; incomplete receipts block as UNKNOWN. Changed fields conflict. Unkeyed creates are non-idempotent.",
                     ],
                 ],
                 "required": ["agent", "project_slug"],
@@ -924,7 +1029,7 @@ final class ConduitSessionAPIServer {
         ],
         [
             "name": "conduit_send_prompt",
-            "description": "Add and deliver one message to an existing Conduit task. Origin is recorded as ChatGPT. This does not approve agent tools or permissions. The reply is not in this response — read it with conduit_session_events once the agent has produced output.",
+            "description": "Add and deliver one message to an existing live Conduit task. If no runtime is live, reconcile first using conduit_reconcile_task; send never starts a runtime. Origin is recorded as ChatGPT. This does not approve agent tools or permissions. The reply is not in this response — read it with conduit_session_events once the agent has produced output.",
             "annotations": ConduitSessionAPIServer.nonDestructiveStateChangingAnnotations,
             "inputSchema": [
                 "type": "object",
@@ -932,6 +1037,10 @@ final class ConduitSessionAPIServer {
                     "taskSessionID": [
                         "type": "string",
                         "description": "Task id from conduit_create_task, or the taskSessionID field of any conduit_list_sessions row.",
+                    ],
+                    "idempotency_key": [
+                        "type": "string",
+                        "description": "Optional exact retry key. Completed private receipts return original task/event identity; incomplete receipts block as UNKNOWN. Unkeyed prompts are non-idempotent.",
                     ],
                     "text": [
                         "type": "string",

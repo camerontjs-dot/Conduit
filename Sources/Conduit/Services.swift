@@ -1246,16 +1246,33 @@ final class TerminalSessionController: NSObject, ObservableObject, LocalProcessT
     /// Runs an agent slash/skill command in the CLI input surface (OpenCode,
     /// Claude Code, …). Bracketed-paste delivery is treated as chat prose and
     /// does not invoke builtins like `/cost`.
-    func injectSlashCommand(_ command: String) {
-        guard lifecycle == .running || lifecycle == .launching else { return }
+    func injectSlashCommand(
+        _ command: String,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        guard lifecycle == .running || lifecycle == .launching else {
+            completion?(false)
+            return
+        }
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            completion?(false)
+            return
+        }
         // Clear any half-typed buffer, then type the command and press Enter.
         injectControlKey(.escape)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
-            guard let self else { return }
+            guard let self,
+                  self.lifecycle == .running || self.lifecycle == .launching else {
+                completion?(false)
+                return
+            }
             self.injectControlInput(trimmed, submit: false)
             self.injectControlKey(.enter)
+            // This observes the terminal write boundary, not provider receipt
+            // or command completion. A runtime that ended during the delay
+            // takes the failed branch instead of being reported delivered.
+            completion?(true)
         }
     }
 
