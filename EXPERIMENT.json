@@ -1,6 +1,6 @@
 {
   "schema_version": "conduit-experiment/v1",
-  "experiment_id": "CONDUIT-R3-GITHUB-ADMISSION-20261022-02",
+  "experiment_id": "CONDUIT-R3-GITHUB-ADMISSION-20261022-03",
   "state": "designed",
   "study_type": "exploratory",
   "evidence_layer": "hosted_environment_preflight",
@@ -27,15 +27,21 @@
   "lifecycle_receipts": "Private coordinator evidence; preserve this initial manifest and bind execution to exact published probe commit",
   "input_sha256": {
     ".github/workflows/r3-guest-probe.yml": "e973a87230459e7e285d7a048d1aade851d50821493608c03bc259ec42f4fc47",
-    "docs/qualification/r3-github-guest-probe.md": "cd358ec3bf72aae7015ffdd2530209f18b0f176ddfedc2bde6da9548dc0bead0",
-    "scripts/r3-guest-probe.py": "29df4b5aa2d6eec91dd37ba12946dc85f338c13eb04fa7823d3c4e0640b77fd6",
+    "docs/qualification/r3-github-guest-probe.md": "0b86a55c4580d3cddc3432a2c5000bcbe96a41c0b7366dc6c10731e5199b920d",
+    "scripts/r3-guest-probe.py": "e79dfbd000f17ec41ebe7ee5074ed658c48e05869e74905d98fe602b8a7a6340",
     "scripts/test-r3-guest-probe.py": "395d5aa2edb44b075c51a32651620679633347531ab39862d23a814e6b92db86"
   },
-  "supersedes": "CONDUIT-R3-GITHUB-ADMISSION-20261022-01",
+  "supersedes": "CONDUIT-R3-GITHUB-ADMISSION-20261022-02",
   "preserved_first_failure": {
     "commit": "c119f4837efb8b7d67a0f6e85803152b248b627f",
     "run_id": 39798116574,
     "receipt_sha256": "cee3e3e16a8bdc33cdda6645490c50fadb885299d15ef572ac8c9df66d5f315e"
   },
-  "repair_scope": "Opaque token handling through header stdin; distinguish missing GUI boolean from observed false. No artifact, candidate, OS or admission gate change."
+  "repair_scope": "Use SDK session-key constants after inspecting CGSession.h; preserve original misleading false and any intermediate missing value. Opaque-token/header repair retained. No artifact, candidate or admission gate change.",
+  "preserved_intermediate_probe": {
+    "commit": "c9a0edd6f7f62eb3a399ef3146f26850e565b173",
+    "run_id": 39799098243,
+    "cancellation_requested": true,
+    "actual_result": "read back separately"
+  }
 }

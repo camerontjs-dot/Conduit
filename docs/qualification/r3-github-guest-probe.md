@@ -44,6 +44,12 @@ curl's header stdin, while rejecting whitespace/control/header injection.
 It also records missing GUI boolean fields as null rather than false. No
 credential content is inspected or published, and no trial gate is relaxed.
 
+Before interpreting desktop availability, probe 03 uses Apple's exported
+session-key constants. The original console-key literal omitted an internal
+letter; probe 01's false value and probe 02's possible null are not evidence
+that a desktop was unavailable. Run 39799098243 was requested to cancel after
+this discovery; its actual outcome is retained separately rather than assumed.
+
 > **Binds:** this one admission workflow and its coordinator.
 > **Tier:** T2 for implemented artifact/scope/runtime preconditions; T0 for broader coordination boundaries.
 > **Check:** `python3 scripts/test-r3-guest-probe.py`, collector preconditions, job timeout and read-only token permissions; hosted receipt and coordinator readback.

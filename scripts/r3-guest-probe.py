@@ -123,8 +123,8 @@ func observedBool(_ key: String) -> Any {
     return NSNull()
 }
 let v: [String: Any] = [
-    "on_console": observedBool("kCGSessionOnConsoleKey"),
-    "login_done": observedBool("kCGSessionLoginDoneKey"),
+    "on_console": observedBool(kCGSessionOnConsoleKey as String),
+    "login_done": observedBool(kCGSessionLoginDoneKey as String),
     "display_count": NSScreen.screens.count,
     "accessibility_trusted": AXIsProcessTrusted(),
     "screen_capture_preflight": CGPreflightScreenCaptureAccess()
