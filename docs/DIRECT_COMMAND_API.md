@@ -20,8 +20,8 @@ network access, subprocess creation or inherited OS privileges.
 
 | Tool | Classification | Inputs |
 | --- | --- | --- |
-| `conduit_run_command` | Write | `operation_id`, `project_slug`, `argv`; optional `cwd`, `timeout_ms`, `max_output_bytes` |
-| `conduit_command_status` | Read | `operation_id`, `project_slug` |
+| `conduit_run_command` | Write | `operation_id`, `project_slug`, `argv`; optional `cwd`, `timeout_ms`, `max_output_bytes`, `max_tail_bytes` |
+| `conduit_command_status` | Read | `operation_id`, `project_slug`; optional `stdout_offset`, `stderr_offset`, `output_page_bytes` |
 | `conduit_cancel_command` | Write | `operation_id`, `project_slug` |
 
 The server binds execute/status/cancel; a JSON argument cannot change the
@@ -43,8 +43,11 @@ in place: the owned child can still be stopped after its cwd moves.
 | `argv` | 1–128 literal strings; at most 65,536 UTF-8 bytes including string terminators; no NUL |
 | `argv[0]` | Absolute executable path, at most 4,096 UTF-8 bytes; no implicit PATH search |
 | `cwd` | Default `.`; ordinary project-relative directory, at most 4,096 UTF-8 bytes; no parent/empty/dot components, excluded names or symlink traversal |
-| `timeout_ms` | Default 10,000; integer 10–120,000 |
+| `timeout_ms` | Default 10,000; integer 10–3,600,000; submit returns before completion |
 | `max_output_bytes` | Default 128,000; integer 1–524,288, independently for stdout and stderr |
+| `max_tail_bytes` | Optional additional suffix retention, integer 0–65,536 per stream; omitted retains historical no-tail request identity |
+| `stdout_offset`, `stderr_offset` | Status only; independent absolute byte offsets, default 0; integer 0–9,007,199,254,740,991; beyond the observed end refuses |
+| `output_page_bytes` | Status only; integer 1–16,384 bytes per stream; default 8,192 when an offset enables paging |
 
 `argv` is passed directly to POSIX spawn. Shell syntax has no interpretation
 unless an explicitly authorized future profile permits a shell executable as
@@ -81,7 +84,7 @@ A nonblocking store ownership lock permits one
 command manager to launch from that store. Capacity is separate from agent task
 capacity: two concurrent commands by default, capped at four. The store retains
 at most 1,000 operations within a 64 MiB global byte budget, reserving the worst
-case two-megabyte receipt growth for every active operation before accepting
+case 2,500,000-byte receipt growth for every active operation before accepting
 another. It refuses further acceptance rather than silently deleting history.
 A corrupt or unreadable existing receipt prevents reuse of its operation ID.
 
@@ -120,6 +123,33 @@ partial UTF-8 suffix caused by the byte boundary. `truncated` explicitly marks
 overflow. `reached_eof` distinguishes complete drainage from a bounded stop.
 Reading continues after the retention limit so ordinary pipe backpressure does
 not deadlock a producing child.
+
+For ordinary checks, request `max_tail_bytes: 16384` to retain final diagnostics,
+then poll status with `output_page_bytes: 8192` and independent stream offsets.
+The suffix is a rolling buffer; it does not preserve the missing middle or a
+stable streaming history. A slow reader can fall behind it. Status reports
+`available_ranges`, `tail_start_offset`, `all_observed_bytes_retained` and, at a
+missing cursor, `page_status: gap` with the exact `missing_range`. Consume that
+explicit loss before following `next_byte_offset`; never claim a complete log
+when a gap or incomplete EOF remains. `truncated` still means the original
+prefix overflowed, even if prefix plus suffix happen to retain every byte.
+
+Any paging argument enables bounded pages. `bytes_base64` then contains only
+the returned page; `returned_bytes` is its length, while `retained_bytes` stays
+the prefix's stored length. `text` is absent if a byte slice splits UTF-8 or
+contains NUL. Reassemble bytes before decoding. `page_status` is `data`, `gap`,
+`pending`, `end`, or `incomplete`; `end` requires observed EOF, and `pending`
+does not establish completion. `page_limited` describes more observed bytes,
+not guaranteed availability. These limits bound output bytes per stream, not
+the complete JSON envelope, argv or base64 encoding overhead.
+
+Omitting all paging fields preserves the original prefix response for existing
+clients, including execute/retry/cancel responses. Old durable receipts without
+tail fields remain readable and exactly retryable. Adding a tail budget to an
+old operation ID changes its request and correctly conflicts. Longer deadlines
+do not grant execution authority, interactive stdin, an inherited environment,
+network access or a toolchain. The hard cap is a development API limit, not a
+one-hour runtime qualification or an OS resource limit.
 
 Spawn uses a dedicated process group and a descriptor pinned to the observed
 working directory identity. Timeout/cancellation signals target that owned
@@ -171,3 +201,8 @@ the separately authorized installed authenticated HTTP/fresh ChatGPT loop.
 This candidate supplies runner behavior and honest unavailable admission; it
 does not complete issue #170's production acceptance or authorize an installed
 app replacement.
+
+The [development successor record](qualification/direct-workflow-20261022.md)
+separates source, OS-policy probe, hosted and installed evidence. The
+[installed-client acceptance packet](qualification/direct-workflow-installed-acceptance.md)
+contains the deferred concrete cases and authority prerequisites.

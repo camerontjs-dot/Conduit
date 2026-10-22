@@ -19,11 +19,14 @@ public struct ConduitDirectCommandRequest: Codable, Equatable {
     public let cwd: String
     public let timeoutMS: Int
     public let maxOutputBytes: Int
+    /// Optional so historical requests retain their exact retry identity.
+    public let maxTailBytes: Int?
 
     public init(operationID: String, projectSlug: String, argv: [String], cwd: String = ".",
-                timeoutMS: Int = 10_000, maxOutputBytes: Int = 128_000) {
+                timeoutMS: Int = 10_000, maxOutputBytes: Int = 128_000, maxTailBytes: Int? = nil) {
         self.operationID = operationID; self.projectSlug = projectSlug; self.argv = argv
         self.cwd = cwd; self.timeoutMS = timeoutMS; self.maxOutputBytes = maxOutputBytes
+        self.maxTailBytes = maxTailBytes
     }
 }
 
@@ -51,6 +54,9 @@ public struct ConduitDirectCommandTransition: Codable, Equatable {
 /// suffix. `utf8Text` is absent when the retained bytes are not ordinary text.
 public struct ConduitDirectCommandOutput: Codable, Equatable {
     public internal(set) var bytes = Data()
+    /// Independently bounded suffix, only retained when explicitly requested.
+    /// Missing in v1 historical receipts; never reconstructed from a prefix.
+    public internal(set) var tailBytes: Data?
     public internal(set) var totalBytesObserved: Int64 = 0
     public internal(set) var reachedEOF = false
     public var truncated: Bool { totalBytesObserved > Int64(bytes.count) }
@@ -58,9 +64,14 @@ public struct ConduitDirectCommandOutput: Codable, Equatable {
         bytes.contains(0) ? nil : String(data: bytes, encoding: .utf8)
     }
     public init() {}
-    mutating func append(_ data: Data, limit: Int) {
+    mutating func append(_ data: Data, limit: Int, tailLimit: Int = 0) {
         totalBytesObserved += Int64(data.count)
         bytes.append(data.prefix(max(0, limit - bytes.count)))
+        if tailLimit > 0 {
+            var tail = tailBytes ?? Data()
+            tail.append(data)
+            tailBytes = Data(tail.suffix(tailLimit))
+        }
     }
 }
 
@@ -101,12 +112,13 @@ public struct ConduitDirectCommandReceipt: Codable {
 /// policy. Only the internal disposable-fixture initializer can launch today.
 /// The service never adopts or signals a PID recovered from an old receipt.
 public final class ConduitDirectCommandService {
-    public static let maximumTimeoutMS = 120_000
+    public static let maximumTimeoutMS = 3_600_000
     public static let maximumTimeoutMilliseconds = maximumTimeoutMS
     public static let maximumOutputBytes = 524_288
+    public static let maximumTailBytes = 65_536
     public static let maximumRetainedOperations = 1_000
     public static let maximumRetainedBytes = 64 * 1_024 * 1_024
-    public static let maximumReceiptBytes = 2_000_000
+    public static let maximumReceiptBytes = 2_500_000
     private let directory: URL
     private let fixtureRoot: URL?
     private let capacity: Int
@@ -240,8 +252,9 @@ public final class ConduitDirectCommandService {
               request.argv.allSatisfy({ !$0.utf8.contains(0) }),
               request.argv.reduce(0, { $0 + $1.utf8.count + 1 }) <= 65_536,
               (10...maximumTimeoutMS).contains(request.timeoutMS),
-              (1...maximumOutputBytes).contains(request.maxOutputBytes) else {
-            throw ConduitDirectCommandError(code: "invalid_arguments", detail: "Require literal argv (absolute executable, at most 128 elements/65536 UTF-8 bytes), timeout_ms 10...120000 and max_output_bytes 1...524288 per stream.")
+              (1...maximumOutputBytes).contains(request.maxOutputBytes),
+              (0...maximumTailBytes).contains(request.maxTailBytes ?? 0) else {
+            throw ConduitDirectCommandError(code: "invalid_arguments", detail: "Require literal argv (absolute executable, at most 128 elements/65536 UTF-8 bytes), timeout_ms 10...3600000, max_output_bytes 1...524288 and optional max_tail_bytes 0...65536 per stream.")
         }
         let parts = request.cwd.split(separator: "/", omittingEmptySubsequences: false)
         guard !request.cwd.isEmpty, request.cwd.utf8.count <= 4096, !request.cwd.utf8.contains(0),
@@ -472,6 +485,15 @@ public final class ConduitDirectCommandService {
             guard receipt.schemaVersion == "conduit-direct-command/v1", receipt.request.operationID == id else {
                 throw failure("receipt_corrupt", "The receipt identity or schema does not match; execution is refused.")
             }
+            try Self.validate(receipt.request)
+            for output in [receipt.stdout, receipt.stderr] {
+                guard output.totalBytesObserved >= Int64(output.bytes.count),
+                      output.bytes.count <= receipt.request.maxOutputBytes,
+                      (output.tailBytes?.count ?? 0) <= (receipt.request.maxTailBytes ?? 0),
+                      Int64(output.tailBytes?.count ?? 0) <= output.totalBytesObserved else {
+                    throw failure("receipt_corrupt", "The retained output ranges violate this operation's bounds.")
+                }
+            }
             return receipt
         } catch {
             throw failure("receipt_corrupt", "The existing receipt is invalid; it is preserved and the operation ID will not be reused.")
@@ -598,8 +620,8 @@ public final class ConduitDirectCommandService {
         defer { _ = close(child.stdoutFD); _ = close(child.stderrFD) }
         while true {
             let now = ProcessInfo.processInfo.systemUptime
-            child.drain(child.stdoutFD, into: &receipt.stdout, limit: receipt.request.maxOutputBytes)
-            child.drain(child.stderrFD, into: &receipt.stderr, limit: receipt.request.maxOutputBytes)
+            child.drain(child.stdoutFD, into: &receipt.stdout, limit: receipt.request.maxOutputBytes, tailLimit: receipt.request.maxTailBytes ?? 0)
+            child.drain(child.stderrFD, into: &receipt.stderr, limit: receipt.request.maxOutputBytes, tailLimit: receipt.request.maxTailBytes ?? 0)
             if !rootReaped && !waitLost {
                 var status: Int32 = 0
                 let waited = waitpid(child.pid, &status, WNOHANG)
@@ -774,7 +796,7 @@ private struct NativeCommandChild {
         return .init(pid: pid, stdoutFD: output[0], stderrFD: errors[0])
     }
 
-    func drain(_ fd: Int32, into output: inout ConduitDirectCommandOutput, limit: Int) {
+    func drain(_ fd: Int32, into output: inout ConduitDirectCommandOutput, limit: Int, tailLimit: Int) {
         guard !output.reachedEOF else { return }
         var buffer = [UInt8](repeating: 0, count: 8192)
         // A continuous writer cannot starve timeout/cancellation observation.
@@ -783,7 +805,7 @@ private struct NativeCommandChild {
             if count == 0 { output.reachedEOF = true; return }
             if count < 0, errno == EINTR { continue }
             guard count > 0 else { return }
-            output.append(Data(buffer.prefix(count)), limit: limit)
+            output.append(Data(buffer.prefix(count)), limit: limit, tailLimit: tailLimit)
         }
     }
 

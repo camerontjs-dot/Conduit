@@ -18,6 +18,14 @@ class HostedControlPresentationContract(unittest.TestCase):
     def setUpClass(cls):
         cls.source = APP.read_text(encoding="utf-8")
 
+    def test_direct_project_resolution_and_admission_cannot_use_human_selection_or_draft(self):
+        direct = region(self.source, "    private func sessionAPIProjectFilesystemRoot(", "    func syncSessionAPI(")
+        self.assertIn("projects.filter { $0.slug == slug && !$0.isMainframeRoot }", direct)
+        self.assertIn("matches.count == 1", direct)
+        for presentation in ("selectedProject", "selectedTaskSessionID", "activeSessionID", "composerText",
+                             "attachments", "selectedSurface", "selectSession(", "selectProject("):
+            self.assertNotIn(presentation, direct)
+
     def test_create_uses_hosted_origin_and_keeps_operator_selection(self):
         dispatch = region(
             self.source,

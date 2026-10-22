@@ -6,6 +6,7 @@ public enum ConduitDirectCommandTool {
     public static let executeName = "conduit_run_command"
     public static let statusName = "conduit_command_status"
     public static let cancelName = "conduit_cancel_command"
+    public static let maximumPageBytes = 16_384
 
     public static func call(operation: String, arguments: CodexJSON, projectRoot: URL?,
                             service: ConduitDirectCommandService?,
@@ -51,7 +52,8 @@ public enum ConduitDirectCommandTool {
                     operationID: id, projectSlug: project, argv: argv,
                     cwd: fields["cwd"]?.stringValue ?? ".",
                     timeoutMS: integer(fields["timeout_ms"], default: 10_000),
-                    maxOutputBytes: integer(fields["max_output_bytes"], default: 128_000)
+                    maxOutputBytes: integer(fields["max_output_bytes"], default: 128_000),
+                    maxTailBytes: fields["max_tail_bytes"].map { integer($0, default: 0) }
                 ), projectRoot: projectRoot, admitWrite: admitWrite)
             case "status":
                 receipt = try service.lookup(operationID: id, projectSlug: project, projectRoot: projectRoot)
@@ -59,7 +61,10 @@ public enum ConduitDirectCommandTool {
                 receipt = try service.cancel(operationID: id, projectSlug: project, projectRoot: projectRoot, admitWrite: admitWrite)
             }
             payload["status"] = receipt.phase.rawValue
-            payload["receipt"] = json(receipt)
+            let paged = ["stdout_offset", "stderr_offset", "output_page_bytes"].contains { fields[$0] != nil }
+            payload["receipt"] = try json(receipt, pageBytes: paged ? integer(fields["output_page_bytes"], default: 8_192) : nil,
+                                          stdoutOffset: Int64(integer(fields["stdout_offset"], default: 0)),
+                                          stderrOffset: Int64(integer(fields["stderr_offset"], default: 0)))
             // Nonzero exit, timeout and cancellation are actual command
             // outcomes, not transport failures that invite duplicate execution.
             return payload
@@ -75,7 +80,12 @@ public enum ConduitDirectCommandTool {
 
     private static func parse(_ arguments: CodexJSON, operation: String) throws -> [String: CodexJSON] {
         let common: Set<String> = ["operation_id", "project_slug"]
-        let allowed = operation == "execute" ? common.union(["argv", "cwd", "timeout_ms", "max_output_bytes"]) : common
+        let allowed: Set<String>
+        switch operation {
+        case "execute": allowed = common.union(["argv", "cwd", "timeout_ms", "max_output_bytes", "max_tail_bytes"])
+        case "status": allowed = common.union(["stdout_offset", "stderr_offset", "output_page_bytes"])
+        default: allowed = common
+        }
         guard ["execute", "status", "cancel"].contains(operation),
               case .object(let fields) = arguments, Set(fields.keys).isSubset(of: allowed),
               let id = fields["operation_id"]?.stringValue, !id.isEmpty,
@@ -86,11 +96,19 @@ public enum ConduitDirectCommandTool {
             guard let argv = array(fields["argv"]), !argv.isEmpty,
                   argv.allSatisfy({ $0.stringValue != nil }),
                   fields["cwd"] == nil || fields["cwd"]?.stringValue != nil else { throw invalid() }
-            for key in ["timeout_ms", "max_output_bytes"] {
-                if let value = fields[key] {
-                    guard case .number(let number) = value, number.isFinite,
-                          number >= 1, number <= 524_288, number.rounded() == number else { throw invalid() }
-                }
+        }
+        let bounds: [String: ClosedRange<Double>] = [
+            "timeout_ms": 10...Double(ConduitDirectCommandService.maximumTimeoutMS),
+            "max_output_bytes": 1...Double(ConduitDirectCommandService.maximumOutputBytes),
+            "max_tail_bytes": 0...Double(ConduitDirectCommandService.maximumTailBytes),
+            "stdout_offset": 0...9_007_199_254_740_991,
+            "stderr_offset": 0...9_007_199_254_740_991,
+            "output_page_bytes": 1...Double(maximumPageBytes),
+        ]
+        for (key, range) in bounds {
+            if let value = fields[key] {
+                guard case .number(let number) = value, number.isFinite,
+                      range.contains(number), number.rounded() == number else { throw invalid() }
             }
         }
         return fields
@@ -110,8 +128,9 @@ public enum ConduitDirectCommandTool {
         return Int(value)
     }
 
-    private static func json(_ receipt: ConduitDirectCommandReceipt) -> [String: Any] {
-        func output(_ value: ConduitDirectCommandOutput) -> [String: Any] {
+    private static func json(_ receipt: ConduitDirectCommandReceipt, pageBytes: Int?,
+                             stdoutOffset: Int64, stderrOffset: Int64) throws -> [String: Any] {
+        func output(_ value: ConduitDirectCommandOutput, offset: Int64) throws -> [String: Any] {
             var result: [String: Any] = [
                 "bytes_base64": value.bytes.base64EncodedString(),
                 "retained_bytes": value.bytes.count, "total_bytes_observed": value.totalBytesObserved,
@@ -119,6 +138,46 @@ public enum ConduitDirectCommandTool {
                 "retained_bytes_are_utf8_text": value.utf8Text != nil,
             ]
             if let text = value.utf8Text { result["text"] = text }
+            // No paging arguments preserves the original prefix response. An
+            // opted-in reader gets only one bounded page, never both buffers.
+            guard let pageBytes else { return result }
+            guard offset <= value.totalBytesObserved else {
+                throw ConduitDirectCommandError(code: "output_offset_out_of_range", detail: "The requested byte offset is beyond this stream's observed end; no output or command was changed.")
+            }
+            let prefixEnd = Int64(value.bytes.count)
+            let tail = value.tailBytes ?? Data()
+            let tailStart = value.totalBytesObserved - Int64(tail.count)
+            var ranges: [[String: Int64]] = []
+            if prefixEnd > 0 { ranges.append(["start": 0, "end": prefixEnd]) }
+            if !tail.isEmpty, value.totalBytesObserved > prefixEnd {
+                ranges.append(["start": max(prefixEnd, tailStart), "end": value.totalBytesObserved])
+            }
+            var bytes = Data(), next = offset, status: String
+            if offset < prefixEnd {
+                bytes = Data(value.bytes.dropFirst(Int(offset)).prefix(pageBytes)); status = "data"
+            } else if offset < tailStart {
+                // Never silently jump a cursor across output that was not kept.
+                status = "gap"; next = tailStart
+                result["missing_range"] = ["start": offset, "end": tailStart]
+            } else if offset < value.totalBytesObserved {
+                bytes = Data(tail.dropFirst(Int(offset - tailStart)).prefix(pageBytes)); status = "data"
+            } else {
+                status = value.reachedEOF ? "end" : (receipt.phase.isTerminal ? "incomplete" : "pending")
+            }
+            if !bytes.isEmpty { next = offset + Int64(bytes.count) }
+            let text = bytes.contains(0) ? nil : String(data: bytes, encoding: .utf8)
+            result["text"] = text
+            result["bytes_base64"] = bytes.base64EncodedString()
+            result["retained_bytes_are_utf8_text"] = text != nil
+            result["byte_offset"] = offset
+            result["next_byte_offset"] = next
+            result["returned_bytes"] = bytes.count
+            result["page_status"] = status
+            result["page_limited"] = status == "data" && next < value.totalBytesObserved
+            result["available_ranges"] = ranges
+            result["tail_retained_bytes"] = tail.count
+            result["tail_start_offset"] = tailStart
+            result["all_observed_bytes_retained"] = prefixEnd >= tailStart
             return result
         }
         var result: [String: Any] = [
@@ -130,13 +189,15 @@ public enum ConduitDirectCommandTool {
             "timeout_ms": receipt.request.timeoutMS, "max_output_bytes_per_stream": receipt.request.maxOutputBytes,
             "phase": receipt.phase.rawValue, "accepted_at": timestamp(receipt.acceptedAt),
             "transitions": receipt.transitions.map { ["phase": $0.phase.rawValue, "at": timestamp($0.at)] },
-            "stdout": output(receipt.stdout), "stderr": output(receipt.stderr),
+            "stdout": try output(receipt.stdout, offset: stdoutOffset),
+            "stderr": try output(receipt.stderr, offset: stderrOffset),
             "direct_child_exit_observed": receipt.directChildExitObserved,
             "process_group_absent_observed": receipt.processGroupAbsentObserved,
             "execution_capacity_released": receipt.executionCapacityReleased,
             "idempotent_replay": receipt.idempotentReplay,
             "descendant_containment": "not_enforced; descendants can leave the original process group",
         ]
+        if let tailBytes = receipt.request.maxTailBytes { result["max_tail_bytes_per_stream"] = tailBytes }
         if let date = receipt.startedAt { result["started_at"] = timestamp(date) }
         if let date = receipt.endedAt { result["ended_at"] = timestamp(date) }
         if let pid = receipt.pid { result["pid"] = pid }

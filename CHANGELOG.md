@@ -25,6 +25,15 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Changed
+
+- Direct-command development receipts support optional bounded final diagnostics
+  and byte-based status pages with explicit missing ranges. Existing requests
+  and receipt retries retain their original prefix-only behavior.
+- Direct-command execution budgets accept up to one hour, with asynchronous
+  submission and same-operation polling. Production continues to refuse new
+  execution as `execution_authority_unavailable`; no execution profile is enabled.
+
 ### Fixed
 
 - Session event export redaction now repeats until nothing changes, so a key

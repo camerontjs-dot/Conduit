@@ -24,4 +24,17 @@ func runDirectCommandSelfChecks(_ report: (String, Bool) -> Void) {
     report("direct command read tool cannot be changed into execution", overridden["status"] as? String == "invalid_arguments")
     report("direct command requested cancellation is not terminal", !ConduitDirectCommandPhase.cancelRequested.isTerminal)
     report("direct command uncertainty is an explicit disposition", ConduitDirectCommandPhase.unknown.isTerminal)
+    let longRequest: CodexJSON = .object([
+        "operation_id": .string("long-selfcheck"), "project_slug": .string("fixture"),
+        "argv": .array([.string("/usr/bin/printf"), .string("unused")]),
+        "timeout_ms": .number(600_000), "max_tail_bytes": .number(16_384),
+    ])
+    let longResult = ConduitDirectCommandTool.perform(operation: "execute", arguments: longRequest,
+                                                      projectRoot: base, service: service)
+    report("long command budgets do not grant production authority", longResult["status"] as? String == "execution_authority_unavailable")
+    let invalidPage = ConduitDirectCommandTool.perform(operation: "status", arguments: .object([
+        "operation_id": .string("selfcheck"), "project_slug": .string("fixture"),
+        "stdout_offset": .number(1e100),
+    ]), projectRoot: base, service: service)
+    report("command output offsets refuse unsafe numeric conversion", invalidPage["status"] as? String == "invalid_arguments")
 }

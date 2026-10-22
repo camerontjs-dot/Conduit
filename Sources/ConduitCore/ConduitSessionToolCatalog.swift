@@ -253,9 +253,16 @@ public enum ConduitSessionToolCatalog {
     private static let readTools: [[String: Any]] = [
         tool(
             ConduitDirectCommandTool.statusName,
-            "Read the retained receipt for one exact direct command and project. This never launches, resumes or cancels a process, creates storage, or consumes write admission. After restart, unowned execution is UNKNOWN; a recorded PID is never adopted as a cancellation target. Inspect status after an uncertain response before deciding on any further action.",
+            "Read the retained receipt for one exact direct command and project. Supply output_page_bytes and independent stdout_offset/stderr_offset byte positions for bounded pages; follow next_byte_offset only after consuming the page. A gap explicitly identifies bytes not retained; the optional suffix retains final diagnostics, not a full log. This never launches, resumes or cancels a process, creates storage, or consumes write admission. After restart, unowned execution is UNKNOWN; a recorded PID is never adopted as a cancellation target. Inspect status after an uncertain response before deciding on any further action.",
             annotations: localReadOnlyAnnotations,
-            properties: directOperationIdentityProperties,
+            properties: directOperationIdentityProperties.merging([
+                "stdout_offset": ["type": "integer", "minimum": 0, "maximum": 9_007_199_254_740_991,
+                                  "description": "Exact stdout byte offset, default 0. Enables paging; byte slices can split UTF-8 and then expose only base64."],
+                "stderr_offset": ["type": "integer", "minimum": 0, "maximum": 9_007_199_254_740_991,
+                                  "description": "Independent stderr byte offset, default 0. A position past the observed end is refused."],
+                "output_page_bytes": ["type": "integer", "minimum": 1, "maximum": ConduitDirectCommandTool.maximumPageBytes,
+                                      "description": "Enables output paging. At most this many bytes per stream in this response (default 8192 when an offset is supplied). Without paging fields the legacy retained-prefix response is preserved."],
+            ]) { _, new in new },
             required: ["operation_id", "project_slug"],
             additionalProperties: false
         ),
@@ -448,10 +455,12 @@ public enum ConduitSessionToolCatalog {
                         "description": "Existing directory relative to the exact project, default '.'. At most 4096 UTF-8 bytes; no absolute path, parent/dot/empty components, symlinks or Explorer-excluded paths."],
                 "timeout_ms": ["type": "integer", "default": 10000, "minimum": 10,
                                "maximum": ConduitDirectCommandService.maximumTimeoutMilliseconds,
-                               "description": "Elapsed execution budget, default 10000 ms, hard cap 120000 ms. A timeout requests termination; its receipt separately reports what exit and process-group observations established."],
+                               "description": "Elapsed execution budget, default 10000 ms, hard cap 3600000 ms. Submission returns without waiting for completion; poll the same operation ID. A timeout requests termination; its receipt separately reports what exit and process-group observations established."],
                 "max_output_bytes": ["type": "integer", "default": 128000, "minimum": 1,
                                      "maximum": ConduitDirectCommandService.maximumOutputBytes,
-                                     "description": "Maximum retained bytes in each of stdout and stderr, default 128000, hard cap 524288 per stream. Exact bytes, truncation and EOF remain separate."],
+                                     "description": "Maximum retained prefix bytes in each of stdout and stderr, default 128000, hard cap 524288 per stream. Exact bytes, truncation and EOF remain separate."],
+                "max_tail_bytes": ["type": "integer", "minimum": 0, "maximum": ConduitDirectCommandService.maximumTailBytes,
+                                   "description": "Optional additional suffix retention per stream, up to 65536 bytes; omitted means none for historical retry compatibility. Use 16384 for final build diagnostics. Status paging reports any missing middle range explicitly."],
             ]) { _, new in new },
             required: ["operation_id", "project_slug", "argv"],
             additionalProperties: false

@@ -2494,3 +2494,37 @@ embedded schema has sessionID, messageID, partID, field and delta, with no event
 identity or offset. Equal deltas can be legitimate repeated tokens; Conduit keeps
 them. Snapshot replacement and closed-message suppression are not exact delta
 deduplication. A reliable provider replay/offset contract is required to do more.
+
+## D-080: Direct checks retain bounded diagnostics without granting execution authority
+
+The development successor to #175 on current main reuses its repair stacks and
+keeps the production `execution_authority_unavailable` refusal. Ordinary checks
+need final error output, more than a two-minute budget, and recovery after a
+lost response. The smallest source change adds opt-in prefix/suffix retention,
+byte-offset status pages that expose missing ranges, and a one-hour maximum
+asynchronous budget. The default budget stays ten seconds. A real 121-second
+fixture supports removal of the old two-minute limit; it does not establish
+reliable one-hour execution.
+
+Omitted tail fields preserve durable request identity and decoding of previous
+receipts. Existing clients retain the original prefix response unless they opt
+into paging. Missing output stays missing; no full-log or streaming guarantee
+is inferred. Full durable spooling is deferred because it needs a separate
+quota, retention and disclosure contract. Environment injection, interactive
+stdin, background services and provider orchestration are outside this change.
+
+An offline project-check profile is a recommendation awaiting owner selection,
+implementation and qualification. A disposable macOS policy probe demonstrates
+some filesystem, executable and network denials on one host; it is not wired
+into the application. A working directory, process group, tool allowlist or
+receipt log alone cannot supply OS containment. No caller field, environment
+switch or source-test initializer grants production authority. The installed
+packet remains NOT_RUN until separately authorized prerequisites exist.
+
+Reconsider full-log retention when real checks need omitted middle output;
+reconsider a longer cap only with workload evidence. Reconsider the proposed
+OS mechanism when the supported platform/toolchain cannot enforce its declared
+access profile. Preserve explicit refusal rather than fall back to an
+unrestricted executor. See the dated qualification record for evidence and
+the unresolved owner decisions; this ADR accepts only the local source/API
+design, not a production execution profile.

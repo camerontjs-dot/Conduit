@@ -1,0 +1,247 @@
+{
+  "schema_version": "conduit-installed-direct-workflow/v1",
+  "status": "PREPARED_NOT_RUN",
+  "authority": {
+    "installation": false,
+    "production_enablement": false,
+    "privilege_expansion": false,
+    "model_launch": false,
+    "active_ui_operation": false
+  },
+  "candidate_manifest": "../../CANDIDATE.json",
+  "run_id": null,
+  "source": {
+    "commit": null,
+    "tree": null
+  },
+  "local_build": {
+    "binary_sha256": null,
+    "bundle_signature": null
+  },
+  "installed": {
+    "binary_sha256": null,
+    "bundle_signature": null,
+    "pid": null,
+    "listener_identity": null
+  },
+  "client": {
+    "identity": null,
+    "registration_identity": null,
+    "tools_list_sha256": null,
+    "fresh_session_evidence": null
+  },
+  "project": {
+    "slug": null,
+    "canonical_root": null,
+    "root_device_inode": null,
+    "read_path": null
+  },
+  "human_state": {
+    "observer_identity": null,
+    "method_qualification": null,
+    "before_receipt_sha256": null,
+    "after_receipt_sha256": null
+  },
+  "execution_profile": {
+    "status": "BLOCKED_UNIMPLEMENTED",
+    "owner_approval": null,
+    "implementation_source": null,
+    "policy_sha256": null,
+    "actual_toolchain_qualification": null
+  },
+  "sessions": [],
+  "cases": [
+    {
+      "id": "A01",
+      "track": "guarded_candidate",
+      "purpose": "identity_and_fresh_discovery",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "A02",
+      "track": "guarded_candidate",
+      "purpose": "read_search_hash_checked_edit",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "A03",
+      "track": "guarded_candidate",
+      "purpose": "file_reconnect_and_duplicate_retry",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "A04",
+      "track": "guarded_candidate",
+      "purpose": "execution_authority_unavailable",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "A05",
+      "track": "guarded_candidate",
+      "purpose": "human_selection_surface_draft_attachment_cursor_scroll",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B01",
+      "track": "enabled_successor",
+      "purpose": "inspect_edit_check_inspect",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B02",
+      "track": "enabled_successor",
+      "purpose": "truncation_tail_gap_nonzero_exit",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B03",
+      "track": "enabled_successor",
+      "purpose": "real_121_second_command",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B04",
+      "track": "enabled_successor",
+      "purpose": "noisy_command_cancel_and_repeat",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B05",
+      "track": "enabled_successor",
+      "purpose": "observed_timeout",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B06",
+      "track": "enabled_successor",
+      "purpose": "command_client_reconnect_duplicate_retry",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B07",
+      "track": "enabled_successor",
+      "purpose": "isolated_app_restart_unknown_ownership",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B08",
+      "track": "enabled_successor",
+      "purpose": "invalid_arguments_offsets_root_remap",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B09",
+      "track": "enabled_successor",
+      "purpose": "os_filesystem_network_subprocess_enforcement",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "B10",
+      "track": "enabled_successor",
+      "purpose": "human_state_and_final_artifact_inspection",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    }
+  ],
+  "teardown": {
+    "status": "NOT_RUN",
+    "owned_resources": [],
+    "observed_resources_remaining": null
+  },
+  "result_boundaries": {
+    "hosted_ci": "NOT_RUN",
+    "installed_guarded_candidate": "NOT_RUN",
+    "installed_execution": "BLOCKED_UNIMPLEMENTED_PROFILE",
+    "mounted_ui": "NOT_RUN",
+    "fresh_chatgpt_client": "NOT_RUN"
+  }
+}
