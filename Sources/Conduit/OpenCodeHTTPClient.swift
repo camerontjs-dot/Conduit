@@ -250,6 +250,15 @@ final class OpenCodeHTTPClient: ObservableObject {
     private(set) var resumeProvenance: SessionResumeSemantics.Provenance?
 
     var onEffect: ((StructuredAdapterEffect) -> Void)?
+    var onRequestEffect: ((OpenCodeRequestEffect) -> Void)?
+    var onIdentityDiagnostic: ((String?) -> Void)?
+    @Published private(set) var identityDiagnostic: String?
+    private var bufferedEvents: [CodexJSON] = []
+    private var bufferedBytes = 0
+    private var bufferOverflow = false
+    private var sseLineDecoder = OpenCodeSSELineDecoder()
+    private var sseInvalid = false
+
     /// Optional presentation-only observation channel for structured activity.
     /// Runtime semantics do not depend on this callback.
     var onConversationActivity: ((OpenCodeConversationActivity) -> Void)?
@@ -260,6 +269,12 @@ final class OpenCodeHTTPClient: ObservableObject {
     var onReady: (() -> Void)?
     var onFailed: ((String) -> Void)?
     var onExited: (() -> Void)?
+
+    private var pendingPrompt: (id: UUID, completion: (Result<Void, Error>) -> Void)?
+    private var promptTransport: ((String) async throws -> Void)?
+
+    private var httpTransport: ((URLRequest) async throws -> (Data, URLResponse))?
+    private var ownsLease = false
 
     private let cwd: URL
     private let model: String?
@@ -287,6 +302,47 @@ final class OpenCodeHTTPClient: ObservableObject {
         self.resumeSessionID = resumeSessionID
     }
 
+    /// In-process transport injection; no lease, listener, or provider is started.
+    init(cwd: URL, promptTransport: @escaping (String) async throws -> Void) {
+        self.cwd = cwd
+        self.model = nil
+        self.resumeSessionID = nil
+        self.promptTransport = promptTransport
+        self.isReady = true
+    }
+
+    /// Exercises the actual POST encoder/status decoder without opening a socket.
+    init(cwd: URL, sessionID: String,
+         httpTransport: @escaping (URLRequest) async throws -> (Data, URLResponse)) {
+        self.cwd = cwd
+        self.model = nil
+        self.resumeSessionID = nil
+        self.sessionID = sessionID
+        self.mapper.sessionID = sessionID
+        self.httpTransport = httpTransport
+        self.lease = OpenCodeServeLeaseRecord(pid: 0, url: "http://fixture.invalid", password: "", ownedByConduit: false)
+        self.isReady = true
+    }
+
+    /// Shared by URLSession's byte stream and socket-free transport fixtures.
+    func receiveSSEByte(_ byte: UInt8) throws {
+        do {
+            if let line = try sseLineDecoder.append(byte) { receiveSSELine(line) }
+        } catch {
+            sseInvalid = true
+            mapper.resetTurn()
+            bufferedEvents.removeAll()
+            bufferedBytes = 0
+            reportUnknown("OpenCode output UNKNOWN: SSE line exceeded the 2 MiB byte limit; stream output and completion withheld.")
+            throw error
+        }
+    }
+
+    func receiveSSELine(_ line: String) {
+        guard let json = OpenCodeEventMapper.parseSSELine(line) else { return }
+        handleEvent(json)
+    }
+
     func start(executable: String) async throws {
         guard FileManager.default.isExecutableFile(atPath: executable) else {
             throw ClientError.executableMissing
@@ -294,6 +350,7 @@ final class OpenCodeHTTPClient: ObservableObject {
         stopped = false
         let lease = try await OpenCodeServeLease.shared.acquire(executable: executable)
         self.lease = lease
+        ownsLease = true
         guard let base = lease.baseURL else {
             throw ClientError.protocolError("OpenCode lease URL is invalid.")
         }
@@ -329,11 +386,36 @@ final class OpenCodeHTTPClient: ObservableObject {
         startSSE(base: base, password: lease.password)
     }
 
-    func sendTurn(text: String) throws {
-        guard isReady, let sessionID, let lease, let base = lease.baseURL else {
-            throw ClientError.notReady
+    func sendTurn(text: String, promptEventID: UUID = UUID(), completion: @escaping (Result<Void, Error>) -> Void) throws {
+        guard isReady, !stopped else { throw ClientError.notReady }
+        guard pendingPrompt == nil, !isTurnActive else {
+            throw ClientError.protocolError("an OpenCode turn is already running")
         }
+        let request: () async throws -> CodexJSON
+        if let promptTransport {
+            request = { try await promptTransport(text); return .object([:]) }
+        } else {
+            guard let sessionID, let lease, let base = lease.baseURL else {
+                throw ClientError.notReady
+            }
+            let split = OpenCodeHTTPContract.splitModel(model)
+            let body = OpenCodeHTTPContract.promptBody(
+                text: text, providerID: split?.providerID, modelID: split?.modelID
+            )
+            request = { [self] in
+                try await postJSON(
+                    OpenCodeHTTPContract.messageURL(base: base, sessionID: sessionID),
+                    password: lease.password, body: body
+                )
+            }
+        }
+        let requestID = UUID()
+        pendingPrompt = (requestID, completion)
         mapper.resetTurn()
+        bufferedEvents.removeAll()
+        bufferedBytes = 0
+        bufferOverflow = false
+        identityDiagnostic = nil
         conversationActivities.removeAll(keepingCapacity: true)
         activityIndexByID.removeAll(keepingCapacity: true)
         isTurnActive = true
@@ -343,21 +425,40 @@ final class OpenCodeHTTPClient: ObservableObject {
         lastTurnStatus = nil
         lastError = nil
         turnFailure = nil
-        let split = OpenCodeHTTPContract.splitModel(model)
-        let body = OpenCodeHTTPContract.promptBody(
-            text: text,
-            providerID: split?.providerID,
-            modelID: split?.modelID
-        )
         Task { [weak self] in
-            do {
-                _ = try await self?.postJSON(
-                    OpenCodeHTTPContract.messageURL(base: base, sessionID: sessionID),
-                    password: lease.password,
-                    body: body
-                )
-            } catch {
-                self?.emit(.failed(error.localizedDescription))
+            let result: Result<CodexJSON, Error>
+            do { result = .success(try await request()) }
+            catch { result = .failure(error) }
+            guard let self, !self.stopped, self.pendingPrompt?.id == requestID else { return }
+            let completion = self.pendingPrompt?.completion
+            self.pendingPrompt = nil
+            let buffered = self.bufferedEvents
+            self.bufferedEvents.removeAll()
+            self.bufferedBytes = 0
+            switch result {
+            case .failure(let error):
+                self.mapper.resetTurn()
+                self.emit(.failed(error.localizedDescription))
+                completion?(.failure(error))
+            case .success(let response):
+                let bound = self.mapper.accept(response, promptEventID: promptEventID)
+                // Delivery records HTTP acceptance only, never turn completion.
+                completion?(.success(()))
+                if !bound {
+                    self.reportUnknown(self.mapper.identityDiagnostic!)
+                } else if let failure = self.mapper.responseFailure {
+                    self.emit(failure.effect, identity: failure.identity)
+                } else if self.sseInvalid {
+                    self.mapper.resetTurn()
+                    self.reportUnknown("OpenCode output UNKNOWN: SSE stream exceeded its line byte limit; output and completion withheld.")
+                } else if self.bufferOverflow {
+                    self.mapper.resetTurn()
+                    self.reportUnknown("OpenCode output identity UNKNOWN: pre-response SSE buffer exceeded its limit; output and completion withheld.")
+                } else {
+                    self.identityDiagnostic = nil
+                    self.onIdentityDiagnostic?(nil)
+                    for event in buffered { self.handleEvent(event) }
+                }
             }
         }
     }
@@ -393,11 +494,20 @@ final class OpenCodeHTTPClient: ObservableObject {
 
     func stop() {
         stopped = true
+        mapper.resetTurn()
+        bufferedEvents.removeAll()
+        bufferedBytes = 0
+        let pending = pendingPrompt
+        pendingPrompt = nil
+        pending?.completion(.failure(ClientError.protocolError(
+            "OpenCode stopped before HTTP acceptance was observed; provider acceptance is unknown."
+        )))
         sseTask?.cancel()
         sseTask = nil
         isReady = false
         isTurnActive = false
-        OpenCodeServeLease.shared.release()
+        if ownsLease { OpenCodeServeLease.shared.release() }
+        ownsLease = false
         lease = nil
     }
 
@@ -432,19 +542,12 @@ final class OpenCodeHTTPClient: ObservableObject {
             OpenCodeServeLease.applyAuth(&request, password: password)
             do {
                 let (bytes, _) = try await URLSession.shared.bytes(for: request)
-                for try await line in bytes.lines {
-                    if Task.isCancelled { break }
-                    let json: CodexJSON?
-                    if line.hasPrefix("data:") {
-                        json = OpenCodeEventMapper.parseSSELine(line)
-                    } else {
-                        json = OpenCodeEventMapper.parseSSELine("data: \(line)")
-                            ?? CodexJSON.parseLine(line)
-                    }
-                    guard let json else { continue }
-                    await MainActor.run {
-                        self?.handleEvent(json)
-                    }
+                for try await byte in bytes {
+                    if Task.isCancelled { return }
+                    try self?.receiveSSEByte(byte)
+                }
+                if !Task.isCancelled, let line = try self?.sseLineDecoder.finish() {
+                    self?.receiveSSELine(line)
                 }
             } catch {
                 if Task.isCancelled { return }
@@ -455,16 +558,40 @@ final class OpenCodeHTTPClient: ObservableObject {
         }
     }
 
+    private func reportUnknown(_ message: String) {
+        identityDiagnostic = message
+        onIdentityDiagnostic?(message)
+    }
+
     private func handleEvent(_ json: CodexJSON) {
-        if let sessionID,
-           let activity = OpenCodeConversationActivityExtractor.activity(
-                from: json,
-                boundSessionID: sessionID
-           ) {
+        guard !stopped, !sseInvalid else { return }
+        if pendingPrompt != nil {
+            // The synchronous message endpoint can stream before returning its
+            // assistant info. Preserve ordering until the exact response binds it.
+            let size = (try? JSONSerialization.data(withJSONObject: json.jsonObject()).count) ?? 0
+            if !bufferOverflow, bufferedEvents.count < 2048, bufferedBytes + size <= 2_097_152 {
+                bufferedEvents.append(json)
+                bufferedBytes += size
+            } else {
+                bufferOverflow = true
+                bufferedEvents.removeAll()
+            }
+            reportUnknown("OpenCode output identity UNKNOWN: awaiting HTTP message identity; SSE is buffered.")
+            return
+        }
+        let ownsEvent = mapper.owns(json)
+        if ownsEvent, let sessionID,
+           let activity = OpenCodeConversationActivityExtractor.activity(from: json, boundSessionID: sessionID) {
             upsertConversationActivity(activity)
         }
-        for effect in mapper.apply(json) {
-            emit(effect)
+        let effects = mapper.applyIdentified(json)
+        if let diagnostic = mapper.identityDiagnostic {
+            reportUnknown(diagnostic)
+        } else if ownsEvent {
+            identityDiagnostic = nil
+        }
+        for identified in effects {
+            emit(identified.effect, identity: identified.identity)
         }
     }
 
@@ -480,7 +607,7 @@ final class OpenCodeHTTPClient: ObservableObject {
         onConversationActivity?(activity)
     }
 
-    private func emit(_ effect: StructuredAdapterEffect) {
+    private func emit(_ effect: StructuredAdapterEffect, identity: OpenCodeRequestIdentity? = nil) {
         switch effect {
         case .sessionStarted(let id):
             sessionID = id
@@ -500,7 +627,11 @@ final class OpenCodeHTTPClient: ObservableObject {
             }
             onFailed?(message)
         }
-        onEffect?(effect)
+        if let identity {
+            onRequestEffect?(OpenCodeRequestEffect(identity: identity, effect: effect))
+        } else {
+            onEffect?(effect)
+        }
     }
 
     private func postJSON(
@@ -514,8 +645,13 @@ final class OpenCodeHTTPClient: ObservableObject {
         request.timeoutInterval = 60
         OpenCodeServeLease.applyAuth(&request, password: password)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+        let (data, response): (Data, URLResponse)
+        if let httpTransport { (data, response) = try await httpTransport(request) }
+        else { (data, response) = try await URLSession.shared.data(for: request) }
+        guard let http = response as? HTTPURLResponse else {
+            throw ClientError.protocolError("OpenCode acceptance is unknown: no HTTP response.")
+        }
+        if !(200..<300).contains(http.statusCode) {
             let snippet = String(data: data, encoding: .utf8) ?? ""
             throw ClientError.protocolError("OpenCode HTTP \(http.statusCode): \(snippet.prefix(240))")
         }

@@ -351,8 +351,18 @@ public final class ProviderSessionAuthorityCoordinator {
     public func adoptSession(
         providerSessionID: String,
         controllerID: String,
-        binding: ProviderObservationBinding? = nil
+        binding: ProviderObservationBinding? = nil,
+        admitWrite: (() throws -> Void)? = nil
     ) throws -> ProviderSessionAdoptionResult {
+        guard !observer.providerID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ProviderSessionAuthorityError.emptyProviderID
+        }
+        guard !providerSessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ProviderSessionAuthorityError.emptyProviderSessionID
+        }
+        guard !controllerID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ProviderSessionAuthorityError.emptyControllerID
+        }
         let worker = try observer.observeSession(
             providerSessionID: providerSessionID,
             binding: binding
@@ -365,6 +375,9 @@ public final class ProviderSessionAuthorityCoordinator {
             )
         }
 
+        // Validation/observation cannot charge admission or change ownership.
+        // A denied admission must leave the existing registry exactly intact.
+        try admitWrite?()
         let receipt = try registry.claimWriter(
             providerID: observer.providerID,
             providerSessionID: providerSessionID,

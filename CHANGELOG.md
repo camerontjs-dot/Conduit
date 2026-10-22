@@ -35,6 +35,78 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   in it. Numeric Session API arguments that are fractional,
   non-finite or out of range no longer terminate the app.
 
+- Reject explicitly supplied non-string Session API create-task objectives before
+  any task admission or launch; an omitted optional objective remains permitted.
+
+- Removed the unsafe action-only replay-journal helper. All callers now use
+  explicit admission and the durable checkpoint before the first possible
+  effect; this prevents future callers from filling receipts with refused work.
+
+- Known pre-dispatch Session API create/send refusals no longer consume durable replay capacity. Intent is synchronized after admission and before the first possible effect; uncertain or accepted requests remain protected against redispatch.
+
+### Fixed
+
+- Session API mutations now share one bearer-authority rate budget; changing the observed MCP client label cannot replenish it. Missing required initialization still fails closed.
+- Provider-session adoption now validates the request and observed identity before write admission, and checks readiness, resources, caller metadata, and rate limits before changing writer ownership. Read-only observation and writer collisions retain their semantics.
+
+### Fixed
+
+- OpenCode HTTP assistant errors now retain prompt/message identity and fail the
+  turn even when HTTP 200 or buffered SSE completion was observed. Replaced
+  clients cannot exit the current runtime. SSE lines are bounded to 2 MiB before
+  decoding; oversized streams withhold output/completion as UNKNOWN.
+
+- OpenCode SSE output and completion now require the assistant message identity
+  returned by the exact prompt HTTP request. Delayed events from an older prompt
+  cannot contaminate or complete a queued or refused prompt. Early SSE is buffered
+  until identity is proven; missing identity is reported as UNKNOWN, and HTTP
+  acceptance alone never completes a turn.
+
+- Refused overlapping structured prompts retain their own failed event without
+  closing or taking ownership of the running prompt's output and feedback.
+- OpenCode prompts stay queued until HTTP acceptance, then update the exact
+  prompt to delivered or failed. Late responses after shutdown cannot rewrite
+  prompt delivery; an unobserved acceptance remains explicitly unknown.
+
+- A second MCP client's initialize no longer redirects durable keyed retry
+  lookup into a different clientInfo-named namespace. Clients sharing the
+  local API bearer authority share conservative retry-key custody.
+  Immediate structured-provider send failures now return an explicit MCP
+  error and original prompt event ID instead of a non-error result.
+
+
+### Changed
+
+- Keyed Session API create and prompt requests now retain private intent/outcome
+  receipts across restarts. Replays return original task/event identities without
+  spending admission budget; incomplete or unsafe receipts block as UNKNOWN.
+  Unkeyed requests remain non-idempotent. Prompt keys are optional.
+- Hosted sends without a live runtime refuse with a reconcile-first instruction
+  and never schedule startup. Ancillary work-log failures remain visible as
+  `ancillary_warnings`, without turning accepted work into an API error or modal.
+
+### Fixed
+
+- Hosted task creation, reconciliation, reconnect, close and lifecycle controls
+  preserve the human's project/task selection, navigation memory, New Task
+  scope, composer and panel state. Delayed delivery and persistence feedback
+  follow the exact initiating action when hosted and human prompts interleave.
+  Hosted slash commands reuse one prompt event and observe delayed delivery
+  instead of clearing the desktop composer or recording a duplicate prompt.
+  Task status exposes conversation-retention uncertainty without presenting
+  hosted failures as an unrelated desktop alert.
+
+- Session API numeric request identities retain large and fractional JSON
+  values without unsafe conversion to machine integers.
+
+- Contained filesystem observations preserve missing-file classification across macOS root aliases without weakening symlink or outside-root refusals.
+
+- Hosted Session API delivery no longer changes the human-selected task.
+  A different project open in the macOS UI cannot inject a project-mismatch
+  error after an authorized ChatGPT prompt was accepted for another task.
+  Human UI project-selection guards and Raw/Conversation pane selection
+  remain unchanged by hosted prompt delivery.
+
 - Proposal context validation now rejects integer overflow and underflow in
   supplied token estimates without terminating the process. Unrepresentable
   totals remain invalid even at the largest budget; ordinary totals, negative
@@ -73,6 +145,29 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
   same redacted text, with `expand_event_id`, in slices that never split a
   character. Event records now report `text_capped` and `source_truncated`
   separately; `truncated` keeps its previous meaning.
+
+- Direct project file search through `conduit_search_files` returns literal
+  UTF-8 matches with exact byte positions, bounded snippets, observed source
+  hashes and explicit traversal/output limits. Filesystem reads now also
+  return SHA-256 of the exact observed raw bytes, including BOM and line endings.
+
+- `conduit_write_file` and `conduit_file_operation_status` add bounded UTF-8
+  create/replace operations and durable retry receipts behind the existing
+  local write/resource gate. Creates require absence; replacements require
+  the expected raw-file hash and preserve observed prior bytes. Protected or
+  changed paths, unsupported metadata and uncertain historical outcomes refuse
+  or remain unknown; replacement is optimistic concurrency, not atomic
+  compare-and-swap against external writers.
+
+- Direct command request, status and cancellation contracts publish separate
+  read/write classifications, literal argv/cwd, bounded output and durable
+  operation identities. Native disposable tests exercise the runner's process
+  behavior. Production execution remains `execution_authority_unavailable`
+  until an operator-granted execution profile is implemented and qualified;
+  the Session API write switch does not grant arbitrary OS execution authority.
+
+- `conduit_read_filesystem` adds bounded root-scoped directory listing, ordinary UTF-8 file reads and exact path metadata through Explorer Core, with explicit missing, unsafe, oversized and changed-file refusals. It does not enable Session API writes.
+- Descriptor-relative, no-follow Explorer reads retain path containment and refuse binary/special-file text interpretation.
 
 - Task-rail thread recognition now shows conversation-aware recency and bounded
   retained prompt/output previews on pointer hover or keyboard focus. Persisted,

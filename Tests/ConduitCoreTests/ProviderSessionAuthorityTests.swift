@@ -94,6 +94,29 @@ final class ProviderSessionAuthorityTests: XCTestCase {
         }
     }
 
+    func testDeniedAdmissionLeavesOwnershipUnchangedAndInvalidRequestsDoNotCharge() throws {
+        enum Denied: Error { case admission }
+        let observer = FakeObserver()
+        let registry = ProviderSessionAuthorityRegistry()
+        let coordinator = coordinator(observer: observer, registry: registry)
+        var charges = 0
+        let deny: () throws -> Void = { charges += 1; throw Denied.admission }
+        let before = try registry.snapshot(providerID: "fixture", providerSessionID: "ses_existing")
+        XCTAssertThrowsError(try coordinator.adoptSession(providerSessionID: "ses_existing", controllerID: "A", admitWrite: deny))
+        XCTAssertEqual(try registry.snapshot(providerID: "fixture", providerSessionID: "ses_existing"), before)
+        XCTAssertEqual(charges, 1)
+        XCTAssertThrowsError(try coordinator.adoptSession(providerSessionID: "ses_existing", controllerID: " ", admitWrite: deny))
+        observer.observedSessionID = "wrong"
+        XCTAssertThrowsError(try coordinator.adoptSession(providerSessionID: "ses_existing", controllerID: "A", admitWrite: deny))
+        XCTAssertEqual(charges, 1)
+        observer.observedSessionID = "ses_existing"
+        _ = try coordinator.adoptSession(providerSessionID: "ses_existing", controllerID: "A")
+        let owned = try registry.snapshot(providerID: "fixture", providerSessionID: "ses_existing")
+        XCTAssertThrowsError(try coordinator.adoptSession(providerSessionID: "ses_existing", controllerID: "B", admitWrite: deny))
+        XCTAssertEqual(try registry.snapshot(providerID: "fixture", providerSessionID: "ses_existing"), owned)
+        XCTAssertEqual(try coordinator.adoptSession(providerSessionID: "ses_existing", controllerID: "B", admitWrite: {}).receipt.disposition, .writerCollision)
+    }
+
     private func coordinator(
         observer: FakeObserver,
         registry: ProviderSessionAuthorityRegistry? = nil
