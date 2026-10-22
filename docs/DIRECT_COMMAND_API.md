@@ -154,7 +154,12 @@ one-hour runtime qualification or an OS resource limit.
 Spawn uses a dedicated process group and a descriptor pinned to the observed
 working directory identity. Timeout/cancellation signals target that owned
 group only while the direct child remains unreaped. After a grace period the
-runner escalates to SIGKILL. It never sends signals after reaping the original
+runner escalates to SIGKILL. During this grace period it uses `waitid(WNOWAIT)`
+to check ownership without reaping even an exited child. That retained child
+pins the group identity until escalation, so a descendant that ignores TERM
+does not escape cleanup just because its leader exited first. After reaping,
+the runner only observes group absence within the original cleanup budget.
+It never sends signals after reaping the original
 child or losing child ownership. If cleanup is not observed within its bounded
 budget, the receipt becomes unknown and command capacity remains occupied.
 
@@ -202,7 +207,14 @@ This candidate supplies runner behavior and honest unavailable admission; it
 does not complete issue #170's production acceptance or authorize an installed
 app replacement.
 
+The [client guide](DIRECT_WORKFLOW_CLIENT.md) explains direct-tool routing,
+compact output settings and exact retry/cancellation handling for ChatGPT.
+MCP initialization delivers the corresponding advisory instructions; it does
+not grant execution authority or prove client compliance.
+
 The [development successor record](qualification/direct-workflow-20261022.md)
 separates source, OS-policy probe, hosted and installed evidence. The
+[R3 repair record](qualification/direct-workflow-20261022-r3.md) records the
+independent R2 finding and successor checks. The
 [installed-client acceptance packet](qualification/direct-workflow-installed-acceptance.md)
 contains the deferred concrete cases and authority prerequisites.

@@ -2528,3 +2528,37 @@ access profile. Preserve explicit refusal rather than fall back to an
 unrestricted executor. See the dated qualification record for evidence and
 the unresolved owner decisions; this ADR accepts only the local source/API
 design, not a production execution profile.
+
+## D-081: Direct client guidance is advisory; cancellation keeps child custody through escalation
+
+The R2 review reproduced a same-process-group cleanup failure: TERM ended the
+direct child, but a descendant ignoring TERM survived after its leader was
+reaped. The receipt correctly reported UNKNOWN but no longer had safe signal
+authority. R3 retains the waitable child through the existing TERM-to-KILL
+grace interval, checking ownership with `waitid(WNOWAIT)`. It then reaps and
+observes group absence within the original two-second cleanup budget. Signals
+after reaping or lost ownership remain prohibited. An unresolved group retains
+UNKNOWN and its capacity reservation; a recovered PID never becomes authority.
+This fixes the observed group case, not descendants that create another group.
+
+For ChatGPT and other MCP clients, authenticated initialization now publishes
+short direct-tool-first instructions. Command/task descriptions repeat the
+route: keep reasoning in the current conversation, inspect/edit/check/inspect
+with eligible tools, use compact byte pages and stable operation IDs, and use
+another model when its reasoning or independent review has a concrete benefit.
+Interactive Shell remains a PTY option needing its own authority. It cannot
+bypass `execution_authority_unavailable`. The existing global MainFrame policy
+is not copied into a new policy engine or changed by this product instruction.
+
+The MCP instruction field is advisory. Its delivery has transport tests; actual
+ChatGPT consumption and routing need fresh installed-client observations. Tool
+descriptions alone cannot enforce routing, just as logging, a cwd, or a Session
+API write switch cannot enforce filesystem/network/process confinement. The
+public command initializer and production refusal remain unchanged.
+
+Reconsider the cleanup design if supported platforms cannot preserve child
+custody, or a real workload needs detached-process management. Reconsider the
+instruction wording against observed fresh-client errors, not its mere presence
+in discovery. The [R3 record](docs/qualification/direct-workflow-20261022-r3.md)
+keeps review, source, hosted and installed evidence distinct. This accepts a
+development repair and client guidance, not production execution or rollout.

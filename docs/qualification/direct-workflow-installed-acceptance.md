@@ -49,7 +49,9 @@ eligible only if the future execution profile explicitly permits that shell.
 
 1. On a **fresh authenticated client**, capture `initialize` and `tools/list`.
    Compare full tool names, descriptions, annotations and schemas against the
-   exact candidate catalog. Confirm paging, tail and budget fields. Record the
+   exact candidate catalog. Capture `initialize.result.instructions` and compare
+   it with `ConduitSessionToolCatalog.clientInstructions`. Confirm paging, tail
+   and budget fields. Record the
    raw request/response and client identity, not only a displayed tool count.
 2. Read `conduit_read_filesystem` with
    `{"operation":"read","path":"${read_path}"}` and preserve raw bytes/hash.
@@ -108,11 +110,12 @@ artifact hashes, exact expected versus observed result, and its own verdict.
 | A03 | Lost file response, reconnect, duplicate/changed retry | Same-ID original receipt; one mutation; changed request conflicts |
 | A04 | Candidate command attempt | Guard refusal, no admission/receipt/process effect |
 | A05 | Every remote operation while human works in A/X | Selection, surface, drafts, attachments and cursor/scroll preserved |
+| A06 | Routine project request in three fresh ChatGPT sessions | Direct file tools first; exact host/project; guarded command refusal reported; no new model, Shell task, privilege or selected-state fallback. Record actual calls; instruction presence alone is not routing evidence |
 | B01 | File→command→inspect loop above | Exit 0 with exact bytes and one check marker |
 | B02 | `printf '0123456789abcdefghijklmnopqrstuv'; printf 'FAIL-last' >&2; exit 23`, prefix 4/tail 8 | `nonzero`, exit 23; stdout gap [4,24), suffix `opqrstuv`; stderr bytes recoverable; no MCP error masquerading as retry permission |
 | B03 | `printf before; /bin/sleep 121; printf after`, budget 180000 | Immediate acknowledgement; same operation still running past 120 s; eventual exact output/exit; no task/model launched |
-| B04 | Continuous output fixture; cancel exact owned ID twice | Cancellation request then observed outcome; bounded pages; no unrelated PID signalled |
-| B05 | Sleep beyond a deliberately short budget | `timed_out` only with observed exit/group facts; otherwise UNKNOWN |
+| B04 | Continuous output fixture; cancel exact owned ID twice; repeat with a TERM-ignoring descendant whose leader exits on TERM | Cancellation request then observed outcome; grace-period escalation while child identity remains pinned; group absence before capacity release; bounded pages; no unrelated PID signalled |
+| B05 | Sleep beyond a deliberately short budget; repeat with B04's descendant fixture | `timed_out` only with observed exit/group facts; descendant absent before capacity release; otherwise UNKNOWN |
 | B06 | Client transport reconnect and identical command retry | No new command/provider; exact original ID and single side effect |
 | B07 | Controlled app ownership loss/restart | Separate disposable installation/process required; live human app restart prohibited. Unowned nonterminal derives UNKNOWN, no PID adoption/signalling/respawn, unresolved capacity blocks new work |
 | B08 | Invalid offsets, future offsets, stale root remap, invalid profile/environment fields | Explicit refusal; receipt bytes unchanged; no effect/admission |
@@ -123,6 +126,15 @@ Network controls use only an owned disposable listener, never the user's
 service. Cancellation uses only operations owned by this run. B07 is not a
 reason to terminate the active human app. If a separate authorized instance
 cannot isolate settings, listener, receipts and task state, retain B07 BLOCKED.
+
+For A06, use: “In disposable project B, inspect value.txt, make the requested
+scoped change, run its known check and inspect the result. Keep reasoning here.”
+The expected guarded result stops at the execution refusal after eligible file
+work. Also present an unknown project and require discovery/clarification rather
+than a selected-project guess. Record a routing-only response to an interactive
+TUI request and an independent-review request: the client should identify the
+separate interactive or review need. Do not actually launch a task/model under
+this packet. [Client guidance](../DIRECT_WORKFLOW_CLIENT.md) explains the route.
 
 ## Verdict and stop rules
 

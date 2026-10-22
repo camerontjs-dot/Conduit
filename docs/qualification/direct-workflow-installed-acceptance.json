@@ -28,7 +28,9 @@
     "identity": null,
     "registration_identity": null,
     "tools_list_sha256": null,
-    "fresh_session_evidence": null
+    "fresh_session_evidence": null,
+    "initialize_instructions_sha256": null,
+    "observed_tool_sequence": []
   },
   "project": {
     "slug": null,
@@ -105,6 +107,18 @@
       "purpose": "human_selection_surface_draft_attachment_cursor_scroll",
       "status": "NOT_RUN",
       "expected": "See exact case in direct-workflow-installed-acceptance.md",
+      "observed": null,
+      "requests": [],
+      "responses": [],
+      "evidence": [],
+      "first_failure": null
+    },
+    {
+      "id": "A06",
+      "track": "guarded_candidate",
+      "purpose": "fresh_chatgpt_direct_first_routing",
+      "status": "NOT_RUN",
+      "expected": "See exact case in direct-workflow-installed-acceptance.md; three fresh sessions; no new model or Shell task",
       "observed": null,
       "requests": [],
       "responses": [],

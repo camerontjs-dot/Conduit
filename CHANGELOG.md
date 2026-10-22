@@ -27,6 +27,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Changed
 
+- Cancellation and timeout cleanup now retain the owned child's wait identity
+  through signal escalation. A same-group descendant ignoring TERM is checked
+  for exit before capacity is released, even if the direct child exited first.
+- Authenticated MCP initialization now tells clients to use direct file and
+  shell/command tools for routine work before launching another model. Command
+  and task descriptions include the same routing guidance, compact output
+  settings, retry handling and the unchanged execution-authority boundary.
+
 - Direct-command development receipts support optional bounded final diagnostics
   and byte-based status pages with explicit missing ranges. Existing requests
   and receipt retries retain their original prefix-only behavior.

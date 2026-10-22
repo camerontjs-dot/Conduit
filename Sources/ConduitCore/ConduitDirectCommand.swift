@@ -622,9 +622,23 @@ public final class ConduitDirectCommandService {
             let now = ProcessInfo.processInfo.systemUptime
             child.drain(child.stdoutFD, into: &receipt.stdout, limit: receipt.request.maxOutputBytes, tailLimit: receipt.request.maxTailBytes ?? 0)
             child.drain(child.stderrFD, into: &receipt.stderr, limit: receipt.request.maxOutputBytes, tailLimit: receipt.request.maxTailBytes ?? 0)
-            if !rootReaped && !waitLost {
+            var ownsUnreapedChild = false
+            if !rootReaped && !waitLost, terminationRequestedAt != nil, !sentKill {
+                // Keep the direct child waitable through escalation, including
+                // when TERM has already made it a zombie. Reaping it now would
+                // release the PID pin before same-group descendants see KILL.
+                // WNOWAIT also checks that this is still our child: ECHILD is
+                // ownership loss, never permission to signal a recorded PGID.
+                var information = siginfo_t()
+                let observed = waitid(P_PID, id_t(child.pid), &information, WEXITED | WNOHANG | WNOWAIT)
+                ownsUnreapedChild = observed == 0
+                if observed < 0 && errno != EINTR {
+                    waitLost = true; receipt.note = "The owned child's wait identity became unavailable; no further signals will be sent."
+                }
+            } else if !rootReaped && !waitLost {
                 var status: Int32 = 0
                 let waited = waitpid(child.pid, &status, WNOHANG)
+                ownsUnreapedChild = waited == 0
                 if waited == child.pid {
                     rootReaped = true; rootEndedAt = now
                     receipt.directChildExitObserved = true
@@ -636,7 +650,7 @@ public final class ConduitDirectCommandService {
                 }
             }
             lock.lock(); let cancellation = cancellations.contains(id); lock.unlock()
-            if !rootReaped && !waitLost {
+            if ownsUnreapedChild && !waitLost {
                 if terminationRequestedAt == nil {
                     timeoutObserved = (now - started) * 1000 >= Double(receipt.request.timeoutMS)
                     cancellationObserved = cancellation
@@ -651,11 +665,19 @@ public final class ConduitDirectCommandService {
                 }
             }
             if waitLost { break }
-            if rootReaped, (receipt.stdout.reachedEOF && receipt.stderr.reachedEOF) || now - (rootEndedAt ?? now) >= 0.25 {
-                break
+            if rootReaped {
+                if terminationRequestedAt != nil {
+                    // KILL was sent while the child still pinned group identity.
+                    // From here on observation is read-only. Let descendants
+                    // disappear within the cleanup budget before releasing the
+                    // slot; EOF alone does not establish their exit.
+                    if kill(-child.pid, 0) < 0 && errno == ESRCH { break }
+                } else if (receipt.stdout.reachedEOF && receipt.stderr.reachedEOF) || now - (rootEndedAt ?? now) >= 0.25 {
+                    break
+                }
             }
             if let requested = terminationRequestedAt, now - requested >= 2 {
-                receipt.note = "Termination was requested but a direct-child exit was not observed within the cleanup budget."
+                receipt.note = "Termination was requested but direct-child exit and original-group absence were not both observed within the cleanup budget."
                 break
             }
             if now - lastSave >= 0.1 {

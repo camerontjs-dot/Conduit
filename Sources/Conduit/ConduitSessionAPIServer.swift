@@ -414,6 +414,7 @@ final class ConduitSessionAPIServer {
                     "protocolVersion": "2024-11-05",
                     "capabilities": ["tools": [String: Any]()],
                     "serverInfo": ["name": "conduit-session", "version": "1.2"],
+                    "instructions": ConduitSessionToolCatalog.clientInstructions,
                 ],
             ]
         case "ping":

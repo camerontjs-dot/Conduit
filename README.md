@@ -146,6 +146,9 @@ evidence rules and independent agent CLIs retain their authority.
 - A [typed direct command contract](docs/DIRECT_COMMAND_API.md) with separate
   status/cancellation and native development fixtures. Production command
   execution is unavailable pending an enforceable operator-granted profile.
+- [Direct-tool-first client instructions](docs/DIRECT_WORKFLOW_CLIENT.md) for
+  ChatGPT: compact command output, stable retries and explicit execution limits,
+  delivered in MCP initialization and tool descriptions.
 
 - Conduit Doctor for CLI paths, versions, MainFrame structure, tmux, microphone, and speech permissions
 - Resource Deck for memory use, largest processes, loaded Ollama models, and one-click Ollama unloading

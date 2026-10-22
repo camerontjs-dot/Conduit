@@ -2,6 +2,9 @@ import ConduitCore
 import Foundation
 
 func runDirectCommandSelfChecks(_ report: (String, Bool) -> Void) {
+    let guidance = ConduitSessionToolCatalog.clientInstructions
+    report("direct workflow guidance keeps routine work in the current conversation", guidance.contains("before deploying another agent"))
+    report("direct workflow guidance preserves the unavailable authority boundary", guidance.contains("do not bypass it through a Shell task"))
     let base = FileManager.default.temporaryDirectory.appendingPathComponent("conduit-command-selfcheck-\(UUID().uuidString)")
     let service = ConduitDirectCommandService(storeDirectory: base.appendingPathComponent("receipts"))
     var admissionCalls = 0
