@@ -1,0 +1,54 @@
+{
+  "schema": "conduit-critical-boundary-campaign/v1",
+  "campaign": "2026-10-07-new-bounded-qualification",
+  "execution": "NOT_RUN",
+  "repository": "camerontjs-dot/Conduit",
+  "order": [
+    123,
+    128
+  ],
+  "subjects": [
+    {
+      "issue": 87,
+      "pr": 123,
+      "head": "9c9a61804eace635901d5e1c1eba46fe44b1c525",
+      "tree": "e022251b34654c9cfcbd93f36e13099b347d393b",
+      "requirement_file": "isolation-requirements.md"
+    },
+    {
+      "issue": 114,
+      "pr": 128,
+      "head": "587be4267f7ef7e3a9e40eacf07aab334dcb59f4",
+      "tree": "6ceb4705cbdb27429dc088dc925ed2dc368084d6",
+      "requirement_file": "runtime-requirements.md"
+    }
+  ],
+  "pre_oracle_allowed": [
+    "subjects.json",
+    "protocol.md",
+    "isolation-requirements.md",
+    "runtime-requirements.md"
+  ],
+  "pre_oracle_file_sha256": {
+    "protocol.md": "0340ea1ad180f43c0c762f1b9baba5ac827a8e3abf2384603e5b3e0be64ea22e",
+    "isolation-requirements.md": "c788c875a06a75cf1b603d82e2ee81ff91366b3da35495736facc717b132b862",
+    "runtime-requirements.md": "39d42abc9f7525e0b34f2b53d144d44df0e2dda0d5a040fa539d16c13a92901b"
+  },
+  "new_limits": {
+    "combined_execution_seconds": 7200,
+    "full_suites_per_subject": 1,
+    "release_builds_per_subject": 1,
+    "full_or_build_seconds_each": 1200,
+    "focused_seconds": 600,
+    "native_controls_per_subject_max": 60,
+    "decisive_attempts_per_control": 1,
+    "native_control_seconds": 30,
+    "http_seconds": 3,
+    "teardown_seconds": 10
+  },
+  "inherited_original_limits": "UNKNOWN; not reconstructed or reset",
+  "coordinator_files_excluded_pre_oracle": [
+    "README.md"
+  ],
+  "no_composition": true
+}
