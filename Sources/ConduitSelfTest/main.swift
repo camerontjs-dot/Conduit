@@ -2490,6 +2490,21 @@ do {
     )
     check("session events mark stale ahead cursor", stale.cursorState == .ahead && stale.events.isEmpty)
     check("session events redact secrets", secretPage.events.first?.redacted == true && secretPage.events.first?.text?.contains("sk-test-secret") != true)
+    let lifecycleEvent = SessionPresentation.openingEvent(
+        .resumed(agentName: "Shell", tmuxSessionName: "conduit-sk-abcdefgh", attachedElsewhere: false)
+    )
+    let lifecycleSource = ConduitSessionEventSource(
+        taskSessionID: "task", backend: .pty, sessionLifecycle: "runtime_missing",
+        runtimeState: "absent", live: false, ready: false, events: [lifecycleEvent]
+    )
+    let lifecycleRecord = ConduitSessionEventExport.page(source: lifecycleSource).events.first
+    let lifecycleExpansion = ConduitSessionEventExport.expand(
+        source: lifecycleSource, eventID: lifecycleEvent.id.uuidString, offset: 0, limit: nil
+    )
+    check("lifecycle expansion preserves redacted metadata and safe text",
+          lifecycleRecord?.redacted == true && lifecycleExpansion.redacted
+            && lifecycleExpansion.text == lifecycleRecord?.text
+            && lifecycleExpansion.text?.contains("sk-abcdefgh") == false)
     check("session events keep Codex turn completed distinct from running session", codexPage.turn.state == "completed" && codexPage.session.lifecycle == "running")
     check("session events keep PTY quiet ambiguous", ptyPage.turn.state == "ambiguous" && ptyPage.turn.ambiguity == "pty_output_quiet")
     check("session events label structured Codex output", codexPage.events.last?.authority == "toolReported" && codexPage.events.last?.turnStatus == "completed")

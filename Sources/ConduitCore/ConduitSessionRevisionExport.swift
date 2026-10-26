@@ -394,12 +394,12 @@ extension ConduitSessionEventExport {
         // Reuse the record builder for kind-specific text so expansion and
         // the page agree on what an event's text is.
         let event = source.events[index]
-        let retained: (text: String, sourceTruncated: Bool)
+        let retained: (text: String, sourceTruncated: Bool, redacted: Bool)
         switch event.kind {
         case .userPrompt(let prompt):
-            retained = (prompt.text, false)
+            retained = (prompt.text, false, false)
         case .agentOutput(let output):
-            retained = (output.text, output.truncated)
+            retained = (output.text, output.truncated, false)
         case .sessionOpened, .interruptRequested:
             let full = record(
                 event: event,
@@ -407,7 +407,7 @@ extension ConduitSessionEventExport {
                 source: source,
                 textLimit: Int.max
             )
-            retained = (full.text ?? "", false)
+            retained = (full.text ?? "", false, full.redacted)
         }
         let redaction = redactText(retained.text)
         let characters = Array(redaction.text)
@@ -426,7 +426,7 @@ extension ConduitSessionEventExport {
             totalCharacters: characters.count,
             fullTextSHA256: sha256Hex(redaction.text),
             sourceTruncated: retained.sourceTruncated,
-            redacted: redaction.redacted,
+            redacted: retained.redacted || redaction.redacted,
             timelineSource: kind
         )
     }

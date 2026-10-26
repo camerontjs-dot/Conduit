@@ -398,6 +398,41 @@ final class ConversationRevisionFeedTests: XCTestCase {
 
     // MARK: Exact expansion
 
+    func testLifecycleExpansionPreservesEarlierRedactionMetadata() throws {
+        let event = SessionPresentation.openingEvent(
+            .resumed(agentName: "Shell", tmuxSessionName: "conduit-sk-abcdefgh", attachedElsewhere: false),
+            id: outputID,
+            occurredAt: t0
+        )
+        let src = source(events: [event], durable: nil, kind: .cachedHistory)
+        let page = ConduitSessionEventExport.page(source: src)
+        let record = try XCTUnwrap(page.events.first)
+        let expansion = ConduitSessionEventExport.expand(
+            source: src, eventID: outputID.uuidString, offset: 0, limit: nil
+        )
+        XCTAssertTrue(record.redacted)
+        XCTAssertTrue(expansion.redacted)
+        XCTAssertFalse(expansion.text?.contains("sk-abcdefgh") == true)
+        XCTAssertEqual(expansion.text, record.text)
+        XCTAssertEqual(expansion.fullTextSHA256, ConduitSessionEventExport.sha256Hex(try XCTUnwrap(record.text)))
+        XCTAssertTrue(expansion.complete)
+        XCTAssertNil(expansion.nextOffset)
+        XCTAssertEqual(page.nextCursor, "v1:1")
+
+        // Clean lifecycle text must not acquire a redaction flag.
+        let clean = SessionPresentation.openingEvent(
+            .started(agentName: "Shell", requestedBackend: "pty"),
+            id: laterID,
+            occurredAt: t0
+        )
+        let cleanSource = source(events: [clean], durable: nil, kind: .cachedHistory)
+        let cleanExpansion = ConduitSessionEventExport.expand(
+            source: cleanSource, eventID: laterID.uuidString, offset: 0, limit: nil
+        )
+        XCTAssertFalse(cleanExpansion.redacted)
+        XCTAssertEqual(cleanExpansion.text, ConduitSessionEventExport.page(source: cleanSource).events.first?.text)
+    }
+
     func testCappedUnicodeTextExpandsExactlyAcrossSlices() throws {
         // Combining marks, ZWJ family emoji, flags and CJK: a slice boundary
         // must never split a user-perceived character.
