@@ -27,6 +27,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Lifecycle event text expansion preserves an earlier redaction flag, so a
+  resumed session's safe text and redaction metadata agree with its page.
+
 - Session event export redaction now repeats until nothing changes, so a key
   exposed by redacting an earlier one (for example after a combining mark) is
   no longer exported. It runs at most eight passes; text that has not settled
