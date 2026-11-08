@@ -1,107 +1,32 @@
 {
   "schema_version": "mainframe-candidate/v1",
-  "candidate_id": "CONDUIT-M1-M2-20261108-D4",
+  "candidate_id": "CONDUIT-M2-GUEST-PREPARATION-20261108-D5",
   "project": "Conduit",
-  "base_commit": "382290bded447ea805ac71ed7d57bebeaf65f471",
-  "maintained_main": "49d4f448910f8ef19c4f3b95fc15a9b91ed70df5",
-  "source_commit": "b76e2c60ac7cc784d5c50297c1d1deb8778450fc",
-  "source_tree": "1665821252a8daf2b6f33d45927c6fb269cb8c3c",
-  "lifecycle_state": "REVIEWABLE_SOURCE_PROPOSAL",
-  "advancement_readiness": "READY_FOR_SOURCE_REVIEW_DEVELOPMENT_ONLY",
+  "base_commit": "533b5fd7254b19efd0ce126e93ebfd36f4041c8d",
+  "source_commit": null,
+  "source_tree": null,
+  "lifecycle_state": "OWNED_DEVELOPMENT_SUCCESSOR",
+  "advancement_readiness": "PREPARATION_ONLY",
   "production_execution": "execution_authority_unavailable",
+  "guest_runtime": "NOT_RUN",
   "qualification": "NOT_RUN",
   "installed_trial": "NOT_ADMITTED",
   "predecessors": {
-    "D1": "35abf570434e1d8e5ee5f602ff15dbf4ad9863f60073d998a95d374d877db1c9",
-    "D2": "cabb947f0b41ed58e7202794086f101f09f6ef8c721ea2d74da9dc447ed34d5e",
-    "D3_selected_recovery": "50b23e2d6fd4dc7bb63c19695996cae608d1162ebfe7b7602922cb2c4dc9e117"
+    "D4": "533b5fd7254b19efd0ce126e93ebfd36f4041c8d",
+    "D3_private_content": "50b23e2d6fd4dc7bb63c19695996cae608d1162ebfe7b7602922cb2c4dc9e117"
   },
   "included_scope": [
-    "D1/D2 supervisor lifecycle source",
-    "D3 claim/capacity guards",
-    "fixture-only offline development boundary probe"
+    "D3 staging/profile/configuration/job data reuse",
+    "native restore/platform metadata and storage readiness",
+    "small owned preparation packets and native denial controls"
   ],
   "excluded_scope": [
-    "D3 VM implementation",
-    "operator installation/grants",
-    "frozen R3 mutation",
+    "D3 batch VM actuator and guest worker",
+    "operator state/authority changes",
+    "large asset download or image allocation before capacity admission",
+    "old exact R3 trial",
     "independent qualification",
-    "M3-M6",
-    "merge/release"
-  ],
-  "source_identity": "Committed source proposal; the following commit updates only this candidate metadata",
-  "private_source_manifest_sha256": "e9850f36903912ea0f70ec1de0115653a386380a181e271aff356eb6c771f914",
-  "source_files_hashed": 436,
-  "milestones": {
-    "M1": "COMPLETE_BOUNDED_SOURCE_DISPOSITION",
-    "M2": "FIRST_NATIVE_DEVELOPMENT_SLICE_COMPLETE",
-    "M2_supported_production_profile": "UNRESOLVED_GUEST_RUNTIME_NOT_RUN"
-  },
-  "evidence_catalog": "docs/qualification/m1-m2-development-evidence.json",
-  "development_evidence": {
-    "focused_xctest": {
-      "reported": 34,
-      "failures": 0
-    },
-    "full_xctest": {
-      "reported": 837,
-      "skipped": 4,
-      "failures": 0
-    },
-    "selftest": {
-      "passed": 601,
-      "failed": 0
-    },
-    "python_contracts": {
-      "reported": 33,
-      "result": "OK"
-    },
-    "CDS1_protocol": {
-      "reported": 8,
-      "failed": 0
-    },
-    "offline_native_final": {
-      "reported": 24,
-      "failed": 0
-    },
-    "unavailable_helper": {
-      "status": "BLOCKED",
-      "exit_code": 2
-    },
-    "history_scan": {
-      "status": "FAIL",
-      "inherited_findings": 6,
-      "disposition": "same H01-H06 published ancestry accepted in PR187; no allowlist or baseline change"
-    }
-  },
-  "build_identity": {
-    "app_version": "0.3.0",
-    "app_build": "3",
-    "file_count": 28,
-    "executable_sha256": "115e923c18fcc7499caafe99d805d98ee6b1cb352777e32b499be02d78f4d6a3",
-    "helper_sha256": "614b4c1a5e621928646e7360228f83a09bd1942fa8a7594a4299d371b424f71b",
-    "app_file_map_sha256": "76078a33178891591439ef9adb09cbf1e2884060c0f88dd0edaf784ea9a1ff5b",
-    "signature": "strict_deep_verified",
-    "installed": false,
-    "launched": false
-  },
-  "operator_installation": {
-    "executable_sha256": "d90de0bb2e1afa49000fce6e97421136e1e1f1c53a291d0e3efcd94f6e4f23cc",
-    "changed": false
-  },
-  "limitations": [
-    "deprecated development backend; excluded from product activation",
-    "no aggregate memory/disk/CPU or task process-count bound established",
-    "native fixture preparation is not installed file-API acceptance",
-    "one named loopback TCP denial; no universal network qualification",
-    "unknown/lost ownership never restores signal or retry authority",
-    "D3 guest assets and runtime unavailable/unrun",
-    "independent reviewer/isolation and installed acceptance unchanged"
-  ],
-  "protected_gates": [
-    "R3 A01-A06 NOT_RUN",
-    "R3 B01-B10 BLOCKED_PROFILE_MISSING / NOT_RUN",
-    "#168 -> #123 -> #128 unchanged",
-    "#142 HOLD unchanged"
+    "merge/release",
+    "M3-M6"
   ]
 }

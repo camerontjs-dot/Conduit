@@ -25,6 +25,14 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Added
+
+- A separate development CLI reuses D3 project staging, inspection, search,
+  hash-checked edits and guest request preparation. It observes native restore
+  metadata and storage capacity, writes small exclusive platform packets, and
+  always refuses image allocation and command execution. No operator setting
+  or guest actuator is added.
+
 ### Fixed
 
 - All internal fixture executors now respect prior supervisor launch claims;

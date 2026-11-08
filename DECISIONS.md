@@ -2615,3 +2615,57 @@ filesystem/network/subprocess confinement. See the [M1/M2 contract](docs/qualifi
 Reconsider before any product grant, install, supported toolchain or wider
 resource/ownership claim. Independent review and installed human/API acceptance
 remain separate requirements.
+
+
+## D-082: Prepare a bounded offline guest without admitting execution
+
+**Status:** Accepted for development preparation, 2026-11-08. Production boundary unresolved.
+
+**Context:** The M1 successor preserves the production refusal and has real
+native evidence only for a deprecated development mechanism. D3 already has
+useful staging, bounded file operations, a fixed guest profile and VM
+configuration code, but its full batch actuator has never run. Rebuilding
+these mechanisms would discard working evidence without resolving that gap.
+
+**Decision:** Reuse D3's staging, profile/configuration and job data in a
+separate preparation CLI, stacked on the M1 successor. Exclude its batch
+actuator and guest worker. Keep all operator settings, effective grants and
+installation unchanged. `run` refuses; preparation never grants execution or
+image allocation. Invalid local packet destinations refuse before native
+parsing or network access. Input files use the existing descriptor-based
+bounded reader rather than reading an unbounded file then checking its size.
+
+For native restore metadata, ad hoc sign only an owned CLI fixture copy with
+`com.apple.security.virtualization`, which Apple requires for restore-image
+loading. This is an explicit development privilege choice. No entitlement is
+added to the product app, no system toolchain changes, and no VM object is
+constructed. Apple's catalog and an Apple HTTPS HEAD request are preparation
+network activity, separate from the proposed offline guest check.
+
+Use a conservative proposed capacity budget of the full 64 GiB D3 boot-image
+ceiling, 256 MiB exchange image, 8 GiB host staging for offline payloads,
+8 GiB host reserve and observed IPSW size. This selects a reversible
+preparation rule, not an empirically established minimum disk profile. A free
+space observation cannot reserve space; capacity success never admits effects.
+D3's fixed 2 CPU / 4 GiB guest profile is not increased to accommodate an
+incompatible restore. Such a restore reports a blocker.
+
+**Evidence and alternatives:** See the dated preparation record and native
+receipt catalog. The unsigned catalog call failed; an entitled private copy
+retrieved real compatible restore metadata. Continuing with host cwd/env
+filtering would not establish confinement. Reusing deprecated `sandbox-exec`
+as a product boundary is rejected. Importing the untested batch actuator or
+silently choosing a smaller sparse disk is deferred until owned storage,
+assets, toolchain and lifecycle evidence exist.
+
+**Limits and reconsideration:** Full guest asset preparation, physical disk
+reservation, offline toolchain/dependency inventory, guest bootstrap, grants,
+command output/exit evidence, descendants and outside-file/network/executable
+controls are NOT_RUN. Lost guest or launcher ownership remains UNKNOWN; do
+not replay an ambiguous operation or infer descendant death from missing
+receipts. Revisit the capacity proposal with actual restore/toolchain needs
+and an owner-selected storage location, then test the supported guest boundary.
+The exact R3 trial and #168 → #123 → #128 / #142 / #174 gates remain separate.
+
+Apple references: [restore image entitlement and metadata](https://developer.apple.com/documentation/virtualization/vzmacosrestoreimage),
+[installation requirements](https://developer.apple.com/documentation/virtualization/installing-macos-on-a-virtual-machine).

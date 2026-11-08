@@ -11,6 +11,7 @@ let package = Package(
         .executable(name: "Conduit", targets: ["Conduit"]),
         .executable(name: "conduit-selftest", targets: ["ConduitSelfTest"]),
         .executable(name: "conduit-command-supervisor", targets: ["ConduitCommandSupervisor"]),
+        .executable(name: "conduit-offline-sample", targets: ["ConduitOfflineSample"]),
         .library(name: "ConduitCore", targets: ["ConduitCore"])
     ],
     dependencies: [
@@ -22,6 +23,7 @@ let package = Package(
     targets: [
         .executableTarget(name: "ConduitCommandSupervisor"),
         .target(name: "ConduitCore"),
+        .executableTarget(name: "ConduitOfflineSample", dependencies: ["ConduitCore"]),
         .executableTarget(
             name: "ConduitSelfTest",
             dependencies: ["ConduitCore"]
