@@ -1,0 +1,125 @@
+{
+  "schema": "conduit-m2-preparation-evidence/v1",
+  "candidate_id": "CONDUIT-M2-GUEST-PREPARATION-20261108-D5",
+  "work_class": "bounded source engineering and native development testing",
+  "base_commit": "533b5fd7254b19efd0ce126e93ebfd36f4041c8d",
+  "base_tree": "4e3cedbd81cda97ee7c7e0dbe5b1d640d64d2bf1",
+  "source_commit": "aec912c8e8f2bcbecb353b44ce498656dc39b823",
+  "source_tree": "0d4701d637766e67fa8009dfa0d61cd398e1f68f",
+  "status": "PREPARATION_SLICE_COMPLETE_GUEST_EXECUTION_BLOCKED",
+  "host": {
+    "os": "macOS 27.0",
+    "build": "26A428",
+    "architecture": "arm64",
+    "cpu_count": 8,
+    "memory_bytes": 25769803776,
+    "xcode": "26.6 / 17F113",
+    "global_toolchain_changed": false
+  },
+  "checks": {
+    "native_controls": {
+      "passed": 13,
+      "failed": 0,
+      "boundary": "native metadata/parser plus application controls; no guest confinement"
+    },
+    "self_checks": 604,
+    "python_checks": 33,
+    "full_xctest_reported": 858,
+    "xctest_skipped": 4,
+    "xctest_failures": 0,
+    "initial_focused_xctest": 20,
+    "final_focused_xctest": 21
+  },
+  "build": {
+    "source_commit": "aec912c8e8f2bcbecb353b44ce498656dc39b823",
+    "source_tree": "0d4701d637766e67fa8009dfa0d61cd398e1f68f",
+    "app_file_count": 28,
+    "app_executable_sha256": "5ec356f51ae7eea3b8d696704bce63c7b6f223e88043c97f3725be73050cd9ea",
+    "version": "0.3.0",
+    "build": "3",
+    "release_CLI_sha256": "34db9cc074618bf099210394e3c1cf3a33de9fe4e1c7038e4fc4b73b4fb7d63e",
+    "installed_or_launched": false
+  },
+  "native_probe": {
+    "schema": "conduit-offline-preparation-probe/v1",
+    "status": "PASS_WITH_BOUNDS",
+    "source_binary_sha256": "4a3230d073a78cb7e024fca18da4fc9009d48ad86e691057086791656b33872d",
+    "signed_binary_sha256": "87e7d44c612b6b9eb0dd2ea29d023f3fed618c05c17a08afc2835bf3f0eeb8b1",
+    "entitlements_sha256": "5c1c6753b84cc1a1349de2a465074f166b5a47bade536b231683c22f53072259",
+    "guest_execution": "NOT_RUN",
+    "confinement": "NOT_ESTABLISHED"
+  },
+  "restore_observation": {
+    "build": "26B123",
+    "byteCount": 25595669503,
+    "hardwareModelSHA256": "18d57e0cfa40f7af63bb38c801a03bde06d00b281554b926128828a7ca0d9a2e",
+    "minimumCPUCount": 2,
+    "minimumMemoryBytes": 4294967296,
+    "version": "27.2.0"
+  },
+  "capacity": {
+    "availableBytes": 35453861888,
+    "minimumRequiredBytes": 86167781376,
+    "requiredBytes": 111763450879,
+    "capacitySufficient": false,
+    "restoreFitsProfile": true,
+    "blockers": [
+      "insufficient_storage_capacity",
+      "storage_not_reserved",
+      "guest_assets_not_prepared",
+      "offline_toolchain_not_packaged",
+      "execution_authority_unavailable"
+    ],
+    "imageAllocationAdmitted": false,
+    "executionAdmitted": false
+  },
+  "first_failures": [
+    {
+      "scope": "unsigned native catalog",
+      "outcome": "sample_failed; no platform packet; entitled fixture copy later succeeded"
+    },
+    {
+      "scope": "custody diagnostic",
+      "outcome": "initial verifier misclassified preserved links and authorized new evidence directory; corrected link-aware comparison preserved all preexisting bytes/modes/HEADs across 15 repositories"
+    },
+    {
+      "scope": "diff whitespace",
+      "outcome": "one extra trailing blank line removed; final staged diff check passed"
+    }
+  ],
+  "publication": {
+    "current_tree": "PASS",
+    "full_history": "FAIL: six unchanged H01-H06 fixture-path findings; same individually dispositioned published ancestry in PR187; no allowlist/baseline change"
+  },
+  "guest_execution": "NOT_RUN",
+  "guest_confinement": "NOT_ESTABLISHED",
+  "independent_qualification": "NOT_RUN",
+  "installed_acceptance": "NOT_RUN",
+  "receipts_private": true,
+  "receipt_sha256": {
+    "native-01/invocation.json": "0a6ba4d89f9c49383d5e6fdcf8a948fcf053e018c50d8fb9002c55e1ba918bc4",
+    "native-01/stderr.txt": "4eb5e9f90b19da823cd597a5ac3acb0ddb22517dc70631cf833d66585c6b241c",
+    "native-02/metadata.invocation.json": "60089f40e04500526c8434b82496e766279f96fcf681d20f9d44c93eced1613f",
+    "native-02/platform-packet/PREPARATION.json": "12a2744774a6d860df0b4299ab5e54a8326d42acc0cb7ebe3dd968821fa68002",
+    "native-03/RESULT.json": "0ab398f4367186428e04c9af9109f085aa11ee02f5f64b7f96076f2302ae4cdc",
+    "native-04/RESULT.json": "8346bfc277b96feb43233c9190cfca7273698a4ebbbbecc1cbf5b5a57312d42c",
+    "native-05/RESULT.json": "8346bfc277b96feb43233c9190cfca7273698a4ebbbbecc1cbf5b5a57312d42c",
+    "native-05/invalid-image.stderr.json": "38303b35c3a59f98df0c95c2f81870ce7e0934788ea1dca30e1a6e4dbad65147",
+    "native-05/platform-packet/PREPARATION.json": "297faf8c44a124ac6e02af9058dcb777deb355f07398663d34b05df56a6eaddf",
+    "focused-test-01.log": "5eac21d9910c0a1e9d0a011cc99793ea602a0d135a656d9f0a2c7f3394bce6f1",
+    "focused-test-02.log": "4c804da5eb9934f03bbf168d7febed4f3a523f1ac763e5a8d9440fb4f9c75d1d",
+    "full-test-01.log": "26af43318cc27fb3c69ff09cc3a8586d64fd45c9caaca7f2f59e23271b083360",
+    "full-test-02.log": "c9732c7f57640ba9bb4dfb67295a62e06fae588369af4d5312d59890b848be16",
+    "build-app-01.log": "c6f0541cf5f8e3477f5848dd1fa8ec3ede29dc1090fcca225df82ce80fa9d687",
+    "build-app-02.log": "1f1763f52897b33c71b1b00a0c77934089ebba366b11f3def51b16214ae9514e",
+    "build-sample-final.log": "9d89e27efd0ea50b5017101670c3c4521d6f85dc3c3c566d725b7d750ee59e21",
+    "signature-verify-final.txt": "e72ee637e6516a5ea44a78124ce17438281ccc3aa340086d2150ab4a67645657",
+    "build-identities-final.json": "5c7c3c4e99148b83b77c716902dcc3a745333626d0155d8e76fdbf7adb1142e2",
+    "preservation-before.json": "a7488d1b01ab32daae5ec5f7643f85d541c798d65f302392493ba02209f436bf",
+    "preservation-after-source.json": "b51dcd18a130165d1eb60dfa51bd1fbab57baa77ca4146e8cff2a5988e7c9b96",
+    "preservation-after-source-corrected.json": "77bdafe3c64bcebd5cea2fae3bf36bfeac81f6dc40e6c486e76648e32d78ed53",
+    "leak-tree-final.log": "db893e788042d45da66468ee0277a4041bba92bfeaeaea5b4441038c209bf868",
+    "leak-full-01.log": "caa3184ad1f327c2128a0b4f8ef8aa203f9b4767a660201b2599cc19f3dbed5c",
+    "D3-reuse-repair-defer.json": "6fc133b6c869276f79eec3434c819dcc106757a7b5541b62373075a523583fa7"
+  }
+}

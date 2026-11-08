@@ -3,8 +3,8 @@
   "candidate_id": "CONDUIT-M2-GUEST-PREPARATION-20261108-D5",
   "project": "Conduit",
   "base_commit": "533b5fd7254b19efd0ce126e93ebfd36f4041c8d",
-  "source_commit": null,
-  "source_tree": null,
+  "source_commit": "aec912c8e8f2bcbecb353b44ce498656dc39b823",
+  "source_tree": "0d4701d637766e67fa8009dfa0d61cd398e1f68f",
   "lifecycle_state": "OWNED_DEVELOPMENT_SUCCESSOR",
   "advancement_readiness": "PREPARATION_ONLY",
   "production_execution": "execution_authority_unavailable",
@@ -28,5 +28,9 @@
     "independent qualification",
     "merge/release",
     "M3-M6"
-  ]
+  ],
+  "evidence": "docs/qualification/m2-guest-preparation-evidence.json",
+  "preparation_status": "PREPARATION_SLICE_COMPLETE_GUEST_EXECUTION_BLOCKED",
+  "native_restore_fits_fixed_profile": true,
+  "capacity_sufficient": false
 }
