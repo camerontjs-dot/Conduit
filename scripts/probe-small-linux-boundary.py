@@ -117,7 +117,7 @@ class Initramfs:
         self.manifest[name] = {"mode": mode, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
-def main():
+def main(launch=capture, *, vm_deadline_seconds=15):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kernel", type=Path, required=True)
     parser.add_argument("--rootfs", type=Path, required=True)
@@ -216,7 +216,8 @@ def main():
     (out / "native-ticket.json").write_bytes(ticket)
     (out / "FixtureGate.swift").write_text(
         "let fixtureGrantDigest = " + json.dumps(hashlib.sha256(ticket).hexdigest()) + "\n" +
-        "let fixtureClaimPath = " + json.dumps(str(out / "native-launch.claim")) + "\n")
+        "let fixtureClaimPath = " + json.dumps(str(out / "native-launch.claim")) + "\n" +
+        "let fixtureDeadlineSeconds: Double = " + str(vm_deadline_seconds) + "\n")
     # Top-level executable code must be in main.swift in a multi-file build.
     shutil.copyfile(out / "VMRunner.swift", out / "main.swift")
     command("compile-runner", ["/usr/bin/swiftc", "-O", "-target", "arm64-apple-macos14.0", "-framework", "Virtualization", out / "main.swift", out / "FixtureGate.swift", "-o", out / "VMRunner"],
@@ -227,7 +228,7 @@ def main():
     command("verify-signature", ["/usr/bin/codesign", "--verify", "--strict", out / "VMRunner"])
     profile = {"id": "portable-bash-grep-linux-fixture/v1", "cpu": 1, "VM_memory_bytes": 134217728,
                "job_memory_bytes": 33554432, "pids": 16, "cpu_quota": "20000 100000", "wall_ms": 1500,
-               "VM_deadline_s": 15, "project_bytes": 1048576, "scratch_bytes": 1048576,
+               "VM_deadline_s": vm_deadline_seconds, "project_bytes": 1048576, "scratch_bytes": 1048576,
                "retained_stream_bytes": 4096, "observed_stream_ceiling": 65536,
                "output_budget_semantics": "kill threshold; pipe/drain overshoot counted, not a hard byte ceiling",
                "network_devices": [], "disks": [], "shares": [], "socket_devices": [],
@@ -290,7 +291,7 @@ def main():
     (out / "GRANT.json").write_text(json.dumps(valid, indent=2) + "\n")
     (out / "PROFILE.json").write_text(json.dumps(profile, indent=2) + "\n")
     start = time.monotonic()
-    p = capture(native_argv, environment, 25, 256*1024, capability=ticket)
+    p = launch(native_argv, environment, 25, 256*1024, capability=ticket)
     (out / "serial.stdout").write_bytes(p["stdout"])
     (out / "host.stderr").write_bytes(p["stderr"])
     invocation = {**{k:v for k,v in p.items() if k not in ("stdout", "stderr")}, "wall_s": time.monotonic() - start, "launches": attempts,

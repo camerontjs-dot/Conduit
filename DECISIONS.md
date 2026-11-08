@@ -2695,3 +2695,10 @@ Reconsider only when a further declared check needs other tools or paths, or
 when an owner proposes production support. This does not supersede D-082's
 record for a macOS-specific restore, the exact R3 trial, or any independent
 review and installed acceptance requirement.
+
+The supervised follow-up keeps this fixed profile and composes it with the
+existing development supervisor and receipt service. It uses a shorter
+native stop deadline inside the supervisor's five-second budget. Guest stop
+and host cleanup stay separate observations. The first supervised result
+and the deliberate host hold after stop are recorded in the
+[profile evidence](docs/qualification/m2-small-portable-boundary.md#supervised-development-check).

@@ -47,7 +47,7 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
             case .failure(let error): event("start_failed", error.localizedDescription); exit(2)
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + fixtureDeadlineSeconds) { [self] in
             guard !ending else { return }
             timedOut = true
             event("deadline_stop_requested")

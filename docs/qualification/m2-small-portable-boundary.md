@@ -129,3 +129,53 @@ changes. Production stays `execution_authority_unavailable`. A future owner
 review can decide whether another declared check is portable; a macOS-only
 toolchain needs its own supported boundary decision and evidence. The frozen
 R3 experiment and #168 → #123 → #128, #142 HOLD and #174 remain separate.
+
+## Supervised development check
+
+D7 runs the same fixed guest suite through the internal development
+initializer of `ConduitDirectCommandService` and the existing CDS1 helper.
+The fixture driver is linked to an owned debug build of ConduitCore. The
+driver takes no arguments. Its build pins the fixture path, ticket and
+executables. It requires the exact ticket on an inherited pipe before
+constructing the service. The original native one-use gate still controls
+the VM. Both gates assume a trusted development owner.
+
+The bridge forwards the exact check bytes and observed exit code after a
+correlated guest result and native stop. The supervisor applies its
+five-second host budget. The fixture's own stop request is due after four
+seconds. A host root or group observation supplies only host cleanup
+evidence. A missing guest stop stays UNKNOWN.
+
+| Owned run | Guest observation | Supervisor receipt |
+| --- | --- | --- |
+| Ordinary completion | Exit 0, 20 stdout bytes, empty stderr, stop observed | `exited`, code 0, both stream EOFs, root and original group cleanup observed |
+| Host timeout control | Same exit and streams, guest stopped before the deliberate hold | `timed_out`, SIGTERM, no exit code, root and original group cleanup observed |
+
+Both runs retained the 29 guest checks and 12 D6 authority controls,
+including the actual guest wall-limit kill and reaping. The new driver
+refused absent and forged tickets before a store or launch claim appeared.
+The public service initializer also refused before a write hook or store
+creation. Live and completed retries and a fresh read-only service returned
+the original operation. A changed request with the same ID refused. Each
+run admitted and entered the bridge once, and the receipt store and native
+launch claim matched before and after retry.
+
+The host timeout control holds the bridge after confirmed guest stop.
+An in-flight loss of VM ownership needs its own experiment. These results
+cover one portable development fixture and its typed receipts.
+
+Use the D6 asset inputs above and a new private run directory. Build
+`ConduitCore` in an owned SwiftPM debug scratch directory and compile
+`Sources/ConduitCommandSupervisor/main.c` with the local Xcode macOS SDK.
+The proof driver is linked and bound to the current fixture at run time.
+
+```sh
+python3 -B scripts/probe-supervised-small-boundary.py \
+  --core-build "$OWNED_BUILD/arm64-apple-macosx/debug" --supervisor-helper "$OWNED_HELPER" \
+  --kernel "$OWNED_KERNEL" --rootfs "$OWNED_APK_ROOT" --zig "$OWNED_ZIG" \
+  --preparation-cli "$OWNED_PREPARATION_CLI" --evidence-dir "$NEW_OWNED_RUN"
+```
+
+For the host timeout control, add `--timeout-after-stop` and choose another
+new evidence directory. The original D6 runner retains its default VM
+deadline. The fixture driver, helper and bridge remain development tools.
