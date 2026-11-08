@@ -2,6 +2,12 @@ import ConduitCore
 import Foundation
 
 func runDirectCommandSelfChecks(_ report: (String, Bool) -> Void) {
+    let profileRequest = ConduitOfflineRequest(operationID: "selfcheck", stagedRoot: "/missing-offline-stage",
+        expectedManifestSHA256: String(repeating: "a", count: 64))
+    let profileReport = ConduitOfflinePreflight.observe(request: profileRequest)
+    report("offline sample cannot grant execution", !profileReport.admitted && profileReport.blockers.contains("execution_authority_unavailable"))
+    report("offline missing guest inputs refuse configuration", !profileReport.configurationReady && profileReport.blockers.contains("staged_workspace_unavailable"))
+    report("offline sample exposes missing lifecycle and export", profileReport.blockers.contains("batch_lifecycle_unavailable") && profileReport.blockers.contains("export_unavailable"))
     let guidance = ConduitSessionToolCatalog.clientInstructions
     report("direct workflow guidance keeps routine work in the current conversation", guidance.contains("before deploying another agent"))
     report("direct workflow guidance preserves the unavailable authority boundary", guidance.contains("do not bypass it through a Shell task"))
