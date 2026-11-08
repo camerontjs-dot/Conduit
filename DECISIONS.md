@@ -2669,3 +2669,29 @@ The exact R3 trial and #168 → #123 → #128 / #142 / #174 gates remain separat
 
 Apple references: [restore image entitlement and metadata](https://developer.apple.com/documentation/virtualization/vzmacosrestoreimage),
 [installation requirements](https://developer.apple.com/documentation/virtualization/installing-macos-on-a-virtual-machine).
+
+## D-083: Use a diskless Linux fixture for the first portable check
+
+**Status:** Accepted for bounded development evidence, 2026-11-08.
+
+The first check uses Bash and grep; it does not need Xcode in a guest. Keep
+D-082's preparation mechanisms and exact D3 script. For this check only,
+replace the proposed macOS restore/storage prerequisite with a pinned Linux
+kernel and RAM filesystem using Apple's supported virtualization interface.
+One CPU and 128 MiB worked without a guest disk, host share or NIC. App Sandbox
+alone did not deny the undeclared executable in its native control. The first
+Linux suite also failed: an implicit ELF loader was missing from the declared
+toolchain. Pin that loader and deny file execution/mapping from the data
+mounts, verified with actual escape controls.
+
+Use separate in-memory and native one-use admission checks for the owned
+fixture, unprivileged payloads, Landlock path rules, seccomp network denials,
+and kernel job budgets. Keep stop, exit, stream and inspection observations
+distinct. A surviving claim supplies no recovery authority. There is no
+operator install, product grant or change to a write gate. See the
+[profile and evidence](docs/qualification/m2-small-portable-boundary.md).
+
+Reconsider only when a further declared check needs other tools or paths, or
+when an owner proposes production support. This does not supersede D-082's
+record for a macOS-specific restore, the exact R3 trial, or any independent
+review and installed acceptance requirement.

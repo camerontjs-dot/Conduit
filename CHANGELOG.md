@@ -27,6 +27,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- Standalone development probes test the fixed offline Bash/grep sample in a
+  diskless Linux guest on macOS, with one-use fixture authority and kernel
+  denial controls. The operator app and its execution guard are unchanged.
 - A separate development CLI reuses D3 project staging, inspection, search,
   hash-checked edits and guest request preparation. It observes native restore
   metadata and storage capacity, writes small exclusive platform packets, and
