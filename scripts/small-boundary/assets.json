@@ -1,0 +1,111 @@
+{
+  "schema": "conduit-small-boundary-assets/v1",
+  "scope": "Owned development fixture only; no binaries redistributed",
+  "root_files": {
+    "bin/bash": {
+      "bytes": 866280,
+      "sha256": "7e4478a30684ef490d685a1dd17da5c4a59aca8620bfb579f5cc20f858d90f45"
+    },
+    "bin/grep": {
+      "bytes": 198664,
+      "sha256": "4c125f50c8a2a16a40f16983e0e1434127d463f58cedd132b43f81955b9b8666"
+    },
+    "lib/ld-musl-aarch64.so.1": {
+      "bytes": 723480,
+      "sha256": "652a04bcb0326733f762eca799887bbc9e070df0a0d6668238769f6dfcdc77c2"
+    },
+    "lib/libc.musl-aarch64.so.1": {
+      "symlink": "ld-musl-aarch64.so.1"
+    },
+    "usr/lib/libreadline.so.8": {
+      "symlink": "libreadline.so.8.3"
+    },
+    "usr/lib/libreadline.so.8.3": {
+      "bytes": 350944,
+      "sha256": "a8f3ec1a6d92c07df91a0cf03df681c73c6258c78cf3411d674354c0c630a2ee"
+    },
+    "usr/lib/libncursesw.so.6": {
+      "symlink": "libncursesw.so.6.5"
+    },
+    "usr/lib/libncursesw.so.6.5": {
+      "bytes": 396160,
+      "sha256": "850bee9882323a0516df2ce97684ad5808ed296ee19e7918e45948453b928cb7"
+    },
+    "usr/lib/libpcre2-8.so.0": {
+      "symlink": "libpcre2-8.so.0.16.1"
+    },
+    "usr/lib/libpcre2-8.so.0.16.1": {
+      "bytes": 788464,
+      "sha256": "070987f1cfe8cd02a5f188913e4562906dffc9dae12461c996ef2d422901c3b3"
+    }
+  },
+  "kernel": {
+    "bytes": 36306944,
+    "sha256": "acb635444e1e736363865c903225e739010ad79e1db51caa17b8f6aa363124a6",
+    "derivation": "gzip member at byte 51832 of boot/vmlinuz-virt; decompressed arm64 Image magic at byte 56"
+  },
+  "zig": {
+    "version": "0.17.1",
+    "platform": "aarch64-macos",
+    "archive_url": "https://ziglang.org/download/0.17.1/zig-aarch64-macos-0.17.1.tar.xz",
+    "archive_sha256": "75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d",
+    "executable_sha256": "bb6397b497438ce9e9d0d668fbfb42e777082f2b0af87ab06dec5ec928e19df5"
+  },
+  "alpine_packages": [
+    {
+      "name": "bash",
+      "version": "5.3.3-r1",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/bash-5.3.3-r1.apk",
+      "sha256": "5557dc5d3dbf3bb3e64f7aad4cfe535a6bffe4c2c13b81d527ef25dd6c438652",
+      "bytes": 542149
+    },
+    {
+      "name": "grep",
+      "version": "3.12-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/grep-3.12-r0.apk",
+      "sha256": "defb9fc7dcb3b1657594513dc4d4103c9d24cf82f2261690268919aef7379081",
+      "bytes": 89280
+    },
+    {
+      "name": "musl",
+      "version": "1.2.5-r24",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/musl-1.2.5-r24.apk",
+      "sha256": "d7043c549029c98d438e9bc94213b006e5c88540eb58d1f5b0f0d1d56dbf9c98",
+      "bytes": 416083
+    },
+    {
+      "name": "readline",
+      "version": "8.3.1-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/readline-8.3.1-r0.apk",
+      "sha256": "70d288a6c3d8daf19b10fb220120d2ebd6f154011c96ca5bc84923b658cb21f7",
+      "bytes": 129698
+    },
+    {
+      "name": "libncursesw",
+      "version": "6.5_p20251123-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/libncursesw-6.5_p20251123-r0.apk",
+      "sha256": "7fe332c8af8b97579e89df56466f83f4abda5040a18e1842c07d684320bbef4b",
+      "bytes": 161252
+    },
+    {
+      "name": "pcre2",
+      "version": "10.49-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/pcre2-10.49-r0.apk",
+      "sha256": "a0af38fe98cb22c358aca1e1e504141c6673efef7635c539a914b83fb5c13b58",
+      "bytes": 320292
+    },
+    {
+      "name": "linux-virt",
+      "version": "6.18.60-r0",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/linux-virt-6.18.60-r0.apk",
+      "sha256": "3dd0e4da4057181287d7c35fe1da1272d5d259b4a84e8d9542b5ad52c4ecad64",
+      "bytes": 39373081
+    }
+  ],
+  "apk_verification": {
+    "key_url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub",
+    "key_sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+    "method": "RSA/SHA1 signature of compressed control member via native OpenSSL; signed .PKGINFO SHA256 datahash equals compressed data member; all seven observed Verified OK",
+    "trust_limit": "Key obtained from vendor HTTPS; no independent key authentication or supply-chain qualification"
+  }
+}

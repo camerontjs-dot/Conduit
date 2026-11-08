@@ -1,36 +1,24 @@
 {
   "schema_version": "mainframe-candidate/v1",
-  "candidate_id": "CONDUIT-M2-GUEST-PREPARATION-20261108-D5",
-  "project": "Conduit",
-  "base_commit": "533b5fd7254b19efd0ce126e93ebfd36f4041c8d",
-  "source_commit": "aec912c8e8f2bcbecb353b44ce498656dc39b823",
-  "source_tree": "0d4701d637766e67fa8009dfa0d61cd398e1f68f",
+  "candidate_id": "CONDUIT-M2-SMALL-BOUNDARY-20261108-D6",
+  "base_commit": "fe5a73868fb3afeb05b511684f79bfe736b16b61",
+  "source_commit": "4e190b6faef274f4f86c688d41a5a47a1dd168fe",
+  "source_tree": "98cacfb068673108a79929728324ca32c65ef778",
   "lifecycle_state": "OWNED_DEVELOPMENT_SUCCESSOR",
-  "advancement_readiness": "PREPARATION_ONLY",
+  "advancement_readiness": "PORTABLE_DEVELOPMENT_PASS_WITH_BOUNDS",
   "production_execution": "execution_authority_unavailable",
-  "guest_runtime": "NOT_RUN",
   "qualification": "NOT_RUN",
   "installed_trial": "NOT_ADMITTED",
-  "predecessors": {
-    "D4": "533b5fd7254b19efd0ce126e93ebfd36f4041c8d",
-    "D3_private_content": "50b23e2d6fd4dc7bb63c19695996cae608d1162ebfe7b7602922cb2c4dc9e117"
-  },
-  "included_scope": [
-    "D3 staging/profile/configuration/job data reuse",
-    "native restore/platform metadata and storage readiness",
-    "small owned preparation packets and native denial controls"
+  "scope": "fixed portable Bash/grep check; native supported boundary falsification, then smallest supported feasible isolated runtime",
+  "protected": [
+    "original R3/D1/D2/D3/D4/D5 and evidence",
+    "operator app/effective grants/write gates/providers/preferences/tunnel",
+    "no file deletion or full macOS VM provisioning",
+    "#168 -> #123 -> #128, #142 HOLD, #174 requirements"
   ],
-  "excluded_scope": [
-    "D3 batch VM actuator and guest worker",
-    "operator state/authority changes",
-    "large asset download or image allocation before capacity admission",
-    "old exact R3 trial",
-    "independent qualification",
-    "merge/release",
-    "M3-M6"
-  ],
-  "evidence": "docs/qualification/m2-guest-preparation-evidence.json",
-  "preparation_status": "PREPARATION_SLICE_COMPLETE_GUEST_EXECUTION_BLOCKED",
-  "native_restore_fits_fixed_profile": true,
-  "capacity_sufficient": false
+  "project": "Conduit",
+  "guest_runtime": "PASS_WITH_BOUNDS: fixed Linux Bash/grep fixture",
+  "macos_toolchain_equivalence": "NOT_ESTABLISHED",
+  "evidence": "docs/qualification/m2-small-portable-boundary.md",
+  "development_receipt_sha256": "eb7a515179f60feb9fb86ceb337b3d16a398cf7f0c7d67cafa40df244a1e2aa1"
 }
