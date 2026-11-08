@@ -10,6 +10,7 @@ let package = Package(
     products: [
         .executable(name: "Conduit", targets: ["Conduit"]),
         .executable(name: "conduit-selftest", targets: ["ConduitSelfTest"]),
+        .executable(name: "conduit-command-supervisor", targets: ["ConduitCommandSupervisor"]),
         .library(name: "ConduitCore", targets: ["ConduitCore"])
     ],
     dependencies: [
@@ -19,6 +20,7 @@ let package = Package(
         )
     ],
     targets: [
+        .executableTarget(name: "ConduitCommandSupervisor"),
         .target(name: "ConduitCore"),
         .executableTarget(
             name: "ConduitSelfTest",

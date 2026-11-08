@@ -2562,3 +2562,56 @@ instruction wording against observed fresh-client errors, not its mere presence
 in discovery. The [R3 record](docs/qualification/direct-workflow-20261022-r3.md)
 keeps review, source, hosted and installed evidence distinct. This accepts a
 development repair and client guidance, not production execution or rollout.
+
+
+## D-SUPERVISOR-DEV-20261023 — Fixture-only lifecycle owner candidate
+
+Status: local development decision, not production architecture acceptance. The direct-command fixture path may opt into one minimal C supervisor as sole waiter of a staged root in a new session. Native process-group control ends before root reaping; a bounded natural-exit window permits late cancellation without app-owned PID signalling. Immutable launch claims and app-only serialized receipt writing retain stable-ID refusal after uncertainty. Final persistence failure quarantines capacity; prior v2 stores are observation-only for new owners. Public initialization remains guarded.
+
+Contract and limits: [supervisor protocol v1](docs/qualification/supervisor-protocol-v1.md). Escaped descendants, supervisor death, hard real-time deadlines, production OS restrictions/grants, packaging integration and installed trials remain outside this candidate. The inherited R3 path and v1 observations remain readable. Native development evidence must identify the actual host/toolchain; macOS 15.7.9 compatibility is not inferred from local checks. Reconsider before broader timeouts, dependency/reaper changes, OS targets or product enablement.
+
+## D-SUPERVISOR-DEV-20261031 — D2 deadline and observation-only recovery
+
+Status: local source successor decision. D1 and R3 remain preserved. A retained
+development regression observed root exit 0/7 before the active deadline, then
+received timeout cause 2 during the natural-exit window. D2 stops active-timeout
+admission once root exit is observed, keeping existing timeout causes, late
+cancellation, root facts and cleanup budgets. Root observation precedes deadline
+evaluation in a turn; no exact exit-time or real-time guarantee is inferred.
+
+Recovery is evidence observation, not regained process authority. V2 historical
+capacity acknowledgements stay false; new owners refuse old claims, and intact
+records still block capacity when a claim is missing. D2 also recognizes a
+launch-claim-only missing outcome using the existing missing-receipt refusal.
+It neither parses claim bytes as permission nor retires them. A new public
+recovery API is unnecessary for these bounded read/replay/refusal semantics.
+
+The [D2 contract](docs/qualification/supervisor-d2-deadline-recovery.md) defines
+the narrow checks and non-claims. Actual crash/power-loss recovery, ownership
+transfer, claim retirement and production confinement remain unresolved. They
+need a separately authorized design. Public execution remains unavailable;
+guest/profile implementation and trials are outside this successor.
+
+## D-SUPERVISOR-DEV-20261108 — Preserve lifecycle work; bound the first offline check
+
+Status: source-development decision, not product execution-profile acceptance.
+Reuse preserved D1 with D2's observed-exit/missing-outcome repairs and D3's two
+recovery guards. Keep original manifests, failures and worktrees separate.
+The new source proposal is stacked on frozen R3 rather than advancing it.
+
+The first executable slice is an owned native fixture: pinned Bash check,
+explicit in-memory grant, scratch-only command writes, typed CDS1 output/exit
+evidence and actual OS denial controls. Its first positive control exposed
+the host's sh-to-bash variant; explicitly naming Bash resolved that development
+toolchain mismatch. Global metadata reads, incomplete aggregate resource
+limits and deprecated sandbox-exec remain material limits. This backend is
+excluded from product activation; AppModel and its public guard are unchanged.
+
+For ordinary project checks, retain the separately preserved D3 offline-guest
+recommendation and resolve its exact asset/runtime prerequisites before a trial.
+A byte-only sandboxed checker would deliberately reduce the goal. Neither a
+cwd nor a write gate, environment filter, receipt or process group supplies
+filesystem/network/subprocess confinement. See the [M1/M2 contract](docs/qualification/m1-m2-offline-development.md).
+Reconsider before any product grant, install, supported toolchain or wider
+resource/ownership claim. Independent review and installed human/API acceptance
+remain separate requirements.
