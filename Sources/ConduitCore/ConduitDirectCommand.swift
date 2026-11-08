@@ -99,6 +99,7 @@ public struct ConduitDirectCommandReceipt: Codable {
     public internal(set) var executionCapacityReleased = false
     public internal(set) var note: String?
     public internal(set) var idempotentReplay = false
+    public internal(set) var supervision: ConduitCommandSupervision?
 
     mutating func transition(_ phase: ConduitDirectCommandPhase, at: Date = Date()) {
         guard self.phase != phase else { return }
@@ -121,6 +122,9 @@ public final class ConduitDirectCommandService {
     public static let maximumReceiptBytes = 2_500_000
     private let directory: URL
     private let fixtureRoot: URL?
+    private let fixtureSupervisor: URL?
+    // Test-only adapter: forwards real POSIX I/O except the witnessed injected call.
+    internal var fixtureIO: ((String, () -> Int32) -> Int32)?
     private let capacity: Int
     private let instanceID = UUID().uuidString
     private let lock = NSLock()
@@ -136,14 +140,16 @@ public final class ConduitDirectCommandService {
     public init(storeDirectory: URL, maximumConcurrentOperations: Int = 2) {
         directory = storeDirectory
         fixtureRoot = nil
+        fixtureSupervisor = nil
         capacity = min(4, max(1, maximumConcurrentOperations))
     }
 
     /// Development-test admission only; unavailable to the application target
     /// and never selected by caller JSON, environment variables, or settings.
-    internal init(storeDirectory: URL, disposableFixtureRoot: URL, maximumConcurrentOperations: Int = 2) {
+    internal init(storeDirectory: URL, disposableFixtureRoot: URL, maximumConcurrentOperations: Int = 2, supervisorExecutable: URL? = nil) {
         directory = storeDirectory
         fixtureRoot = disposableFixtureRoot
+        fixtureSupervisor = supervisorExecutable
         capacity = min(4, max(1, maximumConcurrentOperations))
     }
 
@@ -177,6 +183,9 @@ public final class ConduitDirectCommandService {
         guard root.path == (try Self.canonicalExistingDirectory(fixtureRoot)).path else {
             throw failure("project_not_authorized", "This development executor is restricted to its nominated disposable fixture root.")
         }
+        if fixtureSupervisor != nil && request.timeoutMS > 5_000 {
+            throw failure("supervisor_fixture_limit", "The initial supervisor candidate supports at most five seconds per synthetic command.")
+        }
         try requireExternalStore(root: root)
         let cwd = try Self.resolveCwd(request.cwd, root: root)
         guard active.count < capacity else {
@@ -193,15 +202,22 @@ public final class ConduitDirectCommandService {
             var replay = observed(existing); replay.idempotentReplay = true
             return replay
         }
+        // Switching internal fixture executors cannot restore custody of an old
+        // supervisor attempt. Every fixture executor respects its launch claim.
+        let claims = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".launch-claim") }
+        if claims.contains(where: { receipts[String($0.dropLast(".launch-claim".count))] == nil }) {
+            throw failure("supervisor_recovery_required", "This store contains a prior supervisor attempt. Recovery is observation-only; use a fresh disposable store for new fixtures.")
+        }
         try reserveReceiptCapacity()
         let now = Date()
         var receipt = ConduitDirectCommandReceipt(
-            schemaVersion: "conduit-direct-command/v1", request: request,
+            schemaVersion: fixtureSupervisor == nil ? "conduit-direct-command/v1" : "conduit-direct-command/v2", request: request,
             resolvedProjectRoot: root.path, resolvedCwd: cwd.path,
             projectRootIdentity: try Self.directoryIdentity(root), cwdIdentity: try Self.directoryIdentity(cwd),
             ownerInstanceID: instanceID,
             phase: .accepted, transitions: [.init(phase: .accepted, at: now)], acceptedAt: now
         )
+        if let helper = fixtureSupervisor { receipt.supervision = try ConduitCommandSupervision(helper: helper) }
         receipt.transition(.queued, at: now)
         try reserveID(request.operationID)
         try persist(receipt) // The durable claim precedes every possible spawn.
@@ -457,9 +473,11 @@ public final class ConduitDirectCommandService {
         }
         let fd = openat(directoryFD, id + ".json", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
         if fd < 0, errno == ENOENT {
-            var reserved = stat()
-            if fstatat(directoryFD, id + ".reserved", &reserved, AT_SYMLINK_NOFOLLOW) == 0 || errno != ENOENT {
-                throw failure("operation_receipt_missing", "This operation ID was durably reserved but its outcome receipt is missing or inaccessible. Execution is unknown and will not be replayed.")
+            for marker in [".reserved", ".launch-claim"] {
+                var facts = stat()
+                if fstatat(directoryFD, id + marker, &facts, AT_SYMLINK_NOFOLLOW) == 0 || errno != ENOENT {
+                    throw failure("operation_receipt_missing", "This operation ID has a reservation or launch claim, but its outcome receipt is missing or inaccessible. Execution is unknown and will not be replayed.")
+                }
             }
             return nil
         }
@@ -482,10 +500,23 @@ public final class ConduitDirectCommandService {
         }
         do {
             let receipt = try JSONDecoder().decode(ConduitDirectCommandReceipt.self, from: data)
-            guard receipt.schemaVersion == "conduit-direct-command/v1", receipt.request.operationID == id else {
+            guard ["conduit-direct-command/v1", "conduit-direct-command/v2"].contains(receipt.schemaVersion), receipt.request.operationID == id,
+                  (receipt.schemaVersion != "conduit-direct-command/v2" || receipt.supervision != nil) else {
                 throw failure("receipt_corrupt", "The receipt identity or schema does not match; execution is refused.")
             }
             try Self.validate(receipt.request)
+            if let supervision = receipt.supervision {
+                let hex = CharacterSet(charactersIn: "0123456789abcdef")
+                guard receipt.schemaVersion == "conduit-direct-command/v2", supervision.protocolVersion == "CDS1",
+                      !receipt.executionCapacityReleased,
+                      supervision.attemptNonce.count == 32, supervision.helperIdentity.count == 64,
+                      supervision.attemptNonce.unicodeScalars.allSatisfy({ hex.contains($0) }),
+                      supervision.helperIdentity.unicodeScalars.allSatisfy({ hex.contains($0) }),
+                      supervision.cleanupScope == "original_process_group", supervision.descendantContainment == "not_provided",
+                      !supervision.finalFrameObserved || supervision.controlClosed else {
+                    throw failure("receipt_corrupt", "The supervisor observation contract is invalid; no authority can be recovered.")
+                }
+            }
             for output in [receipt.stdout, receipt.stderr] {
                 guard output.totalBytesObserved >= Int64(output.bytes.count),
                       output.bytes.count <= receipt.request.maxOutputBytes,
@@ -500,6 +531,10 @@ public final class ConduitDirectCommandService {
         }
     }
 
+    private func performIO(_ point: String, _ operation: () -> Int32) -> Int32 {
+        fixtureIO?(point, operation) ?? operation()
+    }
+
     private func persist(_ receipt: ConduitDirectCommandReceipt) throws {
         let data = try JSONEncoder().encode(receipt)
         guard storeFD >= 0, data.count <= Self.maximumReceiptBytes else {
@@ -507,31 +542,34 @@ public final class ConduitDirectCommandService {
         }
         let destination = receipt.request.operationID + ".json"
         let temporary = ".command-\(UUID().uuidString).tmp"
-        let fd = openat(storeFD, temporary, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        let prefix = "receipt.\(receipt.phase.rawValue)."
+        let fd = performIO(prefix + "create") { openat(storeFD, temporary, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600) }
         guard fd >= 0 else { throw failure("receipt_persistence_failed", "Cannot create the durable command receipt; inspect the operation ID before retrying.") }
         defer { _ = close(fd); _ = unlinkat(storeFD, temporary, 0) }
         try data.withUnsafeBytes { bytes in
             var offset = 0
             while offset < bytes.count {
-                let count = write(fd, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                let count = Int(performIO(prefix + "write") { Int32(write(fd, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)) })
                 if count < 0, errno == EINTR { continue }
                 guard count > 0 else { throw failure("receipt_persistence_failed", "The receipt write failed; inspect this operation ID before retrying.") }
                 offset += count
             }
         }
-        guard fsync(fd) == 0, renameat(storeFD, temporary, storeFD, destination) == 0 else {
+        guard performIO(prefix + "fileSync", { fsync(fd) }) == 0,
+              performIO(prefix + "rename", { renameat(storeFD, temporary, storeFD, destination) }) == 0 else {
             throw failure("receipt_persistence_failed", "The receipt could not be synchronized; inspect this operation ID before retrying.")
         }
-        guard fsync(storeFD) == 0 else { throw failure("receipt_persistence_failed", "The receipt directory synchronization failed; operation custody is uncertain.") }
+        guard performIO(prefix + "directorySync", { fsync(storeFD) }) == 0 else { throw failure("receipt_persistence_failed", "The receipt directory synchronization failed; operation custody is uncertain.") }
     }
 
     private func reserveID(_ id: String) throws {
-        let fd = openat(storeFD, id + ".reserved", O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        let fd = performIO("reservation.create") { openat(storeFD, id + ".reserved", O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600) }
         guard fd >= 0 else { throw failure("operation_id_reserved", "The operation ID is already reserved or could not be durably reserved; no command was launched.") }
         defer { _ = close(fd) }
         // Even an empty marker is a permanent claim. It is never removed when
         // a later receipt write fails, because absence must not mean retryable.
-        guard fsync(fd) == 0, fsync(storeFD) == 0 else {
+        guard performIO("reservation.fileSync", { fsync(fd) }) == 0,
+              performIO("reservation.directorySync", { fsync(storeFD) }) == 0 else {
             throw failure("receipt_persistence_failed", "The operation ID reservation could not be synchronized; inspect this ID before retrying.")
         }
     }
@@ -594,6 +632,8 @@ public final class ConduitDirectCommandService {
         do { try persist(receipt); receipts[id] = receipt }
         catch { receipt.phase = .unknown; receipt.note = error.localizedDescription; finishLocked(receipt); lock.unlock(); return }
         lock.unlock()
+
+        if let helper = fixtureSupervisor { runSupervised(receipt, helper: helper); return }
 
         let child: NativeCommandChild
         do { child = try NativeCommandChild.spawn(receipt.request, cwd: receipt.resolvedCwd, expectedCwdIdentity: receipt.cwdIdentity) }
@@ -706,7 +746,138 @@ public final class ConduitDirectCommandService {
         lock.lock(); finishLocked(receipt); lock.unlock()
     }
 
-    private func finishLocked(_ value: ConduitDirectCommandReceipt) {
+    private func runSupervised(_ initial: ConduitDirectCommandReceipt, helper: URL) {
+        var receipt = initial
+        let channel: ConduitSupervisorChannel
+        do { channel = try .spawn(helper: helper, request: receipt.request, receipt: receipt, storeFD: storeFD) }
+        catch {
+            receipt.transition(.launchFailed); receipt.note = error.localizedDescription; receipt.endedAt = Date()
+            lock.lock(); finishLocked(receipt); lock.unlock(); return
+        }
+        let started = ProcessInfo.processInfo.systemUptime
+        var sentCancel = false, sentGO = false, failed = false, final = false
+        var goDisposition: Bool?
+        var lastSave = started
+        func protocolFailure(_ message: String) {
+            failed = true; receipt.note = message; channel.disconnect()
+        }
+        while ProcessInfo.processInfo.systemUptime - started < Double(receipt.request.timeoutMS) / 1_000 + 4 {
+            channel.drain(channel.stdoutFD, into: &receipt.stdout, limit: receipt.request.maxOutputBytes, tail: receipt.request.maxTailBytes ?? 0)
+            channel.drain(channel.stderrFD, into: &receipt.stderr, limit: receipt.request.maxOutputBytes, tail: receipt.request.maxTailBytes ?? 0)
+            do {
+                for event in try channel.poll() {
+                    guard receipt.supervision != nil else { throw failure("supervisor_protocol", "Missing supervision identity") }
+                    receipt.supervision!.lastEventRevision = event.revision
+                    switch event.kind {
+                    case "READY":
+                        guard receipt.pid == nil, event.values[0] > 1, event.values[1] == event.values[0], event.values[2] == channel.pid else {
+                            throw failure("supervisor_protocol", "Invalid READY identity")
+                        }
+                        receipt.pid = event.values[0]; receipt.processGroupID = event.values[1]
+                        lock.lock()
+                        do {
+                            if cancellations.contains(receipt.request.operationID) {
+                                preserveCancellation(&receipt)
+                                try persist(receipt); receipts[receipt.request.operationID] = receipt
+                                try channel.send("CANCEL"); sentCancel = true
+                            } else {
+                                try persist(receipt); receipts[receipt.request.operationID] = receipt
+                                try channel.send("GO"); sentGO = true
+                            }
+                            lock.unlock()
+                        } catch { lock.unlock(); throw error }
+                    case "GO":
+                        guard event.values[0] == 0 || event.values[0] == 1 else { throw failure("supervisor_protocol", "Invalid GO disposition") }
+                        let committed = event.values[0] == 1
+                        if let previous = goDisposition, previous != committed {
+                            throw failure("supervisor_protocol", "GO disposition changed")
+                        }
+                        goDisposition = committed
+                        if event.values[0] == 1 {
+                            guard sentGO else { throw failure("supervisor_protocol", "Unexpected GO commitment") }
+                            receipt.supervision!.goCommitted = true
+                            if receipt.phase != .cancelRequested { receipt.transition(.running) }
+                        }
+                    case "CANCEL":
+                        guard event.values[0] == 0 || event.values[0] == 1 else { throw failure("supervisor_protocol", "Invalid cancellation disposition") }
+                        let accepted = event.values[0] == 1
+                        if let previous = receipt.supervision!.cancellationAccepted, previous != accepted {
+                            throw failure("supervisor_protocol", "Cancellation disposition changed")
+                        }
+                        receipt.supervision!.cancellationAccepted = accepted
+                    case "ROOT":
+                        let code = event.values[0], signal = event.values[1]
+                        guard (-1...255).contains(code), (0...64).contains(signal), code == -1 || signal == 0 else {
+                            throw failure("supervisor_protocol", "Invalid root result")
+                        }
+                        if receipt.supervision!.rootExitObserved {
+                            guard receipt.exitCode == (code < 0 ? nil : code), receipt.terminationSignal == (signal == 0 ? nil : signal) else {
+                                throw failure("supervisor_protocol", "First root result changed")
+                            }
+                        }
+                        receipt.supervision!.rootExitObserved = true
+                        receipt.exitCode = code < 0 ? nil : code
+                        receipt.terminationSignal = signal == 0 ? nil : signal
+                    case "CLOSED":
+                        guard !receipt.supervision!.controlClosed else { throw failure("supervisor_protocol", "Duplicate signal closure") }
+                        receipt.supervision!.controlClosed = true
+                    case "FINAL":
+                        guard receipt.supervision!.controlClosed,
+                              event.values.prefix(3).allSatisfy({ $0 == 0 || $0 == 1 }), (0...5).contains(event.values[3]),
+                              event.values[1] <= event.values[0],
+                              event.values[2] <= event.values[1],
+                              (event.values[0] == 1) == receipt.supervision!.rootExitObserved,
+                              event.values[0] == 0 || (receipt.supervision!.rootExitObserved && event.values[4] == (receipt.exitCode ?? -1) && event.values[5] == (receipt.terminationSignal ?? 0)) else {
+                            throw failure("supervisor_protocol", "Invalid terminal facts/order")
+                        }
+                        receipt.directChildExitObserved = event.values[1] == 1
+                        receipt.processGroupAbsentObserved = event.values[2] == 1
+                        receipt.supervision!.cleanupCause = Int(event.values[3])
+                        receipt.supervision!.finalFrameObserved = true
+                        final = true
+                    case "ERROR": receipt.note = "Supervisor reported errno \(event.values[0]); execution may be unknown."
+                    default: throw failure("supervisor_protocol", "Unknown frame")
+                    }
+                }
+            } catch { protocolFailure(error.localizedDescription) }
+            lock.lock()
+            if cancellations.contains(receipt.request.operationID) {
+                preserveCancellation(&receipt)
+                if !sentCancel && !failed && !final {
+                    do { try channel.send("CANCEL"); sentCancel = true }
+                    catch { protocolFailure(error.localizedDescription) }
+                }
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            if !final && !failed && (now - lastSave >= 0.05 || receipt.supervision!.rootExitObserved) {
+                do { try persist(receipt); receipts[receipt.request.operationID] = receipt }
+                catch { protocolFailure(error.localizedDescription) }
+                lastSave = now
+            }
+            lock.unlock()
+            if final || (channel.eof && channel.helperExited) { break }
+            Thread.sleep(forTimeInterval: 0.005)
+        }
+        // Final drain is bounded. EOF and full output are independent of process cleanup.
+        channel.drain(channel.stdoutFD, into: &receipt.stdout, limit: receipt.request.maxOutputBytes, tail: receipt.request.maxTailBytes ?? 0)
+        channel.drain(channel.stderrFD, into: &receipt.stderr, limit: receipt.request.maxOutputBytes, tail: receipt.request.maxTailBytes ?? 0)
+        channel.disconnect()
+        receipt.endedAt = Date()
+        if !final || failed || !receipt.directChildExitObserved || !receipt.processGroupAbsentObserved {
+            receipt.transition(.unknown)
+            if receipt.note == nil { receipt.note = "Supervisor completion, owned cleanup or persistence acknowledgement is incomplete; no PID will be adopted." }
+        } else if receipt.supervision!.cancellationAccepted == true {
+            receipt.transition(.observedCancelled)
+        } else if receipt.supervision!.cleanupCause == 2 {
+            receipt.transition(.timedOut)
+        } else if receipt.supervision!.cleanupCause != 0 {
+            receipt.transition(.unknown)
+        } else if receipt.exitCode == 0 { receipt.transition(.exited) }
+        else { receipt.transition(.nonzero) }
+        lock.lock(); finishLocked(receipt, releaseAllowed: final && !failed); lock.unlock()
+    }
+
+    private func finishLocked(_ value: ConduitDirectCommandReceipt, releaseAllowed: Bool = true) {
         var receipt = value
         let finalPhase = receipt.phase
         if !receipt.transitions.contains(where: { $0.phase == .cancelRequested }),
@@ -718,10 +889,17 @@ public final class ConduitDirectCommandService {
             preserveCancellation(&receipt)
             receipt.transition(finalPhase)
         }
-        receipt.executionCapacityReleased = receipt.pid == nil
-            || (receipt.directChildExitObserved && receipt.processGroupAbsentObserved)
-        do { try persist(receipt) }
-        catch { receipt.phase = .unknown; receipt.note = "Final receipt persistence failed: \(error.localizedDescription)" }
+        receipt.executionCapacityReleased = releaseAllowed && (receipt.pid == nil
+            || (receipt.directChildExitObserved && receipt.processGroupAbsentObserved))
+        let canRelease = receipt.executionCapacityReleased
+        // v2 disk records never claim that this owner's acknowledgement survived.
+        if receipt.supervision != nil { receipt.executionCapacityReleased = false }
+        do { try persist(receipt); receipt.executionCapacityReleased = canRelease }
+        catch {
+            receipt.phase = .unknown
+            receipt.executionCapacityReleased = false
+            receipt.note = "Final receipt persistence failed: \(error.localizedDescription)"
+        }
         receipts[receipt.request.operationID] = receipt
         if receipt.executionCapacityReleased { active.remove(receipt.request.operationID) }
         cancellations.remove(receipt.request.operationID)

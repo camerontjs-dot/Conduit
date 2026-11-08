@@ -205,6 +205,22 @@ public enum ConduitDirectCommandTool {
         if let code = receipt.exitCode { result["exit_code"] = code }
         if let signal = receipt.terminationSignal { result["termination_signal"] = signal }
         if let note = receipt.note { result["note"] = note }
+        if let supervision = receipt.supervision {
+            var observation: [String: Any] = [
+                "protocol": supervision.protocolVersion,
+                "helper_identity": supervision.helperIdentity,
+                "event_revision": supervision.lastEventRevision,
+                "go_committed": supervision.goCommitted,
+                "root_exit_observed": supervision.rootExitObserved,
+                "control_closed": supervision.controlClosed,
+                "final_frame_observed": supervision.finalFrameObserved,
+                "cleanup_scope": supervision.cleanupScope,
+                "descendant_containment": supervision.descendantContainment,
+            ]
+            if let accepted = supervision.cancellationAccepted { observation["cancellation_accepted"] = accepted }
+            if let cause = supervision.cleanupCause { observation["cleanup_cause"] = cause }
+            result["supervision"] = observation
+        }
         return result
     }
 

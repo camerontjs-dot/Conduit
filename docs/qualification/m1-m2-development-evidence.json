@@ -1,0 +1,121 @@
+{
+  "schema": "conduit-development-evidence/v1",
+  "date": "2026-11-08",
+  "timezone": "America/Toronto",
+  "work_class": "bounded_source_engineering",
+  "independent_qualification": "NOT_RUN",
+  "installed_acceptance": "NOT_RUN",
+  "production_execution": "execution_authority_unavailable",
+  "receipts": {
+    "native-01/RESULT.json": {
+      "sha256": "bac242528f1201c35fb046d2b36c309841349a3eb96b634674c717e924c4d529",
+      "status": "FAIL_PRESERVED",
+      "conditions": 10
+    },
+    "native-02/RESULT.json": {
+      "sha256": "c7fe2ba3450dcb60617da5d612a025a56f6c50d06bcf9f2da249c94cca1d4638",
+      "status": "PASS_DEVELOPMENT_ONLY",
+      "conditions": 24
+    },
+    "native-03/RESULT.json": {
+      "sha256": "bab05019c91838c747151992ba88988ebe0ff687ab041a27fc50d15a23aaa9e2",
+      "status": "PASS_DEVELOPMENT_ONLY",
+      "conditions": 24
+    },
+    "backend-absent-01/RESULT.json": {
+      "sha256": "029b30be70e193c0b428e08c322c7a73519305e63db3114e2f5fd454db262701",
+      "status": "BLOCKED",
+      "conditions": 0
+    },
+    "protocol-01/result.json": {
+      "sha256": "308649ae32461e3f004dc34beed350d23ab3c0db2f4dd56827e551c8ed0c9510",
+      "status": true,
+      "conditions": 8
+    }
+  },
+  "logs": {
+    "focused-swift-01.log": {
+      "sha256": "c74870ce5319b81b5c028a3050b0fa47f46556abcdafa31a4d3f946f936ecd1d",
+      "bytes": 98986
+    },
+    "full-swift-01.log": {
+      "sha256": "49f7f182c43b134bfe432d40d0c10f813023027ae1e4eced9abadcab15f643db",
+      "bytes": 243733
+    },
+    "selftest-01.log": {
+      "sha256": "e103a03a8e985c9cd8c24c676b280eaaba299e344f67ce001e320d9cdce822fe",
+      "bytes": 28768
+    },
+    "python-contracts-01.log": {
+      "sha256": "112d862b05f38606d2b326197c607387366d34790fa609268f52548e32f1c91c",
+      "bytes": 132
+    },
+    "build-supervisor-01.log": {
+      "sha256": "247ffbe85d18c0aa3d5feb71e503715420f7b5924c3677fd6bb7ab9b5fec2e3d",
+      "bytes": 654
+    },
+    "build-app-01.log": {
+      "sha256": "32a8d1aad989133cf8399596dc00e055f556a4edbdb57318655c4870423d3528",
+      "bytes": 2539
+    },
+    "protocol-01.log": {
+      "sha256": "543c07e1d0e0a84dbff4c001e90f9c8a35a8093790b2c1df3a783a1e6018fd3a",
+      "bytes": 1245
+    },
+    "leak-scan-01.log": {
+      "sha256": "785f24727eff58757a38c0408c9d2f0f60940ddbc60245b1093fc2a8ffba3872",
+      "bytes": 1773
+    },
+    "leak-tree-final.log": {
+      "sha256": "c730254015f9e7086e10a3216af3d7eaa556afae4b5659f063adf898b28ec2fd",
+      "bytes": 901
+    }
+  },
+  "checks": {
+    "focused_xctest": {
+      "reported": 34,
+      "failures": 0
+    },
+    "full_xctest": {
+      "reported": 837,
+      "skipped": 4,
+      "failures": 0
+    },
+    "selftest": {
+      "passed": 601,
+      "failed": 0
+    },
+    "python_contracts": {
+      "reported": 33,
+      "result": "OK"
+    },
+    "CDS1_protocol": {
+      "reported": 8,
+      "failed": 0
+    },
+    "offline_native_final": {
+      "reported": 24,
+      "failed": 0
+    },
+    "unavailable_helper": {
+      "status": "BLOCKED",
+      "exit_code": 2
+    },
+    "history_scan": {
+      "status": "FAIL",
+      "inherited_findings": 6,
+      "disposition": "same H01-H06 published ancestry accepted in PR187; no allowlist or baseline change"
+    }
+  },
+  "build": {
+    "app_version": "0.3.0",
+    "app_build": "3",
+    "file_count": 28,
+    "executable_sha256": "115e923c18fcc7499caafe99d805d98ee6b1cb352777e32b499be02d78f4d6a3",
+    "helper_sha256": "614b4c1a5e621928646e7360228f83a09bd1942fa8a7594a4299d371b424f71b",
+    "app_file_map_sha256": "76078a33178891591439ef9adb09cbf1e2884060c0f88dd0edaf784ea9a1ff5b",
+    "signature": "strict_deep_verified",
+    "installed": false,
+    "launched": false
+  }
+}

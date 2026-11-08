@@ -25,6 +25,24 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ## [Unreleased]
 
+### Fixed
+
+- All internal fixture executors now respect prior supervisor launch claims;
+  inconsistent persisted v2 capacity acknowledgments refuse as corrupt.
+- The internal supervisor no longer turns an already observed natural root
+  exit into a timeout during its cancellation/cleanup observation window.
+- An operation with a surviving launch claim and missing outcome now reports
+  missing evidence, preserving the claim and refusing replay. The D2 recovery
+  contract remains observation-only; production execution is still unavailable.
+
+### Changed
+- Added a fixture-only offline development probe using explicit owned grants,
+  CDS1 receipts and real macOS denial controls. Its deprecated backend does not
+  enable production commands or add an app setting.
+- Added an internal disposable-fixture supervisor candidate with private-session ownership, a bounded late-cancellation window and separate root/cleanup observations. Public command execution remains unavailable; no installed execution profile is added.
+- Final receipt persistence failure now retains the direct-command capacity slot. Added real-I/O fault injection coverage and read-only historical receipt compatibility checks.
+
+
 ### Changed
 
 - Cancellation and timeout cleanup now retain the owned child's wait identity
