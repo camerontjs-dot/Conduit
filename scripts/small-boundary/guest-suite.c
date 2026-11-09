@@ -192,6 +192,8 @@ static void drain(int fd, struct capture *out) {
 }
 static void hex(const unsigned char *bytes,size_t n) { for(size_t i=0;i<n;i++)printf("%02x",bytes[i]); }
 static void run(const char *name, enum mode mode, int confined, char *const argv[]) {
+    int witness = !strcmp(name, "live-timeout-witness");
+    unsigned long long wall_limit_ms = witness ? 3000 : 1500;
     int out[2],err[2];if(pipe2(out,O_CLOEXEC)||pipe2(err,O_CLOEXEC))fatal("pipe");
     unsigned long long before_oom=number("memory.events","oom_kill"),before_pid=number("pids.events","max"),before_cpu=number("cpu.stat","nr_throttled");
     unsigned long long start=clock_ms();pid_t child=fork();if(child<0)fatal("fork_case");
@@ -202,18 +204,30 @@ static void run(const char *name, enum mode mode, int confined, char *const argv
         for(int fd=3;fd<1024;fd++)close(fd);
         struct rlimit files={64,64};if(setrlimit(RLIMIT_NOFILE,&files)||setgroups(0,NULL)||setgid(1000)||setuid(1000))fatal("drop_identity");
         if(chdir("/work/project"))fatal("cwd");
-        if(confined)restrict_payload();body(mode,argv);_exit(111);
+        if(confined)restrict_payload();
+        if(witness && write(1,"active\n",7)!=7) _exit(111);
+        body(mode,argv);_exit(111);
     }
     close(out[1]);close(err[1]);fcntl(out[0],F_SETFL,O_NONBLOCK);fcntl(err[0],F_SETFL,O_NONBLOCK);
     struct capture o={0},e={0};int observed=0,status=0,extra=0,orphan_status=-1,timed=0,output_limit=0;
+    unsigned long long next_witness=0;
     for(;;) {
         drain(out[0],&o);drain(err[0],&e);
         int s;pid_t p;while((p=waitpid(-1,&s,WNOHANG))>0){if(p==child){observed=1;status=s;}else{extra++;orphan_status=WIFEXITED(s)?WEXITSTATUS(s):-1;}}
         if(observed&&o.eof&&e.eof&&number("pids.current",NULL)==0)break;
-        if(!timed&&!output_limit&&(clock_ms()-start>1500||o.total>65536||e.total>65536)) {
-            timed=clock_ms()-start>1500;output_limit=!timed;put("/sys/fs/cgroup/check/cgroup.kill","1");
+        if(witness && !observed && o.kept==7 && !memcmp(o.prefix,"active\n",7) && clock_ms()>=next_witness) {
+            unsigned long long pids=number("pids.current",NULL);
+            if(pids) {
+                printf("M2_LIVE {\"nonce\":\"%s\",\"job_pids\":%llu,\"child_pid\":%d,\"job_wall_ms\":%llu}\n",
+                       nonce,pids,child,clock_ms()-start);
+                fflush(stdout);
+                next_witness=clock_ms()+100;
+            }
         }
-        if(clock_ms()-start>2500)fatal("job_ownership_unknown");
+        if(!timed&&!output_limit&&(clock_ms()-start>wall_limit_ms||o.total>65536||e.total>65536)) {
+            timed=clock_ms()-start>wall_limit_ms;output_limit=!timed;put("/sys/fs/cgroup/check/cgroup.kill","1");
+        }
+        if(clock_ms()-start>wall_limit_ms+1000)fatal("job_ownership_unknown");
         struct pollfd fds[]={{out[0],POLLIN,0},{err[0],POLLIN,0}};poll(fds,2,5);
     }
     close(out[0]);close(err[0]);
@@ -279,5 +293,8 @@ int main(void) {
     ssize_t mn=m<0?-1:read(m,message,sizeof(message)),an=a<0?-1:read(a,artifact,sizeof(artifact));if(m>=0)close(m);if(a>=0)close(a);
     struct stat facts;int escaped=stat("/outside/denied-write",&facts)==0||stat("/outside/denied-traversal",&facts)==0||stat("/outside/denied-symlink",&facts)==0||stat("/outside/orphan-write",&facts)==0;
     printf("M2_INSPECT {\"nonce\":\"%s\",\"message_hex\":\"",nonce);if(mn>0)hex((unsigned char*)message,mn);printf("\",\"artifact_hex\":\"");if(an>0)hex((unsigned char*)artifact,an);printf("\",\"escaped_file_exists\":%s}\n",escaped?"true":"false");
-    printf("M2_DONE %s\n",nonce);stop();
+    printf("M2_DONE %s\n",nonce);
+    if(access("/live-timeout-fixture",F_OK)==0)
+        RUN("live-timeout-witness",WALL_LIMIT,1,"unused");
+    stop();
 }
