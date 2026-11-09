@@ -1,24 +1,31 @@
 {
   "schema_version": "mainframe-candidate/v1",
-  "candidate_id": "CONDUIT-M2-SMALL-BOUNDARY-20261108-D6",
-  "base_commit": "fe5a73868fb3afeb05b511684f79bfe736b16b61",
-  "source_commit": "4e190b6faef274f4f86c688d41a5a47a1dd168fe",
-  "source_tree": "98cacfb068673108a79929728324ca32c65ef778",
+  "candidate_id": "CONDUIT-M2-SUPERVISED-CHECK-20261108-D7",
+  "project": "Conduit",
+  "base_commit": "7947307fb0ac6cf0a469533b32628f74c4dce617",
+  "base_tree": "a9c3890bbcf9c5c073317a995f5247c28d5f2534",
+  "source_commit": "f71fe3ee43ed4495907a9a03698834007f60cb6f",
+  "source_tree": "a9504bfed8405020455b2719668f33ae61f8d323",
   "lifecycle_state": "OWNED_DEVELOPMENT_SUCCESSOR",
-  "advancement_readiness": "PORTABLE_DEVELOPMENT_PASS_WITH_BOUNDS",
+  "advancement_readiness": "SUPERVISED_PORTABLE_DEVELOPMENT_PASS_WITH_BOUNDS",
   "production_execution": "execution_authority_unavailable",
   "qualification": "NOT_RUN",
   "installed_trial": "NOT_ADMITTED",
-  "scope": "fixed portable Bash/grep check; native supported boundary falsification, then smallest supported feasible isolated runtime",
-  "protected": [
-    "original R3/D1/D2/D3/D4/D5 and evidence",
-    "operator app/effective grants/write gates/providers/preferences/tunnel",
-    "no file deletion or full macOS VM provisioning",
-    "#168 -> #123 -> #128, #142 HOLD, #174 requirements"
-  ],
-  "project": "Conduit",
-  "guest_runtime": "PASS_WITH_BOUNDS: fixed Linux Bash/grep fixture",
-  "macos_toolchain_equivalence": "NOT_ESTABLISHED",
-  "evidence": "docs/qualification/m2-small-portable-boundary.md",
-  "development_receipt_sha256": "eb7a515179f60feb9fb86ceb337b3d16a398cf7f0c7d67cafa40df244a1e2aa1"
+  "scope": "Fixed D6 fixture through existing Conduit development supervisor; ordinary exit and host timeout after observed guest stop",
+  "evidence": "docs/qualification/m2-small-portable-boundary.md#supervised-development-check",
+  "receipt_sha256": {
+    "complete-02": {
+      "guest": "ba29dc9a0d175618755ca3ce5f87a3daab37485f5624add9187104a93118c274",
+      "supervisor": "2e415c11f71b22932aeed80352c85518d04172ccea0026f968c333384579e1c1"
+    },
+    "timeout-01": {
+      "guest": "3af644b98b36bf13c7f84bb3e72005b5cff6929733fe03bc63b0da110f82017a",
+      "supervisor": "288007f9080a52f2fc621e083fb704a1097efca4cc66a952a23cc7a3b1f6c4d4"
+    }
+  },
+  "limits": [
+    "trusted owned fixture and assets only",
+    "in-flight VM ownership loss NOT_RUN",
+    "macOS/Xcode toolchain equivalence NOT_ESTABLISHED"
+  ]
 }
