@@ -19,6 +19,7 @@ spec = importlib.util.spec_from_file_location("d6", HERE.with_name("probe-small-
 d6 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(d6)
 oracle = d6.module("receipt", HERE.parent / "small-boundary/receipt.py")
+live = d6.module("live_timeout", HERE.parent / "small-boundary/live_timeout.py")
 ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LANG": "C"}
 
 
@@ -42,6 +43,8 @@ def bridge(directory, mode):
         os.fsync(fd)
     finally:
         os.close(fd)
+    if mode in live.MODES:
+        return live.run_native(directory, ENVIRONMENT, ticket)
     start = time.monotonic()
     capture = d6.capture([directory / "VMRunner", directory / "kernel", directory / "initrd.cpio.gz", "--fixture-fd=3"],
                          ENVIRONMENT, 4.75, 256 * 1024, capability=ticket)
@@ -87,7 +90,7 @@ def bridge(directory, mode):
 
 def main():
     if sys.argv[1:2] == ["--owned-bridge"]:
-        if len(sys.argv) != 4 or sys.argv[3] not in ("complete", "timeout-after-stop"):
+        if len(sys.argv) != 4 or sys.argv[3] not in ("complete", "timeout-after-stop", *live.MODES):
             raise RuntimeError("fixed_owned_bridge_arguments_required")
         return bridge(Path(sys.argv[2]), sys.argv[3])
 
@@ -95,11 +98,13 @@ def main():
     parser.add_argument("--core-build", type=Path, required=True,
                         help="Owned SwiftPM debug build directory for this exact ConduitCore source")
     parser.add_argument("--supervisor-helper", type=Path, required=True)
-    parser.add_argument("--timeout-after-stop", action="store_true")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--timeout-after-stop", action="store_true")
+    modes.add_argument("--live-timeout", choices=live.MODES)
     options, remaining = parser.parse_known_args()
     core = options.core_build.resolve(strict=True)
     helper = options.supervisor_helper.resolve(strict=True)
-    mode = "timeout-after-stop" if options.timeout_after_stop else "complete"
+    mode = options.live_timeout or ("timeout-after-stop" if options.timeout_after_stop else "complete")
     sys.argv = [sys.argv[0], *remaining]
 
     def launch(argv, environment, timeout, limit, capability=None):
@@ -112,12 +117,13 @@ def main():
                      "fixtureBridgePath": str(HERE), "fixtureSupervisorPath": str(helper),
                      "fixtureTicketDigest": hashlib.sha256(capability).hexdigest()}
         executables = [python, HERE, helper, argv[0], HERE.with_name("probe-small-linux-boundary.py"),
-                       HERE.parent / "small-boundary/receipt.py"]
+                       HERE.parent / "small-boundary/receipt.py", HERE.parent / "small-boundary/live_timeout.py"]
         with pins.open("x") as stream:
             for name, value in constants.items():
                 stream.write("let " + name + " = " + json.dumps(value) + "\n")
             entries = [json.dumps(str(path)) + ": " + json.dumps(d6.sha(path)) for path in executables]
             stream.write("let fixtureExecutablePins = [" + ", ".join(entries) + "]\n")
+            stream.write("let fixtureHostTimeoutMS = " + str(live.HOST_TIMEOUT_MS if options.live_timeout else 5000) + "\n")
         driver = directory / "supervisor-fixture"
         objects = sorted((core / "ConduitCore.build").glob("*.o"))
         if not objects:
@@ -153,12 +159,15 @@ def main():
         save(directory / "supervisor-driver.invocation.json", invocation)
         if invocation["exit_code"] != 0 or invocation["host_timeout"] or invocation["capture_truncated"]:
             raise RuntimeError("supervisor_fixture_failed_see_preserved_receipts")
+        if options.live_timeout:
+            return live.streams(directory)
         observed = json.loads((directory / "supervised-vm-capture.json").read_text())
         observed["stdout"] = (directory / "supervised-serial.stdout").read_bytes()
         observed["stderr"] = (directory / "supervised-host.stderr").read_bytes()
         return observed
 
-    return d6.main(launch=launch, vm_deadline_seconds=4)
+    return d6.main(launch=launch, vm_deadline_seconds=live.VM_WATCHDOG_SECONDS if options.live_timeout else 4,
+                   live_timeout_mode=options.live_timeout)
 
 
 if __name__ == "__main__":

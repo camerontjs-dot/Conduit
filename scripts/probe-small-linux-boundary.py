@@ -117,7 +117,7 @@ class Initramfs:
         self.manifest[name] = {"mode": mode, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
-def main(launch=capture, *, vm_deadline_seconds=15):
+def main(launch=capture, *, vm_deadline_seconds=15, live_timeout_mode=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kernel", type=Path, required=True)
     parser.add_argument("--rootfs", type=Path, required=True)
@@ -190,6 +190,8 @@ def main(launch=capture, *, vm_deadline_seconds=15):
     image.add("outside/undeclared-dynamic", stat.S_IFREG | 0o755, bounded_file(args.rootfs / "bin/grep", 2 * 1024 * 1024))
     image.add("outside/sentinel.txt", stat.S_IFREG | 0o666, b"owned outside sentinel\n")
     image.add("run-nonce", stat.S_IFREG | 0o600, nonce.encode())
+    if live_timeout_mode:
+        image.add("live-timeout-fixture", stat.S_IFREG | 0o600, b"owned hold\n")
     image.add("sealed/message.txt", stat.S_IFREG | 0o644, bounded_file(stage / "message.txt", 65536))
     script = bounded_file(stage / "scripts/test.sh", 65536)
     image.add("sealed/test.sh", stat.S_IFREG | 0o755, script)
@@ -217,7 +219,9 @@ def main(launch=capture, *, vm_deadline_seconds=15):
     (out / "FixtureGate.swift").write_text(
         "let fixtureGrantDigest = " + json.dumps(hashlib.sha256(ticket).hexdigest()) + "\n" +
         "let fixtureClaimPath = " + json.dumps(str(out / "native-launch.claim")) + "\n" +
-        "let fixtureDeadlineSeconds: Double = " + str(vm_deadline_seconds) + "\n")
+        "let fixtureDeadlineSeconds: Double = " + str(vm_deadline_seconds) + "\n" +
+        "let fixtureTermMode = " + json.dumps(live_timeout_mode or "none") + "\n" +
+        "let fixtureNonce = " + json.dumps(nonce) + "\n")
     # Top-level executable code must be in main.swift in a multi-file build.
     shutil.copyfile(out / "VMRunner.swift", out / "main.swift")
     command("compile-runner", ["/usr/bin/swiftc", "-O", "-target", "arm64-apple-macos14.0", "-framework", "Virtualization", out / "main.swift", out / "FixtureGate.swift", "-o", out / "VMRunner"],
@@ -237,6 +241,8 @@ def main(launch=capture, *, vm_deadline_seconds=15):
                "development_probe_executable": "/probe",
                "asset_pins_sha256": sha(source / "assets.json"),
                "check_script_sha256": hashlib.sha256(script).hexdigest()}
+    if live_timeout_mode:
+        profile["live_timeout_mode"] = live_timeout_mode
     facts = lambda: {"profile": profile, "assets": {name: sha(out / name) for name in ["kernel", "initrd.cpio.gz", "VMRunner"]},
                      "staged_input": sha(stage / "message.txt"), "nonce": nonce}
     authority = native.FixtureAuthority(facts)
@@ -292,6 +298,10 @@ def main(launch=capture, *, vm_deadline_seconds=15):
     (out / "PROFILE.json").write_text(json.dumps(profile, indent=2) + "\n")
     start = time.monotonic()
     p = launch(native_argv, environment, 25, 256*1024, capability=ticket)
+    if live_timeout_mode:
+        observe = module("live_timeout", source / "live_timeout.py")
+        return observe.finish(out, live_timeout_mode, nonce, p, receipt, refusals, native_refusals,
+                              original_project_unchanged=sha(project / "message.txt") == original_message)
     (out / "serial.stdout").write_bytes(p["stdout"])
     (out / "host.stderr").write_bytes(p["stderr"])
     invocation = {**{k:v for k,v in p.items() if k not in ("stdout", "stderr")}, "wall_s": time.monotonic() - start, "launches": attempts,

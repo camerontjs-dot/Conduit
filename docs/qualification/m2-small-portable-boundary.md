@@ -179,3 +179,34 @@ python3 -B scripts/probe-supervised-small-boundary.py \
 For the host timeout control, add `--timeout-after-stop` and choose another
 new evidence directory. The original D6 runner retains its default VM
 deadline. The fixture driver, helper and bridge remain development tools.
+
+### Host deadline with a live guest
+
+D8 keeps the same guest suite. After its 29 cases and postcheck inspection,
+an additional confined pause job keeps the guest running. Trusted PID 1
+reports the job's presence. The native owner records the VM state and its
+own process group when it receives TERM from the supervisor.
+
+| Native response to TERM | Host observation | Guest observation |
+| --- | --- | --- |
+| Explicit framework stop | `timed_out`, root exit and original group absence | Running at TERM. Stop completion and `.stopped` observed 12.8 ms later |
+| Default termination after recording state | `timed_out`, root exit and original group absence | Running at TERM. Stop evidence unavailable, so guest state UNKNOWN |
+
+The host budget is five seconds. The additional pause job has a
+three-second bound. The original 29 guest cases retain their existing
+limits and denials. Both final runs passed them and the prelaunch authority
+controls. The first 3.5-second attempt stopped the VM but interrupted a
+denial receipt before the suite and live witness were complete. That
+attempt is retained separately.
+
+The confirmed VM stop uses the [Apple Virtualization stop API](https://developer.apple.com/documentation/virtualization/vzvirtualmachine/stop%28completionhandler%3A%29).
+It ends VM execution abruptly. The last guest witness still showed the
+pause job, and final guest process reaping is unobserved. A host capacity
+acknowledgement is scoped to host process ownership. The default
+termination case supplies no VM capacity or replay authority.
+
+Use `--live-timeout cooperative` with a fresh owned directory to observe
+the explicit stop. Use `--live-timeout default` for the termination
+control only after the first VM stop is confirmed. The default case ends
+the run sequence with guest stop UNKNOWN. The original supervised
+completion and post-stop hold modes keep their behavior.

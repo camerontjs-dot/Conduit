@@ -13,11 +13,52 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
     var machine: VZVirtualMachine!
     var ending = false
     var timedOut = false
+    var supervisorStopping = false
+    var termSource: DispatchSourceSignal?
     func guestDidStop(_ virtualMachine: VZVirtualMachine) {
+        if supervisorStopping { return }  // The stop callback owns its acknowledgement.
         event("guest_stopped"); ending = true; exit(timedOut ? 124 : 0)
     }
     func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
         event("guest_error", error.localizedDescription); ending = true; exit(3)
+    }
+    func liveEvent(_ name: String) {
+        let state = machine.state
+        let row: [String: Any] = [
+            "event": name, "nonce": fixtureNonce,
+            "state": state == .running ? "running" : state == .stopped ? "stopped" : String(state.rawValue),
+            "pid": getpid(), "pgid": getpgrp(), "monotonic_ns": DispatchTime.now().uptimeNanoseconds
+        ]
+        let bytes = try! JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])
+        FileHandle.standardError.write(bytes + Data("\n".utf8))
+    }
+    func installTimeoutWitness() {
+        guard fixtureTermMode != "none" else { return }
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler { [self] in
+            guard !ending && !supervisorStopping else { return }
+            liveEvent("supervisor_term_received")
+            if fixtureTermMode == "default" {
+                signal(SIGTERM, SIG_DFL)
+                _ = kill(getpid(), SIGTERM)
+                return
+            }
+            guard machine.state == .running && machine.canStop else {
+                liveEvent("supervisor_stop_unavailable"); exit(125)
+            }
+            supervisorStopping = true
+            machine.stop { error in
+                guard error == nil && self.machine.state == .stopped else {
+                    self.liveEvent("supervisor_stop_unconfirmed"); exit(125)
+                }
+                self.liveEvent("supervisor_stop_observed")
+                self.ending = true
+                exit(124)
+            }
+        }
+        termSource = source
+        source.resume()
     }
     func start(kernel: URL, initrd: URL) throws {
         let loader = VZLinuxBootLoader(kernelURL: kernel)
@@ -41,6 +82,7 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
         event("configuration_validated", "cpu=1 memory=134217728 nic=0 disks=0 shares=0 sockets=0 serial=1")
         machine = VZVirtualMachine(configuration: config)
         machine.delegate = self
+        installTimeoutWitness()
         machine.start { result in
             switch result {
             case .success: event("guest_started")
@@ -48,7 +90,7 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + fixtureDeadlineSeconds) { [self] in
-            guard !ending else { return }
+            guard !ending && !supervisorStopping else { return }
             timedOut = true
             event("deadline_stop_requested")
             machine.stop { error in

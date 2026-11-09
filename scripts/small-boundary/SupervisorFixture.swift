@@ -77,10 +77,11 @@ struct SupervisorFixture {
         let store = directory.appendingPathComponent("supervisor-store", isDirectory: true)
         let ungrantedStore = directory.appendingPathComponent("ungranted-store", isDirectory: true)
         let helper = URL(fileURLWithPath: fixtureSupervisorPath)
+        let liveTimeout = ["cooperative", "default"].contains(fixtureMode)
         let request = ConduitDirectCommandRequest(
             operationID: "portable-check", projectSlug: "fixture",
             argv: [fixturePythonPath, "-B", fixtureBridgePath, "--owned-bridge", directory.path, fixtureMode],
-            timeoutMS: 5000, maxOutputBytes: 4096
+            timeoutMS: fixtureHostTimeoutMS, maxOutputBytes: 4096
         )
         var admissions = 0
         let guardOnly = ConduitDirectCommandService(storeDirectory: ungrantedStore)
@@ -92,9 +93,11 @@ struct SupervisorFixture {
                                                   maximumConcurrentOperations: 1, supervisorExecutable: helper)
         let queued = try service.submit(request, projectRoot: project) { admissions += 1 }
         try save(queued, "supervisor-accepted", directory)
-        let activeReplay = try service.submit(request, projectRoot: project) { admissions += 1 }
-        try save(activeReplay, "supervisor-active-replay", directory)
-        try require(activeReplay.idempotentReplay && !activeReplay.phase.isTerminal && admissions == 1, "active_replay_not_idempotent")
+        if !liveTimeout {
+            let activeReplay = try service.submit(request, projectRoot: project) { admissions += 1 }
+            try save(activeReplay, "supervisor-active-replay", directory)
+            try require(activeReplay.idempotentReplay && !activeReplay.phase.isTerminal && admissions == 1, "active_replay_not_idempotent")
+        }
 
         let stopWaiting = ProcessInfo.processInfo.systemUptime + 9
         var final = try service.lookup(operationID: request.operationID, projectSlug: "fixture", projectRoot: project)
@@ -104,6 +107,15 @@ struct SupervisorFixture {
         }
         try save(final, "supervisor-final", directory)
         try require(final.phase.isTerminal, "terminal_receipt_unobserved")
+        if liveTimeout {
+            try require(final.phase == .timedOut && final.supervision?.cleanupCause == 2
+                        && final.supervision?.goCommitted == true && final.supervision?.finalFrameObserved == true
+                        && final.directChildExitObserved && final.processGroupAbsentObserved
+                        && final.stdout.reachedEOF && final.stderr.reachedEOF && admissions == 1,
+                        "live_host_timeout_or_cleanup_unconfirmed")
+            print("SUPERVISOR_FIXTURE_HOST_TIMEOUT")
+            return
+        }
         let before = try storeBytes(store)
         let claim = directory.appendingPathComponent("native-launch.claim")
         let claimBefore = try Data(contentsOf: claim)

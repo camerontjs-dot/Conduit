@@ -55,6 +55,21 @@ def reconcile(result, nonce):
     require(len(result["native_authority_refusals"]) == 3 and all(
         r["status"] == "PASS" and r["claim_absent"] for r in result["native_authority_refusals"]), "native_authority_refusals")
     require(result["native_replay_refusal"]["status"] == "PASS" and result["native_claim_unchanged"], "native_replay_refusal")
+    failures.extend(check_guest(result, nonce))
+    result["failures"] = failures
+    result["ownership"] = "STOP_OBSERVED" if "guest_stopped" in events else "UNKNOWN"
+    result["status"] = "PASS_WITH_BOUNDS" if not failures else "FAIL"
+    return not failures
+
+
+def check_guest(result, nonce):
+    """Reconcile completed guest conditions independently of native stop."""
+    failures = []
+
+    def require(value, detail):
+        if not value:
+            failures.append(detail)
+
     require(len(result["metadata"]) == 1, "metadata_count")
     if len(result["metadata"]) == 1:
         meta = result["metadata"][0]
@@ -122,7 +137,4 @@ def reconcile(result, nonce):
     if len(result["inspection"]) == 1:
         require(result["inspection"][0] == {"nonce": nonce, "message_hex": b"after\n".hex(),
                 "artifact_hex": b"fixture".hex(), "escaped_file_exists": False}, "inspection_changed_or_escaped")
-    result["failures"] = failures
-    result["ownership"] = "STOP_OBSERVED" if "guest_stopped" in events else "UNKNOWN"
-    result["status"] = "PASS_WITH_BOUNDS" if not failures else "FAIL"
-    return not failures
+    return failures

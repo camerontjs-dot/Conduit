@@ -2702,3 +2702,9 @@ native stop deadline inside the supervisor's five-second budget. Guest stop
 and host cleanup stay separate observations. The first supervised result
 and the deliberate host hold after stop are recorded in the
 [profile evidence](docs/qualification/m2-small-portable-boundary.md#supervised-development-check).
+
+The live guest timeout probe observed the original host group disappear
+under both native signal responses. Only the explicit framework stop
+provided a native acknowledgement for the running VM. Treat those
+observations as separate ownership facts and retain UNKNOWN when the
+native acknowledgement is missing.
