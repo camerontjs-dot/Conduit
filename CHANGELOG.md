@@ -27,6 +27,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- An owned development probe runs the fixed offline check through the
+  existing command supervisor and verifies typed exit, timeout, cleanup and
+  repeat-request receipts.
 - Standalone development probes test the fixed offline Bash/grep sample in a
   diskless Linux guest on macOS, with one-use fixture authority and kernel
   denial controls. The operator app and its execution guard are unchanged.
