@@ -210,3 +210,36 @@ the explicit stop. Use `--live-timeout default` for the termination
 control only after the first VM stop is confirmed. The default case ends
 the run sequence with guest stop UNKNOWN. The original supervised
 completion and post-stop hold modes keep their behavior.
+
+### Guest slot after a missing stop acknowledgement
+
+D9 gives the owned campaign one shared guest slot. The signed runner binds
+the slot directory identity, takes its lock and persists the attempt claim
+before constructing a VM. The same owner can add the matching stopped
+record after observing the VM stopped. The records are exclusive and
+append only. Another launcher checks them after acquiring the lock. An
+unmatched claim keeps the slot blocked across native process exit.
+
+| Attempt | Observed outcome |
+| --- | --- |
+| Explicit VM stop | The runner persisted the matching stop record. Its original ticket still refused one-use replay. A fresh operation started through the same slot. |
+| Live timeout without native stop acknowledgement | The host group cleared and host capacity was released. The guest slot retained one unmatched claim. Both host receipt retries returned the same operation with one bridge entry. |
+| Native retry and fresh admission | The old ticket, a distinct valid ticket, and its repeat all returned `guest_slot_stop_unacknowledged` before creating a new native launch claim or configuring a VM. Slot bytes matched before and after. |
+
+Both actual VMs ran the original 29 guest checks. Zero VM starts followed
+the missing acknowledgement. The stopped record reports VM stop only.
+The fixture makes a separate observation of host cleanup and leaves the
+unacknowledged guest UNKNOWN.
+
+Use an owned private campaign directory with an empty private
+`guest-slot` subdirectory. Use the same preparation and build inputs from
+the supervised fixture commands. Pass `--shared-guest-slot` for three
+fresh evidence directories under that campaign. First run
+`--live-timeout cooperative` and verify its stop record. Then run
+`--live-timeout default` and verify the unmatched claim. Finally run
+`--check-blocked-guest-slot` to exercise the valid fresh ticket. The
+campaign retains the slot and all original attempts.
+
+This gate covers one trusted development campaign. The evidence covers
+process exit and fresh launcher admission with retained files. Product
+authority and power-loss recovery require separate evidence.

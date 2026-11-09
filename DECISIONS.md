@@ -2708,3 +2708,8 @@ under both native signal responses. Only the explicit framework stop
 provided a native acknowledgement for the running VM. Treat those
 observations as separate ownership facts and retain UNKNOWN when the
 native acknowledgement is missing.
+
+The owned slot follow-up persists a claim before VM construction and pairs
+it only with the native owner's observed stop. A host receipt or released
+process lock supplies no guest capacity. Exact retries remain one use,
+and a fresh valid ticket is blocked by an unmatched claim in that slot.

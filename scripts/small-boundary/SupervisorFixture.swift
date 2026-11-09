@@ -79,7 +79,7 @@ struct SupervisorFixture {
         let helper = URL(fileURLWithPath: fixtureSupervisorPath)
         let liveTimeout = ["cooperative", "default"].contains(fixtureMode)
         let request = ConduitDirectCommandRequest(
-            operationID: "portable-check", projectSlug: "fixture",
+            operationID: fixtureOperationID, projectSlug: "fixture",
             argv: [fixturePythonPath, "-B", fixtureBridgePath, "--owned-bridge", directory.path, fixtureMode],
             timeoutMS: fixtureHostTimeoutMS, maxOutputBytes: 4096
         )
@@ -113,8 +113,10 @@ struct SupervisorFixture {
                         && final.directChildExitObserved && final.processGroupAbsentObserved
                         && final.stdout.reachedEOF && final.stderr.reachedEOF && admissions == 1,
                         "live_host_timeout_or_cleanup_unconfirmed")
-            print("SUPERVISOR_FIXTURE_HOST_TIMEOUT")
-            return
+            if !(fixtureSharedGuestSlot && fixtureMode == "default") {
+                print("SUPERVISOR_FIXTURE_HOST_TIMEOUT")
+                return
+            }
         }
         let before = try storeBytes(store)
         let claim = directory.appendingPathComponent("native-launch.claim")
@@ -137,6 +139,10 @@ struct SupervisorFixture {
         try require(final.schemaVersion == "conduit-direct-command/v2" && final.supervision?.goCommitted == true
                     && final.supervision?.finalFrameObserved == true && final.directChildExitObserved
                     && final.processGroupAbsentObserved && final.executionCapacityReleased, "host_cleanup_unconfirmed")
+        if liveTimeout {
+            print("SUPERVISOR_FIXTURE_HOST_REPLAY_PASS admissions=\(admissions) entries=1")
+            return
+        }
         try require(final.stdout.bytes == Data("sample check passed\n".utf8) && final.stderr.bytes.isEmpty
                     && final.stdout.reachedEOF && final.stderr.reachedEOF && !final.stdout.truncated && !final.stderr.truncated,
                     "typed_streams_incomplete")
