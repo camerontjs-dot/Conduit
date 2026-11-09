@@ -13,10 +13,26 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
     var machine: VZVirtualMachine!
     var ending = false
     var timedOut = false
+    var started = false
     var supervisorStopping = false
     var termSource: DispatchSourceSignal?
+    let slot: GuestSlot?
+
+    init(slot: GuestSlot?) {
+        self.slot = slot
+        super.init()
+    }
+
+    func persistSlotStop() {
+        guard let slot else { return }
+        guard started && machine.state == .stopped else { event("guest_slot_stop_unconfirmed"); exit(125) }
+        do { try slot.acknowledgeStop() }
+        catch { event("guest_slot_ack_unavailable"); exit(125) }
+    }
+
     func guestDidStop(_ virtualMachine: VZVirtualMachine) {
         if supervisorStopping { return }  // The stop callback owns its acknowledgement.
+        persistSlotStop()
         event("guest_stopped"); ending = true; exit(timedOut ? 124 : 0)
     }
     func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
@@ -52,6 +68,7 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
                 guard error == nil && self.machine.state == .stopped else {
                     self.liveEvent("supervisor_stop_unconfirmed"); exit(125)
                 }
+                self.persistSlotStop()
                 self.liveEvent("supervisor_stop_observed")
                 self.ending = true
                 exit(124)
@@ -85,7 +102,7 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
         installTimeoutWitness()
         machine.start { result in
             switch result {
-            case .success: event("guest_started")
+            case .success: self.started = true; event("guest_started")
             case .failure(let error): event("start_failed", error.localizedDescription); exit(2)
             }
         }
@@ -95,6 +112,7 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
             event("deadline_stop_requested")
             machine.stop { error in
                 if let error { event("ownership_unknown", error.localizedDescription); exit(125) }
+                self.persistSlotStop()
                 event("deadline_stop_observed"); exit(124)
             }
         }
@@ -129,12 +147,20 @@ guard let grant = try? JSONSerialization.jsonObject(with: ticket) as? [String: S
       grant["operation"] == "linux-suite",
       assetDigest(CommandLine.arguments[1]) == grant["kernel_sha256"],
       assetDigest(CommandLine.arguments[2]) == grant["initrd_sha256"] else { refuse("fixture_assets_changed") }
+let slot: GuestSlot?
+do {
+    slot = fixtureGuestSlotPath.isEmpty ? nil : try GuestSlot.reserve(path: fixtureGuestSlotPath, grant: grant, ticket: ticket)
+} catch let failure as GuestSlotFailure {
+    refuse(failure.reason)
+} catch {
+    refuse("guest_slot_evidence_unavailable")
+}
 let claim = open(fixtureClaimPath, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
 guard claim >= 0 else { refuse("fixture_claim_unavailable_or_replay") }
 guard ticket.withUnsafeBytes({ write(claim, $0.baseAddress, $0.count) }) == ticket.count,
       fsync(claim) == 0 else { close(claim); refuse("fixture_claim_persistence") }
 close(claim)
-let owner = Owner()
+let owner = Owner(slot: slot)
 do {
     try owner.start(kernel: URL(fileURLWithPath: CommandLine.arguments[1]),
                     initrd: URL(fileURLWithPath: CommandLine.arguments[2]))

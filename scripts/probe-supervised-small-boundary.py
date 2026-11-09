@@ -101,7 +101,14 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--timeout-after-stop", action="store_true")
     modes.add_argument("--live-timeout", choices=live.MODES)
+    modes.add_argument("--check-blocked-guest-slot", action="store_true")
+    parser.add_argument("--shared-guest-slot", action="store_true",
+                        help="Use the pre-created private guest-slot directory in the evidence parent")
     options, remaining = parser.parse_known_args()
+    if options.check_blocked_guest_slot and not options.shared_guest_slot:
+        parser.error("blocked-slot observation requires the shared fixture slot")
+    if options.shared_guest_slot and not (options.live_timeout or options.check_blocked_guest_slot):
+        parser.error("shared-slot checks require a live timeout mode or blocked-slot observation")
     core = options.core_build.resolve(strict=True)
     helper = options.supervisor_helper.resolve(strict=True)
     mode = options.live_timeout or ("timeout-after-stop" if options.timeout_after_stop else "complete")
@@ -115,7 +122,8 @@ def main():
         pins = directory / "SupervisorFixturePins.swift"
         constants = {"fixtureRunPath": str(directory), "fixtureMode": mode, "fixturePythonPath": str(python),
                      "fixtureBridgePath": str(HERE), "fixtureSupervisorPath": str(helper),
-                     "fixtureTicketDigest": hashlib.sha256(capability).hexdigest()}
+                     "fixtureTicketDigest": hashlib.sha256(capability).hexdigest(),
+                     "fixtureOperationID": json.loads(capability).get("fixture_operation_id", "portable-check")}
         executables = [python, HERE, helper, argv[0], HERE.with_name("probe-small-linux-boundary.py"),
                        HERE.parent / "small-boundary/receipt.py", HERE.parent / "small-boundary/live_timeout.py"]
         with pins.open("x") as stream:
@@ -124,6 +132,7 @@ def main():
             entries = [json.dumps(str(path)) + ": " + json.dumps(d6.sha(path)) for path in executables]
             stream.write("let fixtureExecutablePins = [" + ", ".join(entries) + "]\n")
             stream.write("let fixtureHostTimeoutMS = " + str(live.HOST_TIMEOUT_MS if options.live_timeout else 5000) + "\n")
+            stream.write("let fixtureSharedGuestSlot = " + ("true" if options.shared_guest_slot else "false") + "\n")
         driver = directory / "supervisor-fixture"
         objects = sorted((core / "ConduitCore.build").glob("*.o"))
         if not objects:
@@ -166,8 +175,10 @@ def main():
         observed["stderr"] = (directory / "supervised-host.stderr").read_bytes()
         return observed
 
-    return d6.main(launch=launch, vm_deadline_seconds=live.VM_WATCHDOG_SECONDS if options.live_timeout else 4,
-                   live_timeout_mode=options.live_timeout)
+    live_mode = options.live_timeout or ("default" if options.check_blocked_guest_slot else None)
+    return d6.main(launch=launch, vm_deadline_seconds=live.VM_WATCHDOG_SECONDS if live_mode else 4,
+                   live_timeout_mode=live_mode, shared_guest_slot=options.shared_guest_slot,
+                   observe_blocked_slot=options.check_blocked_guest_slot)
 
 
 if __name__ == "__main__":

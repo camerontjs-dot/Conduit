@@ -27,6 +27,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The owned portable fixture uses a shared guest slot to test that missing
+  stop acknowledgement blocks native retries and fresh VM admission.
 - The supervised fixture now measures a host deadline with a live guest and
   records native VM stop separately from host process cleanup.
 - An owned development probe runs the fixed offline check through the

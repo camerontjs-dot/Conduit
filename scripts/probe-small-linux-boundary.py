@@ -117,7 +117,8 @@ class Initramfs:
         self.manifest[name] = {"mode": mode, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
-def main(launch=capture, *, vm_deadline_seconds=15, live_timeout_mode=None):
+def main(launch=capture, *, vm_deadline_seconds=15, live_timeout_mode=None,
+         shared_guest_slot=False, observe_blocked_slot=False):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kernel", type=Path, required=True)
     parser.add_argument("--rootfs", type=Path, required=True)
@@ -129,6 +130,8 @@ def main(launch=capture, *, vm_deadline_seconds=15, live_timeout_mode=None):
     out.mkdir(mode=0o700)
     repository = Path(__file__).resolve().parent.parent
     source = repository / "scripts/small-boundary"
+    slot = out.parent / "guest-slot" if shared_guest_slot else None
+    slot_probe = module("guest_slot_probe", source / "guest_slot_probe.py") if slot else None
     receipt = module("receipt", source / "receipt.py")
     pins = json.loads((source / "assets.json").read_text())
     if sha(args.kernel) != pins["kernel"]["sha256"] or sha(args.zig) != pins["zig"]["executable_sha256"]:
@@ -213,18 +216,27 @@ def main(launch=capture, *, vm_deadline_seconds=15, live_timeout_mode=None):
     image.add("TRAILER!!!", 0)
     (out / "initrd.cpio.gz").write_bytes(gzip.compress(image.bytes, mtime=0))
     (out / "image-manifest.json").write_text(json.dumps(image.manifest, indent=2) + "\n")
-    ticket = json.dumps({"operation": "linux-suite", "nonce": nonce,
-                         "kernel_sha256": sha(out / "kernel"), "initrd_sha256": sha(out / "initrd.cpio.gz")}, sort_keys=True).encode()
+    ticket_fields = {"operation": "linux-suite", "nonce": nonce,
+                     "kernel_sha256": sha(out / "kernel"), "initrd_sha256": sha(out / "initrd.cpio.gz")}
+    if slot:
+        info = slot.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            raise RuntimeError("owned_private_guest_slot_required")
+        ticket_fields.update(slot_device=str(info.st_dev), slot_inode=str(info.st_ino),
+                             fixture_operation_id="portable-" + nonce)
+    ticket = json.dumps(ticket_fields, sort_keys=True).encode()
     (out / "native-ticket.json").write_bytes(ticket)
     (out / "FixtureGate.swift").write_text(
         "let fixtureGrantDigest = " + json.dumps(hashlib.sha256(ticket).hexdigest()) + "\n" +
         "let fixtureClaimPath = " + json.dumps(str(out / "native-launch.claim")) + "\n" +
         "let fixtureDeadlineSeconds: Double = " + str(vm_deadline_seconds) + "\n" +
         "let fixtureTermMode = " + json.dumps(live_timeout_mode or "none") + "\n" +
-        "let fixtureNonce = " + json.dumps(nonce) + "\n")
+        "let fixtureNonce = " + json.dumps(nonce) + "\n" +
+        "let fixtureGuestSlotPath = " + json.dumps(str(slot) if slot else "") + "\n")
     # Top-level executable code must be in main.swift in a multi-file build.
     shutil.copyfile(out / "VMRunner.swift", out / "main.swift")
-    command("compile-runner", ["/usr/bin/swiftc", "-O", "-target", "arm64-apple-macos14.0", "-framework", "Virtualization", out / "main.swift", out / "FixtureGate.swift", "-o", out / "VMRunner"],
+    shutil.copyfile(source / "GuestSlot.swift", out / "GuestSlot.swift")
+    command("compile-runner", ["/usr/bin/swiftc", "-O", "-target", "arm64-apple-macos14.0", "-framework", "Virtualization", out / "main.swift", out / "FixtureGate.swift", out / "GuestSlot.swift", "-o", out / "VMRunner"],
             {**os.environ, "DEVELOPER_DIR": "/Applications/Xcode.app/Contents/Developer"})
     entitlements = out / "virtualization.entitlements"
     entitlements.write_bytes(plistlib.dumps({"com.apple.security.virtualization": True}))
@@ -243,6 +255,8 @@ def main(launch=capture, *, vm_deadline_seconds=15, live_timeout_mode=None):
                "check_script_sha256": hashlib.sha256(script).hexdigest()}
     if live_timeout_mode:
         profile["live_timeout_mode"] = live_timeout_mode
+    if slot:
+        profile["shared_guest_slot"] = {"device": ticket_fields["slot_device"], "inode": ticket_fields["slot_inode"]}
     facts = lambda: {"profile": profile, "assets": {name: sha(out / name) for name in ["kernel", "initrd.cpio.gz", "VMRunner"]},
                      "staged_input": sha(stage / "message.txt"), "nonce": nonce}
     authority = native.FixtureAuthority(facts)
@@ -296,12 +310,17 @@ def main(launch=capture, *, vm_deadline_seconds=15, live_timeout_mode=None):
     os.write(claim, nonce.encode()); os.fsync(claim); os.close(claim)
     (out / "GRANT.json").write_text(json.dumps(valid, indent=2) + "\n")
     (out / "PROFILE.json").write_text(json.dumps(profile, indent=2) + "\n")
+    if observe_blocked_slot:
+        return slot_probe.fresh_refusal(out, slot, native_argv, ticket, capture, environment)
     start = time.monotonic()
     p = launch(native_argv, environment, 25, 256*1024, capability=ticket)
     if live_timeout_mode:
         observe = module("live_timeout", source / "live_timeout.py")
-        return observe.finish(out, live_timeout_mode, nonce, p, receipt, refusals, native_refusals,
-                              original_project_unchanged=sha(project / "message.txt") == original_message)
+        status = observe.finish(out, live_timeout_mode, nonce, p, receipt, refusals, native_refusals,
+                                original_project_unchanged=sha(project / "message.txt") == original_message)
+        if status == 0 and slot:
+            return slot_probe.after_timeout(out, slot, live_timeout_mode, native_argv, ticket, capture, environment)
+        return status
     (out / "serial.stdout").write_bytes(p["stdout"])
     (out / "host.stderr").write_bytes(p["stderr"])
     invocation = {**{k:v for k,v in p.items() if k not in ("stdout", "stderr")}, "wall_s": time.monotonic() - start, "launches": attempts,
