@@ -27,6 +27,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The owned portable fixture tests stale and mismatched stop records against
+  one waiting native ticket, then restores the genuine acknowledgement to
+  exercise a fresh VM admission. The slot gate and guest denials are unchanged.
 - The owned portable fixture uses a shared guest slot to test that missing
   stop acknowledgement blocks native retries and fresh VM admission.
 - The supervised fixture now measures a host deadline with a live guest and
