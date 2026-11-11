@@ -20,6 +20,7 @@ d6 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(d6)
 oracle = d6.module("receipt", HERE.parent / "small-boundary/receipt.py")
 live = d6.module("live_timeout", HERE.parent / "small-boundary/live_timeout.py")
+stop_ack = d6.module("stop_ack_probe", HERE.parent / "small-boundary/stop_ack_probe.py")
 ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LANG": "C"}
 
 
@@ -104,17 +105,23 @@ def main():
     modes.add_argument("--check-blocked-guest-slot", action="store_true")
     parser.add_argument("--shared-guest-slot", action="store_true",
                         help="Use the pre-created private guest-slot directory in the evidence parent")
+    parser.add_argument("--stop-ack-matrix", action="store_true",
+                        help="Test altered stop records from two confirmed stops before the next admission")
     options, remaining = parser.parse_known_args()
     if options.check_blocked_guest_slot and not options.shared_guest_slot:
         parser.error("blocked-slot observation requires the shared fixture slot")
     if options.shared_guest_slot and not (options.live_timeout or options.check_blocked_guest_slot):
         parser.error("shared-slot checks require a live timeout mode or blocked-slot observation")
+    if options.stop_ack_matrix and not (options.shared_guest_slot and options.live_timeout == "cooperative"):
+        parser.error("stop-ack matrix requires the shared slot and a cooperative live timeout")
     core = options.core_build.resolve(strict=True)
     helper = options.supervisor_helper.resolve(strict=True)
     mode = options.live_timeout or ("timeout-after-stop" if options.timeout_after_stop else "complete")
     sys.argv = [sys.argv[0], *remaining]
+    matrix_directory = None
 
     def launch(argv, environment, timeout, limit, capability=None):
+        nonlocal matrix_directory
         directory = argv[0].parent
         if capability != d6.bounded_file(directory / "native-ticket.json", 16384):
             raise RuntimeError("supervisor_handoff_capability_changed")
@@ -125,7 +132,8 @@ def main():
                      "fixtureTicketDigest": hashlib.sha256(capability).hexdigest(),
                      "fixtureOperationID": json.loads(capability).get("fixture_operation_id", "portable-check")}
         executables = [python, HERE, helper, argv[0], HERE.with_name("probe-small-linux-boundary.py"),
-                       HERE.parent / "small-boundary/receipt.py", HERE.parent / "small-boundary/live_timeout.py"]
+                       HERE.parent / "small-boundary/receipt.py", HERE.parent / "small-boundary/live_timeout.py",
+                       HERE.parent / "small-boundary/stop_ack_probe.py", HERE.parent / "small-boundary/guest_slot_probe.py"]
         with pins.open("x") as stream:
             for name, value in constants.items():
                 stream.write("let " + name + " = " + json.dumps(value) + "\n")
@@ -159,6 +167,9 @@ def main():
         save(directory / "supervisor-authority-refusals.json", refusals)
         if not all(case["refused_before_effects"] for case in refusals):
             raise RuntimeError("supervisor_fixture_refusal_failed")
+        if options.stop_ack_matrix:
+            stop_ack.before_launch(directory, argv, capability, d6.capture, environment)
+            matrix_directory = directory
         invocation = d6.capture([driver], environment, 12, limit, capability=capability)
         for stream in ("stdout", "stderr"):
             (directory / ("supervisor-driver." + stream)).write_bytes(invocation.pop(stream))
@@ -176,9 +187,12 @@ def main():
         return observed
 
     live_mode = options.live_timeout or ("default" if options.check_blocked_guest_slot else None)
-    return d6.main(launch=launch, vm_deadline_seconds=live.VM_WATCHDOG_SECONDS if live_mode else 4,
-                   live_timeout_mode=live_mode, shared_guest_slot=options.shared_guest_slot,
-                   observe_blocked_slot=options.check_blocked_guest_slot)
+    result = d6.main(launch=launch, vm_deadline_seconds=live.VM_WATCHDOG_SECONDS if live_mode else 4,
+                     live_timeout_mode=live_mode, shared_guest_slot=options.shared_guest_slot,
+                     observe_blocked_slot=options.check_blocked_guest_slot)
+    if options.stop_ack_matrix and result == 0:
+        stop_ack.after_launch(matrix_directory)
+    return result
 
 
 if __name__ == "__main__":

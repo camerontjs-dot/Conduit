@@ -243,3 +243,47 @@ campaign retains the slot and all original attempts.
 This gate covers one trusted development campaign. The evidence covers
 process exit and fresh launcher admission with retained files. Product
 authority and power-loss recovery require separate evidence.
+
+### Stale and mismatched stop acknowledgements
+
+D10 exercises the existing exact-claim comparison. The native slot gate,
+guest suite and confinement policy are unchanged. A new owned campaign
+preserves the earlier held slot and its UNKNOWN guest state. Two real
+cooperative stops supply an older and a current native acknowledgement.
+The test apparatus moves the current record aside, retains its exact bytes,
+and submits the same fresh valid ticket to the actual signed native runner.
+
+| Current claim's stop record | Actual native admission |
+| --- | --- |
+| Missing, with the older claim's acknowledgement still present | Refused twice |
+| Older genuine acknowledgement placed at the current record's name | Refused twice |
+| Current nonce with a changed operation ID | Refused twice |
+| Current nonce with a changed initramfs digest | Refused twice |
+| Genuine current acknowledgement restored byte for byte | The same waiting ticket and runner started one VM |
+
+All eight refusals returned `guest_slot_stop_unacknowledged`, with empty
+stdout and no VM configuration, VM start or new launch claim. Each refusal
+left the slot records unchanged. The positive control restored the original
+four slot records before admission. That operation passed all 29 guest
+checks, entered the bridge once and recorded its own native stop. The final
+slot contains three claims and three matching acknowledgements. The
+existing 12 receipt regressions and 33 Python contracts also passed.
+
+Reproduce using the shared-slot command above in a new private campaign.
+Run `--live-timeout cooperative` into `older-ack-01`, then `current-ack-01`.
+Require both complete native stop results before proceeding. For a third
+fresh directory, add `--stop-ack-matrix --live-timeout cooperative`. The
+apparatus requires those two exact control directory names and four
+matched records. It retains original and injected record bytes, separate
+native refusal streams and results, the waiting ticket and runner digests,
+and the final admission result. A failure stops the sequence with the
+current state preserved; it does not automatically restore or release a
+slot with uncertain ownership.
+
+This is a trusted-host record substitution test after confirmed stops. The
+test owner can write these private files; byte matching does not authenticate
+a stop against a compromised same-user host. The restored acknowledgement
+was produced by the native owner after observed stop. No acknowledgement
+was invented for the earlier UNKNOWN guest. Product recovery, power-loss
+behavior, final guest job reaping and independent qualification remain
+unestablished. Production stays `execution_authority_unavailable`.
