@@ -1,26 +1,28 @@
 {
   "schema_version": "mainframe-candidate/v1",
-  "candidate_id": "CONDUIT-M2-GUEST-SLOT-20261109-D9",
+  "candidate_id": "CONDUIT-M2-STOP-ACK-20261111-D10",
   "project": "Conduit",
-  "base_commit": "181a5bebabde69c3f34a991c526fc978f54ccd24",
-  "base_tree": "2c37274e823123558125900899cbaf1893624cc2",
-  "source_commit": "ca58f3e7edc9183fa55e06e012551ccb77f237ab",
-  "source_tree": "ca75695fc08fb6f8a789330852548395f939798e",
+  "base_commit": "ad764d7905a639e4222b3dfa85a83221fdb1388f",
+  "base_tree": "d29b85799827a424b8b9bdffeb3c7b7cbba7a01e",
+  "source_commit": "196df53e255090c12e3233bdfc0d3f2bb547417f",
+  "source_tree": "5f2e36925e0a3929900ad6277dd3e98d949229a1",
   "lifecycle_state": "OWNED_DEVELOPMENT_SUCCESSOR",
-  "advancement_readiness": "GUEST_SLOT_BLOCKED_WITHOUT_STOP_ACK",
+  "advancement_readiness": "MATCHING_STOP_ACK_REQUIRED",
   "production_execution": "execution_authority_unavailable",
   "qualification": "NOT_RUN",
   "installed_trial": "NOT_ADMITTED",
-  "scope": "One owned shared portable guest slot; actual native stop, host receipt retry, and fresh valid admission refusal after unknown",
-  "evidence": "docs/qualification/m2-small-portable-boundary.md#guest-slot-after-a-missing-stop-acknowledgement",
+  "scope": "One owned shared portable guest slot; actual native stale and mismatched stop-record refusals followed by one admission using the same waiting ticket and runner after genuine acknowledgement restoration",
+  "evidence": "docs/qualification/m2-small-portable-boundary.md#stale-and-mismatched-stop-acknowledgements",
   "receipt_sha256": {
-    "acknowledged-01": "bfc4164bea9ccfeccffd1eeafc221d83becc9cbbbd7a4d7708c5ba9e9684ec21",
-    "unacknowledged-01": "1ee01ea26956fa6a92d1b1b4d3d24890bad9d0d5e7e0f6d029221aa88921b165",
-    "fresh-blocked-01": "b011ede17226f680b97ceedccd2006754d8a8b55f383037678e002355188f3ae"
+    "older-ack-01": "a0e506961f27fee84af410e42d42b50715f6c13ec73adf1671b1d22605eb147b",
+    "current-ack-01": "9c5430b7d19560aa909edcfe385cb7764ccc299872c018df0030df810877ec7a",
+    "matching-ack-01": "5ca0f56c750517ca39ee99f717035485497190ea079d3f82d298de3c950c5145",
+    "matching-ack-01/stop-ack-matrix": "a85d7aab92726a8b2d6d9f7e5bd6477acfb5d1d3a016268ab7b7b230cd27d79c"
   },
   "limits": [
-    "trusted development campaign",
-    "unacknowledged guest stop UNKNOWN",
-    "process exit evidence; power-loss recovery NOT_RUN"
+    "Trusted development campaign; host owner can write acknowledgement files.",
+    "Exact-claim comparison is not stop authentication against a compromised same-user host.",
+    "Prior UNKNOWN guest slot preserved; no fabricated acknowledgement for it.",
+    "Power-loss recovery and final guest job reaping NOT_RUN."
   ]
 }
