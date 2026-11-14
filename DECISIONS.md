@@ -2731,6 +2731,10 @@ and typed guest result; it is not a defence against a compromised same-user
 host. Before effects, both adapter and bridge check the grant's scope,
 expiry and current inputs. The public command constructor remains deny-only.
 There is no product setting, grant loader or operator activation route.
+Fresh admission also checks that the submitted grant is the exact permit the
+bridge will redeem. Existing exact-operation retries authenticate that same
+original permit and observe the old receipt even after expiry; observation
+cannot grant a new launch or signalling custody.
 
 Compose the bridge with the existing CDS1 supervisor and native VM owner.
 The bridge owns one exact unreaped native child; the supervisor still owns

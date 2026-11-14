@@ -287,3 +287,11 @@ was produced by the native owner after observed stop. No acknowledgement
 was invented for the earlier UNKNOWN guest. Product recovery, power-loss
 behavior, final guest job reaping and independent qualification remain
 unestablished. Production stays `execution_authority_unavailable`.
+
+## Native adapter follow-up
+
+The [native offline launcher record](m2-native-offline-launcher.md) describes
+the next internal development adapter. Native completion and the matching
+acknowledgement matrix passed. Its final owner-loss control failed closed on
+repeated timeout events; the complete integration gate remains on hold.
+The VM owner, slot gate and original guest denial controls are unchanged.
