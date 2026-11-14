@@ -88,8 +88,10 @@ public enum ConduitPortableGuestDecoder {
         guard let text = String(data: data, encoding: .utf8) else {
             throw ConduitOfflineFailure("portable_capture_invalid")
         }
-        try require(text.last == "\n" && !text.contains("\0"), "capture_incomplete")
-        return try text.dropLast().components(separatedBy: "\n").map { line in
+        // A serial CRLF is one Swift Character. Frame termination is a byte
+        // contract; remove exactly its final LF, retaining CR for normalization.
+        try require(data.last == 10 && !text.contains("\0"), "capture_incomplete")
+        return try String(decoding: data.dropLast(), as: UTF8.self).components(separatedBy: "\n").map { line in
             let normalized = line.hasSuffix("\r") ? String(line.dropLast()) : line
             try require(!normalized.contains("\r"), "frame_invalid")
             return normalized

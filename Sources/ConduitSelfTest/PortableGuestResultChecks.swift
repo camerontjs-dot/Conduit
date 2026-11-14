@@ -46,6 +46,10 @@ func runPortableGuestResultSelfChecks(_ report: (String, Bool) -> Void) {
             catch { return false }
         }
         let result = try decode(serialText, nativeText)
+        let serialCRLF = serialText.replacingOccurrences(of: "\n", with: "\r\n")
+        report("portable serial CRLF is a byte terminator with complete native LF capture",
+               try decode(serialCRLF, nativeText).stdout == result.stdout
+                   && refused { _ = try decode(String(serialCRLF.dropLast()), nativeText) })
         report("portable guest decoder preserves exact nonzero check bytes without granting authority",
                result.checkExitCode == 7 && result.stdout == Data([0, 255]) && result.stderr.isEmpty
                 && result.guestStop == "observed" && result.guestSlot == "not_used"

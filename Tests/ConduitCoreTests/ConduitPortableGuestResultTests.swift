@@ -99,6 +99,20 @@ final class ConduitPortableGuestResultTests: XCTestCase {
         XCTAssertEqual(lost.guestSlot, "held")
         XCTAssertEqual(lost.finalGuestJobReaping, "unobserved")
     }
+    func testSerialCRLFAndMixedNativeLFKeepExactCaptureIdentity() throws {
+        let input = try frames()
+        let serial = Data((input.serial.joined(separator: "\r\n") + "\r\n").utf8)
+        func observed(_ data: Data) throws -> ConduitPortableGuestResult {
+            try ConduitPortableGuestDecoder.decode(serial: data, native: bytes(input.native), nonce: nonce,
+                mode: "complete", expectedCases: cases, nativeProcessID: 100, nativeProcessGroupID: 99,
+                nativeExitCode: 0, nativeSignal: nil, captureComplete: true, slotRequired: false, slotAcknowledged: false)
+        }
+        let result = try observed(serial)
+        XCTAssertEqual(result.stdout, Data([0, 255, 10]))
+        XCTAssertEqual(result.serialSHA256, SHA256.hash(data: serial).map { String(format: "%02x", $0) }.joined())
+        refuses { _ = try observed(serial.dropLast()) }
+        refuses { _ = try observed(Data(String(decoding: serial, as: UTF8.self).replacingOccurrences(of: "M2_DONE", with: "M2_\rDONE").utf8)) }
+    }
     func testCaptureAndMissingBackendFailClosed() throws {
         let input = try frames()
         refuses { _ = try decode(input, complete: false) }
