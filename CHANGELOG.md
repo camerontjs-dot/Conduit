@@ -27,6 +27,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- An internal portable offline profile binds owned fixture authority to the
+  staged input, native tools, environment and budgets. Typed guest evidence
+  remains separate from host cleanup; public command execution stays disabled.
 - The owned portable fixture tests stale and mismatched stop records against
   one waiting native ticket, then restores the genuine acknowledgement to
   exercise a fresh VM admission. The slot gate and guest denials are unchanged.

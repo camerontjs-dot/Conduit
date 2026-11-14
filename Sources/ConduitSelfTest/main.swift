@@ -35,6 +35,7 @@ func withTempDir(_ body: (URL) throws -> Void) {
 
 runAdmissionGovernanceChecks { name, result in check(name, result) }
 runSessionAPIReplayChecks { name, result in check(name, result) }
+runPortableGuestResultSelfChecks { name, result in check(name, result) }
 runOpenCodeIdentityChecks { name, result in check(name, result) }
 
 // MARK: - Retained thread recognition (UX-A)
