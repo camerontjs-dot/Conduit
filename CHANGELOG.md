@@ -54,6 +54,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Exact portable retries can observe their original receipt after grant
+  expiry or input changes; observation supplies no new execution authority.
 - Native portable serial decoding accepts complete CRLF frames while still
   rejecting missing terminators and embedded carriage returns.
 - All internal fixture executors now respect prior supervisor launch claims;

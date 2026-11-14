@@ -173,4 +173,55 @@ final class ConduitPortableOfflineLauncherTests: XCTestCase {
             XCTAssertThrowsError(try ConduitPortableOfflineAuthority.persist(original, name: name, root: f.binding.fixtureRoot))
         }
     }
+
+    func testExpiredExactRetryObservesExistingReceiptWithoutNewAuthorityOrEffects() throws {
+        let f = try Fixture()
+        // Harmless host component actuator only; no VM or confinement claim.
+        let bridge = URL(fileURLWithPath: f.launcher.path)
+        try Data("#!/bin/sh\nprintf 'component receipt\\n'\n".utf8).write(to: bridge)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: bridge.path)
+        let executable = try ConduitOfflineFS.asset(at: bridge.path, maximumBytes: 65_536)
+        let grant = try f.authority.issue(binding: f.binding, launcher: executable, now: f.now)
+        try ConduitPortableOfflineAuthority.persist(grant.encodedPermit, name: "native-permit.json", root: f.binding.fixtureRoot)
+        let project = URL(fileURLWithPath: f.binding.projectRoot.path), store = f.root.appendingPathComponent("receipts")
+        let service = ConduitDirectCommandService(storeDirectory: store, disposableFixtureRoot: project)
+        let adapter = ConduitPortableOfflineLauncher(service: service, authority: f.authority)
+        var writes = 0
+        _ = try adapter.submit(f.binding, grant: grant, now: f.now) { writes += 1 }
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        var final = try service.lookup(operationID: f.binding.operationID, projectSlug: "fixture", projectRoot: project)
+        while !final.phase.isTerminal && ProcessInfo.processInfo.systemUptime < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+            final = try service.lookup(operationID: f.binding.operationID, projectSlug: "fixture", projectRoot: project)
+        }
+        XCTAssertEqual(final.exitCode, 0)
+        XCTAssertEqual(final.stdout.bytes, Data("component receipt\n".utf8))
+        func bytes() throws -> [String: Data] {
+            try Dictionary(uniqueKeysWithValues: FileManager.default.contentsOfDirectory(atPath: store.path).map {
+                ($0, try Data(contentsOf: store.appendingPathComponent($0)))
+            })
+        }
+        let before = try bytes(), expired = f.now.addingTimeInterval(301)
+        try Data("later owned input\n".utf8).write(to: project.appendingPathComponent("message.txt"))
+        try Data("changed non-executable bytes".utf8).write(to: bridge)
+        let replay = try adapter.submit(f.binding, grant: grant, now: expired) { writes += 1 }
+        XCTAssertTrue(replay.idempotentReplay)
+        XCTAssertEqual(replay.stdout, final.stdout)
+        let reader = ConduitPortableOfflineLauncher(service: ConduitDirectCommandService(storeDirectory: store), authority: f.authority)
+        let historical = try reader.submit(f.binding, grant: grant, now: expired) { writes += 1 }
+        XCTAssertTrue(historical.idempotentReplay)
+        XCTAssertFalse(historical.executionCapacityReleased)
+        XCTAssertEqual(writes, 1)
+        XCTAssertEqual(try bytes(), before)
+        XCTAssertThrowsError(try reader.submit(f.binding, grant: nil, now: expired) { writes += 1 })
+        let absent = f.root.appendingPathComponent("absent-receipts")
+        let fresh = ConduitPortableOfflineLauncher(service: ConduitDirectCommandService(storeDirectory: absent,
+            disposableFixtureRoot: project), authority: f.authority)
+        XCTAssertThrowsError(try fresh.submit(f.binding, grant: grant, now: expired) { writes += 1 })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: absent.path))
+        try Data("tampered permit".utf8).write(to: f.root.appendingPathComponent("native-permit.json"))
+        XCTAssertThrowsError(try reader.submit(f.binding, grant: grant, now: expired) { writes += 1 })
+        XCTAssertEqual(writes, 1)
+        XCTAssertEqual(try bytes(), before)
+    }
 }

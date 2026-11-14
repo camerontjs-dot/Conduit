@@ -184,16 +184,23 @@ internal final class ConduitPortableOfflineAuthority {
         return ConduitPortableOfflineGrant(body: body, permit: try seal(body, kind: "grant"))
     }
 
-    /// Pure admission before store/write-hook/claim/launch effects.
-    func authorize(_ binding: ConduitPortableOfflineBinding, grant: ConduitPortableOfflineGrant?, now: Date = Date()) throws -> ConduitPortableOfflineGrant {
+    /// Pure issuer/scope authentication. This alone grants no new execution.
+    func authenticate(_ binding: ConduitPortableOfflineBinding, grant: ConduitPortableOfflineGrant?) throws -> ConduitPortableOfflineGrant {
         guard let grant else { throw ConduitOfflineFailure("portable_execution_authority_unavailable") }
         let decoded: GrantBody = try open(grant.permit, kind: "grant")
-        guard decoded == grant.body, decoded.issuerID == issuerID, decoded.binding == binding else {
+        guard decoded == grant.body, decoded.schema == "conduit-portable-grant/v1",
+              decoded.issuerID == issuerID, decoded.binding == binding else {
             throw ConduitOfflineFailure("portable_grant_mismatch")
         }
+        return grant
+    }
+
+    /// Pure admission before store/write-hook/claim/launch effects.
+    func authorize(_ binding: ConduitPortableOfflineBinding, grant: ConduitPortableOfflineGrant?, now: Date = Date()) throws -> ConduitPortableOfflineGrant {
+        let grant = try authenticate(binding, grant: grant)
         try binding.validate(now: now)
-        try Self.verify(decoded.launcher)
-        try Self.verifyExecutable(decoded.launcher)
+        try Self.verify(grant.launcher)
+        try Self.verifyExecutable(grant.launcher)
         return grant
     }
 
@@ -295,6 +302,22 @@ internal final class ConduitPortableOfflineLauncher {
 
     func submit(_ binding: ConduitPortableOfflineBinding, grant: ConduitPortableOfflineGrant?,
                 now: Date = Date(), admitWrite: (() throws -> Void)? = nil) throws -> ConduitDirectCommandReceipt {
+        let authenticated = try authority.authenticate(binding, grant: grant)
+        // Existing receipts are observations, even after a grant has expired
+        // or staged input has changed. They cannot restore execution custody.
+        do {
+            var existing = try service.lookup(operationID: binding.operationID, projectSlug: "fixture",
+                                               projectRoot: URL(fileURLWithPath: binding.projectRoot.path))
+            guard existing.request == request(for: authenticated),
+                  existing.projectRootIdentity == binding.projectRoot.identity,
+                  try ConduitPortableDirectory.observe(binding.fixtureRoot.path, privateDirectory: true) == binding.fixtureRoot,
+                  try ConduitPortableOfflineAuthority.read(binding.fixtureRoot.path + "/native-permit.json", maximumBytes: 16_384)
+                    == authenticated.encodedPermit else { throw ConduitOfflineFailure("portable_existing_operation_mismatch") }
+            existing.idempotentReplay = true
+            return existing
+        } catch let error as ConduitDirectCommandError where error.code == "operation_not_found" {
+            // Only absence can proceed to fresh, fully checked admission.
+        }
         let admitted = try authority.authorize(binding, grant: grant, now: now)
         return try service.submit(request(for: admitted), projectRoot: URL(fileURLWithPath: binding.projectRoot.path), admitWrite: admitWrite)
     }
