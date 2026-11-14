@@ -210,7 +210,10 @@ final class ConduitPortableOfflineLauncherTests: XCTestCase {
         let reader = ConduitPortableOfflineLauncher(service: ConduitDirectCommandService(storeDirectory: store), authority: f.authority)
         let historical = try reader.submit(f.binding, grant: grant, now: expired) { writes += 1 }
         XCTAssertTrue(historical.idempotentReplay)
-        XCTAssertFalse(historical.executionCapacityReleased)
+        // This host-only component uses legacy v1, which retains its historical
+        // capacity field. Native v2 reader capacity is checked in the real probe.
+        XCTAssertEqual(historical.request, final.request)
+        XCTAssertEqual(historical.phase, final.phase)
         XCTAssertEqual(writes, 1)
         XCTAssertEqual(try bytes(), before)
         XCTAssertThrowsError(try reader.submit(f.binding, grant: nil, now: expired) { writes += 1 })
