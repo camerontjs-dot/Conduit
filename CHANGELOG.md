@@ -27,6 +27,9 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The owned offline probe can execute a native bridge through the existing
+  supervisor, with exact child ownership, bounded private capture and
+  authenticated guest evidence. Preparation and denial oracles are reused.
 - An internal portable offline profile binds owned fixture authority to the
   staged input, native tools, environment and budgets. Typed guest evidence
   remains separate from host cleanup; public command execution stays disabled.
