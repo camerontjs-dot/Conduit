@@ -54,6 +54,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Fresh portable admission requires the exact permit that the native bridge
+  will redeem, refusing a different valid grant before operation effects.
 - Exact portable retries can observe their original receipt after grant
   expiry or input changes; observation supplies no new execution authority.
 - Native portable serial decoding accepts complete CRLF frames while still

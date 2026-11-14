@@ -77,6 +77,7 @@ final class ConduitPortableOfflineLauncherTests: XCTestCase {
         XCTAssertEqual(ConduitOfflineProfile.v1.memoryBytes, 4 * 1024 * 1024 * 1024)
         var writes = 0
         let store = f.root.appendingPathComponent("never-created")
+        try ConduitPortableOfflineAuthority.persist(grant.encodedPermit, name: "native-permit.json", root: f.binding.fixtureRoot)
         let publicService = ConduitDirectCommandService(storeDirectory: store)
         let adapter = ConduitPortableOfflineLauncher(service: publicService, authority: f.authority)
         XCTAssertThrowsError(try adapter.submit(f.binding, grant: grant, now: f.now) { writes += 1 }) {
@@ -172,6 +173,24 @@ final class ConduitPortableOfflineLauncherTests: XCTestCase {
         for name in ["../outside", "nested/file", "..", ""] {
             XCTAssertThrowsError(try ConduitPortableOfflineAuthority.persist(original, name: name, root: f.binding.fixtureRoot))
         }
+    }
+
+    func testDifferentValidPermitRefusesBeforeFreshOperationEffects() throws {
+        let f = try Fixture(), submitted = try f.grant(), stored = try f.grant()
+        XCTAssertNotEqual(submitted.grantID, stored.grantID)
+        try ConduitPortableOfflineAuthority.persist(stored.encodedPermit, name: "native-permit.json", root: f.binding.fixtureRoot)
+        let store = f.root.appendingPathComponent("never-created")
+        let adapter = ConduitPortableOfflineLauncher(service: ConduitDirectCommandService(storeDirectory: store,
+            disposableFixtureRoot: URL(fileURLWithPath: f.binding.projectRoot.path)), authority: f.authority)
+        let before = try FileManager.default.contentsOfDirectory(atPath: f.root.path).sorted()
+        var writes = 0
+        XCTAssertThrowsError(try adapter.submit(f.binding, grant: submitted, now: f.now) { writes += 1 }) {
+            XCTAssertEqual(($0 as? ConduitOfflineFailure)?.code, "portable_native_permit_mismatch")
+        }
+        XCTAssertEqual(writes, 0)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: f.root.path).sorted(), before)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.path))
+        XCTAssertEqual(try Data(contentsOf: f.root.appendingPathComponent("native-permit.json")), stored.encodedPermit)
     }
 
     func testExpiredExactRetryObservesExistingReceiptWithoutNewAuthorityOrEffects() throws {

@@ -319,6 +319,8 @@ internal final class ConduitPortableOfflineLauncher {
             // Only absence can proceed to fresh, fully checked admission.
         }
         let admitted = try authority.authorize(binding, grant: grant, now: now)
+        guard try ConduitPortableOfflineAuthority.read(binding.fixtureRoot.path + "/native-permit.json", maximumBytes: 16_384)
+                == admitted.encodedPermit else { throw ConduitOfflineFailure("portable_native_permit_mismatch") }
         return try service.submit(request(for: admitted), projectRoot: URL(fileURLWithPath: binding.projectRoot.path), admitWrite: admitWrite)
     }
 
