@@ -1,0 +1,118 @@
+{
+  "schema": "conduit-native-offline-source-inputs/v1",
+  "candidate_id": "CONDUIT-M2-NATIVE-OFFLINE-20261114-D11",
+  "work_class": "bounded_source_engineering_and_development_testing",
+  "base_commit": "acd80989d95d33f361bafbea143f4ddddc968706",
+  "native_campaign_commit": "0a45535644f6db8705a3dd64ba07c49bc53f2561",
+  "observation_successor_commit": "02cdb63f60708e1581da84ecafef85f9c165c9a6",
+  "status": "PARTIAL_NATIVE_INTEGRATION_WITH_RETAINED_FAILURE",
+  "independent_qualification": "NOT_RUN",
+  "files": {
+    "Package.swift": {
+      "sha256": "33ec286fdfd858e7068eb9b3d3a7f1c15f32a30742f4f8219903993f474a673a",
+      "bytes": 1674
+    },
+    "Sources/ConduitCore/ConduitDirectCommand.swift": {
+      "sha256": "054b9419b693c93845cbfd97a895a18db54256a9679a66e8ce5e1a51a720f2ee",
+      "bytes": 60488
+    },
+    "Sources/ConduitCore/ConduitCommandSupervisor.swift": {
+      "sha256": "f63aea6473a31e3c7911a2f2656afb3a843dc5dc4d2374acb4b2f8965f588fbc",
+      "bytes": 11290
+    },
+    "Sources/ConduitCommandSupervisor/main.c": {
+      "sha256": "a126e824e5a8e1555c90b359cf8eec6bb75b98738267d82751aa0010ff6aee12",
+      "bytes": 34954
+    },
+    "Sources/ConduitCore/ConduitPortableOfflineLauncher.swift": {
+      "sha256": "4c5737fecf1e46241bc384ee4e4499c3c60babcef02a8273c9ddc9dc7588a587",
+      "bytes": 21594
+    },
+    "Sources/ConduitCore/ConduitPortableGuestResult.swift": {
+      "sha256": "4416fef025cfde4082b1aea67f556c42ecedb77f73f64ccae5f97550e5c63ea2",
+      "bytes": 12127
+    },
+    "Sources/ConduitSelfTest/PortableGuestResultChecks.swift": {
+      "sha256": "803436541ca1fc70d0ef35cba784429a5d955e1cb68675949906e9dbebaa030c",
+      "bytes": 5361
+    },
+    "Sources/ConduitSelfTest/main.swift": {
+      "sha256": "c336ea1bb2b9ecf2c6016628704355f5d95c099b37ec95b81a511424841fee59",
+      "bytes": 160048
+    },
+    "Tests/ConduitCoreTests/ConduitPortableOfflineLauncherTests.swift": {
+      "sha256": "cb848a143b51bf21206ddc410ffa9f807b0381a64ffc0bf70079210f28ea29bb",
+      "bytes": 17059
+    },
+    "Tests/ConduitCoreTests/ConduitPortableGuestResultTests.swift": {
+      "sha256": "cce912069482474fac8b361743139194665030f15c19410e6580f86aa4355bf1",
+      "bytes": 12352
+    },
+    "scripts/probe-native-offline-launcher.py": {
+      "sha256": "3ceae03c5ae2471b619667278c7f67e957d161051804e69af2494a6873cc74e9",
+      "bytes": 12849
+    },
+    "scripts/small-boundary/SupervisorFixture.swift": {
+      "sha256": "0bfbaa9350afd2e424226b99140daab2727efd649d6a1399e207bd936d78a6a1",
+      "bytes": 14833
+    },
+    "scripts/small-boundary/NativeOfflineWorker.swift": {
+      "sha256": "1839d77b18bea48e61e045912ff3a41268eb46216b47ba12b99a7a152ac50b2c",
+      "bytes": 14333
+    },
+    "scripts/small-boundary/NativeOfflineWorkerSupport.c": {
+      "sha256": "5b5e4230f1c9e5e87b46c7f41eedde1b7adeac8b3583014caa8f82244ff38b14",
+      "bytes": 7803
+    },
+    "scripts/small-boundary/NativeOfflineWorkerSupport.h": {
+      "sha256": "667adfe268b3c502a07202a7da685d00f6b8a32b32a642119076bba4b5499757",
+      "bytes": 1200
+    },
+    "scripts/small-boundary/NativeOfflineReplayFixture.swift": {
+      "sha256": "23d40dacaec8c381bd72070bffd3d21262fd9dad472cd11239bff7e5ecf65575",
+      "bytes": 4849
+    },
+    "scripts/small-boundary/test-native-worker-support.c": {
+      "sha256": "c688b0d5aeb60a3b476123fb618794fe1856ad7f8bc0c2f21ad1860e0e383292",
+      "bytes": 14085
+    },
+    "scripts/probe-small-linux-boundary.py": {
+      "sha256": "bc5803508b41530f8a08becad336cc1a8a544f01e8e3f83ce7f64e1aa0c16739",
+      "bytes": 21757
+    },
+    "scripts/small-boundary/VMRunner.swift": {
+      "sha256": "35d18c62880f16af364cc8c08deaae699afc7707847f7c246711b09878ce5048",
+      "bytes": 7921
+    },
+    "scripts/small-boundary/GuestSlot.swift": {
+      "sha256": "86987b636bb9e2d3db62b10b469ce34f73fe3de043464f4269b3b7686c29bb60",
+      "bytes": 5476
+    },
+    "scripts/small-boundary/guest-suite.c": {
+      "sha256": "cd0682b7868b246202c162d59b952126552890838db7656621aab291e3d1a6c4",
+      "bytes": 19472
+    },
+    "scripts/small-boundary/receipt.py": {
+      "sha256": "00e5e5c3ddf879f8f25caa169c10e3f614e2770c005c0711c48c41244acef52b",
+      "bytes": 8270
+    },
+    "scripts/small-boundary/live_timeout.py": {
+      "sha256": "8c181ed67f2f2f0d588435f737739b7e4536eb11b74d16ebe43b933388c6819b",
+      "bytes": 6292
+    },
+    "scripts/small-boundary/guest_slot_probe.py": {
+      "sha256": "b122326a7fc4ee69900873b1a5f73fe4a8ec4b7cef93dab683560e7ac7c64a26",
+      "bytes": 5603
+    },
+    "scripts/small-boundary/stop_ack_probe.py": {
+      "sha256": "a581c5a7bcac8887503242a09050741a7d4b6e071408c2ef11f0d815d24d0c7d",
+      "bytes": 7724
+    },
+    "scripts/small-boundary/assets.json": {
+      "sha256": "28affd20b3e551e7cb9cab949573233af678a2ef015eabcf7b2f9037c901ef67",
+      "bytes": 4325
+    }
+  },
+  "admission_successor_commit": "6d559cc341a4acb0f46c33f3a2f47a0b748ec40e",
+  "component_checked_commit": "6d559cc341a4acb0f46c33f3a2f47a0b748ec40e"
+}

@@ -2713,3 +2713,40 @@ The owned slot follow-up persists a claim before VM construction and pairs
 it only with the native owner's observed stop. A host receipt or released
 process lock supplies no guest capacity. Exact retries remain one use,
 and a fresh valid ticket is blocked by an unmatched claim in that slot.
+
+## D-084: Bind native portable development execution to issued fixture authority
+
+**Status:** Accepted for this bounded development adapter, 2026-11-14.
+
+Give the portable Bash/grep check its own description,
+`conduit-portable-offline-check/v1`. D-082's macOS preparation profile keeps
+its existing identity and resource fields. An internal, opaque fixture grant
+binds an operation and nonce to the staged manifest, directory identities,
+fixed check, exact environment and budgets, helper, native worker, kernel and
+initramfs. Decoded request or profile data supplies no execution authority.
+
+Use a fresh private issuer key compiled only into the owned fixture driver
+and native bridge. Domain-separated authentication binds the issued permit
+and typed guest result; it is not a defence against a compromised same-user
+host. Before effects, both adapter and bridge check the grant's scope,
+expiry and current inputs. The public command constructor remains deny-only.
+There is no product setting, grant loader or operator activation route.
+Fresh admission also checks that the submitted grant is the exact permit the
+bridge will redeem. Existing exact-operation retries authenticate that same
+original permit and observe the old receipt even after expiry; observation
+cannot grant a new launch or signalling custody.
+
+Compose the bridge with the existing CDS1 supervisor and native VM owner.
+The bridge owns one exact unreaped native child; the supervisor still owns
+host lifecycle and idempotency. Keep the existing VM slot gate and guest
+kernel rules. Preserve separate facts for check exit/streams, host cleanup,
+observed native stop, held guest capacity and unobserved final guest reaping.
+A signed result cannot replace the unchanged external denial oracle or
+establish independent qualification.
+
+This reuses D-083's tested boundary instead of changing CDS1 or adding a
+second slot validator. Component tests establish data/admission behavior;
+native integration must be exercised on macOS before making runtime claims.
+Reconsider for a different check/toolchain, ordinary-project authority,
+production support or a stronger host threat model. Installed operation and
+the existing qualification sequence remain separate owner decisions.

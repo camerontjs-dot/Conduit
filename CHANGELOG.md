@@ -27,6 +27,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- The owned offline probe can execute a native bridge through the existing
+  supervisor, with exact child ownership, bounded private capture and
+  authenticated guest evidence. Preparation and denial oracles are reused.
+- An internal portable offline profile binds owned fixture authority to the
+  staged input, native tools, environment and budgets. Typed guest evidence
+  remains separate from host cleanup; public command execution stays disabled.
 - The owned portable fixture tests stale and mismatched stop records against
   one waiting native ticket, then restores the genuine acknowledgement to
   exercise a fresh VM admission. The slot gate and guest denials are unchanged.
@@ -48,6 +54,12 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- Fresh portable admission requires the exact permit that the native bridge
+  will redeem, refusing a different valid grant before operation effects.
+- Exact portable retries can observe their original receipt after grant
+  expiry or input changes; observation supplies no new execution authority.
+- Native portable serial decoding accepts complete CRLF frames while still
+  rejecting missing terminators and embedded carriage returns.
 - All internal fixture executors now respect prior supervisor launch claims;
   inconsistent persisted v2 capacity acknowledgments refuse as corrupt.
 - The internal supervisor no longer turns an already observed natural root
