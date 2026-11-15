@@ -54,6 +54,8 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [self] in
             guard !ending && !supervisorStopping else { return }
+            // Claim the handoff before self-signalling can be observed again.
+            supervisorStopping = true
             liveEvent("supervisor_term_received")
             if fixtureTermMode == "default" {
                 signal(SIGTERM, SIG_DFL)
@@ -63,7 +65,6 @@ final class Owner: NSObject, VZVirtualMachineDelegate {
             guard machine.state == .running && machine.canStop else {
                 liveEvent("supervisor_stop_unavailable"); exit(125)
             }
-            supervisorStopping = true
             machine.stop { error in
                 guard error == nil && self.machine.state == .stopped else {
                     self.liveEvent("supervisor_stop_unconfirmed"); exit(125)

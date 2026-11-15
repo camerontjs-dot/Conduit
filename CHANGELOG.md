@@ -56,6 +56,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Fixed
 
+- The fixture's default timeout branch claims its existing once-only state
+  before logging and self-signalling. Isolated checks do not establish a VM fix.
 - Fresh portable admission requires the exact permit that the native bridge
   will redeem, refusing a different valid grant before operation effects.
 - Exact portable retries can observe their original receipt after grant
