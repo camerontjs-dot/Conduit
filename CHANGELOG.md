@@ -27,6 +27,8 @@ When finishing a session: update **Unreleased** (or cut a dated release block), 
 
 ### Added
 
+- A standalone native signal probe extracts the fixture's timeout witness
+  without a VM and records exact child wait status and bounded streams.
 - The owned offline probe can execute a native bridge through the existing
   supervisor, with exact child ownership, bounded private capture and
   authenticated guest evidence. Preparation and denial oracles are reused.
