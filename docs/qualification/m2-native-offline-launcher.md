@@ -178,3 +178,8 @@ evidence and historical UNKNOWN guest slots remain preserved.
 
 See [D-084](../../DECISIONS.md#d-084-bind-native-portable-development-execution-to-issued-fixture-authority)
 and the [existing portable boundary record](m2-small-portable-boundary.md).
+
+The [isolated timeout follow-up](m2-timeout-witness.md) records three original
+no-VM runs without duplication and a minimal once-only state repair. Three
+repaired runs preserved actual signal15 termination. The original VM failure
+and complete native integration hold remain; no VM validation is implied.
