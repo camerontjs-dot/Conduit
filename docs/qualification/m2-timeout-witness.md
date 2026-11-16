@@ -98,3 +98,11 @@ The [Dispatch signal-source API](https://developer.apple.com/documentation/dispa
 describes signal monitoring; the native run receipts establish this fixture's
 observed termination. No documented API behavior alone establishes the
 cause of D11's repeated events.
+
+## Real-VM follow-up
+
+The separately identified [repaired-owner campaign](m2-repaired-owner-vm.md)
+subsequently exercised exact #197 source in five real boots. Its completion,
+timeout and acknowledgement checks passed within the declared development
+scope; default owner loss still leaves guest stop UNKNOWN and the slot held.
+The original no-VM observations and limitations above remain unchanged.
